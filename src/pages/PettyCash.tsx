@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Search, Wallet, TrendingUp, TrendingDown, Receipt } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Search, Wallet, TrendingUp, TrendingDown, Receipt, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -38,17 +38,19 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { expenseSchema, type ExpenseFormData } from "@/lib/schemas";
+import { supabase } from "@/integrations/supabase/client";
 
-const stores = ["Downtown Store", "Mall Outlet", "Airport Kiosk", "Suburban Store", "Highway Express"];
 const expenseCategories = ["Maintenance", "Supplies", "Transport", "Refreshments", "Utilities", "Miscellaneous"];
 
-const initialTransactions = [
-  { id: "TXN-001", date: "2024-03-20", store: "Downtown Store", category: "Maintenance", description: "Plumbing repair", amount: -2500, type: "expense" },
-  { id: "TXN-002", date: "2024-03-19", store: "Mall Outlet", category: "Supplies", description: "Cleaning supplies", amount: -1800, type: "expense" },
-  { id: "TXN-003", date: "2024-03-18", store: "Downtown Store", category: "Replenishment", description: "Monthly top-up", amount: 10000, type: "credit" },
-  { id: "TXN-004", date: "2024-03-17", store: "Airport Kiosk", category: "Transport", description: "Courier charges", amount: -650, type: "expense" },
-  { id: "TXN-005", date: "2024-03-16", store: "Suburban Store", category: "Refreshments", description: "Staff tea/coffee", amount: -1200, type: "expense" },
-];
+type Expense = {
+  id: string;
+  description: string;
+  category: string;
+  amount: number;
+  date: string;
+  vendor: string | null;
+  status: string;
+};
 
 const stats = [
   { title: "Total Balance", value: "₹1.25L", icon: Wallet, iconColor: "bg-primary/10 text-primary" },
@@ -59,44 +61,73 @@ const stats = [
 
 export default function PettyCash() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [transactions, setTransactions] = useState(initialTransactions);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<ExpenseFormData>({
     resolver: zodResolver(expenseSchema),
     defaultValues: {
-      store: "",
-      category: "",
       description: "",
+      category: "",
       amount: 0,
+      date: "",
+      vendor: "",
     },
   });
 
-  const onSubmit = (data: ExpenseFormData) => {
-    const newTransaction = {
-      id: `TXN-${String(transactions.length + 1).padStart(3, "0")}`,
-      date: new Date().toISOString().split("T")[0],
-      store: data.store,
-      category: data.category,
-      description: data.description,
-      amount: -data.amount,
-      type: "expense" as const,
-    };
-    setTransactions([newTransaction, ...transactions]);
-    form.reset();
-    setOpen(false);
-    toast({
-      title: "Expense recorded",
-      description: `₹${data.amount.toLocaleString()} expense has been recorded.`,
-    });
+  useEffect(() => {
+    fetchExpenses();
+  }, []);
+
+  const fetchExpenses = async () => {
+    const { data, error } = await supabase
+      .from("expenses")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to load expenses", variant: "destructive" });
+    } else {
+      setExpenses(data || []);
+    }
+    setLoading(false);
   };
 
-  const filteredTransactions = transactions.filter(
-    (txn) =>
-      txn.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      txn.store.toLowerCase().includes(searchQuery.toLowerCase())
+  const onSubmit = async (data: ExpenseFormData) => {
+    const { error } = await supabase.from("expenses").insert({
+      description: data.description,
+      category: data.category,
+      amount: data.amount,
+      date: data.date,
+      vendor: data.vendor || null,
+      status: "pending",
+    });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to record expense", variant: "destructive" });
+    } else {
+      toast({ title: "Expense recorded", description: `₹${data.amount.toLocaleString()} expense has been recorded.` });
+      form.reset();
+      setOpen(false);
+      fetchExpenses();
+    }
+  };
+
+  const filteredExpenses = expenses.filter(
+    (exp) =>
+      exp.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      exp.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -120,50 +151,6 @@ export default function PettyCash() {
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
                   control={form.control}
-                  name="store"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Store</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select store" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {stores.map((store) => (
-                            <SelectItem key={store} value={store}>{store}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Category</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select category" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {expenseCategories.map((cat) => (
-                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
                   name="description"
                   render={({ field }) => (
                     <FormItem>
@@ -175,19 +162,71 @@ export default function PettyCash() {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="amount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Amount (₹)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="Enter amount" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="category"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Category</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select category" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {expenseCategories.map((cat) => (
+                              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="date"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Date</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="amount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Amount (₹)</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="Enter amount" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="vendor"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Vendor (Optional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Vendor name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                     Cancel
@@ -210,7 +249,7 @@ export default function PettyCash() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search transactions..."
+            placeholder="Search expenses..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -222,26 +261,30 @@ export default function PettyCash() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Transaction ID</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead>Store</TableHead>
-              <TableHead>Category</TableHead>
               <TableHead>Description</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Vendor</TableHead>
               <TableHead className="text-right">Amount</TableHead>
+              <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredTransactions.map((txn) => (
-              <TableRow key={txn.id}>
-                <TableCell className="font-mono text-sm">{txn.id}</TableCell>
-                <TableCell>{new Date(txn.date).toLocaleDateString()}</TableCell>
-                <TableCell>{txn.store}</TableCell>
+            {filteredExpenses.map((expense) => (
+              <TableRow key={expense.id}>
+                <TableCell>{new Date(expense.date).toLocaleDateString()}</TableCell>
+                <TableCell className="font-medium">{expense.description}</TableCell>
                 <TableCell>
-                  <Badge variant="outline">{txn.category}</Badge>
+                  <Badge variant="outline">{expense.category}</Badge>
                 </TableCell>
-                <TableCell>{txn.description}</TableCell>
-                <TableCell className={`text-right font-medium ${txn.amount > 0 ? "text-success" : "text-destructive"}`}>
-                  {txn.amount > 0 ? "+" : ""}₹{Math.abs(txn.amount).toLocaleString()}
+                <TableCell>{expense.vendor || "-"}</TableCell>
+                <TableCell className="text-right font-medium text-destructive">
+                  -₹{Number(expense.amount).toLocaleString()}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={expense.status === "approved" ? "default" : "secondary"}>
+                    {expense.status}
+                  </Badge>
                 </TableCell>
               </TableRow>
             ))}

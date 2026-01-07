@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Search, Boxes, AlertTriangle, CheckCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Search, Boxes, AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -38,16 +38,19 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { spareSchema, type SpareFormData } from "@/lib/schemas";
+import { supabase } from "@/integrations/supabase/client";
 
 const categories = ["HVAC", "IT", "Electrical", "Refrigeration", "Power", "Plumbing", "Safety"];
 
-const initialSpares = [
-  { id: "SPR-001", name: "AC Compressor", category: "HVAC", quantity: 5, reorderLevel: 3, unitPrice: 12000, status: "adequate" },
-  { id: "SPR-002", name: "POS Paper Roll", category: "IT", quantity: 150, reorderLevel: 50, unitPrice: 45, status: "adequate" },
-  { id: "SPR-003", name: "LED Tube Light", category: "Electrical", quantity: 8, reorderLevel: 10, unitPrice: 350, status: "low" },
-  { id: "SPR-004", name: "Refrigerator Door Seal", category: "Refrigeration", quantity: 2, reorderLevel: 5, unitPrice: 2500, status: "critical" },
-  { id: "SPR-005", name: "Generator Oil Filter", category: "Power", quantity: 12, reorderLevel: 5, unitPrice: 800, status: "adequate" },
-];
+type Spare = {
+  id: string;
+  name: string;
+  category: string;
+  quantity: number;
+  min_stock: number;
+  unit_price: number;
+  supplier: string;
+};
 
 const stats = [
   { title: "Total Spares", value: "342", icon: Boxes, iconColor: "bg-primary/10 text-primary" },
@@ -58,7 +61,8 @@ const stats = [
 
 export default function SparesManagement() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [spares, setSpares] = useState(initialSpares);
+  const [spares, setSpares] = useState<Spare[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
@@ -68,34 +72,54 @@ export default function SparesManagement() {
       name: "",
       category: "",
       quantity: 0,
-      reorderLevel: 0,
+      minStock: 0,
       unitPrice: 0,
+      supplier: "",
     },
   });
 
-  const getStatus = (quantity: number, reorderLevel: number) => {
-    if (quantity <= reorderLevel * 0.5) return "critical";
-    if (quantity <= reorderLevel) return "low";
+  useEffect(() => {
+    fetchSpares();
+  }, []);
+
+  const fetchSpares = async () => {
+    const { data, error } = await supabase
+      .from("spares")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to load spares", variant: "destructive" });
+    } else {
+      setSpares(data || []);
+    }
+    setLoading(false);
+  };
+
+  const getStatus = (quantity: number, minStock: number) => {
+    if (quantity <= minStock * 0.5) return "critical";
+    if (quantity <= minStock) return "low";
     return "adequate";
   };
 
-  const onSubmit = (data: SpareFormData) => {
-    const newSpare = {
-      id: `SPR-${String(spares.length + 1).padStart(3, "0")}`,
+  const onSubmit = async (data: SpareFormData) => {
+    const { error } = await supabase.from("spares").insert({
       name: data.name,
       category: data.category,
       quantity: data.quantity,
-      reorderLevel: data.reorderLevel,
-      unitPrice: data.unitPrice,
-      status: getStatus(data.quantity, data.reorderLevel),
-    };
-    setSpares([...spares, newSpare]);
-    form.reset();
-    setOpen(false);
-    toast({
-      title: "Spare added",
-      description: `${data.name} has been added to inventory.`,
+      min_stock: data.minStock,
+      unit_price: data.unitPrice,
+      supplier: data.supplier,
     });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to add spare", variant: "destructive" });
+    } else {
+      toast({ title: "Spare added", description: `${data.name} has been added to inventory.` });
+      form.reset();
+      setOpen(false);
+      fetchSpares();
+    }
   };
 
   const filteredSpares = spares.filter(
@@ -103,6 +127,14 @@ export default function SparesManagement() {
       spare.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       spare.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -175,10 +207,10 @@ export default function SparesManagement() {
                   />
                   <FormField
                     control={form.control}
-                    name="reorderLevel"
+                    name="minStock"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Reorder Level</FormLabel>
+                        <FormLabel>Min Stock</FormLabel>
                         <FormControl>
                           <Input type="number" placeholder="Minimum stock" {...field} />
                         </FormControl>
@@ -187,19 +219,34 @@ export default function SparesManagement() {
                     )}
                   />
                 </div>
-                <FormField
-                  control={form.control}
-                  name="unitPrice"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Unit Price (₹)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="Price per unit" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="unitPrice"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Unit Price (₹)</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="Price per unit" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="supplier"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Supplier</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Supplier name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                     Cancel
@@ -234,36 +281,39 @@ export default function SparesManagement() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Spare ID</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Quantity</TableHead>
-              <TableHead>Reorder Level</TableHead>
+              <TableHead>Min Stock</TableHead>
               <TableHead>Unit Price</TableHead>
+              <TableHead>Supplier</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredSpares.map((spare) => (
-              <TableRow key={spare.id}>
-                <TableCell className="font-mono text-sm">{spare.id}</TableCell>
-                <TableCell className="font-medium">{spare.name}</TableCell>
-                <TableCell>{spare.category}</TableCell>
-                <TableCell>{spare.quantity}</TableCell>
-                <TableCell>{spare.reorderLevel}</TableCell>
-                <TableCell>₹{spare.unitPrice.toLocaleString()}</TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      spare.status === "adequate" ? "default" :
-                      spare.status === "low" ? "secondary" : "destructive"
-                    }
-                  >
-                    {spare.status}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
+            {filteredSpares.map((spare) => {
+              const status = getStatus(spare.quantity, spare.min_stock);
+              return (
+                <TableRow key={spare.id}>
+                  <TableCell className="font-medium">{spare.name}</TableCell>
+                  <TableCell>{spare.category}</TableCell>
+                  <TableCell>{spare.quantity}</TableCell>
+                  <TableCell>{spare.min_stock}</TableCell>
+                  <TableCell>₹{Number(spare.unit_price).toLocaleString()}</TableCell>
+                  <TableCell>{spare.supplier}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        status === "adequate" ? "default" :
+                        status === "low" ? "secondary" : "destructive"
+                      }
+                    >
+                      {status}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

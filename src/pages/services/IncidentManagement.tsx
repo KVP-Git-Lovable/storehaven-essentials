@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, AlertTriangle, CheckCircle, Clock, XCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, AlertTriangle, CheckCircle, Clock, XCircle, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -39,17 +39,20 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { incidentSchema, type IncidentFormData } from "@/lib/schemas";
+import { supabase } from "@/integrations/supabase/client";
 
-const stores = ["Downtown Store", "Mall Outlet", "Airport Kiosk", "Suburban Store", "Highway Express"];
-const assets = ["Split AC 1.5T", "POS Terminal", "CCTV Camera", "Generator 10KVA", "Display Fridge", "Fire Alarm"];
+const locations = ["Downtown Store", "Mall Outlet", "Airport Kiosk", "Suburban Store", "Highway Express"];
 
-const initialIncidents = [
-  { id: "INC-001", title: "AC not cooling", store: "Downtown Store", asset: "Split AC 1.5T", priority: "high", reportedAt: "2024-03-20 09:30", status: "open" },
-  { id: "INC-002", title: "POS terminal freeze", store: "Mall Outlet", asset: "POS Terminal", priority: "critical", reportedAt: "2024-03-20 10:15", status: "in-progress" },
-  { id: "INC-003", title: "Camera offline", store: "Airport Kiosk", asset: "CCTV Camera", priority: "medium", reportedAt: "2024-03-19 14:00", status: "in-progress" },
-  { id: "INC-004", title: "Generator start issue", store: "Suburban Store", asset: "Generator 10KVA", priority: "high", reportedAt: "2024-03-18 16:45", status: "resolved" },
-  { id: "INC-005", title: "Refrigerator leak", store: "Highway Express", asset: "Display Fridge", priority: "medium", reportedAt: "2024-03-17 11:20", status: "resolved" },
-];
+type Incident = {
+  id: string;
+  title: string;
+  description: string | null;
+  priority: string;
+  location: string;
+  reported_by: string;
+  status: string;
+  created_at: string;
+};
 
 const stats = [
   { title: "Total Incidents", value: "42", icon: AlertTriangle, iconColor: "bg-primary/10 text-primary" },
@@ -59,7 +62,8 @@ const stats = [
 ];
 
 export default function IncidentManagement() {
-  const [incidents, setIncidents] = useState(initialIncidents);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
@@ -67,31 +71,58 @@ export default function IncidentManagement() {
     resolver: zodResolver(incidentSchema),
     defaultValues: {
       title: "",
-      store: "",
-      asset: "",
-      priority: "medium",
       description: "",
+      priority: "medium",
+      location: "",
+      reportedBy: "",
     },
   });
 
-  const onSubmit = (data: IncidentFormData) => {
-    const newIncident = {
-      id: `INC-${String(incidents.length + 1).padStart(3, "0")}`,
-      title: data.title,
-      store: data.store,
-      asset: data.asset,
-      priority: data.priority,
-      reportedAt: new Date().toISOString().replace("T", " ").slice(0, 16),
-      status: "open" as const,
-    };
-    setIncidents([newIncident, ...incidents]);
-    form.reset();
-    setOpen(false);
-    toast({
-      title: "Incident logged",
-      description: `Incident ${newIncident.id} has been created.`,
-    });
+  useEffect(() => {
+    fetchIncidents();
+  }, []);
+
+  const fetchIncidents = async () => {
+    const { data, error } = await supabase
+      .from("incidents")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to load incidents", variant: "destructive" });
+    } else {
+      setIncidents(data || []);
+    }
+    setLoading(false);
   };
+
+  const onSubmit = async (data: IncidentFormData) => {
+    const { error } = await supabase.from("incidents").insert({
+      title: data.title,
+      description: data.description || null,
+      priority: data.priority,
+      location: data.location,
+      reported_by: data.reportedBy,
+      status: "open",
+    });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to log incident", variant: "destructive" });
+    } else {
+      toast({ title: "Incident logged", description: `Incident has been created.` });
+      form.reset();
+      setOpen(false);
+      fetchIncidents();
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -129,19 +160,19 @@ export default function IncidentManagement() {
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="store"
+                    name="location"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Store</FormLabel>
+                        <FormLabel>Location</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Select store" />
+                              <SelectValue placeholder="Select location" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {stores.map((store) => (
-                              <SelectItem key={store} value={store}>{store}</SelectItem>
+                            {locations.map((loc) => (
+                              <SelectItem key={loc} value={loc}>{loc}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -151,20 +182,21 @@ export default function IncidentManagement() {
                   />
                   <FormField
                     control={form.control}
-                    name="asset"
+                    name="priority"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Asset</FormLabel>
+                        <FormLabel>Priority</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Select asset" />
+                              <SelectValue placeholder="Select priority" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {assets.map((asset) => (
-                              <SelectItem key={asset} value={asset}>{asset}</SelectItem>
-                            ))}
+                            <SelectItem value="low">Low</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="high">High</SelectItem>
+                            <SelectItem value="critical">Critical</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -174,23 +206,13 @@ export default function IncidentManagement() {
                 </div>
                 <FormField
                   control={form.control}
-                  name="priority"
+                  name="reportedBy"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Priority</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select priority" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="low">Low</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="high">High</SelectItem>
-                          <SelectItem value="critical">Critical</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <FormLabel>Reported By</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Your name" {...field} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -230,10 +252,9 @@ export default function IncidentManagement() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Incident ID</TableHead>
               <TableHead>Title</TableHead>
-              <TableHead>Store</TableHead>
-              <TableHead>Asset</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>Reported By</TableHead>
               <TableHead>Priority</TableHead>
               <TableHead>Reported</TableHead>
               <TableHead>Status</TableHead>
@@ -242,10 +263,9 @@ export default function IncidentManagement() {
           <TableBody>
             {incidents.map((incident) => (
               <TableRow key={incident.id}>
-                <TableCell className="font-mono text-sm">{incident.id}</TableCell>
                 <TableCell className="font-medium">{incident.title}</TableCell>
-                <TableCell>{incident.store}</TableCell>
-                <TableCell>{incident.asset}</TableCell>
+                <TableCell>{incident.location}</TableCell>
+                <TableCell>{incident.reported_by}</TableCell>
                 <TableCell>
                   <Badge
                     variant={
@@ -256,7 +276,7 @@ export default function IncidentManagement() {
                     {incident.priority}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-sm">{incident.reportedAt}</TableCell>
+                <TableCell className="text-sm">{new Date(incident.created_at).toLocaleDateString()}</TableCell>
                 <TableCell>
                   <Badge
                     variant={

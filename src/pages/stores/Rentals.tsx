@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Building2, Calendar, IndianRupee, AlertCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Building2, Calendar, IndianRupee, AlertCircle, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -38,16 +38,19 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { rentalSchema, type RentalFormData } from "@/lib/schemas";
+import { supabase } from "@/integrations/supabase/client";
 
 const storesList = ["Downtown Store", "Mall Outlet", "Airport Kiosk", "Suburban Store", "Highway Express", "New Location"];
 
-const initialLeases = [
-  { id: 1, store: "Downtown Store", landlord: "ABC Realty", rent: 150000, startDate: "2023-01-01", endDate: "2025-12-31", status: "active" },
-  { id: 2, store: "Mall Outlet", landlord: "Phoenix Ltd", rent: 250000, startDate: "2022-06-15", endDate: "2025-06-14", status: "renewal-due" },
-  { id: 3, store: "Airport Kiosk", landlord: "AAI Commercial", rent: 180000, startDate: "2024-01-01", endDate: "2026-12-31", status: "active" },
-  { id: 4, store: "Suburban Store", landlord: "Green Valley Prop", rent: 85000, startDate: "2023-03-01", endDate: "2026-02-28", status: "active" },
-  { id: 5, store: "Highway Express", landlord: "NH Properties", rent: 120000, startDate: "2023-07-01", endDate: "2024-06-30", status: "expired" },
-];
+type Rental = {
+  id: string;
+  store: string;
+  landlord: string;
+  rent: number;
+  start_date: string;
+  end_date: string;
+  status: string;
+};
 
 const stats = [
   { title: "Total Monthly Rent", value: "₹7.85L", icon: IndianRupee, iconColor: "bg-primary/10 text-primary" },
@@ -57,7 +60,8 @@ const stats = [
 ];
 
 export default function Rentals() {
-  const [leases, setLeases] = useState(initialLeases);
+  const [leases, setLeases] = useState<Rental[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
@@ -72,24 +76,51 @@ export default function Rentals() {
     },
   });
 
-  const onSubmit = (data: RentalFormData) => {
-    const newLease = {
-      id: leases.length + 1,
+  useEffect(() => {
+    fetchRentals();
+  }, []);
+
+  const fetchRentals = async () => {
+    const { data, error } = await supabase
+      .from("rentals")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to load rentals", variant: "destructive" });
+    } else {
+      setLeases(data || []);
+    }
+    setLoading(false);
+  };
+
+  const onSubmit = async (data: RentalFormData) => {
+    const { error } = await supabase.from("rentals").insert({
       store: data.store,
       landlord: data.landlord,
       rent: data.rent,
-      startDate: data.startDate,
-      endDate: data.endDate,
+      start_date: data.startDate,
+      end_date: data.endDate,
       status: "active",
-    };
-    setLeases([...leases, newLease]);
-    form.reset();
-    setOpen(false);
-    toast({
-      title: "Lease added",
-      description: `Lease for ${data.store} has been recorded.`,
     });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to add lease", variant: "destructive" });
+    } else {
+      toast({ title: "Lease added", description: `Lease for ${data.store} has been recorded.` });
+      form.reset();
+      setOpen(false);
+      fetchRentals();
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -221,9 +252,9 @@ export default function Rentals() {
               <TableRow key={lease.id}>
                 <TableCell className="font-medium">{lease.store}</TableCell>
                 <TableCell>{lease.landlord}</TableCell>
-                <TableCell>₹{lease.rent.toLocaleString()}</TableCell>
+                <TableCell>₹{Number(lease.rent).toLocaleString()}</TableCell>
                 <TableCell>
-                  {new Date(lease.startDate).toLocaleDateString()} - {new Date(lease.endDate).toLocaleDateString()}
+                  {new Date(lease.start_date).toLocaleDateString()} - {new Date(lease.end_date).toLocaleDateString()}
                 </TableCell>
                 <TableCell>
                   <Badge

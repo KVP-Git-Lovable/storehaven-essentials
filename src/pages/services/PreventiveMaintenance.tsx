@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Calendar, CheckCircle, Clock, AlertTriangle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Calendar, CheckCircle, Clock, AlertTriangle, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -38,18 +38,22 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { maintenanceSchema, type MaintenanceFormData } from "@/lib/schemas";
+import { supabase } from "@/integrations/supabase/client";
 
 const assets = ["Split AC - Downtown", "Generator - Mall", "Fire Extinguisher - All", "CCTV System - Airport", "Refrigerator - Suburban"];
-const maintenanceTypes = ["Routine Inspection", "Quarterly Service", "Monthly Check", "Annual Inspection", "Deep Cleaning"];
+const taskTypes = ["Routine Inspection", "Quarterly Service", "Monthly Check", "Annual Inspection", "Deep Cleaning"];
 const vendors = ["CoolTech", "PowerGen", "SafeFirst", "SecureView", "IT Support Pro"];
 
-const initialSchedules = [
-  { id: "PM-001", asset: "Split AC - Downtown", type: "Quarterly Service", frequency: "quarterly", lastDone: "2024-01-15", nextDue: "2024-04-15", assignedTo: "CoolTech", status: "due-soon" },
-  { id: "PM-002", asset: "Generator - Mall", type: "Monthly Check", frequency: "monthly", lastDone: "2024-03-01", nextDue: "2024-04-01", assignedTo: "PowerGen", status: "overdue" },
-  { id: "PM-003", asset: "Fire Extinguisher - All", type: "Annual Inspection", frequency: "annual", lastDone: "2023-06-20", nextDue: "2024-06-20", assignedTo: "SafeFirst", status: "scheduled" },
-  { id: "PM-004", asset: "CCTV System - Airport", type: "Quarterly Service", frequency: "quarterly", lastDone: "2024-02-10", nextDue: "2024-05-10", assignedTo: "SecureView", status: "scheduled" },
-  { id: "PM-005", asset: "Refrigerator - Suburban", type: "Monthly Check", frequency: "monthly", lastDone: "2024-03-05", nextDue: "2024-04-05", assignedTo: "CoolTech", status: "due-soon" },
-];
+type MaintenanceTask = {
+  id: string;
+  asset: string;
+  task_type: string;
+  frequency: string;
+  last_done: string;
+  next_due: string;
+  assigned_to: string;
+  status: string;
+};
 
 const stats = [
   { title: "Total Schedules", value: "156", icon: Calendar, iconColor: "bg-primary/10 text-primary" },
@@ -59,7 +63,8 @@ const stats = [
 ];
 
 export default function PreventiveMaintenance() {
-  const [schedules, setSchedules] = useState(initialSchedules);
+  const [schedules, setSchedules] = useState<MaintenanceTask[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
@@ -67,32 +72,59 @@ export default function PreventiveMaintenance() {
     resolver: zodResolver(maintenanceSchema),
     defaultValues: {
       asset: "",
-      type: "",
+      taskType: "",
       frequency: "monthly",
       assignedTo: "",
       nextDue: "",
     },
   });
 
-  const onSubmit = (data: MaintenanceFormData) => {
-    const newSchedule = {
-      id: `PM-${String(schedules.length + 1).padStart(3, "0")}`,
-      asset: data.asset,
-      type: data.type,
-      frequency: data.frequency,
-      lastDone: "-",
-      nextDue: data.nextDue,
-      assignedTo: data.assignedTo,
-      status: "scheduled" as const,
-    };
-    setSchedules([...schedules, newSchedule]);
-    form.reset();
-    setOpen(false);
-    toast({
-      title: "Schedule added",
-      description: `Maintenance schedule for ${data.asset} has been created.`,
-    });
+  useEffect(() => {
+    fetchSchedules();
+  }, []);
+
+  const fetchSchedules = async () => {
+    const { data, error } = await supabase
+      .from("maintenance_tasks")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to load schedules", variant: "destructive" });
+    } else {
+      setSchedules(data || []);
+    }
+    setLoading(false);
   };
+
+  const onSubmit = async (data: MaintenanceFormData) => {
+    const { error } = await supabase.from("maintenance_tasks").insert({
+      asset: data.asset,
+      task_type: data.taskType,
+      frequency: data.frequency,
+      last_done: "-",
+      next_due: data.nextDue,
+      assigned_to: data.assignedTo,
+      status: "scheduled",
+    });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to add schedule", variant: "destructive" });
+    } else {
+      toast({ title: "Schedule added", description: `Maintenance schedule for ${data.asset} has been created.` });
+      form.reset();
+      setOpen(false);
+      fetchSchedules();
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -139,10 +171,10 @@ export default function PreventiveMaintenance() {
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="type"
+                    name="taskType"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Maintenance Type</FormLabel>
+                        <FormLabel>Task Type</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
                             <SelectTrigger>
@@ -150,7 +182,7 @@ export default function PreventiveMaintenance() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {maintenanceTypes.map((type) => (
+                            {taskTypes.map((type) => (
                               <SelectItem key={type} value={type}>{type}</SelectItem>
                             ))}
                           </SelectContent>
@@ -243,9 +275,9 @@ export default function PreventiveMaintenance() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Schedule ID</TableHead>
               <TableHead>Asset</TableHead>
-              <TableHead>Type</TableHead>
+              <TableHead>Task Type</TableHead>
+              <TableHead>Frequency</TableHead>
               <TableHead>Last Done</TableHead>
               <TableHead>Next Due</TableHead>
               <TableHead>Assigned To</TableHead>
@@ -255,12 +287,12 @@ export default function PreventiveMaintenance() {
           <TableBody>
             {schedules.map((schedule) => (
               <TableRow key={schedule.id}>
-                <TableCell className="font-mono text-sm">{schedule.id}</TableCell>
                 <TableCell className="font-medium">{schedule.asset}</TableCell>
-                <TableCell>{schedule.type}</TableCell>
-                <TableCell>{schedule.lastDone === "-" ? "-" : new Date(schedule.lastDone).toLocaleDateString()}</TableCell>
-                <TableCell>{new Date(schedule.nextDue).toLocaleDateString()}</TableCell>
-                <TableCell>{schedule.assignedTo}</TableCell>
+                <TableCell>{schedule.task_type}</TableCell>
+                <TableCell className="capitalize">{schedule.frequency}</TableCell>
+                <TableCell>{schedule.last_done === "-" ? "-" : new Date(schedule.last_done).toLocaleDateString()}</TableCell>
+                <TableCell>{new Date(schedule.next_due).toLocaleDateString()}</TableCell>
+                <TableCell>{schedule.assigned_to}</TableCell>
                 <TableCell>
                   <Badge
                     variant={

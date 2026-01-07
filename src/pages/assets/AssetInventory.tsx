@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Search, Package, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Search, Package, CheckCircle, AlertTriangle, XCircle, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -38,17 +38,20 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { assetSchema, type AssetFormData } from "@/lib/schemas";
+import { supabase } from "@/integrations/supabase/client";
 
-const stores = ["Downtown Store", "Mall Outlet", "Airport Kiosk", "Suburban Store", "Highway Express"];
-const products = ["Split AC 1.5 Ton", "POS Terminal", "Security Camera", "Display Refrigerator", "Generator 10KVA"];
+const locations = ["Downtown Store", "Mall Outlet", "Airport Kiosk", "Suburban Store", "Highway Express"];
+const categories = ["HVAC", "IT Equipment", "Security", "Refrigeration", "Power", "Safety"];
 
-const initialAssets = [
-  { id: "AST-001", name: "Split AC 1.5 Ton", store: "Downtown Store", serialNo: "DAI-2023-001", purchaseDate: "2023-03-15", status: "operational" },
-  { id: "AST-002", name: "POS Terminal", store: "Downtown Store", serialNo: "PL-2023-042", purchaseDate: "2023-01-20", status: "operational" },
-  { id: "AST-003", name: "Security Camera", store: "Mall Outlet", serialNo: "HIK-2022-156", purchaseDate: "2022-08-10", status: "maintenance" },
-  { id: "AST-004", name: "Display Refrigerator", store: "Airport Kiosk", serialNo: "BS-2024-003", purchaseDate: "2024-01-05", status: "operational" },
-  { id: "AST-005", name: "Generator 10KVA", store: "Suburban Store", serialNo: "KIR-2023-007", purchaseDate: "2023-06-20", status: "non-operational" },
-];
+type Asset = {
+  id: string;
+  name: string;
+  category: string;
+  location: string;
+  condition: string;
+  purchase_date: string;
+  value: number;
+};
 
 const stats = [
   { title: "Total Assets", value: "1,247", icon: Package, iconColor: "bg-primary/10 text-primary" },
@@ -59,38 +62,74 @@ const stats = [
 
 export default function AssetInventory() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [assets, setAssets] = useState(initialAssets);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<AssetFormData>({
     resolver: zodResolver(assetSchema),
     defaultValues: {
-      productId: "",
-      store: "",
-      serialNo: "",
+      name: "",
+      category: "",
+      location: "",
+      condition: "operational",
       purchaseDate: "",
-      status: "operational",
+      value: 0,
     },
   });
 
-  const onSubmit = (data: AssetFormData) => {
-    const newAsset = {
-      id: `AST-${String(assets.length + 1).padStart(3, "0")}`,
-      name: data.productId,
-      store: data.store,
-      serialNo: data.serialNo,
-      purchaseDate: data.purchaseDate,
-      status: data.status,
-    };
-    setAssets([...assets, newAsset]);
-    form.reset();
-    setOpen(false);
-    toast({
-      title: "Asset added",
-      description: `Asset ${newAsset.id} has been registered.`,
-    });
+  useEffect(() => {
+    fetchAssets();
+  }, []);
+
+  const fetchAssets = async () => {
+    const { data, error } = await supabase
+      .from("assets")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to load assets", variant: "destructive" });
+    } else {
+      setAssets(data || []);
+    }
+    setLoading(false);
   };
+
+  const onSubmit = async (data: AssetFormData) => {
+    const { error } = await supabase.from("assets").insert({
+      name: data.name,
+      category: data.category,
+      location: data.location,
+      condition: data.condition,
+      purchase_date: data.purchaseDate,
+      value: data.value,
+    });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to add asset", variant: "destructive" });
+    } else {
+      toast({ title: "Asset added", description: `Asset has been registered.` });
+      form.reset();
+      setOpen(false);
+      fetchAssets();
+    }
+  };
+
+  const filteredAssets = assets.filter(
+    (asset) =>
+      asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      asset.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -114,44 +153,13 @@ export default function AssetInventory() {
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
                   control={form.control}
-                  name="productId"
+                  name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Product</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select product" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {products.map((product) => (
-                            <SelectItem key={product} value={product}>{product}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="store"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Store</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select store" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {stores.map((store) => (
-                            <SelectItem key={store} value={store}>{store}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormLabel>Asset Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter asset name" {...field} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -159,17 +167,50 @@ export default function AssetInventory() {
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="serialNo"
+                    name="category"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Serial Number</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter serial no." {...field} />
-                        </FormControl>
+                        <FormLabel>Category</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select category" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {categories.map((cat) => (
+                              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={form.control}
+                    name="location"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Location</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select location" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {locations.map((loc) => (
+                              <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="purchaseDate"
@@ -183,17 +224,30 @@ export default function AssetInventory() {
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={form.control}
+                    name="value"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Value (₹)</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="Enter value" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
                 <FormField
                   control={form.control}
-                  name="status"
+                  name="condition"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Status</FormLabel>
+                      <FormLabel>Condition</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select status" />
+                            <SelectValue placeholder="Select condition" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -234,47 +288,38 @@ export default function AssetInventory() {
             className="pl-10"
           />
         </div>
-        <Select>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="All Stores" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Stores</SelectItem>
-            {stores.map((store) => (
-              <SelectItem key={store} value={store}>{store}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       <div className="rounded-xl border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Asset ID</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Store</TableHead>
-              <TableHead>Serial No</TableHead>
+              <TableHead>Asset Name</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Location</TableHead>
               <TableHead>Purchase Date</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Value</TableHead>
+              <TableHead>Condition</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {assets.map((asset) => (
+            {filteredAssets.map((asset) => (
               <TableRow key={asset.id}>
-                <TableCell className="font-mono text-sm">{asset.id}</TableCell>
                 <TableCell className="font-medium">{asset.name}</TableCell>
-                <TableCell>{asset.store}</TableCell>
-                <TableCell className="font-mono text-sm">{asset.serialNo}</TableCell>
-                <TableCell>{new Date(asset.purchaseDate).toLocaleDateString()}</TableCell>
+                <TableCell>
+                  <Badge variant="outline">{asset.category}</Badge>
+                </TableCell>
+                <TableCell>{asset.location}</TableCell>
+                <TableCell>{new Date(asset.purchase_date).toLocaleDateString()}</TableCell>
+                <TableCell>₹{Number(asset.value).toLocaleString()}</TableCell>
                 <TableCell>
                   <Badge
                     variant={
-                      asset.status === "operational" ? "default" :
-                      asset.status === "maintenance" ? "secondary" : "destructive"
+                      asset.condition === "operational" ? "default" :
+                      asset.condition === "maintenance" ? "secondary" : "destructive"
                     }
                   >
-                    {asset.status}
+                    {asset.condition}
                   </Badge>
                 </TableCell>
               </TableRow>

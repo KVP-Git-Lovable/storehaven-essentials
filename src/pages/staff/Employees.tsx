@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Search, Users, UserCheck, UserX } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Search, Users, UserCheck, UserX, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -38,17 +38,21 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { employeeSchema, type EmployeeFormData } from "@/lib/schemas";
+import { supabase } from "@/integrations/supabase/client";
 
-const stores = ["Downtown Store", "Mall Outlet", "Airport Kiosk", "Suburban Store", "Highway Express"];
-const roles = ["Store Manager", "Assistant Manager", "Sales Associate", "Cashier", "Security", "Housekeeping"];
+const departments = ["Operations", "Sales", "Security", "Housekeeping", "IT", "Management"];
+const positions = ["Store Manager", "Assistant Manager", "Sales Associate", "Cashier", "Security Guard", "Housekeeper"];
 
-const initialEmployees = [
-  { id: "EMP-001", name: "Rahul Sharma", store: "Downtown Store", role: "Store Manager", phone: "+91 98765 10001", joinDate: "2022-03-15", status: "active" },
-  { id: "EMP-002", name: "Priya Patel", store: "Mall Outlet", role: "Store Manager", phone: "+91 98765 10002", joinDate: "2021-06-20", status: "active" },
-  { id: "EMP-003", name: "Amit Kumar", store: "Downtown Store", role: "Sales Associate", phone: "+91 98765 10003", joinDate: "2023-01-10", status: "active" },
-  { id: "EMP-004", name: "Sneha Reddy", store: "Airport Kiosk", role: "Cashier", phone: "+91 98765 10004", joinDate: "2023-08-05", status: "on-leave" },
-  { id: "EMP-005", name: "Vikram Singh", store: "Suburban Store", role: "Security", phone: "+91 98765 10005", joinDate: "2022-11-12", status: "active" },
-];
+type Employee = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  department: string;
+  position: string;
+  join_date: string;
+  status: string;
+};
 
 const stats = [
   { title: "Total Employees", value: "156", icon: Users, iconColor: "bg-primary/10 text-primary" },
@@ -59,7 +63,8 @@ const stats = [
 
 export default function Employees() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [employees, setEmployees] = useState(initialEmployees);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
@@ -67,37 +72,66 @@ export default function Employees() {
     resolver: zodResolver(employeeSchema),
     defaultValues: {
       name: "",
-      store: "",
-      role: "",
+      email: "",
       phone: "",
+      department: "",
+      position: "",
       joinDate: "",
     },
   });
 
-  const onSubmit = (data: EmployeeFormData) => {
-    const newEmployee = {
-      id: `EMP-${String(employees.length + 1).padStart(3, "0")}`,
+  useEffect(() => {
+    fetchEmployees();
+  }, []);
+
+  const fetchEmployees = async () => {
+    const { data, error } = await supabase
+      .from("employees")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to load employees", variant: "destructive" });
+    } else {
+      setEmployees(data || []);
+    }
+    setLoading(false);
+  };
+
+  const onSubmit = async (data: EmployeeFormData) => {
+    const { error } = await supabase.from("employees").insert({
       name: data.name,
-      store: data.store,
-      role: data.role,
+      email: data.email,
       phone: data.phone,
-      joinDate: data.joinDate,
+      department: data.department,
+      position: data.position,
+      join_date: data.joinDate,
       status: "active",
-    };
-    setEmployees([...employees, newEmployee]);
-    form.reset();
-    setOpen(false);
-    toast({
-      title: "Employee added",
-      description: `${data.name} has been added successfully.`,
     });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to add employee", variant: "destructive" });
+    } else {
+      toast({ title: "Employee added", description: `${data.name} has been added successfully.` });
+      form.reset();
+      setOpen(false);
+      fetchEmployees();
+    }
   };
 
   const filteredEmployees = employees.filter(
     (emp) =>
       emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      emp.store.toLowerCase().includes(searchQuery.toLowerCase())
+      emp.department.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -135,50 +169,17 @@ export default function Employees() {
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="store"
+                    name="email"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Store</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select store" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {stores.map((store) => (
-                              <SelectItem key={store} value={store}>{store}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="email@example.com" {...field} />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="role"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Role</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select role" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {roles.map((role) => (
-                              <SelectItem key={role} value={role}>{role}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="phone"
@@ -192,20 +193,66 @@ export default function Employees() {
                       </FormItem>
                     )}
                   />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="joinDate"
+                    name="department"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Join Date</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
+                        <FormLabel>Department</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select department" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {departments.map((dept) => (
+                              <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="position"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Position</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select position" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {positions.map((pos) => (
+                              <SelectItem key={pos} value={pos}>{pos}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
+                <FormField
+                  control={form.control}
+                  name="joinDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Join Date</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                     Cancel
@@ -240,10 +287,10 @@ export default function Employees() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Employee ID</TableHead>
               <TableHead>Name</TableHead>
-              <TableHead>Store</TableHead>
-              <TableHead>Role</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Department</TableHead>
+              <TableHead>Position</TableHead>
               <TableHead>Phone</TableHead>
               <TableHead>Join Date</TableHead>
               <TableHead>Status</TableHead>
@@ -252,12 +299,12 @@ export default function Employees() {
           <TableBody>
             {filteredEmployees.map((emp) => (
               <TableRow key={emp.id}>
-                <TableCell className="font-mono text-sm">{emp.id}</TableCell>
                 <TableCell className="font-medium">{emp.name}</TableCell>
-                <TableCell>{emp.store}</TableCell>
-                <TableCell>{emp.role}</TableCell>
+                <TableCell>{emp.email}</TableCell>
+                <TableCell>{emp.department}</TableCell>
+                <TableCell>{emp.position}</TableCell>
                 <TableCell>{emp.phone}</TableCell>
-                <TableCell>{new Date(emp.joinDate).toLocaleDateString()}</TableCell>
+                <TableCell>{new Date(emp.join_date).toLocaleDateString()}</TableCell>
                 <TableCell>
                   <Badge variant={emp.status === "active" ? "default" : "secondary"}>
                     {emp.status}

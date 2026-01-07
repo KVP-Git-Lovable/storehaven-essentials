@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Search, Package, MoreVertical } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Search, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -37,21 +37,24 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { productSchema, type ProductFormData } from "@/lib/schemas";
+import { supabase } from "@/integrations/supabase/client";
 
 const categories = ["HVAC", "IT Equipment", "Security", "Refrigeration", "Power", "Safety", "Furniture", "Electrical"];
 
-const initialProducts = [
-  { id: 1, name: "Split AC 1.5 Ton", category: "HVAC", brand: "Daikin", model: "FTKF50", warranty: "5 years", price: 45000 },
-  { id: 2, name: "POS Terminal", category: "IT Equipment", brand: "Pine Labs", model: "P1000", warranty: "2 years", price: 25000 },
-  { id: 3, name: "Security Camera", category: "Security", brand: "Hikvision", model: "DS-2CD", warranty: "3 years", price: 8500 },
-  { id: 4, name: "Display Refrigerator", category: "Refrigeration", brand: "Blue Star", model: "DR-500", warranty: "5 years", price: 85000 },
-  { id: 5, name: "Generator 10KVA", category: "Power", brand: "Kirloskar", model: "KG1-10", warranty: "2 years", price: 250000 },
-  { id: 6, name: "Fire Extinguisher", category: "Safety", brand: "Cease Fire", model: "CF-5KG", warranty: "1 year", price: 2500 },
-];
+type Product = {
+  id: string;
+  name: string;
+  category: string;
+  brand: string;
+  model: string;
+  warranty: string;
+  price: number;
+};
 
 export default function Products() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [products, setProducts] = useState(initialProducts);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
@@ -67,23 +70,42 @@ export default function Products() {
     },
   });
 
-  const onSubmit = (data: ProductFormData) => {
-    const newProduct = {
-      id: products.length + 1,
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to load products", variant: "destructive" });
+    } else {
+      setProducts(data || []);
+    }
+    setLoading(false);
+  };
+
+  const onSubmit = async (data: ProductFormData) => {
+    const { error } = await supabase.from("products").insert({
       name: data.name,
       category: data.category,
       brand: data.brand,
       model: data.model,
       warranty: data.warranty,
       price: data.price,
-    };
-    setProducts([...products, newProduct]);
-    form.reset();
-    setOpen(false);
-    toast({
-      title: "Product added",
-      description: `${data.name} has been added to the catalog.`,
     });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to add product", variant: "destructive" });
+    } else {
+      toast({ title: "Product added", description: `${data.name} has been added to the catalog.` });
+      form.reset();
+      setOpen(false);
+      fetchProducts();
+    }
   };
 
   const filteredProducts = products.filter(
@@ -91,6 +113,14 @@ export default function Products() {
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -249,7 +279,7 @@ export default function Products() {
                 <TableCell>{product.brand}</TableCell>
                 <TableCell>{product.model}</TableCell>
                 <TableCell>{product.warranty}</TableCell>
-                <TableCell>₹{product.price.toLocaleString()}</TableCell>
+                <TableCell>₹{Number(product.price).toLocaleString()}</TableCell>
               </TableRow>
             ))}
           </TableBody>

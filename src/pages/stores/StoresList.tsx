@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Search, MapPin, MoreVertical } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Search, MapPin, MoreVertical, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -43,18 +43,22 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { storeSchema, type StoreFormData } from "@/lib/schemas";
+import { supabase } from "@/integrations/supabase/client";
 
-const initialStores = [
-  { id: 1, name: "Downtown Store", address: "123 Main St, City Center", phone: "+91 98765 43210", manager: "Rahul Sharma", status: "active", assets: 52 },
-  { id: 2, name: "Mall Outlet", address: "Phoenix Mall, Floor 2", phone: "+91 98765 43211", manager: "Priya Patel", status: "active", assets: 38 },
-  { id: 3, name: "Airport Kiosk", address: "Terminal 2, Domestic", phone: "+91 98765 43212", manager: "Amit Kumar", status: "active", assets: 15 },
-  { id: 4, name: "Suburban Store", address: "45 Green Valley Rd", phone: "+91 98765 43213", manager: "Sneha Reddy", status: "active", assets: 45 },
-  { id: 5, name: "Highway Express", address: "NH-48, Service Road", phone: "+91 98765 43214", manager: "Vikram Singh", status: "under-renovation", assets: 28 },
-];
+type Store = {
+  id: string;
+  name: string;
+  address: string;
+  phone: string;
+  manager: string;
+  status: string;
+  assets: number;
+};
 
 export default function StoresList() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [stores, setStores] = useState(initialStores);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
@@ -69,23 +73,42 @@ export default function StoresList() {
     },
   });
 
-  const onSubmit = (data: StoreFormData) => {
-    const newStore = {
-      id: stores.length + 1,
+  useEffect(() => {
+    fetchStores();
+  }, []);
+
+  const fetchStores = async () => {
+    const { data, error } = await supabase
+      .from("stores")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to load stores", variant: "destructive" });
+    } else {
+      setStores(data || []);
+    }
+    setLoading(false);
+  };
+
+  const onSubmit = async (data: StoreFormData) => {
+    const { error } = await supabase.from("stores").insert({
       name: data.name,
       address: data.address,
       phone: data.phone,
       manager: data.manager,
       status: data.status,
       assets: 0,
-    };
-    setStores([...stores, newStore]);
-    form.reset();
-    setOpen(false);
-    toast({
-      title: "Store added",
-      description: `${data.name} has been added successfully.`,
     });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to add store", variant: "destructive" });
+    } else {
+      toast({ title: "Store added", description: `${data.name} has been added successfully.` });
+      form.reset();
+      setOpen(false);
+      fetchStores();
+    }
   };
 
   const filteredStores = stores.filter(
@@ -93,6 +116,14 @@ export default function StoresList() {
       store.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       store.address.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
