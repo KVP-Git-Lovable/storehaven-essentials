@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Search, Building2, IndianRupee } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Search, Building2, IndianRupee, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -38,16 +38,19 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { vendorSchema, type VendorFormData } from "@/lib/schemas";
+import { supabase } from "@/integrations/supabase/client";
 
 const categories = ["HVAC", "Security", "Power", "IT", "Safety", "Cleaning", "Electrical", "Plumbing"];
 
-const initialVendors = [
-  { id: 1, name: "CoolTech Services", category: "HVAC", contact: "Rajesh Kumar", phone: "+91 98765 11111", email: "rajesh@cooltech.in", contracts: 3, totalPayouts: 540000 },
-  { id: 2, name: "SecureView Ltd", category: "Security", contact: "Priya Menon", phone: "+91 98765 22222", email: "priya@secureview.in", contracts: 2, totalPayouts: 192000 },
-  { id: 3, name: "PowerGen Solutions", category: "Power", contact: "Amit Shah", phone: "+91 98765 33333", email: "amit@powergen.in", contracts: 1, totalPayouts: 360000 },
-  { id: 4, name: "IT Support Pro", category: "IT", contact: "Neha Sharma", phone: "+91 98765 44444", email: "neha@itsupportpro.in", contracts: 4, totalPayouts: 480000 },
-  { id: 5, name: "SafeFirst Inc", category: "Safety", contact: "Vikram Joshi", phone: "+91 98765 55555", email: "vikram@safefirst.in", contracts: 2, totalPayouts: 288000 },
-];
+type Vendor = {
+  id: string;
+  name: string;
+  category: string;
+  contact_person: string;
+  phone: string;
+  email: string;
+  status: string;
+};
 
 const stats = [
   { title: "Total Vendors", value: "32", icon: Building2, iconColor: "bg-primary/10 text-primary" },
@@ -58,7 +61,8 @@ const stats = [
 
 export default function Vendors() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [vendors, setVendors] = useState(initialVendors);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
@@ -67,30 +71,48 @@ export default function Vendors() {
     defaultValues: {
       name: "",
       category: "",
-      contact: "",
+      contactPerson: "",
       phone: "",
       email: "",
     },
   });
 
-  const onSubmit = (data: VendorFormData) => {
-    const newVendor = {
-      id: vendors.length + 1,
+  useEffect(() => {
+    fetchVendors();
+  }, []);
+
+  const fetchVendors = async () => {
+    const { data, error } = await supabase
+      .from("vendors")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to load vendors", variant: "destructive" });
+    } else {
+      setVendors(data || []);
+    }
+    setLoading(false);
+  };
+
+  const onSubmit = async (data: VendorFormData) => {
+    const { error } = await supabase.from("vendors").insert({
       name: data.name,
       category: data.category,
-      contact: data.contact,
+      contact_person: data.contactPerson,
       phone: data.phone,
       email: data.email,
-      contracts: 0,
-      totalPayouts: 0,
-    };
-    setVendors([...vendors, newVendor]);
-    form.reset();
-    setOpen(false);
-    toast({
-      title: "Vendor added",
-      description: `${data.name} has been added successfully.`,
+      status: "active",
     });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to add vendor", variant: "destructive" });
+    } else {
+      toast({ title: "Vendor added", description: `${data.name} has been added successfully.` });
+      form.reset();
+      setOpen(false);
+      fetchVendors();
+    }
   };
 
   const filteredVendors = vendors.filter(
@@ -98,6 +120,14 @@ export default function Vendors() {
       vendor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       vendor.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -156,7 +186,7 @@ export default function Vendors() {
                 />
                 <FormField
                   control={form.control}
-                  name="contact"
+                  name="contactPerson"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Contact Person</FormLabel>
@@ -233,8 +263,8 @@ export default function Vendors() {
               <TableHead>Category</TableHead>
               <TableHead>Contact Person</TableHead>
               <TableHead>Phone</TableHead>
-              <TableHead>Contracts</TableHead>
-              <TableHead>Total Payouts</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -244,10 +274,14 @@ export default function Vendors() {
                 <TableCell>
                   <Badge variant="outline">{vendor.category}</Badge>
                 </TableCell>
-                <TableCell>{vendor.contact}</TableCell>
+                <TableCell>{vendor.contact_person}</TableCell>
                 <TableCell>{vendor.phone}</TableCell>
-                <TableCell>{vendor.contracts}</TableCell>
-                <TableCell>₹{vendor.totalPayouts.toLocaleString()}</TableCell>
+                <TableCell>{vendor.email}</TableCell>
+                <TableCell>
+                  <Badge variant={vendor.status === "active" ? "default" : "secondary"}>
+                    {vendor.status}
+                  </Badge>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

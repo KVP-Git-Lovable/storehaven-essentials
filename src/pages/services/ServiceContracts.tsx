@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, FileText, CheckCircle, Clock, AlertTriangle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, FileText, CheckCircle, Clock, AlertTriangle, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -38,17 +38,20 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { serviceContractSchema, type ServiceContractFormData } from "@/lib/schemas";
+import { supabase } from "@/integrations/supabase/client";
 
 const vendors = ["CoolTech Services", "SecureView Ltd", "PowerGen Solutions", "IT Support Pro", "SafeFirst Inc"];
-const contractTypes = ["HVAC AMC", "CCTV Maintenance", "Generator Service", "POS Maintenance", "Fire Safety", "Electrical AMC"];
+const serviceTypes = ["HVAC AMC", "CCTV Maintenance", "Generator Service", "POS Maintenance", "Fire Safety", "Electrical AMC"];
 
-const initialContracts = [
-  { id: "CON-001", vendor: "CoolTech Services", type: "HVAC AMC", stores: 5, annualValue: 180000, startDate: "2024-01-01", endDate: "2024-12-31", status: "active" },
-  { id: "CON-002", vendor: "SecureView Ltd", type: "CCTV Maintenance", stores: 8, annualValue: 96000, startDate: "2024-03-15", endDate: "2025-03-14", status: "active" },
-  { id: "CON-003", vendor: "PowerGen Solutions", type: "Generator Service", stores: 4, annualValue: 120000, startDate: "2023-06-01", endDate: "2024-05-31", status: "expiring" },
-  { id: "CON-004", vendor: "IT Support Pro", type: "POS Maintenance", stores: 10, annualValue: 240000, startDate: "2024-04-01", endDate: "2025-03-31", status: "active" },
-  { id: "CON-005", vendor: "SafeFirst Inc", type: "Fire Safety", stores: 12, annualValue: 144000, startDate: "2023-01-01", endDate: "2023-12-31", status: "expired" },
-];
+type ServiceContract = {
+  id: string;
+  vendor: string;
+  service_type: string;
+  start_date: string;
+  end_date: string;
+  value: number;
+  status: string;
+};
 
 const stats = [
   { title: "Total Contracts", value: "24", icon: FileText, iconColor: "bg-primary/10 text-primary" },
@@ -58,7 +61,8 @@ const stats = [
 ];
 
 export default function ServiceContracts() {
-  const [contracts, setContracts] = useState(initialContracts);
+  const [contracts, setContracts] = useState<ServiceContract[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
@@ -66,33 +70,58 @@ export default function ServiceContracts() {
     resolver: zodResolver(serviceContractSchema),
     defaultValues: {
       vendor: "",
-      type: "",
-      stores: 1,
-      annualValue: 0,
+      serviceType: "",
       startDate: "",
       endDate: "",
+      value: 0,
     },
   });
 
-  const onSubmit = (data: ServiceContractFormData) => {
-    const newContract = {
-      id: `CON-${String(contracts.length + 1).padStart(3, "0")}`,
-      vendor: data.vendor,
-      type: data.type,
-      stores: data.stores,
-      annualValue: data.annualValue,
-      startDate: data.startDate,
-      endDate: data.endDate,
-      status: "active",
-    };
-    setContracts([...contracts, newContract]);
-    form.reset();
-    setOpen(false);
-    toast({
-      title: "Contract added",
-      description: `Service contract with ${data.vendor} has been created.`,
-    });
+  useEffect(() => {
+    fetchContracts();
+  }, []);
+
+  const fetchContracts = async () => {
+    const { data, error } = await supabase
+      .from("service_contracts")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to load contracts", variant: "destructive" });
+    } else {
+      setContracts(data || []);
+    }
+    setLoading(false);
   };
+
+  const onSubmit = async (data: ServiceContractFormData) => {
+    const { error } = await supabase.from("service_contracts").insert({
+      vendor: data.vendor,
+      service_type: data.serviceType,
+      start_date: data.startDate,
+      end_date: data.endDate,
+      value: data.value,
+      status: "active",
+    });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to add contract", variant: "destructive" });
+    } else {
+      toast({ title: "Contract added", description: `Service contract with ${data.vendor} has been created.` });
+      form.reset();
+      setOpen(false);
+      fetchContracts();
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -138,10 +167,10 @@ export default function ServiceContracts() {
                 />
                 <FormField
                   control={form.control}
-                  name="type"
+                  name="serviceType"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Contract Type</FormLabel>
+                      <FormLabel>Service Type</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                           <SelectTrigger>
@@ -149,7 +178,7 @@ export default function ServiceContracts() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {contractTypes.map((type) => (
+                          {serviceTypes.map((type) => (
                             <SelectItem key={type} value={type}>{type}</SelectItem>
                           ))}
                         </SelectContent>
@@ -158,34 +187,19 @@ export default function ServiceContracts() {
                     </FormItem>
                   )}
                 />
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="stores"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>No. of Stores</FormLabel>
-                        <FormControl>
-                          <Input type="number" placeholder="Stores covered" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="annualValue"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Annual Value (₹)</FormLabel>
-                        <FormControl>
-                          <Input type="number" placeholder="Contract value" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                <FormField
+                  control={form.control}
+                  name="value"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Contract Value (₹)</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="Contract value" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -236,11 +250,9 @@ export default function ServiceContracts() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Contract ID</TableHead>
               <TableHead>Vendor</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Stores</TableHead>
-              <TableHead>Annual Value</TableHead>
+              <TableHead>Service Type</TableHead>
+              <TableHead>Value</TableHead>
               <TableHead>Period</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
@@ -248,13 +260,11 @@ export default function ServiceContracts() {
           <TableBody>
             {contracts.map((contract) => (
               <TableRow key={contract.id}>
-                <TableCell className="font-mono text-sm">{contract.id}</TableCell>
                 <TableCell className="font-medium">{contract.vendor}</TableCell>
-                <TableCell>{contract.type}</TableCell>
-                <TableCell>{contract.stores}</TableCell>
-                <TableCell>₹{contract.annualValue.toLocaleString()}</TableCell>
+                <TableCell>{contract.service_type}</TableCell>
+                <TableCell>₹{Number(contract.value).toLocaleString()}</TableCell>
                 <TableCell className="text-sm">
-                  {new Date(contract.startDate).toLocaleDateString()} - {new Date(contract.endDate).toLocaleDateString()}
+                  {new Date(contract.start_date).toLocaleDateString()} - {new Date(contract.end_date).toLocaleDateString()}
                 </TableCell>
                 <TableCell>
                   <Badge

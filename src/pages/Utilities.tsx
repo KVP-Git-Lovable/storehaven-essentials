@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Gauge, Zap, Droplets, Fuel } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Gauge, Zap, Droplets, Fuel, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -37,9 +37,11 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { utilityReadingSchema, type UtilityReadingFormData } from "@/lib/schemas";
+import { supabase } from "@/integrations/supabase/client";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 const storesList = ["Downtown Store", "Mall Outlet", "Airport Kiosk", "Suburban Store", "Highway Express"];
+const utilityTypes = ["Power", "Water", "Generator"];
 
 const chartData = [
   { month: "Jan", power: 4200, water: 850, generator: 120 },
@@ -50,13 +52,13 @@ const chartData = [
   { month: "Jun", power: 6100, water: 1400, generator: 280 },
 ];
 
-const initialReadings = [
-  { id: 1, store: "Downtown Store", date: "2024-03-20", power: 1250, water: 45, generator: 12 },
-  { id: 2, store: "Mall Outlet", date: "2024-03-20", power: 1820, water: 62, generator: 8 },
-  { id: 3, store: "Airport Kiosk", date: "2024-03-20", power: 680, water: 28, generator: 5 },
-  { id: 4, store: "Suburban Store", date: "2024-03-20", power: 1100, water: 38, generator: 15 },
-  { id: 5, store: "Highway Express", date: "2024-03-20", power: 950, water: 32, generator: 22 },
-];
+type UtilityReading = {
+  id: string;
+  store: string;
+  utility_type: string;
+  meter_reading: number;
+  reading_date: string;
+};
 
 const stats = [
   { title: "Total Power (kWh)", value: "5,800", change: "+12% from last month", changeType: "negative" as const, icon: Zap, iconColor: "bg-warning/10 text-warning" },
@@ -66,7 +68,8 @@ const stats = [
 ];
 
 export default function Utilities() {
-  const [readings, setReadings] = useState(initialReadings);
+  const [readings, setReadings] = useState<UtilityReading[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
@@ -74,30 +77,55 @@ export default function Utilities() {
     resolver: zodResolver(utilityReadingSchema),
     defaultValues: {
       store: "",
-      date: "",
-      power: 0,
-      water: 0,
-      generator: 0,
+      utilityType: "",
+      meterReading: 0,
+      readingDate: "",
     },
   });
 
-  const onSubmit = (data: UtilityReadingFormData) => {
-    const newReading = {
-      id: readings.length + 1,
-      store: data.store,
-      date: data.date,
-      power: data.power,
-      water: data.water,
-      generator: data.generator,
-    };
-    setReadings([newReading, ...readings]);
-    form.reset();
-    setOpen(false);
-    toast({
-      title: "Reading recorded",
-      description: `Utility reading for ${data.store} has been saved.`,
-    });
+  useEffect(() => {
+    fetchReadings();
+  }, []);
+
+  const fetchReadings = async () => {
+    const { data, error } = await supabase
+      .from("utilities")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to load readings", variant: "destructive" });
+    } else {
+      setReadings(data || []);
+    }
+    setLoading(false);
   };
+
+  const onSubmit = async (data: UtilityReadingFormData) => {
+    const { error } = await supabase.from("utilities").insert({
+      store: data.store,
+      utility_type: data.utilityType,
+      meter_reading: data.meterReading,
+      reading_date: data.readingDate,
+    });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to save reading", variant: "destructive" });
+    } else {
+      toast({ title: "Reading recorded", description: `Utility reading for ${data.store} has been saved.` });
+      form.reset();
+      setOpen(false);
+      fetchReadings();
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -144,7 +172,44 @@ export default function Utilities() {
                   />
                   <FormField
                     control={form.control}
-                    name="date"
+                    name="utilityType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Utility Type</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {utilityTypes.map((type) => (
+                              <SelectItem key={type} value={type}>{type}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="meterReading"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Meter Reading</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="Enter reading" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="readingDate"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Date</FormLabel>
@@ -156,45 +221,6 @@ export default function Utilities() {
                     )}
                   />
                 </div>
-                <FormField
-                  control={form.control}
-                  name="power"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Power (kWh)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="Enter power reading" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="water"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Water (KL)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="Enter water reading" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="generator"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Generator (Hours)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="Enter generator hours" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
                 <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                     Cancel
@@ -239,20 +265,18 @@ export default function Utilities() {
           <TableHeader>
             <TableRow>
               <TableHead>Store</TableHead>
+              <TableHead>Utility Type</TableHead>
+              <TableHead>Reading</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead>Power (kWh)</TableHead>
-              <TableHead>Water (KL)</TableHead>
-              <TableHead>Generator (hrs)</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {readings.map((reading) => (
               <TableRow key={reading.id}>
                 <TableCell className="font-medium">{reading.store}</TableCell>
-                <TableCell>{new Date(reading.date).toLocaleDateString()}</TableCell>
-                <TableCell>{reading.power.toLocaleString()}</TableCell>
-                <TableCell>{reading.water}</TableCell>
-                <TableCell>{reading.generator}</TableCell>
+                <TableCell>{reading.utility_type}</TableCell>
+                <TableCell>{Number(reading.meter_reading).toLocaleString()}</TableCell>
+                <TableCell>{new Date(reading.reading_date).toLocaleDateString()}</TableCell>
               </TableRow>
             ))}
           </TableBody>
