@@ -1,0 +1,155 @@
+import { useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import {
+  LayoutDashboard,
+  Store,
+  Package,
+  Wrench,
+  Users,
+  DollarSign,
+  Gauge,
+  ClipboardList,
+  ShieldCheck,
+  ChevronDown,
+  FileText,
+  Boxes,
+  Calendar,
+  AlertTriangle,
+  UserCheck,
+  Building2,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface NavItem {
+  title: string;
+  href?: string;
+  icon: React.ElementType;
+  children?: { title: string; href: string }[];
+}
+
+const navigation: NavItem[] = [
+  { title: "Dashboard", href: "/", icon: LayoutDashboard },
+  {
+    title: "Store Management",
+    icon: Store,
+    children: [
+      { title: "All Stores", href: "/stores" },
+      { title: "Rentals & Leases", href: "/stores/rentals" },
+      { title: "New Store Opening", href: "/stores/new-opening" },
+    ],
+  },
+  {
+    title: "Assets & Services",
+    icon: Package,
+    children: [
+      { title: "Products Catalog", href: "/assets/products" },
+      { title: "Asset Inventory", href: "/assets/inventory" },
+      { title: "Spares Management", href: "/assets/spares" },
+      { title: "Service Contracts", href: "/services/contracts" },
+      { title: "Preventive Maintenance", href: "/services/maintenance" },
+      { title: "Incidents", href: "/services/incidents" },
+    ],
+  },
+  { title: "Vendors", href: "/vendors", icon: Building2 },
+  { title: "Petty Cash", href: "/petty-cash", icon: DollarSign },
+  { title: "Utilities", href: "/utilities", icon: Gauge },
+  {
+    title: "Staff Management",
+    icon: Users,
+    children: [
+      { title: "Employees", href: "/staff/employees" },
+      { title: "Attendance & Leave", href: "/staff/attendance" },
+    ],
+  },
+  { title: "Housekeeping", href: "/housekeeping", icon: ClipboardList },
+  { title: "Security", href: "/security", icon: ShieldCheck },
+  { title: "Footfall", href: "/footfall", icon: UserCheck },
+];
+
+export function AppSidebar() {
+  const location = useLocation();
+  const [openMenus, setOpenMenus] = useState<string[]>(["Store Management", "Assets & Services"]);
+
+  const toggleMenu = (title: string) => {
+    setOpenMenus((prev) =>
+      prev.includes(title) ? prev.filter((t) => t !== title) : [...prev, title]
+    );
+  };
+
+  const isActive = (href: string) => location.pathname === href;
+  const isChildActive = (children?: { href: string }[]) =>
+    children?.some((child) => location.pathname === child.href);
+
+  return (
+    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
+      <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-6">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+          <Store className="h-4 w-4 text-primary-foreground" />
+        </div>
+        <span className="font-display text-lg font-semibold">StoreOps</span>
+      </div>
+
+      <nav className="flex-1 space-y-1 overflow-y-auto p-4">
+        {navigation.map((item) => (
+          <div key={item.title}>
+            {item.href ? (
+              <NavLink
+                to={item.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  isActive(item.href)
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.title}
+              </NavLink>
+            ) : (
+              <>
+                <button
+                  onClick={() => toggleMenu(item.title)}
+                  className={cn(
+                    "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    isChildActive(item.children)
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <item.icon className="h-4 w-4" />
+                    {item.title}
+                  </div>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform",
+                      openMenus.includes(item.title) && "rotate-180"
+                    )}
+                  />
+                </button>
+                {openMenus.includes(item.title) && item.children && (
+                  <div className="ml-4 mt-1 space-y-1 border-l border-sidebar-border pl-4">
+                    {item.children.map((child) => (
+                      <NavLink
+                        key={child.href}
+                        to={child.href}
+                        className={cn(
+                          "block rounded-lg px-3 py-2 text-sm transition-colors",
+                          isActive(child.href)
+                            ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                            : "text-sidebar-foreground/60 hover:text-sidebar-foreground"
+                        )}
+                      >
+                        {child.title}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        ))}
+      </nav>
+    </aside>
+  );
+}
