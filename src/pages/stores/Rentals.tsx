@@ -75,8 +75,12 @@ export default function Rentals() {
   const onSubmit = (data: RentalFormData) => {
     const newLease = {
       id: leases.length + 1,
-      ...data,
-      status: "active" as const,
+      store: data.store,
+      landlord: data.landlord,
+      rent: data.rent,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      status: "active",
     };
     setLeases([...leases, newLease]);
     form.reset();

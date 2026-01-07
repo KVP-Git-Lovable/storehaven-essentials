@@ -72,7 +72,11 @@ export default function StoresList() {
   const onSubmit = (data: StoreFormData) => {
     const newStore = {
       id: stores.length + 1,
-      ...data,
+      name: data.name,
+      address: data.address,
+      phone: data.phone,
+      manager: data.manager,
+      status: data.status,
       assets: 0,
     };
     setStores([...stores, newStore]);
