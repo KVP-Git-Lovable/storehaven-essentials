@@ -70,6 +70,10 @@ const navigation: NavItem[] = [
     icon: Database,
     children: [
       { title: "Meter Master", href: "/master/meter" },
+      { title: "Department Master", href: "/master/department" },
+      { title: "Position Master", href: "/master/position" },
+      { title: "Category Master", href: "/master/category" },
+      { title: "Location Master", href: "/master/location" },
     ],
   },
 ];
