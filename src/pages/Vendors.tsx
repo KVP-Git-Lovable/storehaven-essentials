@@ -130,20 +130,20 @@ export default function Vendors() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Vendor Management</h1>
-          <p className="text-muted-foreground">Manage vendors and payouts</p>
+          <h1 className="text-xl md:text-2xl font-semibold">Vendor Management</h1>
+          <p className="text-sm text-muted-foreground">Manage vendors and payouts</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button className="gap-2 w-full sm:w-auto">
               <Plus className="h-4 w-4" />
               Add Vendor
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Vendor</DialogTitle>
             </DialogHeader>
@@ -197,7 +197,7 @@ export default function Vendors() {
                     </FormItem>
                   )}
                 />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="phone"
@@ -225,7 +225,7 @@ export default function Vendors() {
                     )}
                   />
                 </div>
-                <div className="flex justify-end gap-2 pt-4">
+                <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                     Cancel
                   </Button>
@@ -237,14 +237,14 @@ export default function Vendors() {
         </Dialog>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
         {stats.map((stat) => (
           <StatCard key={stat.title} {...stat} />
         ))}
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+        <div className="relative flex-1 max-w-full sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search vendors..."
@@ -255,16 +255,16 @@ export default function Vendors() {
         </div>
       </div>
 
-      <div className="rounded-xl border bg-card">
+      <div className="rounded-xl border bg-card overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Vendor Name</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Contact Person</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead className="min-w-[150px]">Vendor Name</TableHead>
+              <TableHead className="min-w-[100px]">Category</TableHead>
+              <TableHead className="min-w-[130px]">Contact Person</TableHead>
+              <TableHead className="min-w-[120px]">Phone</TableHead>
+              <TableHead className="min-w-[150px]">Email</TableHead>
+              <TableHead className="min-w-[80px]">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -276,7 +276,7 @@ export default function Vendors() {
                 </TableCell>
                 <TableCell>{vendor.contact_person}</TableCell>
                 <TableCell>{vendor.phone}</TableCell>
-                <TableCell>{vendor.email}</TableCell>
+                <TableCell className="truncate max-w-[150px]">{vendor.email}</TableCell>
                 <TableCell>
                   <Badge variant={vendor.status === "active" ? "default" : "secondary"}>
                     {vendor.status}

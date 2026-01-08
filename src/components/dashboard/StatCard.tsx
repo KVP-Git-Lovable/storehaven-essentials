@@ -20,14 +20,14 @@ export function StatCard({
 }: StatCardProps) {
   return (
     <div className="stat-card">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <p className="mt-2 text-3xl font-semibold tracking-tight">{value}</p>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs md:text-sm font-medium text-muted-foreground truncate">{title}</p>
+          <p className="mt-1 md:mt-2 text-xl md:text-3xl font-semibold tracking-tight">{value}</p>
           {change && (
             <p
               className={cn(
-                "mt-1 text-sm",
+                "mt-1 text-xs md:text-sm truncate",
                 changeType === "positive" && "text-success",
                 changeType === "negative" && "text-destructive",
                 changeType === "neutral" && "text-muted-foreground"
@@ -37,8 +37,8 @@ export function StatCard({
             </p>
           )}
         </div>
-        <div className={cn("rounded-lg p-2.5", iconColor)}>
-          <Icon className="h-5 w-5" />
+        <div className={cn("rounded-lg p-2 md:p-2.5 shrink-0", iconColor)}>
+          <Icon className="h-4 w-4 md:h-5 md:w-5" />
         </div>
       </div>
     </div>

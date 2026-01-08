@@ -126,20 +126,20 @@ export default function StoresList() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">All Stores</h1>
-          <p className="text-muted-foreground">Manage your store locations</p>
+          <h1 className="text-xl md:text-2xl font-semibold">All Stores</h1>
+          <p className="text-sm text-muted-foreground">Manage your store locations</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button className="gap-2 w-full sm:w-auto">
               <Plus className="h-4 w-4" />
               Add Store
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Store</DialogTitle>
             </DialogHeader>
@@ -171,7 +171,7 @@ export default function StoresList() {
                     </FormItem>
                   )}
                 />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="phone"
@@ -221,7 +221,7 @@ export default function StoresList() {
                     </FormItem>
                   )}
                 />
-                <div className="flex justify-end gap-2 pt-4">
+                <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                     Cancel
                   </Button>
@@ -234,7 +234,7 @@ export default function StoresList() {
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+        <div className="relative flex-1 max-w-full sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search stores..."
@@ -245,15 +245,15 @@ export default function StoresList() {
         </div>
       </div>
 
-      <div className="rounded-xl border bg-card">
+      <div className="rounded-xl border bg-card overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Store Name</TableHead>
-              <TableHead>Address</TableHead>
-              <TableHead>Manager</TableHead>
-              <TableHead>Assets</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead className="min-w-[150px]">Store Name</TableHead>
+              <TableHead className="min-w-[200px]">Address</TableHead>
+              <TableHead className="min-w-[120px]">Manager</TableHead>
+              <TableHead className="min-w-[80px]">Assets</TableHead>
+              <TableHead className="min-w-[100px]">Status</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -263,8 +263,8 @@ export default function StoresList() {
                 <TableCell className="font-medium">{store.name}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2 text-muted-foreground">
-                    <MapPin className="h-4 w-4" />
-                    {store.address}
+                    <MapPin className="h-4 w-4 shrink-0" />
+                    <span className="truncate max-w-[180px]">{store.address}</span>
                   </div>
                 </TableCell>
                 <TableCell>{store.manager}</TableCell>

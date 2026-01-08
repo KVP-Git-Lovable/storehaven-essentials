@@ -1,4 +1,4 @@
-import { Bell, Search, User } from "lucide-react";
+import { Bell, Menu, Search, User } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,23 +9,35 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useIsMobile } from "@/hooks/use-mobile";
 
-export function AppHeader() {
+interface AppHeaderProps {
+  onMenuClick: () => void;
+}
+
+export function AppHeader({ onMenuClick }: AppHeaderProps) {
+  const isMobile = useIsMobile();
+
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6">
-      <div className="flex items-center gap-4 flex-1">
+    <header className="sticky top-0 z-30 flex h-14 md:h-16 items-center justify-between border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6 gap-2">
+      <div className="flex items-center gap-2 md:gap-4 flex-1">
+        {isMobile && (
+          <Button variant="ghost" size="icon" onClick={onMenuClick} className="shrink-0">
+            <Menu className="h-5 w-5" />
+          </Button>
+        )}
         <div className="relative w-full max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search stores, assets, vendors..."
-            className="pl-10 bg-secondary border-0"
+            placeholder={isMobile ? "Search..." : "Search stores, assets, vendors..."}
+            className="pl-10 bg-secondary border-0 h-9 md:h-10"
           />
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
+      <div className="flex items-center gap-1 md:gap-2">
+        <Button variant="ghost" size="icon" className="relative h-9 w-9 md:h-10 md:w-10">
+          <Bell className="h-4 w-4 md:h-5 md:w-5" />
           <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground">
             3
           </span>
@@ -33,9 +45,9 @@ export function AppHeader() {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                <User className="h-4 w-4" />
+            <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 md:h-10 md:w-10">
+              <div className="flex h-7 w-7 md:h-8 md:w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                <User className="h-3.5 w-3.5 md:h-4 md:w-4" />
               </div>
             </Button>
           </DropdownMenuTrigger>

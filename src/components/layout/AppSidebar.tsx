@@ -4,21 +4,21 @@ import {
   LayoutDashboard,
   Store,
   Package,
-  Wrench,
   Users,
   DollarSign,
   Gauge,
   ClipboardList,
   ShieldCheck,
   ChevronDown,
-  FileText,
-  Boxes,
-  Calendar,
-  AlertTriangle,
   UserCheck,
   Building2,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface NavItem {
   title: string;
@@ -66,8 +66,14 @@ const navigation: NavItem[] = [
   { title: "Footfall", href: "/footfall", icon: UserCheck },
 ];
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
   const location = useLocation();
+  const isMobile = useIsMobile();
   const [openMenus, setOpenMenus] = useState<string[]>(["Store Management", "Assets & Services"]);
 
   const toggleMenu = (title: string) => {
@@ -80,76 +86,111 @@ export function AppSidebar() {
   const isChildActive = (children?: { href: string }[]) =>
     children?.some((child) => location.pathname === child.href);
 
-  return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
-      <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-          <Store className="h-4 w-4 text-primary-foreground" />
+  const handleNavClick = () => {
+    if (isMobile) {
+      onOpenChange(false);
+    }
+  };
+
+  const sidebarContent = (
+    <>
+      <div className="flex h-14 md:h-16 items-center justify-between gap-2 border-b border-sidebar-border px-4 md:px-6">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+            <Store className="h-4 w-4 text-primary-foreground" />
+          </div>
+          <span className="font-display text-lg font-semibold">StoreOps</span>
         </div>
-        <span className="font-display text-lg font-semibold">StoreOps</span>
+        {isMobile && (
+          <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8">
+            <X className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto p-4">
-        {navigation.map((item) => (
-          <div key={item.title}>
-            {item.href ? (
-              <NavLink
-                to={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                  isActive(item.href)
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.title}
-              </NavLink>
-            ) : (
-              <>
-                <button
-                  onClick={() => toggleMenu(item.title)}
+      <ScrollArea className="flex-1">
+        <nav className="space-y-1 p-3 md:p-4">
+          {navigation.map((item) => (
+            <div key={item.title}>
+              {item.href ? (
+                <NavLink
+                  to={item.href}
+                  onClick={handleNavClick}
                   className={cn(
-                    "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    isChildActive(item.children)
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 md:py-2 text-sm font-medium transition-colors",
+                    isActive(item.href)
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   )}
                 >
-                  <div className="flex items-center gap-3">
-                    <item.icon className="h-4 w-4" />
-                    {item.title}
-                  </div>
-                  <ChevronDown
+                  <item.icon className="h-4 w-4" />
+                  {item.title}
+                </NavLink>
+              ) : (
+                <>
+                  <button
+                    onClick={() => toggleMenu(item.title)}
                     className={cn(
-                      "h-4 w-4 transition-transform",
-                      openMenus.includes(item.title) && "rotate-180"
+                      "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 md:py-2 text-sm font-medium transition-colors",
+                      isChildActive(item.children)
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     )}
-                  />
-                </button>
-                {openMenus.includes(item.title) && item.children && (
-                  <div className="ml-4 mt-1 space-y-1 border-l border-sidebar-border pl-4">
-                    {item.children.map((child) => (
-                      <NavLink
-                        key={child.href}
-                        to={child.href}
-                        className={cn(
-                          "block rounded-lg px-3 py-2 text-sm transition-colors",
-                          isActive(child.href)
-                            ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                            : "text-sidebar-foreground/60 hover:text-sidebar-foreground"
-                        )}
-                      >
-                        {child.title}
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon className="h-4 w-4" />
+                      {item.title}
+                    </div>
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 transition-transform",
+                        openMenus.includes(item.title) && "rotate-180"
+                      )}
+                    />
+                  </button>
+                  {openMenus.includes(item.title) && item.children && (
+                    <div className="ml-4 mt-1 space-y-1 border-l border-sidebar-border pl-4">
+                      {item.children.map((child) => (
+                        <NavLink
+                          key={child.href}
+                          to={child.href}
+                          onClick={handleNavClick}
+                          className={cn(
+                            "block rounded-lg px-3 py-2 text-sm transition-colors",
+                            isActive(child.href)
+                              ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                              : "text-sidebar-foreground/60 hover:text-sidebar-foreground"
+                          )}
+                        >
+                          {child.title}
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+        </nav>
+      </ScrollArea>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent side="left" className="w-72 p-0 bg-sidebar text-sidebar-foreground border-sidebar-border">
+          <div className="flex flex-col h-full">
+            {sidebarContent}
           </div>
-        ))}
-      </nav>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  return (
+    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col">
+      {sidebarContent}
     </aside>
   );
 }
