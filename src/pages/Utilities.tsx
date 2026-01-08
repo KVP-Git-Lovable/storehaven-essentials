@@ -41,7 +41,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { format } from "date-fns";
 
-const storesList = ["Downtown Store", "Mall Outlet", "Airport Kiosk", "Suburban Store", "Highway Express"];
+type Store = {
+  id: string;
+  name: string;
+};
 
 const chartData = [
   { month: "Jan", power: 4200, water: 850, generator: 120 },
@@ -83,6 +86,7 @@ const stats = [
 export default function Utilities() {
   const [readings, setReadings] = useState<UtilityReading[]>([]);
   const [meterMasters, setMeterMasters] = useState<MeterMaster[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [selectedReading, setSelectedReading] = useState<UtilityReading | null>(null);
@@ -107,10 +111,17 @@ export default function Utilities() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [readingsRes, mastersRes] = await Promise.all([
+    const [readingsRes, mastersRes, storesRes] = await Promise.all([
       supabase.from("utility_readings").select("*").order("created_at", { ascending: false }),
       supabase.from("meter_masters").select("*").order("name"),
+      supabase.from("stores").select("id, name").order("name"),
     ]);
+
+    if (storesRes.error) {
+      toast({ title: "Error", description: "Failed to load stores", variant: "destructive" });
+    } else {
+      setStores(storesRes.data || []);
+    }
 
     if (readingsRes.error) {
       toast({ title: "Error", description: "Failed to load readings", variant: "destructive" });
@@ -148,7 +159,7 @@ export default function Utilities() {
     
     const fields: { key: string; label: string }[] = [];
     
-    master.reading_parameters.forEach((param, index) => {
+    master.reading_parameters.forEach((param) => {
       if (master.details_to_capture === "Start") {
         fields.push({ key: `${param}_start`, label: `${param} Day Start Reading` });
       } else if (master.details_to_capture === "End") {
@@ -160,6 +171,19 @@ export default function Utilities() {
     });
     
     return fields;
+  };
+
+  const calculateConsumption = (readings: Record<string, number>, master: MeterMaster | null) => {
+    if (!master || master.details_to_capture !== "Both") return null;
+    
+    const consumptions: { param: string; value: number }[] = [];
+    master.reading_parameters.forEach((param) => {
+      const start = readings[`${param}_start`] || 0;
+      const end = readings[`${param}_end`] || 0;
+      consumptions.push({ param, value: end - start });
+    });
+    
+    return consumptions;
   };
 
   const validateDate = (dateStr: string): boolean => {
@@ -304,8 +328,8 @@ export default function Utilities() {
                       <SelectValue placeholder="Select store" />
                     </SelectTrigger>
                     <SelectContent>
-                      {storesList.map((store) => (
-                        <SelectItem key={store} value={store}>{store}</SelectItem>
+                      {stores.map((store) => (
+                        <SelectItem key={store.id} value={store.name}>{store.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -354,6 +378,21 @@ export default function Utilities() {
                       </div>
                     ))}
                   </div>
+                  
+                  {/* Live Consumption Calculation */}
+                  {selectedMeterMaster.details_to_capture === "Both" && (
+                    <div className="pt-4">
+                      <h4 className="font-medium text-sm mb-2">Consumption Preview (End - Start)</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {calculateConsumption(formData.readings, selectedMeterMaster)?.map((c) => (
+                          <div key={c.param} className="p-2 bg-primary/10 rounded text-sm">
+                            <span className="text-muted-foreground">{c.param}:</span>
+                            <span className="font-medium ml-2">{c.value.toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -458,8 +497,8 @@ export default function Utilities() {
                         <SelectValue placeholder="Select store" />
                       </SelectTrigger>
                       <SelectContent>
-                        {storesList.map((store) => (
-                          <SelectItem key={store} value={store}>{store}</SelectItem>
+                        {stores.map((store) => (
+                          <SelectItem key={store.id} value={store.name}>{store.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -520,6 +559,21 @@ export default function Utilities() {
                         ) : (
                           <p className="text-sm p-2 bg-muted rounded">{formData.readings[field.key] || 0}</p>
                         )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Consumption Calculation */}
+              {selectedMeterMaster && selectedMeterMaster.details_to_capture === "Both" && !isEditing && (
+                <div className="space-y-2 pt-4 border-t">
+                  <h4 className="font-medium">Consumption (End - Start)</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {calculateConsumption(formData.readings, selectedMeterMaster)?.map((c) => (
+                      <div key={c.param} className="p-3 bg-primary/10 rounded-lg">
+                        <span className="text-sm text-muted-foreground">{c.param} Consumption</span>
+                        <p className="text-lg font-semibold">{c.value.toLocaleString()}</p>
                       </div>
                     ))}
                   </div>
