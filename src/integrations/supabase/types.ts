@@ -16,39 +16,73 @@ export type Database = {
     Tables: {
       assets: {
         Row: {
+          asset_number: string | null
           category: string
+          category_id: string | null
           condition: string
           created_at: string
           id: string
           location: string
           name: string
+          oem_id: string | null
           purchase_date: string
           updated_at: string
           value: number
+          vendor_id: string | null
         }
         Insert: {
+          asset_number?: string | null
           category: string
+          category_id?: string | null
           condition: string
           created_at?: string
           id?: string
           location: string
           name: string
+          oem_id?: string | null
           purchase_date: string
           updated_at?: string
           value: number
+          vendor_id?: string | null
         }
         Update: {
+          asset_number?: string | null
           category?: string
+          category_id?: string | null
           condition?: string
           created_at?: string
           id?: string
           location?: string
           name?: string
+          oem_id?: string | null
           purchase_date?: string
           updated_at?: string
           value?: number
+          vendor_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "assets_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assets_oem_id_fkey"
+            columns: ["oem_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assets_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       categories: {
         Row: {
@@ -599,6 +633,7 @@ export type Database = {
           phone: string
           status: string
           updated_at: string
+          vendor_type: string
         }
         Insert: {
           category: string
@@ -610,6 +645,7 @@ export type Database = {
           phone: string
           status?: string
           updated_at?: string
+          vendor_type?: string
         }
         Update: {
           category?: string
@@ -621,6 +657,7 @@ export type Database = {
           phone?: string
           status?: string
           updated_at?: string
+          vendor_type?: string
         }
         Relationships: []
       }

@@ -42,10 +42,19 @@ import { supabase } from "@/integrations/supabase/client";
 
 const categories = ["HVAC", "Security", "Power", "IT", "Safety", "Cleaning", "Electrical", "Plumbing"];
 
+const vendorTypes = [
+  { value: "oem", label: "OEM" },
+  { value: "distributor", label: "Distributor" },
+  { value: "service-partner", label: "Service Partner" },
+  { value: "distributor-service", label: "Both Distributor and Service" },
+  { value: "consultant", label: "Consultant" },
+];
+
 type Vendor = {
   id: string;
   name: string;
   category: string;
+  vendor_type: string;
   contact_person: string;
   phone: string;
   email: string;
@@ -71,6 +80,7 @@ export default function Vendors() {
     defaultValues: {
       name: "",
       category: "",
+      vendorType: "",
       contactPerson: "",
       phone: "",
       email: "",
@@ -99,6 +109,7 @@ export default function Vendors() {
     const { error } = await supabase.from("vendors").insert({
       name: data.name,
       category: data.category,
+      vendor_type: data.vendorType,
       contact_person: data.contactPerson,
       phone: data.phone,
       email: data.email,
@@ -118,8 +129,13 @@ export default function Vendors() {
   const filteredVendors = vendors.filter(
     (vendor) =>
       vendor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      vendor.category.toLowerCase().includes(searchQuery.toLowerCase())
+      vendor.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (vendor.vendor_type && vendor.vendor_type.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  const getVendorTypeLabel = (value: string) => {
+    return vendorTypes.find((t) => t.value === value)?.label || value;
+  };
 
   if (loading) {
     return (
@@ -162,28 +178,52 @@ export default function Vendors() {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Category</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select category" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {categories.map((cat) => (
-                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="vendorType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Vendor Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {vendorTypes.map((type) => (
+                              <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="category"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Category</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select category" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {categories.map((cat) => (
+                              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 <FormField
                   control={form.control}
                   name="contactPerson"
@@ -260,6 +300,7 @@ export default function Vendors() {
           <TableHeader>
             <TableRow>
               <TableHead className="min-w-[150px]">Vendor Name</TableHead>
+              <TableHead className="min-w-[130px]">Vendor Type</TableHead>
               <TableHead className="min-w-[100px]">Category</TableHead>
               <TableHead className="min-w-[130px]">Contact Person</TableHead>
               <TableHead className="min-w-[120px]">Phone</TableHead>
@@ -271,6 +312,9 @@ export default function Vendors() {
             {filteredVendors.map((vendor) => (
               <TableRow key={vendor.id}>
                 <TableCell className="font-medium">{vendor.name}</TableCell>
+                <TableCell>
+                  <Badge variant="secondary">{getVendorTypeLabel(vendor.vendor_type)}</Badge>
+                </TableCell>
                 <TableCell>
                   <Badge variant="outline">{vendor.category}</Badge>
                 </TableCell>
