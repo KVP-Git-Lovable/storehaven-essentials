@@ -29,6 +29,8 @@ export type Database = {
           updated_at: string
           value: number
           vendor_id: string | null
+          warranty_end_date: string | null
+          warranty_start_date: string | null
         }
         Insert: {
           asset_number?: string | null
@@ -44,6 +46,8 @@ export type Database = {
           updated_at?: string
           value: number
           vendor_id?: string | null
+          warranty_end_date?: string | null
+          warranty_start_date?: string | null
         }
         Update: {
           asset_number?: string | null
@@ -59,6 +63,8 @@ export type Database = {
           updated_at?: string
           value?: number
           vendor_id?: string | null
+          warranty_end_date?: string | null
+          warranty_start_date?: string | null
         }
         Relationships: [
           {
@@ -470,6 +476,42 @@ export type Database = {
         }
         Relationships: []
       }
+      service_contract_assets: {
+        Row: {
+          asset_id: string
+          created_at: string
+          id: string
+          service_contract_id: string
+        }
+        Insert: {
+          asset_id: string
+          created_at?: string
+          id?: string
+          service_contract_id: string
+        }
+        Update: {
+          asset_id?: string
+          created_at?: string
+          id?: string
+          service_contract_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_contract_assets_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_contract_assets_service_contract_id_fkey"
+            columns: ["service_contract_id"]
+            isOneToOne: false
+            referencedRelation: "service_contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_contracts: {
         Row: {
           created_at: string
@@ -580,6 +622,7 @@ export type Database = {
       }
       utility_readings: {
         Row: {
+          asset_id: string | null
           created_at: string
           created_by: string
           id: string
@@ -591,6 +634,7 @@ export type Database = {
           store: string
         }
         Insert: {
+          asset_id?: string | null
           created_at?: string
           created_by?: string
           id?: string
@@ -602,6 +646,7 @@ export type Database = {
           store: string
         }
         Update: {
+          asset_id?: string | null
           created_at?: string
           created_by?: string
           id?: string
@@ -613,6 +658,13 @@ export type Database = {
           store?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "utility_readings_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "utility_readings_meter_master_id_fkey"
             columns: ["meter_master_id"]
