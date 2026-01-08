@@ -200,6 +200,42 @@ export type Database = {
         }
         Relationships: []
       }
+      meter_masters: {
+        Row: {
+          created_at: string
+          created_by: string
+          details_to_capture: string
+          id: string
+          last_modified_at: string
+          last_modified_by: string
+          name: string
+          reading_parameter_count: number
+          reading_parameters: string[]
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          details_to_capture?: string
+          id?: string
+          last_modified_at?: string
+          last_modified_by?: string
+          name: string
+          reading_parameter_count?: number
+          reading_parameters?: string[]
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          details_to_capture?: string
+          id?: string
+          last_modified_at?: string
+          last_modified_by?: string
+          name?: string
+          reading_parameter_count?: number
+          reading_parameters?: string[]
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           brand: string
