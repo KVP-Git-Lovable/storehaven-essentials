@@ -23,6 +23,10 @@ import Housekeeping from "./pages/Housekeeping";
 import Security from "./pages/Security";
 import Footfall from "./pages/Footfall";
 import MeterMaster from "./pages/master/MeterMaster";
+import DepartmentMaster from "./pages/master/DepartmentMaster";
+import PositionMaster from "./pages/master/PositionMaster";
+import CategoryMaster from "./pages/master/CategoryMaster";
+import LocationMaster from "./pages/master/LocationMaster";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -54,6 +58,10 @@ const App = () => (
             <Route path="/security" element={<Security />} />
             <Route path="/footfall" element={<Footfall />} />
             <Route path="/master/meter" element={<MeterMaster />} />
+            <Route path="/master/department" element={<DepartmentMaster />} />
+            <Route path="/master/position" element={<PositionMaster />} />
+            <Route path="/master/category" element={<CategoryMaster />} />
+            <Route path="/master/location" element={<LocationMaster />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
