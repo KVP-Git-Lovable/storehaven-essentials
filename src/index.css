@@ -115,6 +115,6 @@
   }
 
   .stat-card {
-    @apply bg-card rounded-xl border border-border p-6 shadow-sm transition-all duration-200 hover:shadow-md;
+    @apply bg-card rounded-xl border border-border p-4 md:p-6 shadow-sm transition-all duration-200 hover:shadow-md;
   }
 }
