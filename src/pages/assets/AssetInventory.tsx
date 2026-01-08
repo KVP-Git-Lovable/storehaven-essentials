@@ -40,29 +40,56 @@ import { useToast } from "@/hooks/use-toast";
 import { assetSchema, type AssetFormData } from "@/lib/schemas";
 import { supabase } from "@/integrations/supabase/client";
 
-const locations = ["Downtown Store", "Mall Outlet", "Airport Kiosk", "Suburban Store", "Highway Express"];
-const categories = ["HVAC", "IT Equipment", "Security", "Refrigeration", "Power", "Safety"];
-
 type Asset = {
   id: string;
   name: string;
+  asset_number: string | null;
   category: string;
+  category_id: string | null;
   location: string;
   condition: string;
   purchase_date: string;
   value: number;
+  vendor_id: string | null;
+  oem_id: string | null;
 };
+
+type Vendor = {
+  id: string;
+  name: string;
+  vendor_type: string;
+};
+
+type Category = {
+  id: string;
+  name: string;
+  type: string;
+};
+
+type Location = {
+  id: string;
+  name: string;
+};
+
+const conditionOptions = [
+  { value: "under-warranty", label: "Under Warranty" },
+  { value: "under-amc", label: "Under AMC" },
+  { value: "non-operational", label: "Non-Operational" },
+];
 
 const stats = [
   { title: "Total Assets", value: "1,247", icon: Package, iconColor: "bg-primary/10 text-primary" },
-  { title: "Operational", value: "1,198", icon: CheckCircle, iconColor: "bg-success/10 text-success" },
-  { title: "Under Maintenance", value: "32", icon: AlertTriangle, iconColor: "bg-warning/10 text-warning" },
+  { title: "Under Warranty", value: "856", icon: CheckCircle, iconColor: "bg-success/10 text-success" },
+  { title: "Under AMC", value: "374", icon: AlertTriangle, iconColor: "bg-warning/10 text-warning" },
   { title: "Non-Operational", value: "17", icon: XCircle, iconColor: "bg-destructive/10 text-destructive" },
 ];
 
 export default function AssetInventory() {
   const [searchQuery, setSearchQuery] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
@@ -71,40 +98,59 @@ export default function AssetInventory() {
     resolver: zodResolver(assetSchema),
     defaultValues: {
       name: "",
-      category: "",
+      assetNumber: "",
+      categoryId: "",
       location: "",
-      condition: "operational",
+      condition: "under-warranty",
       purchaseDate: "",
       value: 0,
+      vendorId: "",
+      oemId: "",
     },
   });
 
+  const selectedVendorId = form.watch("vendorId");
+
   useEffect(() => {
-    fetchAssets();
+    fetchData();
   }, []);
 
-  const fetchAssets = async () => {
-    const { data, error } = await supabase
-      .from("assets")
-      .select("*")
-      .order("created_at", { ascending: false });
+  const fetchData = async () => {
+    const [assetsRes, vendorsRes, categoriesRes, locationsRes] = await Promise.all([
+      supabase.from("assets").select("*").order("created_at", { ascending: false }),
+      supabase.from("vendors").select("id, name, vendor_type").order("name"),
+      supabase.from("categories").select("id, name, type").eq("type", "asset").eq("status", "active").order("name"),
+      supabase.from("locations").select("id, name").eq("status", "active").order("name"),
+    ]);
 
-    if (error) {
+    if (assetsRes.error) {
       toast({ title: "Error", description: "Failed to load assets", variant: "destructive" });
     } else {
-      setAssets(data || []);
+      setAssets(assetsRes.data || []);
     }
+    
+    setVendors(vendorsRes.data || []);
+    setCategories(categoriesRes.data || []);
+    setLocations(locationsRes.data || []);
     setLoading(false);
   };
 
+  const oemVendors = vendors.filter((v) => v.vendor_type === "oem");
+
   const onSubmit = async (data: AssetFormData) => {
+    const selectedCategory = categories.find((c) => c.id === data.categoryId);
+    
     const { error } = await supabase.from("assets").insert({
       name: data.name,
-      category: data.category,
+      asset_number: data.assetNumber,
+      category: selectedCategory?.name || "",
+      category_id: data.categoryId,
       location: data.location,
       condition: data.condition,
       purchase_date: data.purchaseDate,
       value: data.value,
+      vendor_id: data.vendorId,
+      oem_id: data.oemId || null,
     });
 
     if (error) {
@@ -113,15 +159,22 @@ export default function AssetInventory() {
       toast({ title: "Asset added", description: `Asset has been registered.` });
       form.reset();
       setOpen(false);
-      fetchAssets();
+      fetchData();
     }
   };
 
   const filteredAssets = assets.filter(
     (asset) =>
       asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      asset.category.toLowerCase().includes(searchQuery.toLowerCase())
+      asset.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (asset.asset_number && asset.asset_number.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  const getVendorName = (vendorId: string | null) => {
+    if (!vendorId) return "-";
+    const vendor = vendors.find((v) => v.id === vendorId);
+    return vendor?.name || "-";
+  };
 
   if (loading) {
     return (
@@ -135,7 +188,7 @@ export default function AssetInventory() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Asset Inventory</h1>
+          <h1 className="text-2xl font-semibold">Assets</h1>
           <p className="text-muted-foreground">Track all assets across stores</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -145,33 +198,48 @@ export default function AssetInventory() {
               Add Asset
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Asset</DialogTitle>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Asset Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Enter asset name" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="category"
+                    name="assetNumber"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Category</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormLabel>Asset #</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. AST-00001" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Asset Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Enter asset name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="categoryId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Product Category</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select category" />
@@ -179,7 +247,7 @@ export default function AssetInventory() {
                           </FormControl>
                           <SelectContent>
                             {categories.map((cat) => (
-                              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                              <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -193,7 +261,7 @@ export default function AssetInventory() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Location</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select location" />
@@ -201,7 +269,58 @@ export default function AssetInventory() {
                           </FormControl>
                           <SelectContent>
                             {locations.map((loc) => (
-                              <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                              <SelectItem key={loc.id} value={loc.name}>{loc.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="vendorId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Vendor Procured From</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select vendor" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {vendors.map((vendor) => (
+                              <SelectItem key={vendor.id} value={vendor.id}>{vendor.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="oemId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>OEM Name</FormLabel>
+                        <Select 
+                          onValueChange={(value) => field.onChange(value === "none" ? "" : value)} 
+                          value={field.value || "none"}
+                          disabled={oemVendors.length === 0}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder={oemVendors.length === 0 ? "No OEM vendors" : "Select OEM"} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
+                            {oemVendors.map((vendor) => (
+                              <SelectItem key={vendor.id} value={vendor.id}>{vendor.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -244,16 +363,16 @@ export default function AssetInventory() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Condition</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select condition" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="operational">Operational</SelectItem>
-                          <SelectItem value="maintenance">Under Maintenance</SelectItem>
-                          <SelectItem value="non-operational">Non-Operational</SelectItem>
+                          {conditionOptions.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -290,12 +409,15 @@ export default function AssetInventory() {
         </div>
       </div>
 
-      <div className="rounded-xl border bg-card">
+      <div className="rounded-xl border bg-card overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Asset #</TableHead>
               <TableHead>Asset Name</TableHead>
               <TableHead>Category</TableHead>
+              <TableHead>Vendor</TableHead>
+              <TableHead>OEM</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Purchase Date</TableHead>
               <TableHead>Value</TableHead>
@@ -305,21 +427,24 @@ export default function AssetInventory() {
           <TableBody>
             {filteredAssets.map((asset) => (
               <TableRow key={asset.id}>
+                <TableCell className="font-mono text-sm">{asset.asset_number || "-"}</TableCell>
                 <TableCell className="font-medium">{asset.name}</TableCell>
                 <TableCell>
                   <Badge variant="outline">{asset.category}</Badge>
                 </TableCell>
+                <TableCell>{getVendorName(asset.vendor_id)}</TableCell>
+                <TableCell>{getVendorName(asset.oem_id)}</TableCell>
                 <TableCell>{asset.location}</TableCell>
                 <TableCell>{new Date(asset.purchase_date).toLocaleDateString()}</TableCell>
                 <TableCell>₹{Number(asset.value).toLocaleString()}</TableCell>
                 <TableCell>
                   <Badge
                     variant={
-                      asset.condition === "operational" ? "default" :
-                      asset.condition === "maintenance" ? "secondary" : "destructive"
+                      asset.condition === "under-warranty" ? "default" :
+                      asset.condition === "under-amc" ? "secondary" : "destructive"
                     }
                   >
-                    {asset.condition}
+                    {conditionOptions.find((o) => o.value === asset.condition)?.label || asset.condition}
                   </Badge>
                 </TableCell>
               </TableRow>

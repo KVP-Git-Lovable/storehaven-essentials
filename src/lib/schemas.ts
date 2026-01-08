@@ -27,11 +27,14 @@ export const productSchema = z.object({
 
 export const assetSchema = z.object({
   name: z.string().trim().min(1, "Asset name is required").max(100, "Name must be less than 100 characters"),
-  category: z.string().trim().min(1, "Category is required"),
+  assetNumber: z.string().trim().min(1, "Asset number is required").max(50, "Asset number must be less than 50 characters"),
+  categoryId: z.string().min(1, "Category is required"),
   location: z.string().trim().min(1, "Location is required"),
   condition: z.string().trim().min(1, "Condition is required"),
   purchaseDate: z.string().min(1, "Purchase date is required"),
   value: z.coerce.number().min(0, "Value must be 0 or more").max(100000000, "Value seems too high"),
+  vendorId: z.string().min(1, "Vendor is required"),
+  oemId: z.string().optional(),
 });
 
 export const spareSchema = z.object({
@@ -70,6 +73,7 @@ export const incidentSchema = z.object({
 export const vendorSchema = z.object({
   name: z.string().trim().min(1, "Vendor name is required").max(100, "Name must be less than 100 characters"),
   category: z.string().trim().min(1, "Category is required"),
+  vendorType: z.string().min(1, "Vendor type is required"),
   contactPerson: z.string().trim().min(1, "Contact person is required").max(100, "Name must be less than 100 characters"),
   phone: z.string().trim().min(10, "Valid phone number required").max(15, "Phone must be less than 15 characters"),
   email: z.string().trim().email("Invalid email address").max(255, "Email must be less than 255 characters"),
