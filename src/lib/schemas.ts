@@ -35,6 +35,8 @@ export const assetSchema = z.object({
   value: z.coerce.number().min(0, "Value must be 0 or more").max(100000000, "Value seems too high"),
   vendorId: z.string().min(1, "Vendor is required"),
   oemId: z.string().optional(),
+  warrantyStartDate: z.string().optional(),
+  warrantyEndDate: z.string().optional(),
 });
 
 export const spareSchema = z.object({
@@ -52,6 +54,7 @@ export const serviceContractSchema = z.object({
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().min(1, "End date is required"),
   value: z.coerce.number().min(1, "Value is required").max(100000000, "Value seems too high"),
+  assetIds: z.array(z.string()).min(1, "At least one asset is required"),
 });
 
 export const maintenanceSchema = z.object({

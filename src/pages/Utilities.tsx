@@ -46,6 +46,12 @@ type Store = {
   name: string;
 };
 
+type Asset = {
+  id: string;
+  name: string;
+  asset_number: string | null;
+};
+
 const chartData = [
   { month: "Jan", power: 4200, water: 850, generator: 120 },
   { month: "Feb", power: 3800, water: 920, generator: 95 },
@@ -67,6 +73,7 @@ type UtilityReading = {
   id: string;
   store: string;
   meter_master_id: string;
+  asset_id: string | null;
   reading_date: string;
   readings: Record<string, number>;
   created_by: string;
@@ -87,6 +94,7 @@ export default function Utilities() {
   const [readings, setReadings] = useState<UtilityReading[]>([]);
   const [meterMasters, setMeterMasters] = useState<MeterMaster[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [selectedReading, setSelectedReading] = useState<UtilityReading | null>(null);
@@ -99,6 +107,7 @@ export default function Utilities() {
   const [formData, setFormData] = useState({
     store: "",
     meter_master_id: "",
+    asset_id: "",
     reading_date: format(new Date(), "yyyy-MM-dd"),
     readings: {} as Record<string, number>,
   });
@@ -111,10 +120,11 @@ export default function Utilities() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [readingsRes, mastersRes, storesRes] = await Promise.all([
+    const [readingsRes, mastersRes, storesRes, assetsRes] = await Promise.all([
       supabase.from("utility_readings").select("*").order("created_at", { ascending: false }),
       supabase.from("meter_masters").select("*").order("name"),
       supabase.from("stores").select("id, name").order("name"),
+      supabase.from("assets").select("id, name, asset_number").order("name"),
     ]);
 
     if (storesRes.error) {
@@ -122,6 +132,8 @@ export default function Utilities() {
     } else {
       setStores(storesRes.data || []);
     }
+
+    setAssets(assetsRes.data || []);
 
     if (readingsRes.error) {
       toast({ title: "Error", description: "Failed to load readings", variant: "destructive" });
@@ -209,6 +221,7 @@ export default function Utilities() {
     const { error } = await supabase.from("utility_readings").insert({
       store: formData.store,
       meter_master_id: formData.meter_master_id,
+      asset_id: formData.asset_id || null,
       reading_date: formData.reading_date,
       readings: formData.readings,
       created_by: "Current User",
@@ -237,6 +250,7 @@ export default function Utilities() {
       .update({
         store: formData.store,
         meter_master_id: formData.meter_master_id,
+        asset_id: formData.asset_id || null,
         reading_date: formData.reading_date,
         readings: formData.readings,
         last_modified_by: "Current User",
@@ -273,6 +287,7 @@ export default function Utilities() {
     setFormData({
       store: "",
       meter_master_id: "",
+      asset_id: "",
       reading_date: format(new Date(), "yyyy-MM-dd"),
       readings: {},
     });
@@ -284,6 +299,7 @@ export default function Utilities() {
     setFormData({
       store: reading.store,
       meter_master_id: reading.meter_master_id,
+      asset_id: reading.asset_id || "",
       reading_date: reading.reading_date,
       readings: reading.readings,
     });
@@ -349,14 +365,32 @@ export default function Utilities() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Reading Date *</Label>
-                <Input
-                  type="date"
-                  value={formData.reading_date}
-                  max={format(new Date(), "yyyy-MM-dd")}
-                  onChange={(e) => setFormData(prev => ({ ...prev, reading_date: e.target.value }))}
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Asset (Optional)</Label>
+                  <Select value={formData.asset_id || "none"} onValueChange={(v) => setFormData(prev => ({ ...prev, asset_id: v === "none" ? "" : v }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select asset" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {assets.map((asset) => (
+                        <SelectItem key={asset.id} value={asset.id}>
+                          {asset.asset_number ? `${asset.asset_number} - ` : ""}{asset.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Reading Date *</Label>
+                  <Input
+                    type="date"
+                    value={formData.reading_date}
+                    max={format(new Date(), "yyyy-MM-dd")}
+                    onChange={(e) => setFormData(prev => ({ ...prev, reading_date: e.target.value }))}
+                  />
+                </div>
               </div>
 
               {selectedMeterMaster && (

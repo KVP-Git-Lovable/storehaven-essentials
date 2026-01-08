@@ -52,6 +52,8 @@ type Asset = {
   value: number;
   vendor_id: string | null;
   oem_id: string | null;
+  warranty_start_date: string | null;
+  warranty_end_date: string | null;
 };
 
 type Vendor = {
@@ -106,6 +108,8 @@ export default function AssetInventory() {
       value: 0,
       vendorId: "",
       oemId: "",
+      warrantyStartDate: "",
+      warrantyEndDate: "",
     },
   });
 
@@ -151,6 +155,8 @@ export default function AssetInventory() {
       value: data.value,
       vendor_id: data.vendorId,
       oem_id: data.oemId || null,
+      warranty_start_date: data.warrantyStartDate || null,
+      warranty_end_date: data.warrantyEndDate || null,
     });
 
     if (error) {
@@ -351,6 +357,34 @@ export default function AssetInventory() {
                         <FormLabel>Value (₹)</FormLabel>
                         <FormControl>
                           <Input type="number" placeholder="Enter value" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="warrantyStartDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Warranty Start Date</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="warrantyEndDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Warranty End Date</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
