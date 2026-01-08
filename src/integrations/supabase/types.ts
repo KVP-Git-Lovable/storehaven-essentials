@@ -416,41 +416,49 @@ export type Database = {
         }
         Relationships: []
       }
-      utilities: {
+      utility_readings: {
         Row: {
-          consumption: number | null
           created_at: string
+          created_by: string
           id: string
-          meter_reading: number
-          previous_reading: number | null
+          last_modified_at: string
+          last_modified_by: string
+          meter_master_id: string
           reading_date: string
+          readings: Json
           store: string
-          updated_at: string
-          utility_type: string
         }
         Insert: {
-          consumption?: number | null
           created_at?: string
+          created_by?: string
           id?: string
-          meter_reading: number
-          previous_reading?: number | null
+          last_modified_at?: string
+          last_modified_by?: string
+          meter_master_id: string
           reading_date: string
+          readings?: Json
           store: string
-          updated_at?: string
-          utility_type: string
         }
         Update: {
-          consumption?: number | null
           created_at?: string
+          created_by?: string
           id?: string
-          meter_reading?: number
-          previous_reading?: number | null
+          last_modified_at?: string
+          last_modified_by?: string
+          meter_master_id?: string
           reading_date?: string
+          readings?: Json
           store?: string
-          updated_at?: string
-          utility_type?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "utility_readings_meter_master_id_fkey"
+            columns: ["meter_master_id"]
+            isOneToOne: false
+            referencedRelation: "meter_masters"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendors: {
         Row: {

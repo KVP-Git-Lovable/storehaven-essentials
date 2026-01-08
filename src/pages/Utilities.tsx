@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
-import { Plus, Gauge, Zap, Droplets, Fuel, Loader2 } from "lucide-react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { Plus, Gauge, Zap, Droplets, Fuel, Loader2, Pencil, Trash2, Save, X } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -21,27 +20,28 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { utilityReadingSchema, type UtilityReadingFormData } from "@/lib/schemas";
 import { supabase } from "@/integrations/supabase/client";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { format } from "date-fns";
 
 const storesList = ["Downtown Store", "Mall Outlet", "Airport Kiosk", "Suburban Store", "Highway Express"];
-const utilityTypes = ["Power", "Water", "Generator"];
 
 const chartData = [
   { month: "Jan", power: 4200, water: 850, generator: 120 },
@@ -52,12 +52,25 @@ const chartData = [
   { month: "Jun", power: 6100, water: 1400, generator: 280 },
 ];
 
+type MeterMaster = {
+  id: string;
+  name: string;
+  reading_parameter_count: number;
+  reading_parameters: string[];
+  details_to_capture: string;
+};
+
 type UtilityReading = {
   id: string;
   store: string;
-  utility_type: string;
-  meter_reading: number;
+  meter_master_id: string;
   reading_date: string;
+  readings: Record<string, number>;
+  created_by: string;
+  created_at: string;
+  last_modified_by: string;
+  last_modified_at: string;
+  meter_master?: MeterMaster;
 };
 
 const stats = [
@@ -69,54 +82,191 @@ const stats = [
 
 export default function Utilities() {
   const [readings, setReadings] = useState<UtilityReading[]>([]);
+  const [meterMasters, setMeterMasters] = useState<MeterMaster[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [selectedReading, setSelectedReading] = useState<UtilityReading | null>(null);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const form = useForm<UtilityReadingFormData>({
-    resolver: zodResolver(utilityReadingSchema),
-    defaultValues: {
-      store: "",
-      utilityType: "",
-      meterReading: 0,
-      readingDate: "",
-    },
+  // Form state
+  const [formData, setFormData] = useState({
+    store: "",
+    meter_master_id: "",
+    reading_date: format(new Date(), "yyyy-MM-dd"),
+    readings: {} as Record<string, number>,
   });
 
+  const [selectedMeterMaster, setSelectedMeterMaster] = useState<MeterMaster | null>(null);
+
   useEffect(() => {
-    fetchReadings();
+    fetchData();
   }, []);
 
-  const fetchReadings = async () => {
-    const { data, error } = await supabase
-      .from("utilities")
-      .select("*")
-      .order("created_at", { ascending: false });
+  const fetchData = async () => {
+    setLoading(true);
+    const [readingsRes, mastersRes] = await Promise.all([
+      supabase.from("utility_readings").select("*").order("created_at", { ascending: false }),
+      supabase.from("meter_masters").select("*").order("name"),
+    ]);
 
-    if (error) {
+    if (readingsRes.error) {
       toast({ title: "Error", description: "Failed to load readings", variant: "destructive" });
     } else {
-      setReadings(data || []);
+      // Map meter masters to readings
+      const mastersMap = new Map((mastersRes.data || []).map(m => [m.id, m]));
+      const enrichedReadings = (readingsRes.data || []).map(r => ({
+        ...r,
+        readings: r.readings as Record<string, number>,
+        meter_master: mastersMap.get(r.meter_master_id),
+      }));
+      setReadings(enrichedReadings);
+    }
+
+    if (mastersRes.error) {
+      toast({ title: "Error", description: "Failed to load meter masters", variant: "destructive" });
+    } else {
+      setMeterMasters(mastersRes.data || []);
     }
     setLoading(false);
   };
 
-  const onSubmit = async (data: UtilityReadingFormData) => {
-    const { error } = await supabase.from("utilities").insert({
-      store: data.store,
-      utility_type: data.utilityType,
-      meter_reading: data.meterReading,
-      reading_date: data.readingDate,
+  const handleMeterMasterChange = (id: string) => {
+    const master = meterMasters.find(m => m.id === id);
+    setSelectedMeterMaster(master || null);
+    setFormData(prev => ({
+      ...prev,
+      meter_master_id: id,
+      readings: {},
+    }));
+  };
+
+  const getReadingFields = (master: MeterMaster | null) => {
+    if (!master) return [];
+    
+    const fields: { key: string; label: string }[] = [];
+    
+    master.reading_parameters.forEach((param, index) => {
+      if (master.details_to_capture === "Start") {
+        fields.push({ key: `${param}_start`, label: `${param} Day Start Reading` });
+      } else if (master.details_to_capture === "End") {
+        fields.push({ key: `${param}_end`, label: `${param} Day End Reading` });
+      } else if (master.details_to_capture === "Both") {
+        fields.push({ key: `${param}_start`, label: `${param} Day Start Reading` });
+        fields.push({ key: `${param}_end`, label: `${param} Day End Reading` });
+      }
+    });
+    
+    return fields;
+  };
+
+  const validateDate = (dateStr: string): boolean => {
+    const selectedDate = new Date(dateStr);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    return selectedDate <= today;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.store || !formData.meter_master_id || !formData.reading_date) {
+      toast({ title: "Error", description: "Please fill all required fields", variant: "destructive" });
+      return;
+    }
+
+    if (!validateDate(formData.reading_date)) {
+      toast({ title: "Error", description: "Future dates are not allowed", variant: "destructive" });
+      return;
+    }
+
+    const { error } = await supabase.from("utility_readings").insert({
+      store: formData.store,
+      meter_master_id: formData.meter_master_id,
+      reading_date: formData.reading_date,
+      readings: formData.readings,
+      created_by: "Current User",
+      last_modified_by: "Current User",
     });
 
     if (error) {
       toast({ title: "Error", description: "Failed to save reading", variant: "destructive" });
     } else {
-      toast({ title: "Reading recorded", description: `Utility reading for ${data.store} has been saved.` });
-      form.reset();
+      toast({ title: "Reading recorded", description: `Utility reading has been saved.` });
+      resetForm();
       setOpen(false);
-      fetchReadings();
+      fetchData();
     }
+  };
+
+  const handleUpdate = async () => {
+    if (!selectedReading) return;
+
+    if (!validateDate(formData.reading_date)) {
+      toast({ title: "Error", description: "Future dates are not allowed", variant: "destructive" });
+      return;
+    }
+
+    const { error } = await supabase.from("utility_readings")
+      .update({
+        store: formData.store,
+        meter_master_id: formData.meter_master_id,
+        reading_date: formData.reading_date,
+        readings: formData.readings,
+        last_modified_by: "Current User",
+        last_modified_at: new Date().toISOString(),
+      })
+      .eq("id", selectedReading.id);
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to update reading", variant: "destructive" });
+    } else {
+      toast({ title: "Reading updated", description: `Utility reading has been updated.` });
+      setIsEditing(false);
+      setViewOpen(false);
+      fetchData();
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+
+    const { error } = await supabase.from("utility_readings").delete().eq("id", deleteId);
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to delete reading", variant: "destructive" });
+    } else {
+      toast({ title: "Reading deleted", description: "Utility reading has been deleted." });
+      setDeleteId(null);
+      setViewOpen(false);
+      fetchData();
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      store: "",
+      meter_master_id: "",
+      reading_date: format(new Date(), "yyyy-MM-dd"),
+      readings: {},
+    });
+    setSelectedMeterMaster(null);
+  };
+
+  const openViewDialog = (reading: UtilityReading) => {
+    setSelectedReading(reading);
+    setFormData({
+      store: reading.store,
+      meter_master_id: reading.meter_master_id,
+      reading_date: reading.reading_date,
+      readings: reading.readings,
+    });
+    const master = meterMasters.find(m => m.id === reading.meter_master_id);
+    setSelectedMeterMaster(master || null);
+    setIsEditing(false);
+    setViewOpen(true);
   };
 
   if (loading) {
@@ -129,106 +279,94 @@ export default function Utilities() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Utilities Monitoring</h1>
-          <p className="text-muted-foreground">Track power, water, and generator consumption</p>
+          <p className="text-muted-foreground">Track utility consumption based on meter masters</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) resetForm(); }}>
           <DialogTrigger asChild>
             <Button className="gap-2">
               <Plus className="h-4 w-4" />
               Add Reading
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Record Utility Reading</DialogTitle>
             </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="store"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Store</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select store" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {storesList.map((store) => (
-                              <SelectItem key={store} value={store}>{store}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="utilityType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Utility Type</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select type" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {utilityTypes.map((type) => (
-                              <SelectItem key={type} value={type}>{type}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Store *</Label>
+                  <Select value={formData.store} onValueChange={(v) => setFormData(prev => ({ ...prev, store: v }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select store" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {storesList.map((store) => (
+                        <SelectItem key={store} value={store}>{store}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="meterReading"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Meter Reading</FormLabel>
-                        <FormControl>
-                          <Input type="number" placeholder="Enter reading" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="readingDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Date</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <div className="space-y-2">
+                  <Label>Utility Type (Meter Master) *</Label>
+                  <Select value={formData.meter_master_id} onValueChange={handleMeterMasterChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select meter type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {meterMasters.map((master) => (
+                        <SelectItem key={master.id} value={master.id}>{master.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit">Save Reading</Button>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Reading Date *</Label>
+                <Input
+                  type="date"
+                  value={formData.reading_date}
+                  max={format(new Date(), "yyyy-MM-dd")}
+                  onChange={(e) => setFormData(prev => ({ ...prev, reading_date: e.target.value }))}
+                />
+              </div>
+
+              {selectedMeterMaster && (
+                <div className="space-y-4 pt-4 border-t">
+                  <h4 className="font-medium">Reading Parameters</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {getReadingFields(selectedMeterMaster).map((field) => (
+                      <div key={field.key} className="space-y-2">
+                        <Label>{field.label}</Label>
+                        <Input
+                          type="number"
+                          placeholder="Enter reading"
+                          value={formData.readings[field.key] || ""}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            readings: { ...prev.readings, [field.key]: parseFloat(e.target.value) || 0 }
+                          }))}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </form>
-            </Form>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="outline" onClick={() => { setOpen(false); resetForm(); }}>
+                  Cancel
+                </Button>
+                <Button type="submit">
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Reading
+                </Button>
+              </div>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
@@ -261,27 +399,204 @@ export default function Utilities() {
         <div className="p-4 border-b">
           <h3 className="font-semibold">Latest Readings</h3>
         </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Store</TableHead>
-              <TableHead>Utility Type</TableHead>
-              <TableHead>Reading</TableHead>
-              <TableHead>Date</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {readings.map((reading) => (
-              <TableRow key={reading.id}>
-                <TableCell className="font-medium">{reading.store}</TableCell>
-                <TableCell>{reading.utility_type}</TableCell>
-                <TableCell>{Number(reading.meter_reading).toLocaleString()}</TableCell>
-                <TableCell>{new Date(reading.reading_date).toLocaleDateString()}</TableCell>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Store</TableHead>
+                <TableHead>Meter Type</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {readings.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                    No readings found. Add a reading to get started.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                readings.map((reading) => (
+                  <TableRow key={reading.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openViewDialog(reading)}>
+                    <TableCell className="font-medium">{reading.store}</TableCell>
+                    <TableCell>{reading.meter_master?.name || "Unknown"}</TableCell>
+                    <TableCell>{new Date(reading.reading_date).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openViewDialog(reading); setIsEditing(true); }}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteId(reading.id); }}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
+
+      {/* View/Edit Dialog */}
+      <Dialog open={viewOpen} onOpenChange={(o) => { setViewOpen(o); if (!o) { setIsEditing(false); setSelectedReading(null); } }}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{isEditing ? "Edit Utility Reading" : "View Utility Reading"}</DialogTitle>
+          </DialogHeader>
+          
+          {selectedReading && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Store</Label>
+                  {isEditing ? (
+                    <Select value={formData.store} onValueChange={(v) => setFormData(prev => ({ ...prev, store: v }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select store" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {storesList.map((store) => (
+                          <SelectItem key={store} value={store}>{store}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm p-2 bg-muted rounded">{formData.store}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Utility Type (Meter Master)</Label>
+                  {isEditing ? (
+                    <Select value={formData.meter_master_id} onValueChange={handleMeterMasterChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select meter type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {meterMasters.map((master) => (
+                          <SelectItem key={master.id} value={master.id}>{master.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm p-2 bg-muted rounded">{selectedReading.meter_master?.name || "Unknown"}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Reading Date</Label>
+                {isEditing ? (
+                  <Input
+                    type="date"
+                    value={formData.reading_date}
+                    max={format(new Date(), "yyyy-MM-dd")}
+                    onChange={(e) => setFormData(prev => ({ ...prev, reading_date: e.target.value }))}
+                  />
+                ) : (
+                  <p className="text-sm p-2 bg-muted rounded">{new Date(formData.reading_date).toLocaleDateString()}</p>
+                )}
+              </div>
+
+              {selectedMeterMaster && (
+                <div className="space-y-4 pt-4 border-t">
+                  <h4 className="font-medium">Reading Parameters</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {getReadingFields(selectedMeterMaster).map((field) => (
+                      <div key={field.key} className="space-y-2">
+                        <Label>{field.label}</Label>
+                        {isEditing ? (
+                          <Input
+                            type="number"
+                            placeholder="Enter reading"
+                            value={formData.readings[field.key] || ""}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              readings: { ...prev.readings, [field.key]: parseFloat(e.target.value) || 0 }
+                            }))}
+                          />
+                        ) : (
+                          <p className="text-sm p-2 bg-muted rounded">{formData.readings[field.key] || 0}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Audit Fields */}
+              <div className="pt-4 border-t space-y-2">
+                <h4 className="font-medium text-sm text-muted-foreground">Audit Information</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Created By:</span>
+                    <p>{selectedReading.created_by}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Created At:</span>
+                    <p>{new Date(selectedReading.created_at).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Last Modified By:</span>
+                    <p>{selectedReading.last_modified_by}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Last Modified At:</span>
+                    <p>{new Date(selectedReading.last_modified_at).toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-4">
+                {isEditing ? (
+                  <>
+                    <Button variant="outline" onClick={() => setIsEditing(false)}>
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel
+                    </Button>
+                    <Button onClick={handleUpdate}>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Changes
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button variant="outline" className="text-destructive" onClick={() => setDeleteId(selectedReading.id)}>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </Button>
+                    <Button onClick={() => setIsEditing(true)}>
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Reading</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this utility reading? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
