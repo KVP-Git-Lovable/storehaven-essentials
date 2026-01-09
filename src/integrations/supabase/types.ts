@@ -366,6 +366,45 @@ export type Database = {
         }
         Relationships: []
       }
+      planograms: {
+        Row: {
+          created_at: string
+          created_by: string
+          deadline: string | null
+          description: string | null
+          id: string
+          image_url: string
+          status: string
+          title: string
+          updated_at: string
+          zone: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          deadline?: string | null
+          description?: string | null
+          id?: string
+          image_url: string
+          status?: string
+          title: string
+          updated_at?: string
+          zone: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          deadline?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          zone?: string
+        }
+        Relationships: []
+      }
       positions: {
         Row: {
           created_at: string
@@ -712,6 +751,209 @@ export type Database = {
           vendor_type?: string
         }
         Relationships: []
+      }
+      vm_compliance_tasks: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          description: string | null
+          due_date: string
+          frequency: string
+          id: string
+          planogram_id: string
+          status: string
+          store_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          description?: string | null
+          due_date: string
+          frequency?: string
+          id?: string
+          planogram_id: string
+          status?: string
+          store_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string
+          frequency?: string
+          id?: string
+          planogram_id?: string
+          status?: string
+          store_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vm_compliance_tasks_planogram_id_fkey"
+            columns: ["planogram_id"]
+            isOneToOne: false
+            referencedRelation: "planograms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vm_compliance_tasks_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vm_correction_tasks: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          description: string
+          due_date: string
+          id: string
+          original_task_id: string
+          review_id: string
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          description: string
+          due_date: string
+          id?: string
+          original_task_id: string
+          review_id: string
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          description?: string
+          due_date?: string
+          id?: string
+          original_task_id?: string
+          review_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vm_correction_tasks_original_task_id_fkey"
+            columns: ["original_task_id"]
+            isOneToOne: false
+            referencedRelation: "vm_compliance_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vm_correction_tasks_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: false
+            referencedRelation: "vm_reviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vm_photo_submissions: {
+        Row: {
+          captured_at: string
+          created_at: string
+          id: string
+          image_url: string
+          latitude: number | null
+          location_address: string | null
+          longitude: number | null
+          notes: string | null
+          submitted_by: string
+          task_id: string
+        }
+        Insert: {
+          captured_at?: string
+          created_at?: string
+          id?: string
+          image_url: string
+          latitude?: number | null
+          location_address?: string | null
+          longitude?: number | null
+          notes?: string | null
+          submitted_by?: string
+          task_id: string
+        }
+        Update: {
+          captured_at?: string
+          created_at?: string
+          id?: string
+          image_url?: string
+          latitude?: number | null
+          location_address?: string | null
+          longitude?: number | null
+          notes?: string | null
+          submitted_by?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vm_photo_submissions_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "vm_compliance_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vm_reviews: {
+        Row: {
+          annotations: Json | null
+          feedback: string | null
+          id: string
+          rating: number
+          reviewed_at: string
+          reviewed_by: string
+          status: string
+          submission_id: string
+          task_id: string
+        }
+        Insert: {
+          annotations?: Json | null
+          feedback?: string | null
+          id?: string
+          rating: number
+          reviewed_at?: string
+          reviewed_by?: string
+          status: string
+          submission_id: string
+          task_id: string
+        }
+        Update: {
+          annotations?: Json | null
+          feedback?: string | null
+          id?: string
+          rating?: number
+          reviewed_at?: string
+          reviewed_by?: string
+          status?: string
+          submission_id?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vm_reviews_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "vm_photo_submissions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vm_reviews_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "vm_compliance_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

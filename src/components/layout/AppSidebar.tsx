@@ -14,6 +14,7 @@ import {
   Building2,
   X,
   Database,
+  Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -65,6 +66,16 @@ const navigation: NavItem[] = [
   { title: "Housekeeping", href: "/housekeeping", icon: ClipboardList },
   { title: "Security", href: "/security", icon: ShieldCheck },
   { title: "Footfall", href: "/footfall", icon: UserCheck },
+  {
+    title: "Visual Merchandising",
+    icon: Eye,
+    children: [
+      { title: "Planograms", href: "/vm/planograms" },
+      { title: "Compliance Tasks", href: "/vm/tasks" },
+      { title: "Submit Photo", href: "/vm/submit" },
+      { title: "Review Submissions", href: "/vm/review" },
+    ],
+  },
   {
     title: "Master",
     icon: Database,
