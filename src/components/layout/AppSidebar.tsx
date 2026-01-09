@@ -91,6 +91,7 @@ const navigation: NavItem[] = [
       { title: "Expiry Management", href: "/inventory/expiry" },
       { title: "Return to Vendor", href: "/inventory/rtv" },
       { title: "Store Transfers", href: "/inventory/transfers" },
+      { title: "Low Stock Alerts", href: "/inventory/alerts" },
     ],
   },
   {
