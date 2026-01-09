@@ -1305,6 +1305,132 @@ export type Database = {
           },
         ]
       }
+      store_transfer_items: {
+        Row: {
+          created_at: string
+          id: string
+          item_id: string
+          notes: string | null
+          quantity_approved: number | null
+          quantity_received: number | null
+          quantity_requested: number
+          quantity_sent: number | null
+          transfer_id: string
+          unit_cost: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_id: string
+          notes?: string | null
+          quantity_approved?: number | null
+          quantity_received?: number | null
+          quantity_requested: number
+          quantity_sent?: number | null
+          transfer_id: string
+          unit_cost: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_id?: string
+          notes?: string | null
+          quantity_approved?: number | null
+          quantity_received?: number | null
+          quantity_requested?: number
+          quantity_sent?: number | null
+          transfer_id?: string
+          unit_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_transfer_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_transfer_items_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: false
+            referencedRelation: "store_transfers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_transfers: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          dispatched_at: string | null
+          from_store_id: string
+          id: string
+          notes: string | null
+          priority: string
+          received_at: string | null
+          received_by: string | null
+          requested_at: string
+          requested_by: string
+          status: string
+          to_store_id: string
+          transfer_number: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          dispatched_at?: string | null
+          from_store_id: string
+          id?: string
+          notes?: string | null
+          priority?: string
+          received_at?: string | null
+          received_by?: string | null
+          requested_at?: string
+          requested_by: string
+          status?: string
+          to_store_id: string
+          transfer_number: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          dispatched_at?: string | null
+          from_store_id?: string
+          id?: string
+          notes?: string | null
+          priority?: string
+          received_at?: string | null
+          received_by?: string | null
+          requested_at?: string
+          requested_by?: string
+          status?: string
+          to_store_id?: string
+          transfer_number?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_transfers_from_store_id_fkey"
+            columns: ["from_store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_transfers_to_store_id_fkey"
+            columns: ["to_store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stores: {
         Row: {
           address: string
