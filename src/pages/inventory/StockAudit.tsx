@@ -4,8 +4,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Search, ClipboardCheck, AlertTriangle, CheckCircle, TrendingDown } from "lucide-react";
+import { Plus, Search, ClipboardCheck, AlertTriangle, CheckCircle, TrendingDown, ScanLine } from "lucide-react";
 import { format } from "date-fns";
+import { BarcodeScanner } from "@/components/inventory/BarcodeScanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -122,6 +123,23 @@ export default function StockAudit() {
   });
 
   const selectedItem = items.find(i => i.id === form.watch("item_id"));
+
+  const handleBarcodeScan = async (barcode: string) => {
+    // Try to find item by barcode or SKU
+    const { data, error } = await supabase
+      .from("inventory_items")
+      .select("id, name, barcode, sku")
+      .or(`barcode.eq.${barcode},sku.eq.${barcode}`)
+      .single();
+
+    if (error || !data) {
+      toast.error(`No item found with barcode: ${barcode}`);
+      return;
+    }
+
+    form.setValue("item_id", data.id);
+    toast.success(`Found: ${data.name}`);
+  };
 
   useEffect(() => {
     fetchData();
@@ -280,18 +298,28 @@ export default function StockAudit() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Item</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select item" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {items.map(item => (
-                            <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex gap-2">
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="Select item" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {items.map(item => (
+                              <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <BarcodeScanner 
+                          onScan={handleBarcodeScan}
+                          trigger={
+                            <Button type="button" variant="outline" size="icon" className="shrink-0">
+                              <ScanLine className="h-4 w-4" />
+                            </Button>
+                          }
+                        />
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
