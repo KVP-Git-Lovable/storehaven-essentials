@@ -10,6 +10,7 @@ import Rentals from "./pages/stores/Rentals";
 import NewStoreOpening from "./pages/stores/NewStoreOpening";
 import Products from "./pages/assets/Products";
 import AssetInventory from "./pages/assets/AssetInventory";
+import AssetDetails from "./pages/assets/AssetDetails";
 import SparesManagement from "./pages/assets/SparesManagement";
 import ServiceContracts from "./pages/services/ServiceContracts";
 import PreventiveMaintenance from "./pages/services/PreventiveMaintenance";
@@ -45,6 +46,7 @@ const App = () => (
             <Route path="/stores/new-opening" element={<NewStoreOpening />} />
             <Route path="/assets/products" element={<Products />} />
             <Route path="/assets/inventory" element={<AssetInventory />} />
+            <Route path="/assets/inventory/:id" element={<AssetDetails />} />
             <Route path="/assets/spares" element={<SparesManagement />} />
             <Route path="/services/contracts" element={<ServiceContracts />} />
             <Route path="/services/maintenance" element={<PreventiveMaintenance />} />

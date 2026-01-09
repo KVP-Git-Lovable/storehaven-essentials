@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Package, CheckCircle, AlertTriangle, XCircle, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Search, Package, CheckCircle, AlertTriangle, XCircle, Loader2, Eye } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -87,6 +88,7 @@ const stats = [
 ];
 
 export default function AssetInventory() {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -456,11 +458,12 @@ export default function AssetInventory() {
               <TableHead>Purchase Date</TableHead>
               <TableHead>Value</TableHead>
               <TableHead>Condition</TableHead>
+              <TableHead className="w-[80px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredAssets.map((asset) => (
-              <TableRow key={asset.id}>
+              <TableRow key={asset.id} className="cursor-pointer" onClick={() => navigate(`/assets/inventory/${asset.id}`)}>
                 <TableCell className="font-mono text-sm">{asset.asset_number || "-"}</TableCell>
                 <TableCell className="font-medium">{asset.name}</TableCell>
                 <TableCell>
@@ -480,6 +483,11 @@ export default function AssetInventory() {
                   >
                     {conditionOptions.find((o) => o.value === asset.condition)?.label || asset.condition}
                   </Badge>
+                </TableCell>
+                <TableCell>
+                  <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); navigate(`/assets/inventory/${asset.id}`); }}>
+                    <Eye className="h-4 w-4" />
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
