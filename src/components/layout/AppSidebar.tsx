@@ -90,6 +90,7 @@ const navigation: NavItem[] = [
       { title: "Consumption Log", href: "/inventory/consumption" },
       { title: "Expiry Management", href: "/inventory/expiry" },
       { title: "Return to Vendor", href: "/inventory/rtv" },
+      { title: "Store Transfers", href: "/inventory/transfers" },
     ],
   },
   {
