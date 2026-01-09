@@ -35,8 +35,11 @@ export default function TaskAdherence() {
   const [selectedStore, setSelectedStore] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [handoverDialogOpen, setHandoverDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [completionNotes, setCompletionNotes] = useState("");
+  const [handoverNotes, setHandoverNotes] = useState("");
+  const [targetRoleId, setTargetRoleId] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const queryClient = useQueryClient();
 
@@ -44,6 +47,15 @@ export default function TaskAdherence() {
     queryKey: ["stores"],
     queryFn: async () => {
       const { data, error } = await supabase.from("stores").select("id, name").order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: roles } = useQuery({
+    queryKey: ["roles"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("role_master").select("id, name, shift_type").eq("status", "active").order("name");
       if (error) throw error;
       return data;
     },
@@ -231,11 +243,83 @@ export default function TaskAdherence() {
     onError: (error) => toast.error(error.message),
   });
 
+  const handoverTaskMutation = useMutation({
+    mutationFn: async ({ taskId, notes, targetRoleId }: { taskId: string; notes: string; targetRoleId: string }) => {
+      const now = new Date();
+      const task = taskInstances?.find(t => t.id === taskId);
+      
+      // Update task instance with handover details
+      const { error: updateError } = await supabase
+        .from("task_instances")
+        .update({ 
+          status: 'handed_over', 
+          handed_over_at: now.toISOString(),
+          handed_over_from: task?.role_id,
+          role_id: targetRoleId,
+          notes: notes ? `[Handover] ${notes}` : task?.notes,
+        })
+        .eq("id", taskId);
+      
+      if (updateError) throw updateError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["task-instances"] });
+      toast.success("Task handed over to next shift");
+      setHandoverDialogOpen(false);
+      setSelectedTask(null);
+      setHandoverNotes("");
+      setTargetRoleId("");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const bulkHandoverMutation = useMutation({
+    mutationFn: async ({ targetRoleId, notes }: { targetRoleId: string; notes: string }) => {
+      const now = new Date();
+      const incompleteTasks = taskInstances?.filter(t => 
+        t.status === 'pending' || t.status === 'in_progress' || t.status === 'overdue'
+      ) || [];
+      
+      if (incompleteTasks.length === 0) {
+        throw new Error("No incomplete tasks to hand over");
+      }
+
+      for (const task of incompleteTasks) {
+        const { error } = await supabase
+          .from("task_instances")
+          .update({ 
+            status: 'handed_over', 
+            handed_over_at: now.toISOString(),
+            handed_over_from: task.role_id,
+            role_id: targetRoleId,
+            notes: notes ? `[Bulk Handover] ${notes}` : task.notes,
+          })
+          .eq("id", task.id);
+        
+        if (error) throw error;
+      }
+      
+      return incompleteTasks.length;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ["task-instances"] });
+      toast.success(`${count} tasks handed over to next shift`);
+      setHandoverDialogOpen(false);
+      setHandoverNotes("");
+      setTargetRoleId("");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   // Calculate stats
   const totalTasks = taskInstances?.length || 0;
   const completedTasks = taskInstances?.filter(t => t.status === 'completed').length || 0;
   const overdueTasks = taskInstances?.filter(t => t.status === 'overdue').length || 0;
   const inProgressTasks = taskInstances?.filter(t => t.status === 'in_progress').length || 0;
+  const handedOverTasks = taskInstances?.filter(t => t.status === 'handed_over').length || 0;
+  const incompleteTasks = taskInstances?.filter(t => 
+    t.status === 'pending' || t.status === 'in_progress' || t.status === 'overdue'
+  ).length || 0;
   const adherenceRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
   const onTimeCompletions = completions?.filter(c => c.is_on_time).length || 0;
   const onTimeRate = completions && completions.length > 0 
@@ -249,10 +333,24 @@ export default function TaskAdherence() {
           <h1 className="text-3xl font-bold tracking-tight">Task Adherence</h1>
           <p className="text-muted-foreground">Monitor and complete daily store operations</p>
         </div>
-        <Button onClick={() => generateTasksMutation.mutate()} disabled={generateTasksMutation.isPending}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${generateTasksMutation.isPending ? 'animate-spin' : ''}`} />
-          Generate Tasks
-        </Button>
+        <div className="flex gap-2">
+          {incompleteTasks > 0 && (
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setSelectedTask(null);
+                setHandoverDialogOpen(true);
+              }}
+            >
+              <ArrowRight className="mr-2 h-4 w-4" />
+              Shift Handover ({incompleteTasks})
+            </Button>
+          )}
+          <Button onClick={() => generateTasksMutation.mutate()} disabled={generateTasksMutation.isPending}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${generateTasksMutation.isPending ? 'animate-spin' : ''}`} />
+            Generate Tasks
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -353,28 +451,72 @@ export default function TaskAdherence() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {task.status === 'pending' && (
-                          <Button size="sm" onClick={() => startTaskMutation.mutate(task.id)}>
-                            <Play className="h-4 w-4 mr-1" /> Start
-                          </Button>
-                        )}
-                        {task.status === 'in_progress' && (
-                          <Button
-                            size="sm"
-                            variant="default"
-                            onClick={() => {
-                              setSelectedTask(task);
-                              setCompleteDialogOpen(true);
-                            }}
-                          >
-                            <CheckCircle className="h-4 w-4 mr-1" /> Complete
-                          </Button>
-                        )}
-                        {task.status === 'completed' && (
-                          <span className="text-sm text-muted-foreground">
-                            {task.completed_at && format(new Date(task.completed_at), "HH:mm")}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {task.status === 'pending' && (
+                            <>
+                              <Button size="sm" onClick={() => startTaskMutation.mutate(task.id)}>
+                                <Play className="h-4 w-4 mr-1" /> Start
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => {
+                                  setSelectedTask(task);
+                                  setHandoverDialogOpen(true);
+                                }}
+                              >
+                                <ArrowRight className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                          {task.status === 'in_progress' && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => {
+                                  setSelectedTask(task);
+                                  setCompleteDialogOpen(true);
+                                }}
+                              >
+                                <CheckCircle className="h-4 w-4 mr-1" /> Complete
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => {
+                                  setSelectedTask(task);
+                                  setHandoverDialogOpen(true);
+                                }}
+                              >
+                                <ArrowRight className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                          {task.status === 'completed' && (
+                            <span className="text-sm text-muted-foreground">
+                              {task.completed_at && format(new Date(task.completed_at), "HH:mm")}
+                            </span>
+                          )}
+                          {task.status === 'handed_over' && (
+                            <div className="text-xs text-muted-foreground">
+                              {task.handed_over_at && format(new Date(task.handed_over_at), "HH:mm")}
+                              {task.notes && <div className="italic">{task.notes}</div>}
+                            </div>
+                          )}
+                          {(task.status === 'overdue' || task.status === 'escalated') && (
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedTask(task);
+                                setHandoverDialogOpen(true);
+                              }}
+                            >
+                              <ArrowRight className="h-4 w-4 mr-1" /> Handover
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -421,6 +563,85 @@ export default function TaskAdherence() {
               disabled={selectedTask?.task_master?.requires_photo_evidence && !photoUrl}
             >
               <CheckCircle className="h-4 w-4 mr-2" /> Mark as Complete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={handoverDialogOpen} onOpenChange={setHandoverDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {selectedTask 
+                ? `Handover Task: ${selectedTask?.task_master?.name}` 
+                : `Shift Handover (${incompleteTasks} tasks)`
+              }
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label>Hand Over To (Role/Shift)</Label>
+              <Select value={targetRoleId} onValueChange={setTargetRoleId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select next shift role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles?.map((role) => (
+                    <SelectItem key={role.id} value={role.id}>
+                      {role.name} ({role.shift_type} shift)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Handover Notes</Label>
+              <Textarea
+                value={handoverNotes}
+                onChange={(e) => setHandoverNotes(e.target.value)}
+                placeholder="Important context for the next shift..."
+                rows={4}
+              />
+            </div>
+            {!selectedTask && (
+              <div className="bg-muted p-3 rounded-lg text-sm">
+                <p className="font-medium mb-2">Tasks to be handed over:</p>
+                <ul className="space-y-1 text-muted-foreground">
+                  {taskInstances?.filter(t => 
+                    t.status === 'pending' || t.status === 'in_progress' || t.status === 'overdue'
+                  ).slice(0, 5).map(t => (
+                    <li key={t.id} className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        {t.status}
+                      </Badge>
+                      {t.task_master?.name}
+                    </li>
+                  ))}
+                  {incompleteTasks > 5 && (
+                    <li className="text-muted-foreground">...and {incompleteTasks - 5} more</li>
+                  )}
+                </ul>
+              </div>
+            )}
+            <Button
+              onClick={() => {
+                if (selectedTask) {
+                  handoverTaskMutation.mutate({
+                    taskId: selectedTask.id,
+                    notes: handoverNotes,
+                    targetRoleId: targetRoleId,
+                  });
+                } else {
+                  bulkHandoverMutation.mutate({
+                    targetRoleId: targetRoleId,
+                    notes: handoverNotes,
+                  });
+                }
+              }}
+              disabled={!targetRoleId || handoverTaskMutation.isPending || bulkHandoverMutation.isPending}
+            >
+              <ArrowRight className="h-4 w-4 mr-2" /> 
+              {selectedTask ? "Handover Task" : `Handover All (${incompleteTasks})`}
             </Button>
           </div>
         </DialogContent>
