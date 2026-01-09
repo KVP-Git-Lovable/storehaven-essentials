@@ -4,8 +4,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Search, Package, CheckCircle, AlertTriangle, FileCheck } from "lucide-react";
+import { Plus, Search, Package, CheckCircle, AlertTriangle, FileCheck, ScanLine } from "lucide-react";
 import { format } from "date-fns";
+import { BarcodeScanner } from "@/components/inventory/BarcodeScanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -200,6 +201,22 @@ export default function GoodsReceipt() {
     grn.received_by.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handleBarcodeScan = async (barcode: string) => {
+    // Try to find item by barcode or SKU for verification
+    const { data, error } = await supabase
+      .from("inventory_items")
+      .select("id, name, barcode, sku")
+      .or(`barcode.eq.${barcode},sku.eq.${barcode}`)
+      .single();
+
+    if (error || !data) {
+      toast.error(`No item found with barcode: ${barcode}`);
+      return;
+    }
+
+    toast.success(`Verified: ${data.name}`);
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "pending": return "bg-yellow-500 text-white";
@@ -216,12 +233,21 @@ export default function GoodsReceipt() {
           <h1 className="text-3xl font-bold text-foreground">Goods Receipt Notes</h1>
           <p className="text-muted-foreground">Receive and verify incoming shipments</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" /> Create GRN
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <BarcodeScanner
+            onScan={handleBarcodeScan}
+            trigger={
+              <Button variant="outline">
+                <ScanLine className="mr-2 h-4 w-4" /> Scan Item
+              </Button>
+            }
+          />
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" /> Create GRN
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Create Goods Receipt Note</DialogTitle>
@@ -306,6 +332,7 @@ export default function GoodsReceipt() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Stats */}
