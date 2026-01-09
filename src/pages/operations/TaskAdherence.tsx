@@ -373,12 +373,12 @@ export default function TaskAdherence() {
             </div>
             <div className="flex-1">
               <Label>Store</Label>
-              <Select value={selectedStore} onValueChange={setSelectedStore}>
+              <Select value={selectedStore || "_all"} onValueChange={(v) => setSelectedStore(v === "_all" ? "" : v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="All Stores" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Stores</SelectItem>
+                  <SelectItem value="_all">All Stores</SelectItem>
                   {stores?.map((store) => (
                     <SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>
                   ))}
