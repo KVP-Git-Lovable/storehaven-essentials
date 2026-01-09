@@ -42,6 +42,7 @@ import ConsumptionLog from "./pages/inventory/ConsumptionLog";
 import ExpiryManagement from "./pages/inventory/ExpiryManagement";
 import ReturnToVendor from "./pages/inventory/ReturnToVendor";
 import StoreTransfers from "./pages/inventory/StoreTransfers";
+import LowStockAlerts from "./pages/inventory/LowStockAlerts";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -92,6 +93,7 @@ const App = () => (
             <Route path="/inventory/expiry" element={<ExpiryManagement />} />
             <Route path="/inventory/rtv" element={<ReturnToVendor />} />
             <Route path="/inventory/transfers" element={<StoreTransfers />} />
+            <Route path="/inventory/alerts" element={<LowStockAlerts />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
