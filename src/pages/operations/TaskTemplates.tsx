@@ -209,12 +209,12 @@ export default function TaskTemplates() {
               </div>
               <div className="space-y-2">
                 <Label>Store (Optional - leave empty for global template)</Label>
-                <Select value={templateForm.store_id} onValueChange={(v) => setTemplateForm({ ...templateForm, store_id: v })}>
+                <Select value={templateForm.store_id || "_all"} onValueChange={(v) => setTemplateForm({ ...templateForm, store_id: v === "_all" ? "" : v })}>
                   <SelectTrigger>
                     <SelectValue placeholder="All stores (Global)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All stores (Global)</SelectItem>
+                    <SelectItem value="_all">All stores (Global)</SelectItem>
                     {stores?.map((store) => (
                       <SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>
                     ))}
