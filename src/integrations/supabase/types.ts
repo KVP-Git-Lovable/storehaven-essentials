@@ -270,6 +270,42 @@ export type Database = {
         }
         Relationships: []
       }
+      frequency_master: {
+        Row: {
+          created_at: string
+          days_of_week: number[] | null
+          description: string | null
+          frequency_type: Database["public"]["Enums"]["frequency_type"]
+          id: string
+          interval_days: number | null
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          days_of_week?: number[] | null
+          description?: string | null
+          frequency_type: Database["public"]["Enums"]["frequency_type"]
+          id?: string
+          interval_days?: number | null
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          days_of_week?: number[] | null
+          description?: string | null
+          frequency_type?: Database["public"]["Enums"]["frequency_type"]
+          id?: string
+          interval_days?: number | null
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       grn: {
         Row: {
           created_at: string
@@ -875,6 +911,39 @@ export type Database = {
           },
         ]
       }
+      role_master: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          permissions: Json | null
+          shift_type: Database["public"]["Enums"]["shift_type"]
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          permissions?: Json | null
+          shift_type: Database["public"]["Enums"]["shift_type"]
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          permissions?: Json | null
+          shift_type?: Database["public"]["Enums"]["shift_type"]
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       rtv: {
         Row: {
           approved_by: string | null
@@ -1305,6 +1374,44 @@ export type Database = {
           },
         ]
       }
+      store_operating_hours: {
+        Row: {
+          close_time: string
+          created_at: string
+          day_of_week: number
+          id: string
+          is_closed: boolean | null
+          open_time: string
+          store_id: string
+        }
+        Insert: {
+          close_time: string
+          created_at?: string
+          day_of_week: number
+          id?: string
+          is_closed?: boolean | null
+          open_time: string
+          store_id: string
+        }
+        Update: {
+          close_time?: string
+          created_at?: string
+          day_of_week?: number
+          id?: string
+          is_closed?: boolean | null
+          open_time?: string
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_operating_hours_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       store_transfer_items: {
         Row: {
           created_at: string
@@ -1466,6 +1573,361 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      task_completions: {
+        Row: {
+          barcode_scanned: string | null
+          completed_by: string
+          completion_time: string
+          created_at: string
+          device_info: Json | null
+          gps_address: string | null
+          gps_latitude: number | null
+          gps_longitude: number | null
+          id: string
+          is_on_time: boolean
+          notes: string | null
+          photo_evidence_url: string | null
+          task_instance_id: string
+        }
+        Insert: {
+          barcode_scanned?: string | null
+          completed_by: string
+          completion_time?: string
+          created_at?: string
+          device_info?: Json | null
+          gps_address?: string | null
+          gps_latitude?: number | null
+          gps_longitude?: number | null
+          id?: string
+          is_on_time?: boolean
+          notes?: string | null
+          photo_evidence_url?: string | null
+          task_instance_id: string
+        }
+        Update: {
+          barcode_scanned?: string | null
+          completed_by?: string
+          completion_time?: string
+          created_at?: string
+          device_info?: Json | null
+          gps_address?: string | null
+          gps_latitude?: number | null
+          gps_longitude?: number | null
+          id?: string
+          is_on_time?: boolean
+          notes?: string | null
+          photo_evidence_url?: string | null
+          task_instance_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_completions_task_instance_id_fkey"
+            columns: ["task_instance_id"]
+            isOneToOne: false
+            referencedRelation: "task_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_escalations: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          created_at: string
+          escalated_to: string
+          escalation_level: number
+          escalation_reason: string | null
+          id: string
+          task_instance_id: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          created_at?: string
+          escalated_to: string
+          escalation_level?: number
+          escalation_reason?: string | null
+          id?: string
+          task_instance_id: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          created_at?: string
+          escalated_to?: string
+          escalation_level?: number
+          escalation_reason?: string | null
+          id?: string
+          task_instance_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_escalations_task_instance_id_fkey"
+            columns: ["task_instance_id"]
+            isOneToOne: false
+            referencedRelation: "task_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_instances: {
+        Row: {
+          assigned_to: string | null
+          completed_at: string | null
+          created_at: string
+          due_time: string | null
+          escalated_at: string | null
+          escalated_to: string | null
+          handed_over_at: string | null
+          handed_over_from: string | null
+          id: string
+          notes: string | null
+          role_id: string
+          scheduled_date: string
+          scheduled_time: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["task_instance_status"]
+          store_id: string
+          task_id: string
+          template_item_id: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          completed_at?: string | null
+          created_at?: string
+          due_time?: string | null
+          escalated_at?: string | null
+          escalated_to?: string | null
+          handed_over_at?: string | null
+          handed_over_from?: string | null
+          id?: string
+          notes?: string | null
+          role_id: string
+          scheduled_date: string
+          scheduled_time?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["task_instance_status"]
+          store_id: string
+          task_id: string
+          template_item_id: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          completed_at?: string | null
+          created_at?: string
+          due_time?: string | null
+          escalated_at?: string | null
+          escalated_to?: string | null
+          handed_over_at?: string | null
+          handed_over_from?: string | null
+          id?: string
+          notes?: string | null
+          role_id?: string
+          scheduled_date?: string
+          scheduled_time?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["task_instance_status"]
+          store_id?: string
+          task_id?: string
+          template_item_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_instances_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "role_master"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_instances_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_instances_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "task_master"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_instances_template_item_id_fkey"
+            columns: ["template_item_id"]
+            isOneToOne: false
+            referencedRelation: "task_template_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_master: {
+        Row: {
+          category: Database["public"]["Enums"]["task_category"]
+          created_at: string
+          description: string | null
+          estimated_duration_mins: number | null
+          id: string
+          name: string
+          qr_code_value: string | null
+          requires_barcode_scan: boolean | null
+          requires_gps_verification: boolean | null
+          requires_photo_evidence: boolean | null
+          sop_image_url: string | null
+          sop_video_url: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          category: Database["public"]["Enums"]["task_category"]
+          created_at?: string
+          description?: string | null
+          estimated_duration_mins?: number | null
+          id?: string
+          name: string
+          qr_code_value?: string | null
+          requires_barcode_scan?: boolean | null
+          requires_gps_verification?: boolean | null
+          requires_photo_evidence?: boolean | null
+          sop_image_url?: string | null
+          sop_video_url?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["task_category"]
+          created_at?: string
+          description?: string | null
+          estimated_duration_mins?: number | null
+          id?: string
+          name?: string
+          qr_code_value?: string | null
+          requires_barcode_scan?: boolean | null
+          requires_gps_verification?: boolean | null
+          requires_photo_evidence?: boolean | null
+          sop_image_url?: string | null
+          sop_video_url?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      task_template: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_default: boolean | null
+          name: string
+          status: string
+          store_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean | null
+          name: string
+          status?: string
+          store_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean | null
+          name?: string
+          status?: string
+          store_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_template_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_template_items: {
+        Row: {
+          created_at: string
+          frequency_id: string
+          id: string
+          is_mandatory: boolean | null
+          periodic_interval_mins: number | null
+          priority: number | null
+          role_id: string
+          task_id: string
+          template_id: string
+          time_offset_mins: number | null
+          time_window: Database["public"]["Enums"]["task_time_window"]
+        }
+        Insert: {
+          created_at?: string
+          frequency_id: string
+          id?: string
+          is_mandatory?: boolean | null
+          periodic_interval_mins?: number | null
+          priority?: number | null
+          role_id: string
+          task_id: string
+          template_id: string
+          time_offset_mins?: number | null
+          time_window?: Database["public"]["Enums"]["task_time_window"]
+        }
+        Update: {
+          created_at?: string
+          frequency_id?: string
+          id?: string
+          is_mandatory?: boolean | null
+          periodic_interval_mins?: number | null
+          priority?: number | null
+          role_id?: string
+          task_id?: string
+          template_id?: string
+          time_offset_mins?: number | null
+          time_window?: Database["public"]["Enums"]["task_time_window"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_template_items_frequency_id_fkey"
+            columns: ["frequency_id"]
+            isOneToOne: false
+            referencedRelation: "frequency_master"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_template_items_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "role_master"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_template_items_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "task_master"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_template_items_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "task_template"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       utility_readings: {
         Row: {
@@ -1810,7 +2272,23 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      frequency_type: "daily" | "weekly" | "monthly" | "custom"
+      shift_type: "morning" | "afternoon" | "evening" | "night"
+      task_category:
+        | "cleaning"
+        | "inventory"
+        | "security"
+        | "maintenance"
+        | "customer_service"
+        | "admin"
+      task_instance_status:
+        | "pending"
+        | "in_progress"
+        | "completed"
+        | "overdue"
+        | "escalated"
+        | "handed_over"
+      task_time_window: "opening" | "periodic" | "closing" | "anytime"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1937,6 +2415,26 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      frequency_type: ["daily", "weekly", "monthly", "custom"],
+      shift_type: ["morning", "afternoon", "evening", "night"],
+      task_category: [
+        "cleaning",
+        "inventory",
+        "security",
+        "maintenance",
+        "customer_service",
+        "admin",
+      ],
+      task_instance_status: [
+        "pending",
+        "in_progress",
+        "completed",
+        "overdue",
+        "escalated",
+        "handed_over",
+      ],
+      task_time_window: ["opening", "periodic", "closing", "anytime"],
+    },
   },
 } as const

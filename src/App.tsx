@@ -43,6 +43,11 @@ import ExpiryManagement from "./pages/inventory/ExpiryManagement";
 import ReturnToVendor from "./pages/inventory/ReturnToVendor";
 import StoreTransfers from "./pages/inventory/StoreTransfers";
 import LowStockAlerts from "./pages/inventory/LowStockAlerts";
+import TaskMaster from "./pages/operations/TaskMaster";
+import RoleMaster from "./pages/operations/RoleMaster";
+import TaskTemplates from "./pages/operations/TaskTemplates";
+import TaskAdherence from "./pages/operations/TaskAdherence";
+import StoreHeatmap from "./pages/operations/StoreHeatmap";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -94,6 +99,11 @@ const App = () => (
             <Route path="/inventory/rtv" element={<ReturnToVendor />} />
             <Route path="/inventory/transfers" element={<StoreTransfers />} />
             <Route path="/inventory/alerts" element={<LowStockAlerts />} />
+            <Route path="/operations/tasks" element={<TaskMaster />} />
+            <Route path="/operations/roles" element={<RoleMaster />} />
+            <Route path="/operations/templates" element={<TaskTemplates />} />
+            <Route path="/operations/adherence" element={<TaskAdherence />} />
+            <Route path="/operations/heatmap" element={<StoreHeatmap />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
