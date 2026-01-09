@@ -16,6 +16,7 @@ import {
   Database,
   Eye,
   Boxes,
+  ClipboardCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -92,6 +93,17 @@ const navigation: NavItem[] = [
       { title: "Return to Vendor", href: "/inventory/rtv" },
       { title: "Store Transfers", href: "/inventory/transfers" },
       { title: "Low Stock Alerts", href: "/inventory/alerts" },
+    ],
+  },
+  {
+    title: "Store Operations",
+    icon: ClipboardCheck,
+    children: [
+      { title: "Task Master", href: "/operations/tasks" },
+      { title: "Role Master", href: "/operations/roles" },
+      { title: "Task Templates", href: "/operations/templates" },
+      { title: "Task Adherence", href: "/operations/adherence" },
+      { title: "Store Heatmap", href: "/operations/heatmap" },
     ],
   },
   {
