@@ -32,6 +32,13 @@ import Planograms from "./pages/vm/Planograms";
 import ComplianceTasks from "./pages/vm/ComplianceTasks";
 import PhotoSubmission from "./pages/vm/PhotoSubmission";
 import ReviewSubmissions from "./pages/vm/ReviewSubmissions";
+import Warehouses from "./pages/inventory/Warehouses";
+import InventoryItems from "./pages/inventory/InventoryItems";
+import Requisitions from "./pages/inventory/Requisitions";
+import ShipmentTracking from "./pages/inventory/ShipmentTracking";
+import GoodsReceipt from "./pages/inventory/GoodsReceipt";
+import StockAudit from "./pages/inventory/StockAudit";
+import ConsumptionLog from "./pages/inventory/ConsumptionLog";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -72,6 +79,13 @@ const App = () => (
             <Route path="/vm/tasks" element={<ComplianceTasks />} />
             <Route path="/vm/submit" element={<PhotoSubmission />} />
             <Route path="/vm/review" element={<ReviewSubmissions />} />
+            <Route path="/inventory/warehouses" element={<Warehouses />} />
+            <Route path="/inventory/items" element={<InventoryItems />} />
+            <Route path="/inventory/requisitions" element={<Requisitions />} />
+            <Route path="/inventory/shipments" element={<ShipmentTracking />} />
+            <Route path="/inventory/grn" element={<GoodsReceipt />} />
+            <Route path="/inventory/audit" element={<StockAudit />} />
+            <Route path="/inventory/consumption" element={<ConsumptionLog />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
