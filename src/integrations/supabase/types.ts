@@ -660,6 +660,107 @@ export type Database = {
         }
         Relationships: []
       }
+      petty_cash: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          date: string
+          description: string | null
+          id: string
+          store_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string
+          date: string
+          description?: string | null
+          id?: string
+          store_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          date?: string
+          description?: string | null
+          id?: string
+          store_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "petty_cash_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      petty_cash_expenses: {
+        Row: {
+          amount: number
+          created_at: string
+          date: string
+          description: string
+          expense_type: string
+          id: string
+          notes: string | null
+          payment_status: string
+          petty_cash_id: string
+          spent_by: string
+          updated_at: string
+          vendor_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          date: string
+          description: string
+          expense_type: string
+          id?: string
+          notes?: string | null
+          payment_status?: string
+          petty_cash_id: string
+          spent_by: string
+          updated_at?: string
+          vendor_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          date?: string
+          description?: string
+          expense_type?: string
+          id?: string
+          notes?: string | null
+          payment_status?: string
+          petty_cash_id?: string
+          spent_by?: string
+          updated_at?: string
+          vendor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "petty_cash_expenses_petty_cash_id_fkey"
+            columns: ["petty_cash_id"]
+            isOneToOne: false
+            referencedRelation: "petty_cash"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "petty_cash_expenses_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       planograms: {
         Row: {
           created_at: string
