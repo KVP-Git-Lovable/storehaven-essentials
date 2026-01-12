@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppLayout } from "./components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import StoresList from "./pages/stores/StoresList";
+import StoreDetails from "./pages/stores/StoreDetails";
 import Rentals from "./pages/stores/Rentals";
 import NewStoreOpening from "./pages/stores/NewStoreOpening";
 import Products from "./pages/assets/Products";
@@ -62,6 +63,7 @@ const App = () => (
           <Route element={<AppLayout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/stores" element={<StoresList />} />
+            <Route path="/stores/:id" element={<StoreDetails />} />
             <Route path="/stores/rentals" element={<Rentals />} />
             <Route path="/stores/new-opening" element={<NewStoreOpening />} />
             <Route path="/assets/products" element={<Products />} />

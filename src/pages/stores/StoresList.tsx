@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { Plus, Search, MapPin, MoreVertical, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -260,7 +261,14 @@ export default function StoresList() {
           <TableBody>
             {filteredStores.map((store) => (
               <TableRow key={store.id}>
-                <TableCell className="font-medium">{store.name}</TableCell>
+                <TableCell className="font-medium">
+                  <Link 
+                    to={`/stores/${store.id}`}
+                    className="hover:underline text-primary cursor-pointer"
+                  >
+                    {store.name}
+                  </Link>
+                </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <MapPin className="h-4 w-4 shrink-0" />
@@ -282,9 +290,15 @@ export default function StoresList() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem>View Details</DropdownMenuItem>
-                      <DropdownMenuItem>Edit Store</DropdownMenuItem>
-                      <DropdownMenuItem>View Assets</DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to={`/stores/${store.id}`}>View Details</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to={`/stores/${store.id}`}>Edit Store</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to={`/stores/${store.id}?tab=assets`}>View Assets</Link>
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
