@@ -9,13 +9,12 @@ import StoresList from "./pages/stores/StoresList";
 import StoreDetails from "./pages/stores/StoreDetails";
 import Rentals from "./pages/stores/Rentals";
 import NewStoreOpening from "./pages/stores/NewStoreOpening";
-import Products from "./pages/assets/Products";
 import AssetInventory from "./pages/assets/AssetInventory";
 import AssetDetails from "./pages/assets/AssetDetails";
 import SparesManagement from "./pages/assets/SparesManagement";
 import ServiceContracts from "./pages/services/ServiceContracts";
 import PreventiveMaintenance from "./pages/services/PreventiveMaintenance";
-import IncidentManagement from "./pages/services/IncidentManagement";
+import ServiceTickets from "./pages/services/ServiceTickets";
 import Vendors from "./pages/Vendors";
 import PettyCash from "./pages/PettyCash";
 import Utilities from "./pages/Utilities";
@@ -66,13 +65,12 @@ const App = () => (
             <Route path="/stores/:id" element={<StoreDetails />} />
             <Route path="/stores/rentals" element={<Rentals />} />
             <Route path="/stores/new-opening" element={<NewStoreOpening />} />
-            <Route path="/assets/products" element={<Products />} />
             <Route path="/assets/inventory" element={<AssetInventory />} />
             <Route path="/assets/inventory/:id" element={<AssetDetails />} />
             <Route path="/assets/spares" element={<SparesManagement />} />
             <Route path="/services/contracts" element={<ServiceContracts />} />
             <Route path="/services/maintenance" element={<PreventiveMaintenance />} />
-            <Route path="/services/incidents" element={<IncidentManagement />} />
+            <Route path="/services/tickets" element={<ServiceTickets />} />
             <Route path="/vendors" element={<Vendors />} />
             <Route path="/petty-cash" element={<PettyCash />} />
             <Route path="/utilities" element={<Utilities />} />
