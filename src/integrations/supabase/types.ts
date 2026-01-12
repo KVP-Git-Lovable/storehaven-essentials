@@ -1374,6 +1374,53 @@ export type Database = {
           },
         ]
       }
+      store_contacts: {
+        Row: {
+          contact_type: string
+          created_at: string
+          designation: string | null
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          store_id: string
+          updated_at: string
+        }
+        Insert: {
+          contact_type?: string
+          created_at?: string
+          designation?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          store_id: string
+          updated_at?: string
+        }
+        Update: {
+          contact_type?: string
+          created_at?: string
+          designation?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          store_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_contacts_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       store_operating_hours: {
         Row: {
           close_time: string
