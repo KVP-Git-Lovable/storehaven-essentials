@@ -425,6 +425,7 @@ export type Database = {
       }
       incidents: {
         Row: {
+          asset_id: string | null
           created_at: string
           description: string
           id: string
@@ -432,10 +433,12 @@ export type Database = {
           priority: string
           reported_by: string
           status: string
+          store_id: string | null
           title: string
           updated_at: string
         }
         Insert: {
+          asset_id?: string | null
           created_at?: string
           description: string
           id?: string
@@ -443,10 +446,12 @@ export type Database = {
           priority: string
           reported_by: string
           status?: string
+          store_id?: string | null
           title: string
           updated_at?: string
         }
         Update: {
+          asset_id?: string | null
           created_at?: string
           description?: string
           id?: string
@@ -454,10 +459,26 @@ export type Database = {
           priority?: string
           reported_by?: string
           status?: string
+          store_id?: string | null
           title?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "incidents_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incidents_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       inventory_items: {
         Row: {
@@ -546,6 +567,7 @@ export type Database = {
       maintenance_tasks: {
         Row: {
           asset: string
+          asset_id: string | null
           assigned_to: string
           created_at: string
           frequency: string
@@ -553,11 +575,13 @@ export type Database = {
           last_done: string
           next_due: string
           status: string
+          store_id: string | null
           task_type: string
           updated_at: string
         }
         Insert: {
           asset: string
+          asset_id?: string | null
           assigned_to: string
           created_at?: string
           frequency: string
@@ -565,11 +589,13 @@ export type Database = {
           last_done: string
           next_due: string
           status?: string
+          store_id?: string | null
           task_type: string
           updated_at?: string
         }
         Update: {
           asset?: string
+          asset_id?: string | null
           assigned_to?: string
           created_at?: string
           frequency?: string
@@ -577,10 +603,26 @@ export type Database = {
           last_done?: string
           next_due?: string
           status?: string
+          store_id?: string | null
           task_type?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_tasks_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_tasks_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       meter_masters: {
         Row: {
@@ -656,6 +698,88 @@ export type Database = {
           zone?: string
         }
         Relationships: []
+      }
+      pm_attachments: {
+        Row: {
+          file_name: string
+          file_size: number | null
+          file_type: string | null
+          file_url: string
+          id: string
+          pm_id: string
+          uploaded_at: string
+          uploaded_by: string
+        }
+        Insert: {
+          file_name: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          pm_id: string
+          uploaded_at?: string
+          uploaded_by: string
+        }
+        Update: {
+          file_name?: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          pm_id?: string
+          uploaded_at?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_attachments_pm_id_fkey"
+            columns: ["pm_id"]
+            isOneToOne: false
+            referencedRelation: "store_preventive_maintenance"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pm_checklist_items: {
+        Row: {
+          checked_at: string | null
+          checked_by: string | null
+          created_at: string
+          id: string
+          is_checked: boolean | null
+          item_name: string
+          notes: string | null
+          pm_id: string
+        }
+        Insert: {
+          checked_at?: string | null
+          checked_by?: string | null
+          created_at?: string
+          id?: string
+          is_checked?: boolean | null
+          item_name: string
+          notes?: string | null
+          pm_id: string
+        }
+        Update: {
+          checked_at?: string | null
+          checked_by?: string | null
+          created_at?: string
+          id?: string
+          is_checked?: boolean | null
+          item_name?: string
+          notes?: string | null
+          pm_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_checklist_items_pm_id_fkey"
+            columns: ["pm_id"]
+            isOneToOne: false
+            referencedRelation: "store_preventive_maintenance"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       positions: {
         Row: {
@@ -1137,6 +1261,99 @@ export type Database = {
         }
         Relationships: []
       }
+      service_tickets: {
+        Row: {
+          asset_id: string | null
+          assigned_to: string | null
+          closed_at: string | null
+          created_at: string
+          description: string | null
+          id: string
+          manager_confirmed: boolean | null
+          manager_confirmed_at: string | null
+          manager_feedback: string | null
+          priority: string
+          reported_at: string
+          reported_by: string
+          resolution_time_hours: number | null
+          resolved_at: string | null
+          resolved_by: string | null
+          sla_due_date: string | null
+          solution_provided: string | null
+          started_at: string | null
+          status: string
+          store_id: string
+          ticket_number: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          asset_id?: string | null
+          assigned_to?: string | null
+          closed_at?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          manager_confirmed?: boolean | null
+          manager_confirmed_at?: string | null
+          manager_feedback?: string | null
+          priority?: string
+          reported_at?: string
+          reported_by: string
+          resolution_time_hours?: number | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          sla_due_date?: string | null
+          solution_provided?: string | null
+          started_at?: string | null
+          status?: string
+          store_id: string
+          ticket_number: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          asset_id?: string | null
+          assigned_to?: string | null
+          closed_at?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          manager_confirmed?: boolean | null
+          manager_confirmed_at?: string | null
+          manager_feedback?: string | null
+          priority?: string
+          reported_at?: string
+          reported_by?: string
+          resolution_time_hours?: number | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          sla_due_date?: string | null
+          solution_provided?: string | null
+          started_at?: string | null
+          status?: string
+          store_id?: string
+          ticket_number?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_tickets_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_tickets_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shipments: {
         Row: {
           carrier_name: string | null
@@ -1374,6 +1591,60 @@ export type Database = {
           },
         ]
       }
+      store_asset_deployments: {
+        Row: {
+          asset_id: string
+          created_at: string
+          deployed_date: string
+          feedback: string | null
+          id: string
+          notes: string | null
+          removed_date: string | null
+          status: string
+          store_id: string
+          updated_at: string
+        }
+        Insert: {
+          asset_id: string
+          created_at?: string
+          deployed_date?: string
+          feedback?: string | null
+          id?: string
+          notes?: string | null
+          removed_date?: string | null
+          status?: string
+          store_id: string
+          updated_at?: string
+        }
+        Update: {
+          asset_id?: string
+          created_at?: string
+          deployed_date?: string
+          feedback?: string | null
+          id?: string
+          notes?: string | null
+          removed_date?: string | null
+          status?: string
+          store_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_asset_deployments_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_asset_deployments_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       store_contacts: {
         Row: {
           contact_type: string
@@ -1452,6 +1723,78 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "store_operating_hours_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_preventive_maintenance: {
+        Row: {
+          asset_id: string | null
+          assigned_to: string | null
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          description: string | null
+          frequency: string
+          id: string
+          manager_confirmed: boolean | null
+          manager_confirmed_at: string | null
+          manager_feedback: string | null
+          scheduled_date: string
+          status: string
+          store_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          asset_id?: string | null
+          assigned_to?: string | null
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          description?: string | null
+          frequency?: string
+          id?: string
+          manager_confirmed?: boolean | null
+          manager_confirmed_at?: string | null
+          manager_feedback?: string | null
+          scheduled_date: string
+          status?: string
+          store_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          asset_id?: string | null
+          assigned_to?: string | null
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          description?: string | null
+          frequency?: string
+          id?: string
+          manager_confirmed?: boolean | null
+          manager_confirmed_at?: string | null
+          manager_feedback?: string | null
+          scheduled_date?: string
+          status?: string
+          store_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_preventive_maintenance_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_preventive_maintenance_store_id_fkey"
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
