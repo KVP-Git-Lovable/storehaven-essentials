@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Wallet, TrendingDown, ChevronDown, ChevronRight, Loader2, Trash2, Store } from "lucide-react";
+import { Plus, Loader2, Wallet, ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { StatCard } from "@/components/dashboard/StatCard";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -36,12 +36,6 @@ import {
 } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Link } from "react-router-dom";
-
-type StoreType = {
-  id: string;
-  name: string;
-};
 
 type Vendor = {
   id: string;
@@ -69,19 +63,20 @@ type PettyCash = {
   date: string;
   description: string | null;
   created_by: string;
-  store?: StoreType;
   expenses?: PettyCashExpense[];
   total_spent?: number;
   available?: number;
 };
 
+type StorePettyCashTabProps = {
+  storeId: string;
+};
+
 const expenseTypes = ["Maintenance", "Supplies", "Transport", "Refreshments", "Utilities", "Office", "Miscellaneous"];
 const paymentStatuses = ["pending", "paid", "approved", "rejected"];
 
-export default function PettyCash() {
-  const [searchQuery, setSearchQuery] = useState("");
+export function StorePettyCashTab({ storeId }: StorePettyCashTabProps) {
   const [pettyCashList, setPettyCashList] = useState<PettyCash[]>([]);
-  const [stores, setStores] = useState<StoreType[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [pcDialogOpen, setPcDialogOpen] = useState(false);
@@ -90,7 +85,7 @@ export default function PettyCash() {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
-  const [pcForm, setPcForm] = useState({ store_id: "", amount: "", date: format(new Date(), "yyyy-MM-dd"), description: "" });
+  const [pcForm, setPcForm] = useState({ amount: "", date: format(new Date(), "yyyy-MM-dd"), description: "" });
   const [expenseForm, setExpenseForm] = useState({
     description: "", expense_type: "", amount: "", date: format(new Date(), "yyyy-MM-dd"),
     vendor_id: "", spent_by: "", payment_status: "pending", notes: ""
@@ -98,28 +93,25 @@ export default function PettyCash() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [storeId]);
 
   const fetchData = async () => {
     setLoading(true);
-    const [pcRes, expensesRes, storesRes, vendorsRes] = await Promise.all([
-      supabase.from("petty_cash").select("*").order("date", { ascending: false }),
+    const [pcRes, expensesRes, vendorsRes] = await Promise.all([
+      supabase.from("petty_cash").select("*").eq("store_id", storeId).order("date", { ascending: false }),
       supabase.from("petty_cash_expenses").select("*, vendor:vendors(id, name)"),
-      supabase.from("stores").select("id, name").order("name"),
       supabase.from("vendors").select("id, name").order("name"),
     ]);
 
     if (pcRes.error) {
       toast({ title: "Error", description: "Failed to load petty cash", variant: "destructive" });
     } else {
-      const storesMap = new Map((storesRes.data || []).map(s => [s.id, s]));
       const expenses = (expensesRes.data || []) as PettyCashExpense[];
       const enrichedPC = (pcRes.data || []).map(pc => {
         const pcExpenses = expenses.filter(e => e.petty_cash_id === pc.id);
         const totalSpent = pcExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
         return {
           ...pc,
-          store: storesMap.get(pc.store_id),
           expenses: pcExpenses,
           total_spent: totalSpent,
           available: Number(pc.amount) - totalSpent,
@@ -127,20 +119,19 @@ export default function PettyCash() {
       });
       setPettyCashList(enrichedPC);
     }
-    setStores(storesRes.data || []);
     setVendors(vendorsRes.data || []);
     setLoading(false);
   };
 
   const handleAddPettyCash = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pcForm.store_id || !pcForm.amount || !pcForm.date) {
+    if (!pcForm.amount || !pcForm.date) {
       toast({ title: "Error", description: "Please fill required fields", variant: "destructive" });
       return;
     }
 
     const { error } = await supabase.from("petty_cash").insert({
-      store_id: pcForm.store_id,
+      store_id: storeId,
       amount: parseFloat(pcForm.amount),
       date: pcForm.date,
       description: pcForm.description || null,
@@ -151,7 +142,7 @@ export default function PettyCash() {
       toast({ title: "Error", description: "Failed to add petty cash", variant: "destructive" });
     } else {
       toast({ title: "Petty cash added" });
-      setPcForm({ store_id: "", amount: "", date: format(new Date(), "yyyy-MM-dd"), description: "" });
+      setPcForm({ amount: "", date: format(new Date(), "yyyy-MM-dd"), description: "" });
       setPcDialogOpen(false);
       fetchData();
     }
@@ -216,54 +207,22 @@ export default function PettyCash() {
   const totalAllocated = pettyCashList.reduce((sum, pc) => sum + Number(pc.amount), 0);
   const totalSpent = pettyCashList.reduce((sum, pc) => sum + (pc.total_spent || 0), 0);
   const totalAvailable = totalAllocated - totalSpent;
-  const totalTransactions = pettyCashList.reduce((sum, pc) => sum + (pc.expenses?.length || 0), 0);
-
-  const filteredPettyCash = pettyCashList.filter((pc) =>
-    pc.store?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    pc.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const stats = [
-    { title: "Total Allocated", value: `₹${(totalAllocated / 1000).toFixed(1)}K`, icon: Wallet, iconColor: "bg-primary/10 text-primary" },
-    { title: "Total Spent", value: `₹${(totalSpent / 1000).toFixed(1)}K`, icon: TrendingDown, iconColor: "bg-destructive/10 text-destructive" },
-    { title: "Available", value: `₹${(totalAvailable / 1000).toFixed(1)}K`, icon: Wallet, iconColor: "bg-green-100 text-green-600" },
-    { title: "Transactions", value: totalTransactions.toString(), icon: Store, iconColor: "bg-info/10 text-info" },
-  ];
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <div className="flex items-center justify-center h-32"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Petty Cash Management</h1>
-          <p className="text-muted-foreground">Track store-level petty cash and expenses</p>
-        </div>
+        <h2 className="text-lg font-medium">Petty Cash</h2>
         <Dialog open={pcDialogOpen} onOpenChange={setPcDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              Add Petty Cash
-            </Button>
+            <Button size="sm"><Plus className="h-4 w-4 mr-2" />Add Petty Cash</Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[400px]">
             <DialogHeader><DialogTitle>Add Petty Cash</DialogTitle></DialogHeader>
             <form onSubmit={handleAddPettyCash} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Store *</Label>
-                <Select value={pcForm.store_id} onValueChange={(v) => setPcForm(prev => ({ ...prev, store_id: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Select store" /></SelectTrigger>
-                  <SelectContent>
-                    {stores.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Amount (₹) *</Label>
@@ -290,30 +249,28 @@ export default function PettyCash() {
         </Dialog>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <StatCard key={stat.title} {...stat} />
-        ))}
-      </div>
-
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search by store or description..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-3 gap-4">
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Total Allocated</CardTitle></CardHeader>
+          <CardContent><p className="text-xl font-bold">₹{totalAllocated.toLocaleString()}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Total Spent</CardTitle></CardHeader>
+          <CardContent><p className="text-xl font-bold text-destructive">₹{totalSpent.toLocaleString()}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Available</CardTitle></CardHeader>
+          <CardContent><p className="text-xl font-bold text-green-600">₹{totalAvailable.toLocaleString()}</p></CardContent>
+        </Card>
       </div>
 
       {/* Petty Cash List with Expenses */}
       <div className="space-y-3">
-        {filteredPettyCash.length === 0 ? (
+        {pettyCashList.length === 0 ? (
           <div className="text-center text-muted-foreground py-8 border rounded-xl bg-card">No petty cash records</div>
         ) : (
-          filteredPettyCash.map((pc) => (
+          pettyCashList.map((pc) => (
             <Collapsible key={pc.id} open={expandedItems.has(pc.id)} onOpenChange={() => toggleExpand(pc.id)}>
               <div className="border rounded-xl bg-card overflow-hidden">
                 <CollapsibleTrigger asChild>
@@ -322,12 +279,7 @@ export default function PettyCash() {
                       {expandedItems.has(pc.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                       <Wallet className="h-5 w-5 text-primary" />
                       <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium">₹{Number(pc.amount).toLocaleString()}</p>
-                          <Link to={`/stores/${pc.store_id}`} className="text-sm text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
-                            {pc.store?.name || "Unknown Store"}
-                          </Link>
-                        </div>
+                        <p className="font-medium">₹{Number(pc.amount).toLocaleString()}</p>
                         <p className="text-sm text-muted-foreground">{format(new Date(pc.date), "PP")}</p>
                       </div>
                     </div>

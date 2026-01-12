@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Plus, Phone, User, MapPin, Loader2, Package, Home, Trash2, Calendar, Wrench, Ticket, FileText, Check, X } from "lucide-react";
+import { ArrowLeft, Plus, Phone, User, MapPin, Loader2, Package, Home, Trash2, Calendar, Wrench, Ticket, FileText, Check, X, Gauge, Wallet } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { StoreUtilitiesTab } from "@/components/stores/StoreUtilitiesTab";
+import { StorePettyCashTab } from "@/components/stores/StorePettyCashTab";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -502,6 +504,8 @@ export default function StoreDetails() {
           <TabsTrigger value="assets">Assets Deployed</TabsTrigger>
           <TabsTrigger value="pm">Preventive Maintenance</TabsTrigger>
           <TabsTrigger value="tickets">Service Tickets</TabsTrigger>
+          <TabsTrigger value="utilities"><Gauge className="h-4 w-4 mr-1" />Utilities</TabsTrigger>
+          <TabsTrigger value="pettycash"><Wallet className="h-4 w-4 mr-1" />Petty Cash</TabsTrigger>
           <TabsTrigger value="rentals">Rentals</TabsTrigger>
           <TabsTrigger value="contacts">Contacts</TabsTrigger>
         </TabsList>
@@ -865,6 +869,16 @@ export default function StoreDetails() {
               </TableBody>
             </Table>
           </div>
+        </TabsContent>
+
+        {/* Utilities Tab */}
+        <TabsContent value="utilities">
+          <StoreUtilitiesTab storeId={id!} storeName={store.name} deployedAssetIds={deployedAssetIds} />
+        </TabsContent>
+
+        {/* Petty Cash Tab */}
+        <TabsContent value="pettycash">
+          <StorePettyCashTab storeId={id!} />
         </TabsContent>
 
         {/* Rentals Tab */}
