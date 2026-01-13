@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,21 +15,59 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const isMountedRef = useRef(true);
+  const scannerContainerId = useRef(`barcode-scanner-${Date.now()}`);
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
-      stopScanner();
+      isMountedRef.current = false;
     };
   }, []);
 
-  const startScanner = async () => {
-    if (!containerRef.current) return;
+  const stopScanner = useCallback(async () => {
+    if (scannerRef.current) {
+      try {
+        const state = scannerRef.current.getState();
+        if (state === 2) { // Html5QrcodeScannerState.SCANNING
+          await scannerRef.current.stop();
+        }
+      } catch (err) {
+        // Ignore stop errors
+      }
+      
+      try {
+        await scannerRef.current.clear();
+      } catch (err) {
+        // Manually clear the container if clear fails
+        const container = document.getElementById(scannerContainerId.current);
+        if (container) {
+          container.innerHTML = '';
+        }
+      }
+      
+      scannerRef.current = null;
+    }
+    if (isMountedRef.current) {
+      setIsScanning(false);
+    }
+  }, []);
+
+  const startScanner = useCallback(async () => {
+    const containerId = scannerContainerId.current;
+    const container = document.getElementById(containerId);
+    if (!container) return;
     
     setError(null);
     
+    // Ensure any previous instance is cleaned up
+    await stopScanner();
+    
+    // Clear the container before starting
+    container.innerHTML = '';
+    
     try {
-      const html5QrCode = new Html5Qrcode("barcode-scanner-container");
+      const html5QrCode = new Html5Qrcode(containerId);
       scannerRef.current = html5QrCode;
 
       await html5QrCode.start(
@@ -47,50 +85,58 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
         }
       );
 
-      setIsScanning(true);
+      if (isMountedRef.current) {
+        setIsScanning(true);
+      }
     } catch (err: any) {
       console.error("Scanner error:", err);
-      if (err.name === "NotAllowedError") {
-        setError("Camera access denied. Please allow camera permission to scan barcodes.");
-      } else if (err.name === "NotFoundError") {
-        setError("No camera found on this device.");
-      } else {
-        setError("Failed to start camera. Please try again.");
+      if (isMountedRef.current) {
+        if (err.name === "NotAllowedError") {
+          setError("Camera access denied. Please allow camera permission to scan barcodes.");
+        } else if (err.name === "NotFoundError") {
+          setError("No camera found on this device.");
+        } else {
+          setError("Failed to start camera. Please try again.");
+        }
       }
     }
-  };
+  }, [stopScanner]);
 
-  const stopScanner = async () => {
-    if (scannerRef.current) {
-      try {
-        await scannerRef.current.stop();
-        await scannerRef.current.clear();
-      } catch (err) {
-        console.error("Error stopping scanner:", err);
-      }
-      scannerRef.current = null;
-    }
-    setIsScanning(false);
-  };
-
-  const handleScanSuccess = (barcode: string) => {
+  const handleScanSuccess = useCallback((barcode: string) => {
     toast.success(`Scanned: ${barcode}`);
     onScan(barcode);
     handleClose();
-  };
+  }, [onScan]);
 
-  const handleOpen = () => {
+  const handleOpen = useCallback(() => {
+    scannerContainerId.current = `barcode-scanner-${Date.now()}`;
     setIsOpen(true);
     setError(null);
-    // Start scanner after a short delay to ensure DOM is ready
-    setTimeout(startScanner, 100);
-  };
+  }, []);
 
-  const handleClose = () => {
-    stopScanner();
+  const handleClose = useCallback(async () => {
+    await stopScanner();
     setIsOpen(false);
     setError(null);
-  };
+  }, [stopScanner]);
+
+  // Start scanner when dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      // Small delay to ensure the container is mounted
+      const timer = setTimeout(() => {
+        startScanner();
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, startScanner]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopScanner();
+    };
+  }, [stopScanner]);
 
   return (
     <>
@@ -102,7 +148,14 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
         </Button>
       )}
 
-      <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+      <Dialog 
+        open={isOpen} 
+        onOpenChange={(open) => {
+          if (!open) {
+            handleClose();
+          }
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -125,8 +178,7 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
             ) : (
               <>
                 <div 
-                  id="barcode-scanner-container"
-                  ref={containerRef}
+                  id={scannerContainerId.current}
                   className="relative w-full aspect-video bg-muted rounded-lg overflow-hidden"
                 >
                   {!isScanning && (
