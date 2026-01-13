@@ -457,7 +457,7 @@ export default function PointOfSale() {
           </div>
         )}
 
-        {/* Product Grid */}
+        {/* Product Grid - displays products from Product Master */}
         <div className="flex-1 overflow-y-auto">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {filteredProducts.map((product) => (
