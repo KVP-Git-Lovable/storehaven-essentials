@@ -48,6 +48,9 @@ import RoleMaster from "./pages/operations/RoleMaster";
 import TaskTemplates from "./pages/operations/TaskTemplates";
 import TaskAdherence from "./pages/operations/TaskAdherence";
 import StoreHeatmap from "./pages/operations/StoreHeatmap";
+import PointOfSale from "./pages/pos/PointOfSale";
+import OrderHistory from "./pages/pos/OrderHistory";
+import Schemes from "./pages/pos/Schemes";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -61,6 +64,9 @@ const App = () => (
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/pos" element={<PointOfSale />} />
+            <Route path="/pos/orders" element={<OrderHistory />} />
+            <Route path="/pos/schemes" element={<Schemes />} />
             <Route path="/stores" element={<StoresList />} />
             <Route path="/stores/:id" element={<StoreDetails />} />
             <Route path="/stores/rentals" element={<Rentals />} />

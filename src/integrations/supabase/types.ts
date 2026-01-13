@@ -168,6 +168,42 @@ export type Database = {
           },
         ]
       }
+      customers: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          loyalty_points: number | null
+          name: string | null
+          phone: string
+          total_orders: number | null
+          total_spent: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          loyalty_points?: number | null
+          name?: string | null
+          phone: string
+          total_orders?: number | null
+          total_spent?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          loyalty_points?: number | null
+          name?: string | null
+          phone?: string
+          total_orders?: number | null
+          total_spent?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       departments: {
         Row: {
           created_at: string
@@ -659,6 +695,135 @@ export type Database = {
           reading_parameters?: string[]
         }
         Relationships: []
+      }
+      order_items: {
+        Row: {
+          created_at: string
+          discount_amount: number | null
+          discount_percent: number | null
+          id: string
+          item_id: string
+          order_id: string
+          quantity: number
+          tax_amount: number | null
+          tax_percent: number | null
+          total_amount: number
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          discount_amount?: number | null
+          discount_percent?: number | null
+          id?: string
+          item_id: string
+          order_id: string
+          quantity: number
+          tax_amount?: number | null
+          tax_percent?: number | null
+          total_amount: number
+          unit_price: number
+        }
+        Update: {
+          created_at?: string
+          discount_amount?: number | null
+          discount_percent?: number | null
+          id?: string
+          item_id?: string
+          order_id?: string
+          quantity?: number
+          tax_amount?: number | null
+          tax_percent?: number | null
+          total_amount?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          created_at: string
+          created_by: string
+          customer_id: string | null
+          discount_amount: number | null
+          id: string
+          notes: string | null
+          order_number: string
+          payment_method: string
+          payment_reference: string | null
+          payment_status: string
+          status: string
+          store_id: string | null
+          subtotal: number
+          tax_amount: number | null
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          customer_id?: string | null
+          discount_amount?: number | null
+          id?: string
+          notes?: string | null
+          order_number: string
+          payment_method: string
+          payment_reference?: string | null
+          payment_status?: string
+          status?: string
+          store_id?: string | null
+          subtotal?: number
+          tax_amount?: number | null
+          total_amount?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          customer_id?: string | null
+          discount_amount?: number | null
+          id?: string
+          notes?: string | null
+          order_number?: string
+          payment_method?: string
+          payment_reference?: string | null
+          payment_status?: string
+          status?: string
+          store_id?: string | null
+          subtotal?: number
+          tax_amount?: number | null
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       petty_cash: {
         Row: {
@@ -1289,6 +1454,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      schemes: {
+        Row: {
+          applicable_items: string[] | null
+          buy_quantity: number | null
+          created_at: string
+          description: string | null
+          discount_type: string
+          discount_value: number
+          end_date: string
+          get_quantity: number | null
+          id: string
+          min_purchase_amount: number | null
+          min_quantity: number | null
+          name: string
+          start_date: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          applicable_items?: string[] | null
+          buy_quantity?: number | null
+          created_at?: string
+          description?: string | null
+          discount_type: string
+          discount_value: number
+          end_date: string
+          get_quantity?: number | null
+          id?: string
+          min_purchase_amount?: number | null
+          min_quantity?: number | null
+          name: string
+          start_date: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          applicable_items?: string[] | null
+          buy_quantity?: number | null
+          created_at?: string
+          description?: string | null
+          discount_type?: string
+          discount_value?: number
+          end_date?: string
+          get_quantity?: number | null
+          id?: string
+          min_purchase_amount?: number | null
+          min_quantity?: number | null
+          name?: string
+          start_date?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       service_contract_assets: {
         Row: {
