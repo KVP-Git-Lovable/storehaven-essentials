@@ -93,14 +93,13 @@ export default function PointOfSale() {
     },
   });
 
-  // Fetch inventory items
-  const { data: items = [] } = useQuery({
-    queryKey: ["inventory-items"],
+  // Fetch products from Product Master
+  const { data: products = [] } = useQuery({
+    queryKey: ["pos-products"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("inventory_items")
+        .from("products")
         .select("*")
-        .eq("status", "active")
         .order("name");
       if (error) throw error;
       return data;
@@ -250,20 +249,20 @@ export default function PointOfSale() {
   };
 
   const handleBarcodeScan = (barcode: string) => {
-    const item = items.find((i) => i.barcode === barcode || i.sku === barcode);
-    if (item) {
-      addToCart(item);
+    const product = products.find((p) => p.model === barcode || p.name.includes(barcode));
+    if (product) {
+      addToCart(product);
     } else {
       toast.error(`Product with barcode ${barcode} not found`);
     }
   };
 
-  const addToCart = (item: any) => {
+  const addToCart = (product: any) => {
     setCart((prevCart) => {
-      const existingItem = prevCart.find((ci) => ci.itemId === item.id);
+      const existingItem = prevCart.find((ci) => ci.itemId === product.id);
       if (existingItem) {
         return prevCart.map((ci) =>
-          ci.itemId === item.id
+          ci.itemId === product.id
             ? {
                 ...ci,
                 quantity: ci.quantity + 1,
@@ -276,15 +275,15 @@ export default function PointOfSale() {
         ...prevCart,
         {
           id: crypto.randomUUID(),
-          itemId: item.id,
-          name: item.name,
+          itemId: product.id,
+          name: product.name,
           quantity: 1,
-          unitPrice: item.selling_price,
+          unitPrice: Number(product.price),
           discountPercent: 0,
           discountAmount: 0,
           taxPercent: 0,
           taxAmount: 0,
-          totalAmount: item.selling_price,
+          totalAmount: Number(product.price),
         },
       ];
     });
@@ -347,12 +346,12 @@ export default function PointOfSale() {
   const grandTotal = subtotal - totalDiscount + taxAmount;
   const changeAmount = paymentMethod === "cash" && cashReceived ? parseFloat(cashReceived) - grandTotal : 0;
 
-  const filteredItems = items.filter(
-    (item) =>
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.barcode?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredProducts = products.filter(
+    (product) =>
+      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.model?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const startNewOrder = () => {
@@ -461,20 +460,20 @@ export default function PointOfSale() {
         {/* Product Grid */}
         <div className="flex-1 overflow-y-auto">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {filteredItems.map((item) => (
+            {filteredProducts.map((product) => (
               <Card
-                key={item.id}
+                key={product.id}
                 className="cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => addToCart(item)}
+                onClick={() => addToCart(product)}
               >
                 <CardContent className="p-3">
-                  <div className="font-medium text-sm truncate">{item.name}</div>
-                  <div className="text-xs text-muted-foreground">{item.category}</div>
+                  <div className="font-medium text-sm truncate">{product.name}</div>
+                  <div className="text-xs text-muted-foreground">{product.category}</div>
                   <div className="flex items-center justify-between mt-2">
-                    <span className="font-bold text-primary">₹{item.selling_price}</span>
-                    {item.sku && (
+                    <span className="font-bold text-primary">₹{product.price}</span>
+                    {product.brand && (
                       <Badge variant="outline" className="text-xs">
-                        {item.sku}
+                        {product.brand}
                       </Badge>
                     )}
                   </div>

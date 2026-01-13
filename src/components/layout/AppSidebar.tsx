@@ -39,6 +39,7 @@ const navigation: NavItem[] = [
     icon: ShoppingCart,
     children: [
       { title: "Quick Sale", href: "/pos" },
+      { title: "Product Master", href: "/pos/products" },
       { title: "Order History", href: "/pos/orders" },
       { title: "Schemes", href: "/pos/schemes" },
     ],

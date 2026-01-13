@@ -51,6 +51,7 @@ import StoreHeatmap from "./pages/operations/StoreHeatmap";
 import PointOfSale from "./pages/pos/PointOfSale";
 import OrderHistory from "./pages/pos/OrderHistory";
 import Schemes from "./pages/pos/Schemes";
+import ProductMaster from "./pages/pos/ProductMaster";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -65,6 +66,7 @@ const App = () => (
           <Route element={<AppLayout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/pos" element={<PointOfSale />} />
+            <Route path="/pos/products" element={<ProductMaster />} />
             <Route path="/pos/orders" element={<OrderHistory />} />
             <Route path="/pos/schemes" element={<Schemes />} />
             <Route path="/stores" element={<StoresList />} />
