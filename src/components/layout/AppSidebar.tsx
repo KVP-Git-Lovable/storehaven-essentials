@@ -17,6 +17,7 @@ import {
   Eye,
   Boxes,
   ClipboardCheck,
+  ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -33,6 +34,15 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard },
+  {
+    title: "Point of Sale",
+    icon: ShoppingCart,
+    children: [
+      { title: "Quick Sale", href: "/pos" },
+      { title: "Order History", href: "/pos/orders" },
+      { title: "Schemes", href: "/pos/schemes" },
+    ],
+  },
   {
     title: "Store Management",
     icon: Store,
