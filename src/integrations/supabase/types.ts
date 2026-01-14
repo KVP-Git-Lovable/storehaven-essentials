@@ -1509,6 +1509,565 @@ export type Database = {
         }
         Relationships: []
       }
+      security_attendance: {
+        Row: {
+          attendance_date: string
+          check_in_time: string | null
+          check_out_time: string | null
+          created_at: string
+          guard_id: string
+          id: string
+          points_earned: number | null
+          roster_daily_id: string | null
+          status: string
+        }
+        Insert: {
+          attendance_date: string
+          check_in_time?: string | null
+          check_out_time?: string | null
+          created_at?: string
+          guard_id: string
+          id?: string
+          points_earned?: number | null
+          roster_daily_id?: string | null
+          status?: string
+        }
+        Update: {
+          attendance_date?: string
+          check_in_time?: string | null
+          check_out_time?: string | null
+          created_at?: string
+          guard_id?: string
+          id?: string
+          points_earned?: number | null
+          roster_daily_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "security_attendance_guard_id_fkey"
+            columns: ["guard_id"]
+            isOneToOne: false
+            referencedRelation: "security_guards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "security_attendance_roster_daily_id_fkey"
+            columns: ["roster_daily_id"]
+            isOneToOne: false
+            referencedRelation: "security_roster_daily"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      security_guard_feedback: {
+        Row: {
+          alertness_rating: number | null
+          comments: string | null
+          created_at: string
+          dependability_rating: number | null
+          feedback_date: string
+          guard_id: string
+          id: string
+          overall_rating: number | null
+          punctuality_rating: number | null
+          quality_of_service_rating: number | null
+          store_id: string
+          submitted_by: string
+          work_ethics_rating: number | null
+        }
+        Insert: {
+          alertness_rating?: number | null
+          comments?: string | null
+          created_at?: string
+          dependability_rating?: number | null
+          feedback_date?: string
+          guard_id: string
+          id?: string
+          overall_rating?: number | null
+          punctuality_rating?: number | null
+          quality_of_service_rating?: number | null
+          store_id: string
+          submitted_by: string
+          work_ethics_rating?: number | null
+        }
+        Update: {
+          alertness_rating?: number | null
+          comments?: string | null
+          created_at?: string
+          dependability_rating?: number | null
+          feedback_date?: string
+          guard_id?: string
+          id?: string
+          overall_rating?: number | null
+          punctuality_rating?: number | null
+          quality_of_service_rating?: number | null
+          store_id?: string
+          submitted_by?: string
+          work_ethics_rating?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "security_guard_feedback_guard_id_fkey"
+            columns: ["guard_id"]
+            isOneToOne: false
+            referencedRelation: "security_guards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "security_guard_feedback_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      security_guards: {
+        Row: {
+          address: string | null
+          address_proof_url: string | null
+          age: number | null
+          blood_group: string | null
+          created_at: string
+          date_of_birth: string | null
+          email: string | null
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          health_notes: string | null
+          height: number | null
+          id: string
+          id_proof_url: string | null
+          login_pin: string | null
+          name: string
+          phone: string
+          photo_url: string | null
+          previous_experience: Json | null
+          references_info: Json | null
+          status: string
+          store_id: string | null
+          total_points: number | null
+          updated_at: string
+          vendor_id: string | null
+          weight: number | null
+        }
+        Insert: {
+          address?: string | null
+          address_proof_url?: string | null
+          age?: number | null
+          blood_group?: string | null
+          created_at?: string
+          date_of_birth?: string | null
+          email?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          health_notes?: string | null
+          height?: number | null
+          id?: string
+          id_proof_url?: string | null
+          login_pin?: string | null
+          name: string
+          phone: string
+          photo_url?: string | null
+          previous_experience?: Json | null
+          references_info?: Json | null
+          status?: string
+          store_id?: string | null
+          total_points?: number | null
+          updated_at?: string
+          vendor_id?: string | null
+          weight?: number | null
+        }
+        Update: {
+          address?: string | null
+          address_proof_url?: string | null
+          age?: number | null
+          blood_group?: string | null
+          created_at?: string
+          date_of_birth?: string | null
+          email?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          health_notes?: string | null
+          height?: number | null
+          id?: string
+          id_proof_url?: string | null
+          login_pin?: string | null
+          name?: string
+          phone?: string
+          photo_url?: string | null
+          previous_experience?: Json | null
+          references_info?: Json | null
+          status?: string
+          store_id?: string | null
+          total_points?: number | null
+          updated_at?: string
+          vendor_id?: string | null
+          weight?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "security_guards_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "security_guards_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      security_patrol_points: {
+        Row: {
+          created_at: string
+          floor: string | null
+          id: string
+          is_active: boolean | null
+          location_description: string | null
+          name: string
+          qr_code: string
+          store_id: string
+          updated_at: string
+          zone: string | null
+        }
+        Insert: {
+          created_at?: string
+          floor?: string | null
+          id?: string
+          is_active?: boolean | null
+          location_description?: string | null
+          name: string
+          qr_code: string
+          store_id: string
+          updated_at?: string
+          zone?: string | null
+        }
+        Update: {
+          created_at?: string
+          floor?: string | null
+          id?: string
+          is_active?: boolean | null
+          location_description?: string | null
+          name?: string
+          qr_code?: string
+          store_id?: string
+          updated_at?: string
+          zone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "security_patrol_points_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      security_patrol_routes: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          shift_type: string
+          store_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          shift_type: string
+          store_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          shift_type?: string
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "security_patrol_routes_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      security_patrol_visits: {
+        Row: {
+          created_at: string
+          gps_latitude: number | null
+          gps_longitude: number | null
+          guard_id: string
+          id: string
+          is_on_time: boolean | null
+          notes: string | null
+          patrol_point_id: string
+          route_point_id: string | null
+          scanned_at: string
+          scheduled_time: string | null
+          selfie_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          gps_latitude?: number | null
+          gps_longitude?: number | null
+          guard_id: string
+          id?: string
+          is_on_time?: boolean | null
+          notes?: string | null
+          patrol_point_id: string
+          route_point_id?: string | null
+          scanned_at?: string
+          scheduled_time?: string | null
+          selfie_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          gps_latitude?: number | null
+          gps_longitude?: number | null
+          guard_id?: string
+          id?: string
+          is_on_time?: boolean | null
+          notes?: string | null
+          patrol_point_id?: string
+          route_point_id?: string | null
+          scanned_at?: string
+          scheduled_time?: string | null
+          selfie_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "security_patrol_visits_guard_id_fkey"
+            columns: ["guard_id"]
+            isOneToOne: false
+            referencedRelation: "security_guards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "security_patrol_visits_patrol_point_id_fkey"
+            columns: ["patrol_point_id"]
+            isOneToOne: false
+            referencedRelation: "security_patrol_points"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "security_patrol_visits_route_point_id_fkey"
+            columns: ["route_point_id"]
+            isOneToOne: false
+            referencedRelation: "security_route_points"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      security_points_log: {
+        Row: {
+          created_at: string
+          guard_id: string
+          id: string
+          points: number
+          reason: string
+          reference_id: string | null
+          reference_type: string | null
+        }
+        Insert: {
+          created_at?: string
+          guard_id: string
+          id?: string
+          points: number
+          reason: string
+          reference_id?: string | null
+          reference_type?: string | null
+        }
+        Update: {
+          created_at?: string
+          guard_id?: string
+          id?: string
+          points?: number
+          reason?: string
+          reference_id?: string | null
+          reference_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "security_points_log_guard_id_fkey"
+            columns: ["guard_id"]
+            isOneToOne: false
+            referencedRelation: "security_guards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      security_roster_daily: {
+        Row: {
+          assignment_date: string
+          check_in_time: string | null
+          check_out_time: string | null
+          created_at: string
+          end_time: string
+          guard_id: string
+          id: string
+          notes: string | null
+          shift_type: string
+          start_time: string
+          status: string | null
+          store_id: string
+        }
+        Insert: {
+          assignment_date: string
+          check_in_time?: string | null
+          check_out_time?: string | null
+          created_at?: string
+          end_time: string
+          guard_id: string
+          id?: string
+          notes?: string | null
+          shift_type: string
+          start_time: string
+          status?: string | null
+          store_id: string
+        }
+        Update: {
+          assignment_date?: string
+          check_in_time?: string | null
+          check_out_time?: string | null
+          created_at?: string
+          end_time?: string
+          guard_id?: string
+          id?: string
+          notes?: string | null
+          shift_type?: string
+          start_time?: string
+          status?: string | null
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "security_roster_daily_guard_id_fkey"
+            columns: ["guard_id"]
+            isOneToOne: false
+            referencedRelation: "security_guards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "security_roster_daily_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      security_roster_templates: {
+        Row: {
+          created_at: string
+          day_of_week: number
+          end_time: string
+          guard_id: string
+          id: string
+          is_active: boolean | null
+          shift_type: string
+          start_time: string
+          store_id: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week: number
+          end_time: string
+          guard_id: string
+          id?: string
+          is_active?: boolean | null
+          shift_type: string
+          start_time: string
+          store_id: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number
+          end_time?: string
+          guard_id?: string
+          id?: string
+          is_active?: boolean | null
+          shift_type?: string
+          start_time?: string
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "security_roster_templates_guard_id_fkey"
+            columns: ["guard_id"]
+            isOneToOne: false
+            referencedRelation: "security_guards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "security_roster_templates_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      security_route_points: {
+        Row: {
+          created_at: string
+          id: string
+          patrol_point_id: string
+          route_id: string
+          scheduled_time: string
+          sequence_order: number
+          tolerance_minutes: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          patrol_point_id: string
+          route_id: string
+          scheduled_time: string
+          sequence_order: number
+          tolerance_minutes?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          patrol_point_id?: string
+          route_id?: string
+          scheduled_time?: string
+          sequence_order?: number
+          tolerance_minutes?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "security_route_points_patrol_point_id_fkey"
+            columns: ["patrol_point_id"]
+            isOneToOne: false
+            referencedRelation: "security_patrol_points"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "security_route_points_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "security_patrol_routes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_contract_assets: {
         Row: {
           asset_id: string
