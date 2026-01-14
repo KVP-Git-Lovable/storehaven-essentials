@@ -1,25 +1,10 @@
 import { useState, useEffect } from "react";
-import { Plus, Calendar, Clock, Users } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Filter, Search, X, Clock, MapPin, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -28,14 +13,39 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  useDraggable,
+  useDroppable,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { cn } from "@/lib/utils";
 
-const DAYS_OF_WEEK = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const SHIFT_TYPES = ["Morning", "Evening", "Night"];
+const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAYS_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const SHIFT_TYPES = [
+  { value: "Morning", label: "Morning", time: "06:00 - 14:00", color: "bg-amber-500/20 text-amber-700 border-amber-500/30" },
+  { value: "Evening", label: "Evening", time: "14:00 - 22:00", color: "bg-blue-500/20 text-blue-700 border-blue-500/30" },
+  { value: "Night", label: "Night", time: "22:00 - 06:00", color: "bg-purple-500/20 text-purple-700 border-purple-500/30" },
+];
 
 interface Guard {
   id: string;
   name: string;
+  photo_url: string | null;
+  phone: string;
+  status: string;
+  store_id: string | null;
+  stores?: { name: string } | null;
+  vendor_id: string | null;
+  vendors?: { name: string } | null;
 }
 
 interface Store {
@@ -52,159 +62,315 @@ interface RosterTemplate {
   start_time: string;
   end_time: string;
   is_active: boolean;
-  security_guards?: { name: string };
-  stores?: { name: string };
+  security_guards?: { name: string; photo_url: string | null };
 }
 
-interface DailyAssignment {
-  id: string;
-  guard_id: string;
-  store_id: string;
-  assignment_date: string;
-  shift_type: string;
-  start_time: string;
-  end_time: string;
-  status: string;
-  check_in_time: string | null;
-  check_out_time: string | null;
-  security_guards?: { name: string };
-  stores?: { name: string };
+// Draggable Guard Card Component
+function DraggableGuard({ guard, isAssigned }: { guard: Guard; isAssigned?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: guard.id,
+    data: { guard },
+  });
+
+  const style = transform
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+      }
+    : undefined;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className={cn(
+        "flex items-center gap-3 p-3 rounded-lg border bg-card cursor-grab active:cursor-grabbing transition-all",
+        isDragging && "opacity-50 scale-105 shadow-lg",
+        isAssigned && "border-primary/50 bg-primary/5"
+      )}
+    >
+      <Avatar className="h-10 w-10 border-2 border-background shadow-sm">
+        <AvatarImage src={guard.photo_url || undefined} alt={guard.name} />
+        <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+          {guard.name.split(" ").map(n => n[0]).join("").toUpperCase()}
+        </AvatarFallback>
+      </Avatar>
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-sm truncate">{guard.name}</p>
+        <p className="text-xs text-muted-foreground truncate">
+          {guard.stores?.name || "Unassigned"}
+        </p>
+      </div>
+      {isAssigned && (
+        <Badge variant="secondary" className="text-xs">Scheduled</Badge>
+      )}
+    </div>
+  );
+}
+
+// Guard Card for Drag Overlay
+function GuardDragOverlay({ guard }: { guard: Guard }) {
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-lg border bg-card shadow-2xl scale-105">
+      <Avatar className="h-10 w-10 border-2 border-primary shadow-sm">
+        <AvatarImage src={guard.photo_url || undefined} alt={guard.name} />
+        <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+          {guard.name.split(" ").map(n => n[0]).join("").toUpperCase()}
+        </AvatarFallback>
+      </Avatar>
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-sm truncate">{guard.name}</p>
+        <p className="text-xs text-muted-foreground">Drop to assign</p>
+      </div>
+    </div>
+  );
+}
+
+// Droppable Calendar Cell
+function DroppableCell({ 
+  dayIndex, 
+  shift, 
+  storeId,
+  assignments,
+  onRemove
+}: { 
+  dayIndex: number; 
+  shift: string; 
+  storeId: string;
+  assignments: RosterTemplate[];
+  onRemove: (id: string) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `${dayIndex}-${shift}-${storeId}`,
+    data: { dayIndex, shift, storeId },
+  });
+
+  const shiftConfig = SHIFT_TYPES.find(s => s.value === shift);
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "min-h-[80px] p-2 rounded-lg border-2 border-dashed transition-all",
+        isOver ? "border-primary bg-primary/10" : "border-muted-foreground/20 bg-muted/30",
+        assignments.length > 0 && "border-solid border-muted"
+      )}
+    >
+      {assignments.length === 0 ? (
+        <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
+          Drop guard here
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {assignments.map((assignment) => (
+            <div
+              key={assignment.id}
+              className={cn(
+                "flex items-center gap-2 p-2 rounded-md border text-xs",
+                shiftConfig?.color
+              )}
+            >
+              <Avatar className="h-6 w-6">
+                <AvatarImage src={assignment.security_guards?.photo_url || undefined} />
+                <AvatarFallback className="text-[10px] bg-background">
+                  {assignment.security_guards?.name?.split(" ").map(n => n[0]).join("") || "?"}
+                </AvatarFallback>
+              </Avatar>
+              <span className="flex-1 truncate font-medium">
+                {assignment.security_guards?.name}
+              </span>
+              <button
+                onClick={() => onRemove(assignment.id)}
+                className="hover:bg-background/50 rounded p-0.5"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function SecurityRoster() {
-  const [templates, setTemplates] = useState<RosterTemplate[]>([]);
-  const [dailyAssignments, setDailyAssignments] = useState<DailyAssignment[]>([]);
   const [guards, setGuards] = useState<Guard[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
+  const [templates, setTemplates] = useState<RosterTemplate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
-  const [isDailyDialogOpen, setIsDailyDialogOpen] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [selectedStore, setSelectedStore] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [vendorFilter, setVendorFilter] = useState<string>("all");
+  const [activeGuard, setActiveGuard] = useState<Guard | null>(null);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedShift, setSelectedShift] = useState<string>("all");
 
-  // Form state for templates
-  const [templateForm, setTemplateForm] = useState({
-    guard_id: "",
-    store_id: "",
-    day_of_week: "1",
-    shift_type: "Morning",
-    start_time: "08:00",
-    end_time: "20:00",
-  });
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
 
-  // Form state for daily
-  const [dailyForm, setDailyForm] = useState({
-    guard_id: "",
-    store_id: "",
-    assignment_date: new Date().toISOString().split("T")[0],
-    shift_type: "Morning",
-    start_time: "08:00",
-    end_time: "20:00",
-  });
+  // Get current week dates
+  const getWeekDates = () => {
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay() + (weekOffset * 7));
+    
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(startOfWeek);
+      date.setDate(startOfWeek.getDate() + i);
+      return date;
+    });
+  };
+
+  const weekDates = getWeekDates();
 
   useEffect(() => {
     fetchData();
-  }, [selectedDate]);
+  }, [selectedStore]);
 
   const fetchData = async () => {
     try {
-      const [guardsRes, storesRes, templatesRes, dailyRes] = await Promise.all([
-        supabase.from("security_guards").select("id, name").eq("status", "active"),
+      const [guardsRes, storesRes] = await Promise.all([
+        supabase.from("security_guards").select(`
+          id, name, photo_url, phone, status, store_id, vendor_id,
+          stores(name),
+          vendors(name)
+        `).eq("status", "active"),
         supabase.from("stores").select("id, name").eq("status", "active"),
-        supabase.from("security_roster_templates").select(`
-          *,
-          security_guards(name),
-          stores(name)
-        `).eq("is_active", true),
-        supabase.from("security_roster_daily").select(`
-          *,
-          security_guards(name),
-          stores(name)
-        `).eq("assignment_date", selectedDate).order("start_time"),
       ]);
 
       if (guardsRes.data) setGuards(guardsRes.data);
-      if (storesRes.data) setStores(storesRes.data);
-      if (templatesRes.data) setTemplates(templatesRes.data);
-      if (dailyRes.data) setDailyAssignments(dailyRes.data);
+      if (storesRes.data) {
+        setStores(storesRes.data);
+        if (!selectedStore && storesRes.data.length > 0) {
+          setSelectedStore(storesRes.data[0].id);
+        }
+      }
     } catch (error) {
       console.error("Error fetching data:", error);
-      toast.error("Failed to fetch roster data");
+      toast.error("Failed to fetch data");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddTemplate = async () => {
+  useEffect(() => {
+    if (selectedStore) {
+      fetchTemplates();
+    }
+  }, [selectedStore]);
+
+  const fetchTemplates = async () => {
+    if (!selectedStore) return;
+    
+    const { data, error } = await supabase
+      .from("security_roster_templates")
+      .select(`
+        *,
+        security_guards(name, photo_url)
+      `)
+      .eq("store_id", selectedStore)
+      .eq("is_active", true);
+
+    if (data) setTemplates(data);
+    if (error) console.error("Error fetching templates:", error);
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const guard = guards.find(g => g.id === event.active.id);
+    if (guard) setActiveGuard(guard);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveGuard(null);
+    
+    const { active, over } = event;
+    if (!over || !selectedStore) return;
+
+    const guardId = active.id as string;
+    const [dayIndex, shift] = (over.id as string).split("-");
+
+    // Check if already assigned
+    const existing = templates.find(
+      t => t.guard_id === guardId && 
+           t.day_of_week === parseInt(dayIndex) && 
+           t.shift_type === shift &&
+           t.store_id === selectedStore
+    );
+
+    if (existing) {
+      toast.info("Guard already assigned to this slot");
+      return;
+    }
+
+    // Get shift times
+    const shiftConfig = SHIFT_TYPES.find(s => s.value === shift);
+    const [startTime, endTime] = shiftConfig?.time.split(" - ") || ["08:00", "20:00"];
+
     try {
       const { error } = await supabase.from("security_roster_templates").insert({
-        guard_id: templateForm.guard_id,
-        store_id: templateForm.store_id,
-        day_of_week: parseInt(templateForm.day_of_week),
-        shift_type: templateForm.shift_type,
-        start_time: templateForm.start_time,
-        end_time: templateForm.end_time,
+        guard_id: guardId,
+        store_id: selectedStore,
+        day_of_week: parseInt(dayIndex),
+        shift_type: shift,
+        start_time: startTime,
+        end_time: endTime,
       });
 
       if (error) throw error;
-      toast.success("Weekly schedule template added");
-      setIsTemplateDialogOpen(false);
-      fetchData();
+      toast.success("Guard assigned to schedule");
+      fetchTemplates();
     } catch (error) {
-      console.error("Error adding template:", error);
-      toast.error("Failed to add template");
+      console.error("Error assigning guard:", error);
+      toast.error("Failed to assign guard");
     }
   };
 
-  const handleAddDaily = async () => {
+  const handleRemoveAssignment = async (templateId: string) => {
     try {
-      const { error } = await supabase.from("security_roster_daily").insert({
-        guard_id: dailyForm.guard_id,
-        store_id: dailyForm.store_id,
-        assignment_date: dailyForm.assignment_date,
-        shift_type: dailyForm.shift_type,
-        start_time: dailyForm.start_time,
-        end_time: dailyForm.end_time,
-      });
+      const { error } = await supabase
+        .from("security_roster_templates")
+        .delete()
+        .eq("id", templateId);
 
       if (error) throw error;
-      toast.success("Daily assignment added");
-      setIsDailyDialogOpen(false);
-      fetchData();
+      toast.success("Assignment removed");
+      fetchTemplates();
     } catch (error) {
-      console.error("Error adding assignment:", error);
-      toast.error("Failed to add assignment");
+      console.error("Error removing assignment:", error);
+      toast.error("Failed to remove assignment");
     }
   };
 
-  const generateFromTemplate = async () => {
-    try {
-      const dayOfWeek = new Date(selectedDate).getDay();
-      const matchingTemplates = templates.filter(t => t.day_of_week === dayOfWeek);
-
-      if (matchingTemplates.length === 0) {
-        toast.info("No templates found for this day");
-        return;
-      }
-
-      const assignments = matchingTemplates.map(t => ({
-        guard_id: t.guard_id,
-        store_id: t.store_id,
-        assignment_date: selectedDate,
-        shift_type: t.shift_type,
-        start_time: t.start_time,
-        end_time: t.end_time,
-      }));
-
-      const { error } = await supabase.from("security_roster_daily").insert(assignments);
-      if (error) throw error;
-      
-      toast.success(`Generated ${assignments.length} assignments from templates`);
-      fetchData();
-    } catch (error) {
-      console.error("Error generating assignments:", error);
-      toast.error("Failed to generate assignments");
-    }
+  const getAssignmentsForCell = (dayIndex: number, shift: string) => {
+    return templates.filter(
+      t => t.day_of_week === dayIndex && t.shift_type === shift
+    );
   };
+
+  const getScheduledGuardIds = () => {
+    return new Set(templates.map(t => t.guard_id));
+  };
+
+  // Filter guards
+  const filteredGuards = guards.filter(guard => {
+    const matchesSearch = guard.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesVendor = vendorFilter === "all" || guard.vendor_id === vendorFilter;
+    const matchesStore = !selectedStore || guard.store_id === selectedStore || !guard.store_id;
+    return matchesSearch && matchesVendor && matchesStore;
+  });
+
+  const uniqueVendors = [...new Set(guards.filter(g => g.vendor_id).map(g => ({ 
+    id: g.vendor_id!, 
+    name: g.vendors?.name || "Unknown" 
+  })))];
+
+  const scheduledGuardIds = getScheduledGuardIds();
 
   if (loading) {
     return (
@@ -215,290 +381,215 @@ export default function SecurityRoster() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Security Roster</h1>
-          <p className="text-muted-foreground">Manage guard schedules and shifts</p>
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="h-[calc(100vh-120px)] flex flex-col animate-fade-in">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-semibold">Security Roster</h1>
+            <p className="text-muted-foreground">Drag guards to assign shifts</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Select value={selectedStore} onValueChange={setSelectedStore}>
+              <SelectTrigger className="w-[200px]">
+                <MapPin className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Select store" />
+              </SelectTrigger>
+              <SelectContent>
+                {stores.map((store) => (
+                  <SelectItem key={store.id} value={store.id}>
+                    {store.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1 flex gap-4 min-h-0">
+          {/* Left Panel - Guards */}
+          <Card className="w-72 flex flex-col">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Security Guards
+              </CardTitle>
+              <div className="space-y-2 mt-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search guards..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 h-9"
+                  />
+                </div>
+                <Select value={vendorFilter} onValueChange={setVendorFilter}>
+                  <SelectTrigger className="h-9">
+                    <Filter className="h-4 w-4 mr-2" />
+                    <SelectValue placeholder="Filter by vendor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Vendors</SelectItem>
+                    {uniqueVendors.map((vendor) => (
+                      <SelectItem key={vendor.id} value={vendor.id}>
+                        {vendor.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 p-3 pt-0">
+              <ScrollArea className="h-full">
+                <div className="space-y-2 pr-3">
+                  {filteredGuards.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground text-sm">
+                      No guards found
+                    </div>
+                  ) : (
+                    filteredGuards.map((guard) => (
+                      <DraggableGuard
+                        key={guard.id}
+                        guard={guard}
+                        isAssigned={scheduledGuardIds.has(guard.id)}
+                      />
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+
+          {/* Right Panel - Calendar */}
+          <Card className="flex-1 flex flex-col">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Weekly Schedule
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Select value={selectedShift} onValueChange={setSelectedShift}>
+                    <SelectTrigger className="w-[140px] h-8">
+                      <Clock className="h-3 w-3 mr-2" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Shifts</SelectItem>
+                      {SHIFT_TYPES.map((shift) => (
+                        <SelectItem key={shift.value} value={shift.value}>
+                          {shift.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setWeekOffset(prev => prev - 1)}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3"
+                      onClick={() => setWeekOffset(0)}
+                    >
+                      Today
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setWeekOffset(prev => prev + 1)}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-auto p-3 pt-0">
+              {!selectedStore ? (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  Select a store to view schedule
+                </div>
+              ) : (
+                <div className="min-w-[800px]">
+                  {/* Day Headers */}
+                  <div className="grid grid-cols-8 gap-2 mb-3">
+                    <div className="p-2 text-sm font-medium text-muted-foreground">Shift</div>
+                    {weekDates.map((date, index) => {
+                      const isToday = date.toDateString() === new Date().toDateString();
+                      return (
+                        <div
+                          key={index}
+                          className={cn(
+                            "p-2 text-center rounded-lg",
+                            isToday && "bg-primary/10 text-primary"
+                          )}
+                        >
+                          <div className="text-xs font-medium text-muted-foreground">
+                            {DAYS_OF_WEEK[index]}
+                          </div>
+                          <div className={cn("text-lg font-semibold", isToday && "text-primary")}>
+                            {date.getDate()}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Shift Rows */}
+                  {SHIFT_TYPES.filter(shift => selectedShift === "all" || selectedShift === shift.value).map((shift) => (
+                    <div key={shift.value} className="grid grid-cols-8 gap-2 mb-3">
+                      <div className="flex flex-col justify-center p-2">
+                        <span className="text-sm font-medium">{shift.label}</span>
+                        <span className="text-xs text-muted-foreground">{shift.time}</span>
+                      </div>
+                      {weekDates.map((_, dayIndex) => (
+                        <DroppableCell
+                          key={`${dayIndex}-${shift.value}`}
+                          dayIndex={dayIndex}
+                          shift={shift.value}
+                          storeId={selectedStore}
+                          assignments={getAssignmentsForCell(dayIndex, shift.value)}
+                          onRemove={handleRemoveAssignment}
+                        />
+                      ))}
+                    </div>
+                  ))}
+
+                  {/* Legend */}
+                  <div className="flex items-center gap-4 mt-6 pt-4 border-t">
+                    <span className="text-sm text-muted-foreground">Legend:</span>
+                    {SHIFT_TYPES.map((shift) => (
+                      <div key={shift.value} className="flex items-center gap-2">
+                        <div className={cn("w-3 h-3 rounded-full", shift.color.split(" ")[0])} />
+                        <span className="text-xs">{shift.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
 
-      <Tabs defaultValue="daily">
-        <TabsList>
-          <TabsTrigger value="daily">Daily Assignments</TabsTrigger>
-          <TabsTrigger value="templates">Weekly Templates</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="daily" className="space-y-4">
-          <div className="flex items-center gap-4 justify-between">
-            <div className="flex items-center gap-4">
-              <Input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-auto"
-              />
-              <Button variant="outline" onClick={generateFromTemplate}>
-                <Calendar className="h-4 w-4 mr-2" />
-                Generate from Templates
-              </Button>
-            </div>
-            <Button onClick={() => setIsDailyDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Assignment
-            </Button>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Assignments for {new Date(selectedDate).toLocaleDateString()}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Guard</TableHead>
-                    <TableHead>Store</TableHead>
-                    <TableHead>Shift</TableHead>
-                    <TableHead>Time</TableHead>
-                    <TableHead>Check In</TableHead>
-                    <TableHead>Check Out</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dailyAssignments.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                        No assignments for this date
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    dailyAssignments.map((assignment) => (
-                      <TableRow key={assignment.id}>
-                        <TableCell className="font-medium">
-                          {assignment.security_guards?.name}
-                        </TableCell>
-                        <TableCell>{assignment.stores?.name}</TableCell>
-                        <TableCell>{assignment.shift_type}</TableCell>
-                        <TableCell>
-                          {assignment.start_time} - {assignment.end_time}
-                        </TableCell>
-                        <TableCell>
-                          {assignment.check_in_time 
-                            ? new Date(assignment.check_in_time).toLocaleTimeString() 
-                            : "-"}
-                        </TableCell>
-                        <TableCell>
-                          {assignment.check_out_time 
-                            ? new Date(assignment.check_out_time).toLocaleTimeString() 
-                            : "-"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge 
-                            variant={
-                              assignment.status === "completed" ? "default" :
-                              assignment.status === "in-progress" ? "secondary" : "outline"
-                            }
-                          >
-                            {assignment.status}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="templates" className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={() => setIsTemplateDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Template
-            </Button>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Weekly Recurring Schedule
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Guard</TableHead>
-                    <TableHead>Store</TableHead>
-                    <TableHead>Day</TableHead>
-                    <TableHead>Shift</TableHead>
-                    <TableHead>Time</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {templates.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                        No schedule templates created yet
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    templates.map((template) => (
-                      <TableRow key={template.id}>
-                        <TableCell className="font-medium">
-                          {template.security_guards?.name}
-                        </TableCell>
-                        <TableCell>{template.stores?.name}</TableCell>
-                        <TableCell>{DAYS_OF_WEEK[template.day_of_week]}</TableCell>
-                        <TableCell>{template.shift_type}</TableCell>
-                        <TableCell>{template.start_time} - {template.end_time}</TableCell>
-                        <TableCell>
-                          <Badge variant={template.is_active ? "default" : "secondary"}>
-                            {template.is_active ? "Active" : "Inactive"}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* Template Dialog */}
-      <Dialog open={isTemplateDialogOpen} onOpenChange={setIsTemplateDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Weekly Schedule Template</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Guard</Label>
-              <Select value={templateForm.guard_id} onValueChange={(v) => setTemplateForm({...templateForm, guard_id: v})}>
-                <SelectTrigger><SelectValue placeholder="Select guard" /></SelectTrigger>
-                <SelectContent>
-                  {guards.map((g) => (
-                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Store</Label>
-              <Select value={templateForm.store_id} onValueChange={(v) => setTemplateForm({...templateForm, store_id: v})}>
-                <SelectTrigger><SelectValue placeholder="Select store" /></SelectTrigger>
-                <SelectContent>
-                  {stores.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Day of Week</Label>
-              <Select value={templateForm.day_of_week} onValueChange={(v) => setTemplateForm({...templateForm, day_of_week: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {DAYS_OF_WEEK.map((day, index) => (
-                    <SelectItem key={index} value={index.toString()}>{day}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Shift Type</Label>
-              <Select value={templateForm.shift_type} onValueChange={(v) => setTemplateForm({...templateForm, shift_type: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {SHIFT_TYPES.map((shift) => (
-                    <SelectItem key={shift} value={shift}>{shift}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Start Time</Label>
-                <Input type="time" value={templateForm.start_time} onChange={(e) => setTemplateForm({...templateForm, start_time: e.target.value})} />
-              </div>
-              <div className="space-y-2">
-                <Label>End Time</Label>
-                <Input type="time" value={templateForm.end_time} onChange={(e) => setTemplateForm({...templateForm, end_time: e.target.value})} />
-              </div>
-            </div>
-            <Button className="w-full" onClick={handleAddTemplate}>Add Template</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Daily Assignment Dialog */}
-      <Dialog open={isDailyDialogOpen} onOpenChange={setIsDailyDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Daily Assignment</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Guard</Label>
-              <Select value={dailyForm.guard_id} onValueChange={(v) => setDailyForm({...dailyForm, guard_id: v})}>
-                <SelectTrigger><SelectValue placeholder="Select guard" /></SelectTrigger>
-                <SelectContent>
-                  {guards.map((g) => (
-                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Store</Label>
-              <Select value={dailyForm.store_id} onValueChange={(v) => setDailyForm({...dailyForm, store_id: v})}>
-                <SelectTrigger><SelectValue placeholder="Select store" /></SelectTrigger>
-                <SelectContent>
-                  {stores.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Date</Label>
-              <Input type="date" value={dailyForm.assignment_date} onChange={(e) => setDailyForm({...dailyForm, assignment_date: e.target.value})} />
-            </div>
-            <div className="space-y-2">
-              <Label>Shift Type</Label>
-              <Select value={dailyForm.shift_type} onValueChange={(v) => setDailyForm({...dailyForm, shift_type: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {SHIFT_TYPES.map((shift) => (
-                    <SelectItem key={shift} value={shift}>{shift}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Start Time</Label>
-                <Input type="time" value={dailyForm.start_time} onChange={(e) => setDailyForm({...dailyForm, start_time: e.target.value})} />
-              </div>
-              <div className="space-y-2">
-                <Label>End Time</Label>
-                <Input type="time" value={dailyForm.end_time} onChange={(e) => setDailyForm({...dailyForm, end_time: e.target.value})} />
-              </div>
-            </div>
-            <Button className="w-full" onClick={handleAddDaily}>Add Assignment</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+      {/* Drag Overlay */}
+      <DragOverlay>
+        {activeGuard && <GuardDragOverlay guard={activeGuard} />}
+      </DragOverlay>
+    </DndContext>
   );
 }
