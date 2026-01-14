@@ -26,28 +26,23 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
   }, []);
 
   const stopScanner = useCallback(async () => {
-    if (scannerRef.current) {
+    const scanner = scannerRef.current;
+    scannerRef.current = null;
+    
+    if (scanner) {
       try {
-        const state = scannerRef.current.getState();
+        const state = scanner.getState();
         if (state === 2) { // Html5QrcodeScannerState.SCANNING
-          await scannerRef.current.stop();
+          await scanner.stop();
         }
       } catch (err) {
         // Ignore stop errors
       }
       
-      try {
-        await scannerRef.current.clear();
-      } catch (err) {
-        // Manually clear the container if clear fails
-        const container = document.getElementById(scannerContainerId.current);
-        if (container) {
-          container.innerHTML = '';
-        }
-      }
-      
-      scannerRef.current = null;
+      // Don't call clear() - it causes DOM conflicts with React portals
+      // React will clean up the container when the dialog unmounts
     }
+    
     if (isMountedRef.current) {
       setIsScanning(false);
     }
@@ -56,15 +51,9 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
   const startScanner = useCallback(async () => {
     const containerId = scannerContainerId.current;
     const container = document.getElementById(containerId);
-    if (!container) return;
+    if (!container || scannerRef.current) return;
     
     setError(null);
-    
-    // Ensure any previous instance is cleaned up
-    await stopScanner();
-    
-    // Clear the container before starting
-    container.innerHTML = '';
     
     try {
       const html5QrCode = new Html5Qrcode(containerId);
