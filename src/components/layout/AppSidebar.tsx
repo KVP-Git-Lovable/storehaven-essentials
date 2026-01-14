@@ -75,8 +75,19 @@ const navigation: NavItem[] = [
       { title: "Attendance & Leave", href: "/staff/attendance" },
     ],
   },
-  { title: "Housekeeping", href: "/housekeeping", icon: ClipboardList },
-  { title: "Security", href: "/security", icon: ShieldCheck },
+  {
+    title: "Security",
+    icon: ShieldCheck,
+    children: [
+      { title: "Dashboard", href: "/security" },
+      { title: "Guards", href: "/security/guards" },
+      { title: "Roster", href: "/security/roster" },
+      { title: "Patrol Points", href: "/security/patrol-points" },
+      { title: "Patrol Scan", href: "/security/scan" },
+      { title: "Feedback", href: "/security/feedback" },
+      { title: "Gamification", href: "/security/gamification" },
+    ],
+  },
   { title: "Footfall", href: "/footfall", icon: UserCheck },
   {
     title: "Visual Merchandising",

@@ -20,8 +20,13 @@ import PettyCash from "./pages/PettyCash";
 import Utilities from "./pages/Utilities";
 import Employees from "./pages/staff/Employees";
 import Attendance from "./pages/staff/Attendance";
-import Housekeeping from "./pages/Housekeeping";
-import Security from "./pages/Security";
+import SecurityDashboard from "./pages/security/SecurityDashboard";
+import SecurityGuards from "./pages/security/SecurityGuards";
+import SecurityRoster from "./pages/security/SecurityRoster";
+import PatrolPoints from "./pages/security/PatrolPoints";
+import PatrolScan from "./pages/security/PatrolScan";
+import GuardFeedback from "./pages/security/GuardFeedback";
+import Gamification from "./pages/security/Gamification";
 import Footfall from "./pages/Footfall";
 import MeterMaster from "./pages/master/MeterMaster";
 import DepartmentMaster from "./pages/master/DepartmentMaster";
@@ -84,8 +89,13 @@ const App = () => (
             <Route path="/utilities" element={<Utilities />} />
             <Route path="/staff/employees" element={<Employees />} />
             <Route path="/staff/attendance" element={<Attendance />} />
-            <Route path="/housekeeping" element={<Housekeeping />} />
-            <Route path="/security" element={<Security />} />
+            <Route path="/security" element={<SecurityDashboard />} />
+            <Route path="/security/guards" element={<SecurityGuards />} />
+            <Route path="/security/roster" element={<SecurityRoster />} />
+            <Route path="/security/patrol-points" element={<PatrolPoints />} />
+            <Route path="/security/scan" element={<PatrolScan />} />
+            <Route path="/security/feedback" element={<GuardFeedback />} />
+            <Route path="/security/gamification" element={<Gamification />} />
             <Route path="/footfall" element={<Footfall />} />
             <Route path="/master/meter" element={<MeterMaster />} />
             <Route path="/master/department" element={<DepartmentMaster />} />
