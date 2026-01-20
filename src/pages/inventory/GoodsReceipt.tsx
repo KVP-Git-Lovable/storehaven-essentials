@@ -146,7 +146,7 @@ export default function GoodsReceipt() {
         notes: data.notes || null,
       };
       
-      if (data.shipment_id) {
+      if (data.shipment_id && data.shipment_id !== "none") {
         insertData.shipment_id = data.shipment_id;
       }
 
@@ -289,7 +289,7 @@ export default function GoodsReceipt() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
                           {shipments.map(ship => (
                             <SelectItem key={ship.id} value={ship.id}>
                               {ship.shipment_number}
