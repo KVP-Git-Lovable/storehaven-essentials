@@ -525,7 +525,7 @@ export default function NewStoreOpening() {
         status: data.status,
         sort_order: maxOrder,
         is_custom: true,
-        vendor_id: data.vendor_id || null,
+        vendor_id: data.vendor_id && data.vendor_id !== "none" ? data.vendor_id : null,
       });
       if (error) throw error;
     },
@@ -678,7 +678,7 @@ export default function NewStoreOpening() {
       start_date: taskForm.start_date ? format(taskForm.start_date, "yyyy-MM-dd") : null,
       end_date: taskForm.end_date ? format(taskForm.end_date, "yyyy-MM-dd") : null,
       status: taskForm.status,
-      vendor_id: taskForm.vendor_id || null,
+      vendor_id: taskForm.vendor_id && taskForm.vendor_id !== "none" ? taskForm.vendor_id : null,
     });
     setTaskDetailsDialogOpen(false);
   };
@@ -1212,7 +1212,7 @@ export default function NewStoreOpening() {
                     <SelectValue placeholder="Select vendor" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No Vendor</SelectItem>
+                    <SelectItem value="none">No Vendor</SelectItem>
                     {vendors.map((vendor) => (
                       <SelectItem key={vendor.id} value={vendor.id}>
                         {vendor.name}
@@ -1343,7 +1343,7 @@ export default function NewStoreOpening() {
                   <SelectValue placeholder="Select vendor" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No Vendor</SelectItem>
+                  <SelectItem value="none">No Vendor</SelectItem>
                   {vendors.map((vendor) => (
                     <SelectItem key={vendor.id} value={vendor.id}>
                       {vendor.name}

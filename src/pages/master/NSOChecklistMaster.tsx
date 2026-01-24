@@ -296,7 +296,7 @@ export default function NSOChecklistMaster() {
         description: data.description || null,
         duration_days: data.duration_days,
         sort_order: maxOrder,
-        vendor_id: data.vendor_id || null,
+        vendor_id: data.vendor_id && data.vendor_id !== "none" ? data.vendor_id : null,
       }).select().single();
       if (error) throw error;
 
@@ -334,7 +334,7 @@ export default function NSOChecklistMaster() {
                 sort_order: maxOrder,
                 is_custom: false,
                 status: "pending",
-                vendor_id: data.vendor_id || null,
+                vendor_id: data.vendor_id && data.vendor_id !== "none" ? data.vendor_id : null,
               });
             }
           }
@@ -361,7 +361,7 @@ export default function NSOChecklistMaster() {
           name: data.name,
           description: data.description || null,
           duration_days: data.duration_days,
-          vendor_id: data.vendor_id || null,
+          vendor_id: data.vendor_id && data.vendor_id !== "none" ? data.vendor_id : null,
         })
         .eq("id", data.id);
       if (error) throw error;
@@ -935,7 +935,7 @@ export default function NSOChecklistMaster() {
                     <SelectValue placeholder="Select vendor" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No Vendor</SelectItem>
+                    <SelectItem value="none">No Vendor</SelectItem>
                     {vendors.map((vendor) => (
                       <SelectItem key={vendor.id} value={vendor.id}>
                         {vendor.name}
