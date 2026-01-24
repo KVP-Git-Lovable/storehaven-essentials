@@ -696,6 +696,293 @@ export type Database = {
         }
         Relationships: []
       }
+      nso_checklist_masters: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          status: string
+          store_type: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          status?: string
+          store_type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          status?: string
+          store_type?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      nso_master_sections: {
+        Row: {
+          created_at: string
+          id: string
+          master_id: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          master_id: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          master_id?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nso_master_sections_master_id_fkey"
+            columns: ["master_id"]
+            isOneToOne: false
+            referencedRelation: "nso_checklist_masters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nso_master_tasks: {
+        Row: {
+          created_at: string
+          description: string | null
+          duration_days: number
+          id: string
+          name: string
+          section_id: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          duration_days?: number
+          id?: string
+          name: string
+          section_id: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          duration_days?: number
+          id?: string
+          name?: string
+          section_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nso_master_tasks_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "nso_master_sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nso_store_checklists: {
+        Row: {
+          created_at: string
+          id: string
+          master_id: string | null
+          name: string
+          start_date: string
+          status: string
+          store_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          master_id?: string | null
+          name: string
+          start_date: string
+          status?: string
+          store_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          master_id?: string | null
+          name?: string
+          start_date?: string
+          status?: string
+          store_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nso_store_checklists_master_id_fkey"
+            columns: ["master_id"]
+            isOneToOne: false
+            referencedRelation: "nso_checklist_masters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nso_store_checklists_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nso_store_sections: {
+        Row: {
+          checklist_id: string
+          created_at: string
+          id: string
+          is_custom: boolean
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          checklist_id: string
+          created_at?: string
+          id?: string
+          is_custom?: boolean
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          checklist_id?: string
+          created_at?: string
+          id?: string
+          is_custom?: boolean
+          name?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nso_store_sections_checklist_id_fkey"
+            columns: ["checklist_id"]
+            isOneToOne: false
+            referencedRelation: "nso_store_checklists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nso_store_tasks: {
+        Row: {
+          checklist_id: string
+          created_at: string
+          description: string | null
+          end_date: string | null
+          id: string
+          is_custom: boolean
+          name: string
+          owner: string | null
+          section_id: string
+          sort_order: number
+          start_date: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          checklist_id: string
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          is_custom?: boolean
+          name: string
+          owner?: string | null
+          section_id: string
+          sort_order?: number
+          start_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          checklist_id?: string
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          is_custom?: boolean
+          name?: string
+          owner?: string | null
+          section_id?: string
+          sort_order?: number
+          start_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nso_store_tasks_checklist_id_fkey"
+            columns: ["checklist_id"]
+            isOneToOne: false
+            referencedRelation: "nso_store_checklists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nso_store_tasks_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "nso_store_sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nso_task_attachments: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_size: number | null
+          file_type: string | null
+          file_url: string
+          id: string
+          task_id: string
+          uploaded_by: string
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          task_id: string
+          uploaded_by: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          task_id?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nso_task_attachments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "nso_store_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           created_at: string
