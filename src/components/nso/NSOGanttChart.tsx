@@ -2,8 +2,9 @@ import { useState, useRef, useCallback, useMemo } from "react";
 import { format, differenceInDays, addDays, parseISO, startOfDay, min, max } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CheckCircle2, Clock, AlertCircle, GripVertical } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, GripVertical, Plus } from "lucide-react";
 
 interface StoreSection {
   id: string;
@@ -32,6 +33,8 @@ interface NSOGanttChartProps {
   tasks: StoreTask[];
   onTaskUpdate: (taskId: string, startDate: string, endDate: string) => void;
   onTaskClick: (task: StoreTask) => void;
+  onAddTask: (sectionId: string) => void;
+  onTaskReorder: (taskId: string, newSectionId: string, newSortOrder: number) => void;
 }
 
 const statusConfig: Record<string, { color: string; icon: React.ElementType }> = {
@@ -44,9 +47,16 @@ const statusConfig: Record<string, { color: string; icon: React.ElementType }> =
 const DAY_WIDTH = 32;
 const ROW_HEIGHT = 40;
 const HEADER_HEIGHT = 60;
-const LEFT_PANEL_WIDTH = 280;
+const LEFT_PANEL_WIDTH = 320;
 
-export function NSOGanttChart({ sections, tasks, onTaskUpdate, onTaskClick }: NSOGanttChartProps) {
+export function NSOGanttChart({ 
+  sections, 
+  tasks, 
+  onTaskUpdate, 
+  onTaskClick,
+  onAddTask,
+  onTaskReorder
+}: NSOGanttChartProps) {
   const [dragging, setDragging] = useState<{
     taskId: string;
     type: "move" | "resize-start" | "resize-end";
@@ -61,7 +71,15 @@ export function NSOGanttChart({ sections, tasks, onTaskUpdate, onTaskClick }: NS
     endDate: Date;
   } | null>(null);
 
+  const [reorderDragging, setReorderDragging] = useState<{
+    taskId: string;
+    sectionId: string;
+    initialY: number;
+    currentY: number;
+  } | null>(null);
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const contentScrollRef = useRef<HTMLDivElement>(null);
 
   // Calculate date range from all tasks
   const { startDate: chartStartDate, endDate: chartEndDate, totalDays } = useMemo(() => {
@@ -111,7 +129,7 @@ export function NSOGanttChart({ sections, tasks, onTaskUpdate, onTaskClick }: NS
     return { left, width };
   }, [chartStartDate, tempDates]);
 
-  // Mouse handlers for drag and drop
+  // Mouse handlers for drag and drop (timeline)
   const handleMouseDown = useCallback((
     e: React.MouseEvent,
     task: StoreTask,
@@ -132,35 +150,39 @@ export function NSOGanttChart({ sections, tasks, onTaskUpdate, onTaskClick }: NS
   }, []);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragging) return;
-    
-    const deltaX = e.clientX - dragging.initialX;
-    const daysDelta = Math.round(deltaX / DAY_WIDTH);
-    
-    let newStartDate = dragging.initialStartDate;
-    let newEndDate = dragging.initialEndDate;
-    
-    if (dragging.type === "move") {
-      newStartDate = addDays(dragging.initialStartDate, daysDelta);
-      newEndDate = addDays(dragging.initialEndDate, daysDelta);
-    } else if (dragging.type === "resize-start") {
-      newStartDate = addDays(dragging.initialStartDate, daysDelta);
-      if (differenceInDays(newEndDate, newStartDate) < 0) {
-        newStartDate = newEndDate;
+    if (dragging) {
+      const deltaX = e.clientX - dragging.initialX;
+      const daysDelta = Math.round(deltaX / DAY_WIDTH);
+      
+      let newStartDate = dragging.initialStartDate;
+      let newEndDate = dragging.initialEndDate;
+      
+      if (dragging.type === "move") {
+        newStartDate = addDays(dragging.initialStartDate, daysDelta);
+        newEndDate = addDays(dragging.initialEndDate, daysDelta);
+      } else if (dragging.type === "resize-start") {
+        newStartDate = addDays(dragging.initialStartDate, daysDelta);
+        if (differenceInDays(newEndDate, newStartDate) < 0) {
+          newStartDate = newEndDate;
+        }
+      } else if (dragging.type === "resize-end") {
+        newEndDate = addDays(dragging.initialEndDate, daysDelta);
+        if (differenceInDays(newEndDate, newStartDate) < 0) {
+          newEndDate = newStartDate;
+        }
       }
-    } else if (dragging.type === "resize-end") {
-      newEndDate = addDays(dragging.initialEndDate, daysDelta);
-      if (differenceInDays(newEndDate, newStartDate) < 0) {
-        newEndDate = newStartDate;
-      }
+      
+      setTempDates({
+        taskId: dragging.taskId,
+        startDate: newStartDate,
+        endDate: newEndDate,
+      });
     }
-    
-    setTempDates({
-      taskId: dragging.taskId,
-      startDate: newStartDate,
-      endDate: newEndDate,
-    });
-  }, [dragging]);
+
+    if (reorderDragging) {
+      setReorderDragging(prev => prev ? { ...prev, currentY: e.clientY } : null);
+    }
+  }, [dragging, reorderDragging]);
 
   const handleMouseUp = useCallback(() => {
     if (dragging && tempDates) {
@@ -170,9 +192,43 @@ export function NSOGanttChart({ sections, tasks, onTaskUpdate, onTaskClick }: NS
         format(tempDates.endDate, "yyyy-MM-dd")
       );
     }
+
+    if (reorderDragging) {
+      // Calculate new position
+      const deltaY = reorderDragging.currentY - reorderDragging.initialY;
+      const rowsDelta = Math.round(deltaY / ROW_HEIGHT);
+      
+      if (rowsDelta !== 0) {
+        const sectionTasks = tasks.filter(t => t.section_id === reorderDragging.sectionId);
+        const currentTask = sectionTasks.find(t => t.id === reorderDragging.taskId);
+        if (currentTask) {
+          const currentIndex = sectionTasks.findIndex(t => t.id === reorderDragging.taskId);
+          const newIndex = Math.max(0, Math.min(sectionTasks.length - 1, currentIndex + rowsDelta));
+          
+          if (newIndex !== currentIndex) {
+            const newSortOrder = sectionTasks[newIndex].sort_order;
+            onTaskReorder(reorderDragging.taskId, reorderDragging.sectionId, newSortOrder);
+          }
+        }
+      }
+    }
+    
     setDragging(null);
     setTempDates(null);
-  }, [dragging, tempDates, onTaskUpdate]);
+    setReorderDragging(null);
+  }, [dragging, tempDates, onTaskUpdate, reorderDragging, tasks, onTaskReorder]);
+
+  // Reorder drag handlers
+  const handleReorderDragStart = useCallback((e: React.MouseEvent, task: StoreTask) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setReorderDragging({
+      taskId: task.id,
+      sectionId: task.section_id,
+      initialY: e.clientY,
+      currentY: e.clientY,
+    });
+  }, []);
 
   // Build row data with sections and tasks
   const rows = useMemo(() => {
@@ -181,6 +237,7 @@ export function NSOGanttChart({ sections, tasks, onTaskUpdate, onTaskClick }: NS
     sections.forEach((section) => {
       result.push({ type: "section", data: section });
       const sectionTasks = tasks.filter((t) => t.section_id === section.id);
+      sectionTasks.sort((a, b) => a.sort_order - b.sort_order);
       sectionTasks.forEach((task) => {
         result.push({ type: "task", data: task });
       });
@@ -191,6 +248,13 @@ export function NSOGanttChart({ sections, tasks, onTaskUpdate, onTaskClick }: NS
 
   const chartWidth = totalDays * DAY_WIDTH;
   const chartHeight = rows.length * ROW_HEIGHT;
+
+  // Sync scroll between header and content
+  const handleContentScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    }
+  }, []);
 
   return (
     <TooltipProvider>
@@ -213,7 +277,7 @@ export function NSOGanttChart({ sections, tasks, onTaskUpdate, onTaskClick }: NS
           {/* Date headers */}
           <div 
             ref={scrollContainerRef}
-            className="overflow-x-auto flex-1"
+            className="overflow-x-auto flex-1 scrollbar-hide"
             style={{ height: HEADER_HEIGHT }}
           >
             <div 
@@ -256,29 +320,54 @@ export function NSOGanttChart({ sections, tasks, onTaskUpdate, onTaskClick }: NS
                 return (
                   <div
                     key={`section-${section.id}`}
-                    className="px-4 flex items-center bg-muted/50 font-medium border-b"
+                    className="px-4 flex items-center justify-between bg-muted/50 font-medium border-b"
                     style={{ height: ROW_HEIGHT }}
                   >
-                    <span className="truncate">{section.name}</span>
-                    {section.is_custom && (
-                      <Badge variant="secondary" className="ml-2 text-[10px] h-4">
-                        Custom
-                      </Badge>
-                    )}
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="truncate">{section.name}</span>
+                      {section.is_custom && (
+                        <Badge variant="secondary" className="text-[10px] h-4 flex-shrink-0">
+                          Custom
+                        </Badge>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 flex-shrink-0"
+                      onClick={() => onAddTask(section.id)}
+                    >
+                      <Plus className="h-3 w-3" />
+                    </Button>
                   </div>
                 );
               } else {
                 const task = row.data as StoreTask;
                 const StatusIcon = statusConfig[task.status]?.icon || Clock;
+                const isBeingReordered = reorderDragging?.taskId === task.id;
+                
                 return (
                   <div
                     key={`task-${task.id}`}
-                    className="px-4 flex items-center gap-2 border-b hover:bg-accent/50 cursor-pointer"
+                    className={cn(
+                      "px-4 flex items-center gap-2 border-b hover:bg-accent/50 transition-colors",
+                      isBeingReordered && "bg-accent shadow-md z-10 relative"
+                    )}
                     style={{ height: ROW_HEIGHT }}
-                    onClick={() => onTaskClick(task)}
                   >
+                    <div
+                      className="cursor-grab active:cursor-grabbing p-1 -ml-1 hover:bg-muted rounded"
+                      onMouseDown={(e) => handleReorderDragStart(e, task)}
+                    >
+                      <GripVertical className="h-3 w-3 text-muted-foreground" />
+                    </div>
                     <StatusIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <span className="truncate text-sm">{task.name}</span>
+                    <span 
+                      className="truncate text-sm cursor-pointer hover:text-primary"
+                      onClick={() => onTaskClick(task)}
+                    >
+                      {task.name}
+                    </span>
                   </div>
                 );
               }
@@ -287,136 +376,132 @@ export function NSOGanttChart({ sections, tasks, onTaskUpdate, onTaskClick }: NS
 
           {/* Right panel - Gantt bars */}
           <div 
+            ref={contentScrollRef}
             className="overflow-auto flex-1"
             style={{ maxHeight: 500 }}
-            onScroll={(e) => {
-              // Sync scroll with header
-              if (scrollContainerRef.current) {
-                scrollContainerRef.current.scrollLeft = e.currentTarget.scrollLeft;
-              }
-            }}
+            onScroll={handleContentScroll}
           >
-            <div style={{ width: chartWidth, height: chartHeight }}>
+            <div className="relative" style={{ width: chartWidth, height: chartHeight }}>
               {/* Grid background */}
-              <div className="absolute" style={{ width: chartWidth, height: chartHeight }}>
-                {dateHeaders.map((header, index) => (
-                  <div
-                    key={index}
-                    className={cn(
-                      "absolute top-0 bottom-0 border-r",
-                      header.isWeekend && "bg-muted/20",
-                      header.isToday && "bg-primary/5"
-                    )}
-                    style={{ left: index * DAY_WIDTH, width: DAY_WIDTH, height: chartHeight }}
-                  />
-                ))}
-              </div>
+              {dateHeaders.map((header, index) => (
+                <div
+                  key={index}
+                  className={cn(
+                    "absolute top-0 border-r",
+                    header.isWeekend && "bg-muted/20",
+                    header.isToday && "bg-primary/5"
+                  )}
+                  style={{ left: index * DAY_WIDTH, width: DAY_WIDTH, height: chartHeight }}
+                />
+              ))}
 
               {/* Task bars */}
-              <div className="relative" style={{ width: chartWidth, height: chartHeight }}>
-                {rows.map((row, rowIndex) => {
-                  if (row.type === "section") {
-                    return (
-                      <div
-                        key={`section-bar-${row.data.id}`}
-                        className="absolute w-full bg-muted/30 border-b"
-                        style={{ top: rowIndex * ROW_HEIGHT, height: ROW_HEIGHT }}
-                      />
-                    );
-                  }
-                  
-                  const task = row.data as StoreTask;
-                  const position = getTaskPosition(task);
-                  
-                  if (!position) {
-                    return (
-                      <div
-                        key={`task-bar-${task.id}`}
-                        className="absolute w-full border-b"
-                        style={{ top: rowIndex * ROW_HEIGHT, height: ROW_HEIGHT }}
-                      />
-                    );
-                  }
-                  
-                  const isDragging = dragging?.taskId === task.id;
-                  const statusColor = statusConfig[task.status]?.color || "bg-muted";
-                  
+              {rows.map((row, rowIndex) => {
+                if (row.type === "section") {
+                  return (
+                    <div
+                      key={`section-bar-${row.data.id}`}
+                      className="absolute w-full bg-muted/30 border-b"
+                      style={{ top: rowIndex * ROW_HEIGHT, height: ROW_HEIGHT }}
+                    />
+                  );
+                }
+                
+                const task = row.data as StoreTask;
+                const position = getTaskPosition(task);
+                
+                if (!position) {
                   return (
                     <div
                       key={`task-bar-${task.id}`}
                       className="absolute w-full border-b"
                       style={{ top: rowIndex * ROW_HEIGHT, height: ROW_HEIGHT }}
-                    >
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div
-                            className={cn(
-                              "absolute top-1.5 rounded-md flex items-center cursor-move transition-shadow group",
-                              statusColor,
-                              isDragging && "shadow-lg ring-2 ring-primary z-10",
-                              task.status === "pending" && "text-muted-foreground",
-                              task.status !== "pending" && "text-white"
-                            )}
-                            style={{
-                              left: position.left + 2,
-                              width: position.width - 4,
-                              height: ROW_HEIGHT - 12,
-                            }}
-                            onMouseDown={(e) => handleMouseDown(e, task, "move")}
-                          >
-                            {/* Resize handle - start */}
-                            <div
-                              className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-black/20 rounded-l-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                              onMouseDown={(e) => handleMouseDown(e, task, "resize-start")}
-                            >
-                              <GripVertical className="h-3 w-3" />
-                            </div>
-                            
-                            {/* Task content */}
-                            <div className="flex-1 px-2 truncate text-xs font-medium">
-                              {position.width > 60 && task.name}
-                            </div>
-                            
-                            {/* Resize handle - end */}
-                            <div
-                              className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-black/20 rounded-r-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                              onMouseDown={(e) => handleMouseDown(e, task, "resize-end")}
-                            >
-                              <GripVertical className="h-3 w-3" />
-                            </div>
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-xs">
-                          <div className="space-y-1">
-                            <p className="font-medium">{task.name}</p>
-                            {task.owner && (
-                              <p className="text-xs text-muted-foreground">Owner: {task.owner}</p>
-                            )}
-                            <p className="text-xs">
-                              {task.start_date && format(parseISO(task.start_date), "MMM d")} - {" "}
-                              {task.end_date && format(parseISO(task.end_date), "MMM d, yyyy")}
-                            </p>
-                            <Badge variant="outline" className="text-xs">
-                              {task.status.replace("_", " ")}
-                            </Badge>
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
+                    />
                   );
-                })}
+                }
                 
-                {/* Today line */}
-                {dateHeaders.findIndex((h) => h.isToday) !== -1 && (
+                const isDragging = dragging?.taskId === task.id;
+                const isReordering = reorderDragging?.taskId === task.id;
+                const statusColor = statusConfig[task.status]?.color || "bg-muted";
+                
+                return (
                   <div
-                    className="absolute top-0 bottom-0 w-0.5 bg-destructive z-20"
-                    style={{ 
-                      left: dateHeaders.findIndex((h) => h.isToday) * DAY_WIDTH + DAY_WIDTH / 2,
-                      height: chartHeight
-                    }}
-                  />
-                )}
-              </div>
+                    key={`task-bar-${task.id}`}
+                    className={cn(
+                      "absolute w-full border-b",
+                      isReordering && "opacity-50"
+                    )}
+                    style={{ top: rowIndex * ROW_HEIGHT, height: ROW_HEIGHT }}
+                  >
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          className={cn(
+                            "absolute top-1.5 rounded-md flex items-center cursor-move transition-shadow group",
+                            statusColor,
+                            isDragging && "shadow-lg ring-2 ring-primary z-10",
+                            task.status === "pending" && "text-muted-foreground",
+                            task.status !== "pending" && "text-white"
+                          )}
+                          style={{
+                            left: position.left + 2,
+                            width: position.width - 4,
+                            height: ROW_HEIGHT - 12,
+                          }}
+                          onMouseDown={(e) => handleMouseDown(e, task, "move")}
+                        >
+                          {/* Resize handle - start */}
+                          <div
+                            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-black/20 rounded-l-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            onMouseDown={(e) => handleMouseDown(e, task, "resize-start")}
+                          >
+                            <GripVertical className="h-3 w-3" />
+                          </div>
+                          
+                          {/* Task content */}
+                          <div className="flex-1 px-2 truncate text-xs font-medium">
+                            {position.width > 60 && task.name}
+                          </div>
+                          
+                          {/* Resize handle - end */}
+                          <div
+                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-black/20 rounded-r-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            onMouseDown={(e) => handleMouseDown(e, task, "resize-end")}
+                          >
+                            <GripVertical className="h-3 w-3" />
+                          </div>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <div className="space-y-1">
+                          <p className="font-medium">{task.name}</p>
+                          {task.owner && (
+                            <p className="text-xs text-muted-foreground">Owner: {task.owner}</p>
+                          )}
+                          <p className="text-xs">
+                            {task.start_date && format(parseISO(task.start_date), "MMM d")} - {" "}
+                            {task.end_date && format(parseISO(task.end_date), "MMM d, yyyy")}
+                          </p>
+                          <Badge variant="outline" className="text-xs">
+                            {task.status.replace("_", " ")}
+                          </Badge>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                );
+              })}
+              
+              {/* Today line */}
+              {dateHeaders.findIndex((h) => h.isToday) !== -1 && (
+                <div
+                  className="absolute top-0 bottom-0 w-0.5 bg-destructive z-20"
+                  style={{ 
+                    left: dateHeaders.findIndex((h) => h.isToday) * DAY_WIDTH + DAY_WIDTH / 2,
+                    height: chartHeight
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>

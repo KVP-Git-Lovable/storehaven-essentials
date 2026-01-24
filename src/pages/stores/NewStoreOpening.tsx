@@ -15,7 +15,18 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -44,7 +55,6 @@ import {
   CalendarIcon,
   FolderPlus,
   ListPlus,
-  Pencil,
   Trash2,
   Paperclip,
   Upload,
@@ -55,10 +65,27 @@ import {
   AlertCircle,
   LayoutList,
   GanttChart,
+  GripVertical,
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import { NSOGanttChart } from "@/components/nso/NSOGanttChart";
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface StoreChecklist {
   id: string;
@@ -109,6 +136,101 @@ const statusConfig: Record<string, { color: string; icon: React.ElementType; lab
   blocked: { color: "bg-red-100 text-red-800", icon: AlertCircle, label: "Blocked" },
 };
 
+// Sortable Task Row Component
+function SortableTaskRow({ 
+  task, 
+  onTaskClick, 
+  onStatusChange, 
+  onDelete 
+}: { 
+  task: StoreTask; 
+  onTaskClick: (task: StoreTask) => void;
+  onStatusChange: (taskId: string, status: string) => void;
+  onDelete: (taskId: string) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  const StatusIcon = statusConfig[task.status]?.icon || Clock;
+
+  return (
+    <TableRow
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "cursor-pointer hover:bg-muted/50",
+        isDragging && "opacity-50 bg-accent"
+      )}
+      onClick={() => onTaskClick(task)}
+    >
+      <TableCell>
+        <div className="flex items-center gap-2">
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing p-1 -ml-1 hover:bg-muted rounded"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <GripVertical className="h-3 w-3 text-muted-foreground" />
+          </div>
+          <StatusIcon className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium">{task.name}</span>
+        </div>
+      </TableCell>
+      <TableCell>
+        <span className="text-sm">{task.owner || "-"}</span>
+      </TableCell>
+      <TableCell>
+        <span className="text-sm">
+          {task.start_date ? format(new Date(task.start_date), "MMM d") : "-"}
+        </span>
+      </TableCell>
+      <TableCell>
+        <span className="text-sm">
+          {task.end_date ? format(new Date(task.end_date), "MMM d") : "-"}
+        </span>
+      </TableCell>
+      <TableCell onClick={(e) => e.stopPropagation()}>
+        <Select
+          value={task.status}
+          onValueChange={(v) => onStatusChange(task.id, v)}
+        >
+          <SelectTrigger className="h-8 w-[130px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="in_progress">In Progress</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+            <SelectItem value="blocked">Blocked</SelectItem>
+          </SelectContent>
+        </Select>
+      </TableCell>
+      <TableCell onClick={(e) => e.stopPropagation()}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-destructive"
+          onClick={() => onDelete(task.id)}
+        >
+          <Trash2 className="h-3 w-3" />
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export default function NewStoreOpening() {
   const queryClient = useQueryClient();
   const [selectedChecklist, setSelectedChecklist] = useState<StoreChecklist | null>(null);
@@ -119,6 +241,9 @@ export default function NewStoreOpening() {
   const [selectedTask, setSelectedTask] = useState<StoreTask | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "gantt">("list");
+  const [deleteChecklistDialogOpen, setDeleteChecklistDialogOpen] = useState(false);
+  const [checklistToDelete, setChecklistToDelete] = useState<StoreChecklist | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
   // Form states
   const [assignForm, setAssignForm] = useState({
@@ -135,6 +260,15 @@ export default function NewStoreOpening() {
     end_date: null as Date | null,
     status: "pending",
   });
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
 
   // Fetch stores
   const { data: stores = [] } = useQuery({
@@ -301,6 +435,43 @@ export default function NewStoreOpening() {
     onError: () => toast.error("Failed to assign checklist"),
   });
 
+  // Delete checklist mutation
+  const deleteChecklistMutation = useMutation({
+    mutationFn: async (checklistId: string) => {
+      // Delete in order: attachments -> tasks -> sections -> checklist
+      // First get all tasks to delete their attachments
+      const { data: checklistTasks } = await supabase
+        .from("nso_store_tasks")
+        .select("id")
+        .eq("checklist_id", checklistId);
+      
+      if (checklistTasks && checklistTasks.length > 0) {
+        const taskIds = checklistTasks.map(t => t.id);
+        await supabase.from("nso_task_attachments").delete().in("task_id", taskIds);
+      }
+      
+      // Delete tasks
+      await supabase.from("nso_store_tasks").delete().eq("checklist_id", checklistId);
+      
+      // Delete sections
+      await supabase.from("nso_store_sections").delete().eq("checklist_id", checklistId);
+      
+      // Delete checklist
+      const { error } = await supabase.from("nso_store_checklists").delete().eq("id", checklistId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-store-checklists"] });
+      if (selectedChecklist?.id === checklistToDelete?.id) {
+        setSelectedChecklist(null);
+      }
+      toast.success("Checklist deleted successfully");
+      setDeleteChecklistDialogOpen(false);
+      setChecklistToDelete(null);
+    },
+    onError: () => toast.error("Failed to delete checklist"),
+  });
+
   // Add section mutation
   const addSectionMutation = useMutation({
     mutationFn: async (data: { name: string; checklist_id: string }) => {
@@ -352,22 +523,24 @@ export default function NewStoreOpening() {
   // Update task mutation
   const updateTaskMutation = useMutation({
     mutationFn: async (data: Partial<StoreTask> & { id: string }) => {
+      const updateData: Record<string, unknown> = {};
+      if (data.name !== undefined) updateData.name = data.name;
+      if (data.description !== undefined) updateData.description = data.description;
+      if (data.owner !== undefined) updateData.owner = data.owner;
+      if (data.start_date !== undefined) updateData.start_date = data.start_date;
+      if (data.end_date !== undefined) updateData.end_date = data.end_date;
+      if (data.status !== undefined) updateData.status = data.status;
+      if (data.sort_order !== undefined) updateData.sort_order = data.sort_order;
+      if (data.section_id !== undefined) updateData.section_id = data.section_id;
+
       const { error } = await supabase
         .from("nso_store_tasks")
-        .update({
-          name: data.name,
-          description: data.description,
-          owner: data.owner,
-          start_date: data.start_date,
-          end_date: data.end_date,
-          status: data.status,
-        })
+        .update(updateData)
         .eq("id", data.id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["nso-store-tasks"] });
-      toast.success("Task updated");
     },
     onError: () => toast.error("Failed to update task"),
   });
@@ -388,6 +561,8 @@ export default function NewStoreOpening() {
   // Delete section mutation
   const deleteSectionMutation = useMutation({
     mutationFn: async (id: string) => {
+      // Delete tasks in section first
+      await supabase.from("nso_store_tasks").delete().eq("section_id", id);
       const { error } = await supabase.from("nso_store_sections").delete().eq("id", id);
       if (error) throw error;
     },
@@ -494,6 +669,10 @@ export default function NewStoreOpening() {
     updateTaskMutation.mutate({ id: taskId, start_date: startDate, end_date: endDate });
   };
 
+  const handleTaskReorder = (taskId: string, newSectionId: string, newSortOrder: number) => {
+    updateTaskMutation.mutate({ id: taskId, section_id: newSectionId, sort_order: newSortOrder });
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || !selectedTask) return;
@@ -503,13 +682,69 @@ export default function NewStoreOpening() {
     e.target.value = "";
   };
 
-  const getTasksForSection = (sectionId: string) => tasks.filter((t) => t.section_id === sectionId);
+  const handleDeleteChecklist = (checklist: StoreChecklist, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setChecklistToDelete(checklist);
+    setDeleteChecklistDialogOpen(true);
+  };
+
+  const confirmDeleteChecklist = () => {
+    if (checklistToDelete) {
+      deleteChecklistMutation.mutate(checklistToDelete.id);
+    }
+  };
+
+  // DnD handlers
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragId(null);
+    
+    if (!over || active.id === over.id) return;
+
+    const activeTask = tasks.find(t => t.id === active.id);
+    const overTask = tasks.find(t => t.id === over.id);
+    
+    if (!activeTask || !overTask) return;
+    
+    // Only reorder within same section for now
+    if (activeTask.section_id !== overTask.section_id) return;
+
+    const sectionTasks = tasks
+      .filter(t => t.section_id === activeTask.section_id)
+      .sort((a, b) => a.sort_order - b.sort_order);
+    
+    const oldIndex = sectionTasks.findIndex(t => t.id === active.id);
+    const newIndex = sectionTasks.findIndex(t => t.id === over.id);
+    
+    if (oldIndex === newIndex) return;
+
+    // Calculate new sort orders
+    const updatedTasks = [...sectionTasks];
+    const [movedTask] = updatedTasks.splice(oldIndex, 1);
+    updatedTasks.splice(newIndex, 0, movedTask);
+
+    // Update sort orders in database
+    updatedTasks.forEach((task, index) => {
+      if (task.sort_order !== index) {
+        updateTaskMutation.mutate({ id: task.id, sort_order: index });
+      }
+    });
+  };
+
+  const getTasksForSection = (sectionId: string) => 
+    tasks.filter((t) => t.section_id === sectionId).sort((a, b) => a.sort_order - b.sort_order);
 
   const getProgress = () => {
     if (tasks.length === 0) return 0;
     const completed = tasks.filter((t) => t.status === "completed").length;
     return Math.round((completed / tasks.length) * 100);
   };
+
+  const activeDragTask = activeDragId ? tasks.find(t => t.id === activeDragId) : null;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -543,23 +778,35 @@ export default function NewStoreOpening() {
                   <div
                     key={checklist.id}
                     className={cn(
-                      "p-4 cursor-pointer hover:bg-accent/50 transition-colors",
+                      "p-4 cursor-pointer hover:bg-accent/50 transition-colors group relative",
                       selectedChecklist?.id === checklist.id && "bg-accent"
                     )}
                     onClick={() => setSelectedChecklist(checklist)}
                   >
-                    <h4 className="font-medium">{checklist.stores?.name || "Unknown Store"}</h4>
-                    <p className="text-sm text-muted-foreground">{checklist.name}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Badge
-                        variant={checklist.status === "completed" ? "default" : "outline"}
-                        className="text-xs"
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium truncate">{checklist.stores?.name || "Unknown Store"}</h4>
+                        <p className="text-sm text-muted-foreground truncate">{checklist.name}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge
+                            variant={checklist.status === "completed" ? "default" : "outline"}
+                            className="text-xs"
+                          >
+                            {checklist.status}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            Start: {format(new Date(checklist.start_date), "MMM d, yyyy")}
+                          </span>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                        onClick={(e) => handleDeleteChecklist(checklist, e)}
                       >
-                        {checklist.status}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        Start: {format(new Date(checklist.start_date), "MMM d, yyyy")}
-                      </span>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 ))
@@ -635,129 +882,103 @@ export default function NewStoreOpening() {
                       tasks={tasks}
                       onTaskUpdate={handleGanttTaskUpdate}
                       onTaskClick={handleTaskClick}
+                      onAddTask={handleAddTask}
+                      onTaskReorder={handleTaskReorder}
                     />
                   ) : (
-                    <Accordion
-                      type="multiple"
-                      defaultValue={sections.map((s) => s.id)}
-                      className="space-y-3"
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
                     >
-                      {sections.map((section) => (
-                        <AccordionItem
-                          key={section.id}
-                          value={section.id}
-                          className="border rounded-lg"
-                        >
-                          <AccordionTrigger className="px-4 hover:no-underline">
-                            <div className="flex items-center gap-3 flex-1">
-                              <span className="font-medium">{section.name}</span>
-                              <Badge variant="outline" className="ml-2">
-                                {getTasksForSection(section.id).filter((t) => t.status === "completed").length}/
-                                {getTasksForSection(section.id).length}
-                              </Badge>
-                              {section.is_custom && (
-                                <Badge variant="secondary" className="text-xs">Custom</Badge>
-                              )}
-                            </div>
-                            <div className="flex gap-1 mr-2" onClick={(e) => e.stopPropagation()}>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-destructive"
-                                onClick={() => deleteSectionMutation.mutate(section.id)}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent className="px-4 pb-4">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="w-[250px]">Task</TableHead>
-                                  <TableHead>Owner</TableHead>
-                                  <TableHead>Start</TableHead>
-                                  <TableHead>End</TableHead>
-                                  <TableHead>Status</TableHead>
-                                  <TableHead className="w-[80px]">Actions</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {getTasksForSection(section.id).map((task) => {
-                                  const StatusIcon = statusConfig[task.status]?.icon || Clock;
-                                  return (
-                                    <TableRow
-                                      key={task.id}
-                                      className="cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleTaskClick(task)}
-                                    >
-                                      <TableCell>
-                                        <div className="flex items-center gap-2">
-                                          <StatusIcon className="h-4 w-4 text-muted-foreground" />
-                                          <span className="font-medium">{task.name}</span>
-                                        </div>
-                                      </TableCell>
-                                      <TableCell>
-                                        <span className="text-sm">{task.owner || "-"}</span>
-                                      </TableCell>
-                                      <TableCell>
-                                        <span className="text-sm">
-                                          {task.start_date
-                                            ? format(new Date(task.start_date), "MMM d")
-                                            : "-"}
-                                        </span>
-                                      </TableCell>
-                                      <TableCell>
-                                        <span className="text-sm">
-                                          {task.end_date
-                                            ? format(new Date(task.end_date), "MMM d")
-                                            : "-"}
-                                        </span>
-                                      </TableCell>
-                                      <TableCell onClick={(e) => e.stopPropagation()}>
-                                        <Select
-                                          value={task.status}
-                                          onValueChange={(v) => handleInlineStatusChange(task.id, v)}
-                                        >
-                                          <SelectTrigger className="h-8 w-[130px]">
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="pending">Pending</SelectItem>
-                                            <SelectItem value="in_progress">In Progress</SelectItem>
-                                            <SelectItem value="completed">Completed</SelectItem>
-                                            <SelectItem value="blocked">Blocked</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      </TableCell>
-                                      <TableCell onClick={(e) => e.stopPropagation()}>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-7 w-7 text-destructive"
-                                          onClick={() => deleteTaskMutation.mutate(task.id)}
-                                        >
-                                          <Trash2 className="h-3 w-3" />
-                                        </Button>
-                                      </TableCell>
-                                    </TableRow>
-                                  );
-                                })}
-                              </TableBody>
-                            </Table>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="mt-3"
-                              onClick={() => handleAddTask(section.id)}
+                      <Accordion
+                        type="multiple"
+                        defaultValue={sections.map((s) => s.id)}
+                        className="space-y-3"
+                      >
+                        {sections.map((section) => {
+                          const sectionTasks = getTasksForSection(section.id);
+                          return (
+                            <AccordionItem
+                              key={section.id}
+                              value={section.id}
+                              className="border rounded-lg"
                             >
-                              <ListPlus className="h-4 w-4 mr-2" />
-                              Add Task
-                            </Button>
-                          </AccordionContent>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
+                              <AccordionTrigger className="px-4 hover:no-underline">
+                                <div className="flex items-center gap-3 flex-1">
+                                  <span className="font-medium">{section.name}</span>
+                                  <Badge variant="outline" className="ml-2">
+                                    {sectionTasks.filter((t) => t.status === "completed").length}/
+                                    {sectionTasks.length}
+                                  </Badge>
+                                  {section.is_custom && (
+                                    <Badge variant="secondary" className="text-xs">Custom</Badge>
+                                  )}
+                                </div>
+                                <div className="flex gap-1 mr-2" onClick={(e) => e.stopPropagation()}>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-destructive"
+                                    onClick={() => deleteSectionMutation.mutate(section.id)}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </AccordionTrigger>
+                              <AccordionContent className="px-4 pb-4">
+                                <SortableContext
+                                  items={sectionTasks.map(t => t.id)}
+                                  strategy={verticalListSortingStrategy}
+                                >
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead className="w-[250px]">Task</TableHead>
+                                        <TableHead>Owner</TableHead>
+                                        <TableHead>Start</TableHead>
+                                        <TableHead>End</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead className="w-[80px]">Actions</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {sectionTasks.map((task) => (
+                                        <SortableTaskRow
+                                          key={task.id}
+                                          task={task}
+                                          onTaskClick={handleTaskClick}
+                                          onStatusChange={handleInlineStatusChange}
+                                          onDelete={(id) => deleteTaskMutation.mutate(id)}
+                                        />
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </SortableContext>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="mt-3"
+                                  onClick={() => handleAddTask(section.id)}
+                                >
+                                  <ListPlus className="h-4 w-4 mr-2" />
+                                  Add Task
+                                </Button>
+                              </AccordionContent>
+                            </AccordionItem>
+                          );
+                        })}
+                      </Accordion>
+                      <DragOverlay>
+                        {activeDragTask ? (
+                          <div className="bg-card border rounded-lg p-2 shadow-lg flex items-center gap-2">
+                            <GripVertical className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">{activeDragTask.name}</span>
+                          </div>
+                        ) : null}
+                      </DragOverlay>
+                    </DndContext>
                   )}
                 </div>
               </div>
@@ -771,6 +992,28 @@ export default function NewStoreOpening() {
           )}
         </div>
       </div>
+
+      {/* Delete Checklist Confirmation Dialog */}
+      <AlertDialog open={deleteChecklistDialogOpen} onOpenChange={setDeleteChecklistDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Checklist?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the checklist "{checklistToDelete?.name}" for {checklistToDelete?.stores?.name}? 
+              This will permanently delete all sections, tasks, and attachments. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteChecklist}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete Checklist
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Assign Checklist Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
@@ -843,9 +1086,9 @@ export default function NewStoreOpening() {
             </Button>
             <Button
               onClick={() => assignChecklistMutation.mutate(assignForm)}
-              disabled={!assignForm.store_id || !assignForm.master_id}
+              disabled={!assignForm.store_id || !assignForm.master_id || assignChecklistMutation.isPending}
             >
-              Assign Checklist
+              {assignChecklistMutation.isPending ? "Assigning..." : "Assign Checklist"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -892,6 +1135,9 @@ export default function NewStoreOpening() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Task</DialogTitle>
+            <DialogDescription>
+              Add a new task to the selected section
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
