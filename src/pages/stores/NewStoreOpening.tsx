@@ -37,6 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "sonner";
 import {
   Plus,
@@ -52,9 +53,12 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  LayoutList,
+  GanttChart,
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { cn } from "@/lib/utils";
+import { NSOGanttChart } from "@/components/nso/NSOGanttChart";
 
 interface StoreChecklist {
   id: string;
@@ -114,6 +118,7 @@ export default function NewStoreOpening() {
   const [taskDetailsDialogOpen, setTaskDetailsDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<StoreTask | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "gantt">("list");
 
   // Form states
   const [assignForm, setAssignForm] = useState({
@@ -485,6 +490,10 @@ export default function NewStoreOpening() {
     updateTaskMutation.mutate({ id: taskId, status });
   };
 
+  const handleGanttTaskUpdate = (taskId: string, startDate: string, endDate: string) => {
+    updateTaskMutation.mutate({ id: taskId, start_date: startDate, end_date: endDate });
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || !selectedTask) return;
@@ -580,10 +589,27 @@ export default function NewStoreOpening() {
                 <Progress value={getProgress()} className="h-2" />
               </div>
 
-              {/* Sections & Tasks */}
+              {/* View Toggle and Actions */}
               <div className="rounded-xl border bg-card">
                 <div className="p-4 border-b flex items-center justify-between">
-                  <h3 className="font-semibold">Checklist Tasks</h3>
+                  <div className="flex items-center gap-4">
+                    <h3 className="font-semibold">Checklist Tasks</h3>
+                    <ToggleGroup
+                      type="single"
+                      value={viewMode}
+                      onValueChange={(value) => value && setViewMode(value as "list" | "gantt")}
+                      className="border rounded-lg p-1"
+                    >
+                      <ToggleGroupItem value="list" aria-label="List view" className="h-8 px-3 gap-2">
+                        <LayoutList className="h-4 w-4" />
+                        List
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="gantt" aria-label="Gantt view" className="h-8 px-3 gap-2">
+                        <GanttChart className="h-4 w-4" />
+                        Gantt
+                      </ToggleGroupItem>
+                    </ToggleGroup>
+                  </div>
                   <Button
                     variant="outline"
                     size="sm"
@@ -603,6 +629,13 @@ export default function NewStoreOpening() {
                       <FolderPlus className="h-12 w-12 mx-auto mb-3 opacity-50" />
                       <p>No sections yet</p>
                     </div>
+                  ) : viewMode === "gantt" ? (
+                    <NSOGanttChart
+                      sections={sections}
+                      tasks={tasks}
+                      onTaskUpdate={handleGanttTaskUpdate}
+                      onTaskClick={handleTaskClick}
+                    />
                   ) : (
                     <Accordion
                       type="multiple"
