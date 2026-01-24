@@ -767,6 +767,7 @@ export type Database = {
           name: string
           section_id: string
           sort_order: number
+          vendor_id: string | null
         }
         Insert: {
           created_at?: string
@@ -776,6 +777,7 @@ export type Database = {
           name: string
           section_id: string
           sort_order?: number
+          vendor_id?: string | null
         }
         Update: {
           created_at?: string
@@ -785,6 +787,7 @@ export type Database = {
           name?: string
           section_id?: string
           sort_order?: number
+          vendor_id?: string | null
         }
         Relationships: [
           {
@@ -792,6 +795,13 @@ export type Database = {
             columns: ["section_id"]
             isOneToOne: false
             referencedRelation: "nso_master_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nso_master_tasks_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
             referencedColumns: ["id"]
           },
         ]
@@ -894,6 +904,7 @@ export type Database = {
           start_date: string | null
           status: string
           updated_at: string
+          vendor_id: string | null
         }
         Insert: {
           checklist_id: string
@@ -909,6 +920,7 @@ export type Database = {
           start_date?: string | null
           status?: string
           updated_at?: string
+          vendor_id?: string | null
         }
         Update: {
           checklist_id?: string
@@ -924,6 +936,7 @@ export type Database = {
           start_date?: string | null
           status?: string
           updated_at?: string
+          vendor_id?: string | null
         }
         Relationships: [
           {
@@ -938,6 +951,13 @@ export type Database = {
             columns: ["section_id"]
             isOneToOne: false
             referencedRelation: "nso_store_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nso_store_tasks_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
             referencedColumns: ["id"]
           },
         ]

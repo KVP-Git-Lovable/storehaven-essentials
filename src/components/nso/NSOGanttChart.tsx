@@ -34,7 +34,7 @@ interface NSOGanttChartProps {
   onTaskUpdate: (taskId: string, startDate: string, endDate: string) => void;
   onTaskClick: (task: StoreTask) => void;
   onAddTask: (sectionId: string) => void;
-  onTaskReorder: (taskId: string, newSectionId: string, newSortOrder: number) => void;
+  onTaskReorder: (taskId: string, newSectionId: string, newIndex: number, sectionTasks: StoreTask[]) => void;
 }
 
 const statusConfig: Record<string, { color: string; icon: React.ElementType }> = {
@@ -199,15 +199,16 @@ export function NSOGanttChart({
       const rowsDelta = Math.round(deltaY / ROW_HEIGHT);
       
       if (rowsDelta !== 0) {
-        const sectionTasks = tasks.filter(t => t.section_id === reorderDragging.sectionId);
-        const currentTask = sectionTasks.find(t => t.id === reorderDragging.taskId);
-        if (currentTask) {
-          const currentIndex = sectionTasks.findIndex(t => t.id === reorderDragging.taskId);
+        const sectionTasks = tasks
+          .filter(t => t.section_id === reorderDragging.sectionId)
+          .sort((a, b) => a.sort_order - b.sort_order);
+        const currentIndex = sectionTasks.findIndex(t => t.id === reorderDragging.taskId);
+        
+        if (currentIndex !== -1) {
           const newIndex = Math.max(0, Math.min(sectionTasks.length - 1, currentIndex + rowsDelta));
           
           if (newIndex !== currentIndex) {
-            const newSortOrder = sectionTasks[newIndex].sort_order;
-            onTaskReorder(reorderDragging.taskId, reorderDragging.sectionId, newSortOrder);
+            onTaskReorder(reorderDragging.taskId, reorderDragging.sectionId, newIndex, sectionTasks);
           }
         }
       }
