@@ -117,6 +117,12 @@ interface StoreTask {
   status: string;
   sort_order: number;
   is_custom: boolean;
+  vendor_id: string | null;
+}
+
+interface Vendor {
+  id: string;
+  name: string;
 }
 
 interface TaskAttachment {
@@ -259,6 +265,7 @@ export default function NewStoreOpening() {
     start_date: null as Date | null,
     end_date: null as Date | null,
     status: "pending",
+    vendor_id: "",
   });
 
   // DnD sensors
@@ -277,6 +284,16 @@ export default function NewStoreOpening() {
       const { data, error } = await supabase.from("stores").select("id, name").order("name");
       if (error) throw error;
       return data;
+    },
+  });
+
+  // Fetch vendors
+  const { data: vendors = [] } = useQuery({
+    queryKey: ["vendors"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("vendors").select("id, name").order("name");
+      if (error) throw error;
+      return data as Vendor[];
     },
   });
 
@@ -508,6 +525,7 @@ export default function NewStoreOpening() {
         status: data.status,
         sort_order: maxOrder,
         is_custom: true,
+        vendor_id: data.vendor_id || null,
       });
       if (error) throw error;
     },
@@ -532,6 +550,7 @@ export default function NewStoreOpening() {
       if (data.status !== undefined) updateData.status = data.status;
       if (data.sort_order !== undefined) updateData.sort_order = data.sort_order;
       if (data.section_id !== undefined) updateData.section_id = data.section_id;
+      if (data.vendor_id !== undefined) updateData.vendor_id = data.vendor_id;
 
       const { error } = await supabase
         .from("nso_store_tasks")
@@ -624,6 +643,7 @@ export default function NewStoreOpening() {
       start_date: null,
       end_date: null,
       status: "pending",
+      vendor_id: "",
     });
     setSelectedSectionId(null);
   };
@@ -643,6 +663,7 @@ export default function NewStoreOpening() {
       start_date: task.start_date ? new Date(task.start_date) : null,
       end_date: task.end_date ? new Date(task.end_date) : null,
       status: task.status,
+      vendor_id: task.vendor_id || "",
     });
     setTaskDetailsDialogOpen(true);
   };
@@ -657,6 +678,7 @@ export default function NewStoreOpening() {
       start_date: taskForm.start_date ? format(taskForm.start_date, "yyyy-MM-dd") : null,
       end_date: taskForm.end_date ? format(taskForm.end_date, "yyyy-MM-dd") : null,
       status: taskForm.status,
+      vendor_id: taskForm.vendor_id || null,
     });
     setTaskDetailsDialogOpen(false);
   };
@@ -669,8 +691,22 @@ export default function NewStoreOpening() {
     updateTaskMutation.mutate({ id: taskId, start_date: startDate, end_date: endDate });
   };
 
-  const handleTaskReorder = (taskId: string, newSectionId: string, newSortOrder: number) => {
-    updateTaskMutation.mutate({ id: taskId, section_id: newSectionId, sort_order: newSortOrder });
+  const handleTaskReorder = (taskId: string, newSectionId: string, newIndex: number, sectionTasks: StoreTask[]) => {
+    // Reorder within the section by recalculating sort_orders
+    const currentIndex = sectionTasks.findIndex(t => t.id === taskId);
+    if (currentIndex === -1 || currentIndex === newIndex) return;
+
+    // Create new array with moved task
+    const updatedTasks = [...sectionTasks];
+    const [movedTask] = updatedTasks.splice(currentIndex, 1);
+    updatedTasks.splice(newIndex, 0, movedTask);
+
+    // Update sort orders for all affected tasks
+    updatedTasks.forEach((task, index) => {
+      if (task.sort_order !== index) {
+        updateTaskMutation.mutate({ id: task.id, sort_order: index });
+      }
+    });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1132,14 +1168,14 @@ export default function NewStoreOpening() {
 
       {/* Add Task Dialog */}
       <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Task</DialogTitle>
             <DialogDescription>
               Add a new task to the selected section
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
             <div className="space-y-2">
               <Label>Task Name *</Label>
               <Input
@@ -1149,12 +1185,42 @@ export default function NewStoreOpening() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Owner</Label>
-              <Input
-                value={taskForm.owner}
-                onChange={(e) => setTaskForm((f) => ({ ...f, owner: e.target.value }))}
-                placeholder="Person responsible"
+              <Label>Description</Label>
+              <Textarea
+                value={taskForm.description}
+                onChange={(e) => setTaskForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="Task details and notes..."
+                rows={3}
               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Owner</Label>
+                <Input
+                  value={taskForm.owner}
+                  onChange={(e) => setTaskForm((f) => ({ ...f, owner: e.target.value }))}
+                  placeholder="Person responsible"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Vendor</Label>
+                <Select
+                  value={taskForm.vendor_id}
+                  onValueChange={(v) => setTaskForm((f) => ({ ...f, vendor_id: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select vendor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No Vendor</SelectItem>
+                    {vendors.map((vendor) => (
+                      <SelectItem key={vendor.id} value={vendor.id}>
+                        {vendor.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -1266,6 +1332,25 @@ export default function NewStoreOpening() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Vendor</Label>
+              <Select
+                value={taskForm.vendor_id}
+                onValueChange={(v) => setTaskForm((f) => ({ ...f, vendor_id: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select vendor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">No Vendor</SelectItem>
+                  {vendors.map((vendor) => (
+                    <SelectItem key={vendor.id} value={vendor.id}>
+                      {vendor.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

@@ -70,6 +70,12 @@ interface MasterTask {
   description: string | null;
   duration_days: number;
   sort_order: number;
+  vendor_id: string | null;
+}
+
+interface Vendor {
+  id: string;
+  name: string;
 }
 
 const storeTypes = ["Flagship", "Standard", "Express", "Outlet", "Kiosk"];
@@ -84,8 +90,6 @@ export default function NSOChecklistMaster() {
   const [editingSection, setEditingSection] = useState<MasterSection | null>(null);
   const [editingTask, setEditingTask] = useState<MasterTask | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
-
-  // Form states
   const [masterForm, setMasterForm] = useState({
     name: "",
     store_type: "",
@@ -97,6 +101,7 @@ export default function NSOChecklistMaster() {
     name: "",
     description: "",
     duration_days: 1,
+    vendor_id: "",
   });
 
   // Fetch checklist masters
@@ -143,6 +148,16 @@ export default function NSOChecklistMaster() {
       return data as MasterTask[];
     },
     enabled: !!selectedMaster && sections.length > 0,
+  });
+
+  // Fetch vendors
+  const { data: vendors = [] } = useQuery({
+    queryKey: ["vendors"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("vendors").select("id, name").order("name");
+      if (error) throw error;
+      return data as Vendor[];
+    },
   });
 
   // Mutations
@@ -203,15 +218,36 @@ export default function NSOChecklistMaster() {
   const createSectionMutation = useMutation({
     mutationFn: async (data: { name: string; master_id: string }) => {
       const maxOrder = sections.length > 0 ? Math.max(...sections.map((s) => s.sort_order)) + 1 : 0;
-      const { error } = await supabase.from("nso_master_sections").insert({
+      
+      // Create the master section
+      const { data: newSection, error } = await supabase.from("nso_master_sections").insert({
         ...data,
         sort_order: maxOrder,
-      });
+      }).select().single();
       if (error) throw error;
+
+      // Propagate to all assigned store checklists
+      const { data: assignedChecklists } = await supabase
+        .from("nso_store_checklists")
+        .select("id")
+        .eq("master_id", data.master_id);
+
+      if (assignedChecklists && assignedChecklists.length > 0) {
+        const storeSections = assignedChecklists.map(checklist => ({
+          checklist_id: checklist.id,
+          name: data.name,
+          sort_order: maxOrder,
+          is_custom: false,
+        }));
+        await supabase.from("nso_store_sections").insert(storeSections);
+      }
+
+      return newSection;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["nso-master-sections"] });
-      toast.success("Section created");
+      queryClient.invalidateQueries({ queryKey: ["nso-store-sections"] });
+      toast.success("Section created and synced to all assigned stores");
       setSectionDialogOpen(false);
       setSectionForm({ name: "" });
     },
@@ -252,18 +288,65 @@ export default function NSOChecklistMaster() {
     mutationFn: async (data: typeof taskForm & { section_id: string }) => {
       const sectionTasks = tasks.filter((t) => t.section_id === data.section_id);
       const maxOrder = sectionTasks.length > 0 ? Math.max(...sectionTasks.map((t) => t.sort_order)) + 1 : 0;
-      const { error } = await supabase.from("nso_master_tasks").insert({
+      
+      // Create the master task
+      const { data: newTask, error } = await supabase.from("nso_master_tasks").insert({
         section_id: data.section_id,
         name: data.name,
         description: data.description || null,
         duration_days: data.duration_days,
         sort_order: maxOrder,
-      });
+        vendor_id: data.vendor_id || null,
+      }).select().single();
       if (error) throw error;
+
+      // Get the master section to find its name
+      const { data: masterSection } = await supabase
+        .from("nso_master_sections")
+        .select("name, master_id")
+        .eq("id", data.section_id)
+        .single();
+
+      if (masterSection) {
+        // Find all assigned store checklists
+        const { data: assignedChecklists } = await supabase
+          .from("nso_store_checklists")
+          .select("id")
+          .eq("master_id", masterSection.master_id);
+
+        if (assignedChecklists && assignedChecklists.length > 0) {
+          // For each checklist, find the corresponding section and add the task
+          for (const checklist of assignedChecklists) {
+            const { data: storeSection } = await supabase
+              .from("nso_store_sections")
+              .select("id")
+              .eq("checklist_id", checklist.id)
+              .eq("name", masterSection.name)
+              .eq("is_custom", false)
+              .single();
+
+            if (storeSection) {
+              await supabase.from("nso_store_tasks").insert({
+                section_id: storeSection.id,
+                checklist_id: checklist.id,
+                name: data.name,
+                description: data.description || null,
+                sort_order: maxOrder,
+                is_custom: false,
+                status: "pending",
+                vendor_id: data.vendor_id || null,
+              });
+            }
+          }
+        }
+      }
+
+      return newTask;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["nso-master-tasks"] });
-      toast.success("Task created");
+      queryClient.invalidateQueries({ queryKey: ["nso-store-tasks"] });
+      toast.success("Task created and synced to all assigned stores");
       setTaskDialogOpen(false);
       resetTaskForm();
     },
@@ -278,6 +361,7 @@ export default function NSOChecklistMaster() {
           name: data.name,
           description: data.description || null,
           duration_days: data.duration_days,
+          vendor_id: data.vendor_id || null,
         })
         .eq("id", data.id);
       if (error) throw error;
@@ -370,7 +454,7 @@ export default function NSOChecklistMaster() {
   };
 
   const resetTaskForm = () => {
-    setTaskForm({ name: "", description: "", duration_days: 1 });
+    setTaskForm({ name: "", description: "", duration_days: 1, vendor_id: "" });
     setEditingTask(null);
     setSelectedSectionId(null);
   };
@@ -398,6 +482,7 @@ export default function NSOChecklistMaster() {
       name: task.name,
       description: task.description || "",
       duration_days: task.duration_days,
+      vendor_id: task.vendor_id || "",
     });
     setSelectedSectionId(task.section_id);
     setTaskDialogOpen(true);
@@ -825,19 +910,40 @@ export default function NSOChecklistMaster() {
                 rows={3}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Duration (Days)</Label>
-              <Input
-                type="number"
-                min={1}
-                value={taskForm.duration_days}
-                onChange={(e) =>
-                  setTaskForm((f) => ({ ...f, duration_days: parseInt(e.target.value) || 1 }))
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                Number of days this task typically takes to complete
-              </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Duration (Days)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={taskForm.duration_days}
+                  onChange={(e) =>
+                    setTaskForm((f) => ({ ...f, duration_days: parseInt(e.target.value) || 1 }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Days to complete
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Vendor</Label>
+                <Select
+                  value={taskForm.vendor_id}
+                  onValueChange={(v) => setTaskForm((f) => ({ ...f, vendor_id: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select vendor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No Vendor</SelectItem>
+                    {vendors.map((vendor) => (
+                      <SelectItem key={vendor.id} value={vendor.id}>
+                        {vendor.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           <DialogFooter>
