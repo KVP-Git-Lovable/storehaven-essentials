@@ -1,0 +1,858 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  FileText,
+  FolderPlus,
+  ListPlus,
+  GripVertical,
+  Copy,
+} from "lucide-react";
+import { format } from "date-fns";
+
+interface ChecklistMaster {
+  id: string;
+  name: string;
+  store_type: string | null;
+  description: string | null;
+  status: string;
+  created_at: string;
+}
+
+interface MasterSection {
+  id: string;
+  master_id: string;
+  name: string;
+  sort_order: number;
+}
+
+interface MasterTask {
+  id: string;
+  section_id: string;
+  name: string;
+  description: string | null;
+  duration_days: number;
+  sort_order: number;
+}
+
+const storeTypes = ["Flagship", "Standard", "Express", "Outlet", "Kiosk"];
+
+export default function NSOChecklistMaster() {
+  const queryClient = useQueryClient();
+  const [selectedMaster, setSelectedMaster] = useState<ChecklistMaster | null>(null);
+  const [masterDialogOpen, setMasterDialogOpen] = useState(false);
+  const [sectionDialogOpen, setSectionDialogOpen] = useState(false);
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [editingMaster, setEditingMaster] = useState<ChecklistMaster | null>(null);
+  const [editingSection, setEditingSection] = useState<MasterSection | null>(null);
+  const [editingTask, setEditingTask] = useState<MasterTask | null>(null);
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+
+  // Form states
+  const [masterForm, setMasterForm] = useState({
+    name: "",
+    store_type: "",
+    description: "",
+    status: "active",
+  });
+  const [sectionForm, setSectionForm] = useState({ name: "" });
+  const [taskForm, setTaskForm] = useState({
+    name: "",
+    description: "",
+    duration_days: 1,
+  });
+
+  // Fetch checklist masters
+  const { data: masters = [] } = useQuery({
+    queryKey: ["nso-checklist-masters"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("nso_checklist_masters")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as ChecklistMaster[];
+    },
+  });
+
+  // Fetch sections for selected master
+  const { data: sections = [] } = useQuery({
+    queryKey: ["nso-master-sections", selectedMaster?.id],
+    queryFn: async () => {
+      if (!selectedMaster) return [];
+      const { data, error } = await supabase
+        .from("nso_master_sections")
+        .select("*")
+        .eq("master_id", selectedMaster.id)
+        .order("sort_order");
+      if (error) throw error;
+      return data as MasterSection[];
+    },
+    enabled: !!selectedMaster,
+  });
+
+  // Fetch tasks for all sections
+  const { data: tasks = [] } = useQuery({
+    queryKey: ["nso-master-tasks", selectedMaster?.id],
+    queryFn: async () => {
+      if (!selectedMaster || sections.length === 0) return [];
+      const sectionIds = sections.map((s) => s.id);
+      const { data, error } = await supabase
+        .from("nso_master_tasks")
+        .select("*")
+        .in("section_id", sectionIds)
+        .order("sort_order");
+      if (error) throw error;
+      return data as MasterTask[];
+    },
+    enabled: !!selectedMaster && sections.length > 0,
+  });
+
+  // Mutations
+  const createMasterMutation = useMutation({
+    mutationFn: async (data: typeof masterForm) => {
+      const { error } = await supabase.from("nso_checklist_masters").insert({
+        name: data.name,
+        store_type: data.store_type || null,
+        description: data.description || null,
+        status: data.status,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-checklist-masters"] });
+      toast.success("Checklist master created");
+      setMasterDialogOpen(false);
+      resetMasterForm();
+    },
+    onError: () => toast.error("Failed to create checklist master"),
+  });
+
+  const updateMasterMutation = useMutation({
+    mutationFn: async (data: typeof masterForm & { id: string }) => {
+      const { error } = await supabase
+        .from("nso_checklist_masters")
+        .update({
+          name: data.name,
+          store_type: data.store_type || null,
+          description: data.description || null,
+          status: data.status,
+        })
+        .eq("id", data.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-checklist-masters"] });
+      toast.success("Checklist master updated");
+      setMasterDialogOpen(false);
+      resetMasterForm();
+    },
+    onError: () => toast.error("Failed to update checklist master"),
+  });
+
+  const deleteMasterMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("nso_checklist_masters").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-checklist-masters"] });
+      toast.success("Checklist master deleted");
+      if (selectedMaster) setSelectedMaster(null);
+    },
+    onError: () => toast.error("Failed to delete checklist master"),
+  });
+
+  const createSectionMutation = useMutation({
+    mutationFn: async (data: { name: string; master_id: string }) => {
+      const maxOrder = sections.length > 0 ? Math.max(...sections.map((s) => s.sort_order)) + 1 : 0;
+      const { error } = await supabase.from("nso_master_sections").insert({
+        ...data,
+        sort_order: maxOrder,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-master-sections"] });
+      toast.success("Section created");
+      setSectionDialogOpen(false);
+      setSectionForm({ name: "" });
+    },
+    onError: () => toast.error("Failed to create section"),
+  });
+
+  const updateSectionMutation = useMutation({
+    mutationFn: async (data: { id: string; name: string }) => {
+      const { error } = await supabase
+        .from("nso_master_sections")
+        .update({ name: data.name })
+        .eq("id", data.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-master-sections"] });
+      toast.success("Section updated");
+      setSectionDialogOpen(false);
+      setEditingSection(null);
+      setSectionForm({ name: "" });
+    },
+    onError: () => toast.error("Failed to update section"),
+  });
+
+  const deleteSectionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("nso_master_sections").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-master-sections", "nso-master-tasks"] });
+      toast.success("Section deleted");
+    },
+    onError: () => toast.error("Failed to delete section"),
+  });
+
+  const createTaskMutation = useMutation({
+    mutationFn: async (data: typeof taskForm & { section_id: string }) => {
+      const sectionTasks = tasks.filter((t) => t.section_id === data.section_id);
+      const maxOrder = sectionTasks.length > 0 ? Math.max(...sectionTasks.map((t) => t.sort_order)) + 1 : 0;
+      const { error } = await supabase.from("nso_master_tasks").insert({
+        section_id: data.section_id,
+        name: data.name,
+        description: data.description || null,
+        duration_days: data.duration_days,
+        sort_order: maxOrder,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-master-tasks"] });
+      toast.success("Task created");
+      setTaskDialogOpen(false);
+      resetTaskForm();
+    },
+    onError: () => toast.error("Failed to create task"),
+  });
+
+  const updateTaskMutation = useMutation({
+    mutationFn: async (data: typeof taskForm & { id: string }) => {
+      const { error } = await supabase
+        .from("nso_master_tasks")
+        .update({
+          name: data.name,
+          description: data.description || null,
+          duration_days: data.duration_days,
+        })
+        .eq("id", data.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-master-tasks"] });
+      toast.success("Task updated");
+      setTaskDialogOpen(false);
+      resetTaskForm();
+    },
+    onError: () => toast.error("Failed to update task"),
+  });
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("nso_master_tasks").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-master-tasks"] });
+      toast.success("Task deleted");
+    },
+    onError: () => toast.error("Failed to delete task"),
+  });
+
+  const duplicateMasterMutation = useMutation({
+    mutationFn: async (master: ChecklistMaster) => {
+      // Create new master
+      const { data: newMaster, error: masterError } = await supabase
+        .from("nso_checklist_masters")
+        .insert({
+          name: `${master.name} (Copy)`,
+          store_type: master.store_type,
+          description: master.description,
+          status: "active",
+        })
+        .select()
+        .single();
+      if (masterError) throw masterError;
+
+      // Copy sections
+      const { data: oldSections } = await supabase
+        .from("nso_master_sections")
+        .select("*")
+        .eq("master_id", master.id);
+
+      if (oldSections && oldSections.length > 0) {
+        for (const section of oldSections) {
+          const { data: newSection, error: sectionError } = await supabase
+            .from("nso_master_sections")
+            .insert({
+              master_id: newMaster.id,
+              name: section.name,
+              sort_order: section.sort_order,
+            })
+            .select()
+            .single();
+          if (sectionError) throw sectionError;
+
+          // Copy tasks for this section
+          const { data: oldTasks } = await supabase
+            .from("nso_master_tasks")
+            .select("*")
+            .eq("section_id", section.id);
+
+          if (oldTasks && oldTasks.length > 0) {
+            await supabase.from("nso_master_tasks").insert(
+              oldTasks.map((task) => ({
+                section_id: newSection.id,
+                name: task.name,
+                description: task.description,
+                duration_days: task.duration_days,
+                sort_order: task.sort_order,
+              }))
+            );
+          }
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-checklist-masters"] });
+      toast.success("Checklist master duplicated");
+    },
+    onError: () => toast.error("Failed to duplicate checklist master"),
+  });
+
+  const resetMasterForm = () => {
+    setMasterForm({ name: "", store_type: "", description: "", status: "active" });
+    setEditingMaster(null);
+  };
+
+  const resetTaskForm = () => {
+    setTaskForm({ name: "", description: "", duration_days: 1 });
+    setEditingTask(null);
+    setSelectedSectionId(null);
+  };
+
+  const handleEditMaster = (master: ChecklistMaster) => {
+    setEditingMaster(master);
+    setMasterForm({
+      name: master.name,
+      store_type: master.store_type || "",
+      description: master.description || "",
+      status: master.status,
+    });
+    setMasterDialogOpen(true);
+  };
+
+  const handleEditSection = (section: MasterSection) => {
+    setEditingSection(section);
+    setSectionForm({ name: section.name });
+    setSectionDialogOpen(true);
+  };
+
+  const handleEditTask = (task: MasterTask) => {
+    setEditingTask(task);
+    setTaskForm({
+      name: task.name,
+      description: task.description || "",
+      duration_days: task.duration_days,
+    });
+    setSelectedSectionId(task.section_id);
+    setTaskDialogOpen(true);
+  };
+
+  const handleAddTask = (sectionId: string) => {
+    setSelectedSectionId(sectionId);
+    setTaskDialogOpen(true);
+  };
+
+  const handleMasterSubmit = () => {
+    if (!masterForm.name.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+    if (editingMaster) {
+      updateMasterMutation.mutate({ ...masterForm, id: editingMaster.id });
+    } else {
+      createMasterMutation.mutate(masterForm);
+    }
+  };
+
+  const handleSectionSubmit = () => {
+    if (!sectionForm.name.trim()) {
+      toast.error("Section name is required");
+      return;
+    }
+    if (editingSection) {
+      updateSectionMutation.mutate({ id: editingSection.id, name: sectionForm.name });
+    } else if (selectedMaster) {
+      createSectionMutation.mutate({ name: sectionForm.name, master_id: selectedMaster.id });
+    }
+  };
+
+  const handleTaskSubmit = () => {
+    if (!taskForm.name.trim()) {
+      toast.error("Task name is required");
+      return;
+    }
+    if (editingTask) {
+      updateTaskMutation.mutate({ ...taskForm, id: editingTask.id });
+    } else if (selectedSectionId) {
+      createTaskMutation.mutate({ ...taskForm, section_id: selectedSectionId });
+    }
+  };
+
+  const getTasksForSection = (sectionId: string) => tasks.filter((t) => t.section_id === sectionId);
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">NSO Checklist Master</h1>
+          <p className="text-muted-foreground">
+            Create and manage new store opening checklist templates
+          </p>
+        </div>
+        <Button onClick={() => setMasterDialogOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          New Checklist Template
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Masters List */}
+        <div className="lg:col-span-1 space-y-4">
+          <div className="rounded-xl border bg-card">
+            <div className="p-4 border-b">
+              <h3 className="font-semibold">Checklist Templates</h3>
+            </div>
+            <div className="divide-y max-h-[600px] overflow-y-auto">
+              {masters.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>No checklist templates yet</p>
+                  <p className="text-sm">Create your first template to get started</p>
+                </div>
+              ) : (
+                masters.map((master) => (
+                  <div
+                    key={master.id}
+                    className={`p-4 cursor-pointer hover:bg-accent/50 transition-colors ${
+                      selectedMaster?.id === master.id ? "bg-accent" : ""
+                    }`}
+                    onClick={() => setSelectedMaster(master)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium truncate">{master.name}</h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          {master.store_type && (
+                            <Badge variant="outline" className="text-xs">
+                              {master.store_type}
+                            </Badge>
+                          )}
+                          <Badge
+                            variant={master.status === "active" ? "default" : "secondary"}
+                            className="text-xs"
+                          >
+                            {master.status}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Created {format(new Date(master.created_at), "MMM d, yyyy")}
+                        </p>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            duplicateMasterMutation.mutate(master);
+                          }}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditMaster(master);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteMasterMutation.mutate(master.id);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Master Details / Sections & Tasks */}
+        <div className="lg:col-span-2">
+          {selectedMaster ? (
+            <div className="rounded-xl border bg-card">
+              <div className="p-4 border-b flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold">{selectedMaster.name}</h3>
+                  {selectedMaster.description && (
+                    <p className="text-sm text-muted-foreground">{selectedMaster.description}</p>
+                  )}
+                </div>
+                <Button
+                  onClick={() => {
+                    setEditingSection(null);
+                    setSectionForm({ name: "" });
+                    setSectionDialogOpen(true);
+                  }}
+                >
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                  Add Section
+                </Button>
+              </div>
+
+              <div className="p-4">
+                {sections.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <FolderPlus className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No sections yet</p>
+                    <p className="text-sm">Add sections to organize your checklist tasks</p>
+                  </div>
+                ) : (
+                  <Accordion type="multiple" defaultValue={sections.map((s) => s.id)} className="space-y-3">
+                    {sections.map((section) => (
+                      <AccordionItem
+                        key={section.id}
+                        value={section.id}
+                        className="border rounded-lg px-4"
+                      >
+                        <AccordionTrigger className="hover:no-underline py-3">
+                          <div className="flex items-center gap-3 flex-1">
+                            <GripVertical className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">{section.name}</span>
+                            <Badge variant="outline" className="ml-2">
+                              {getTasksForSection(section.id).length} tasks
+                            </Badge>
+                          </div>
+                          <div className="flex gap-1 mr-2" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => handleEditSection(section)}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive"
+                              onClick={() => deleteSectionMutation.mutate(section.id)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="pt-2 pb-4">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Task Name</TableHead>
+                                  <TableHead>Duration (Days)</TableHead>
+                                  <TableHead className="w-[100px]">Actions</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {getTasksForSection(section.id).map((task) => (
+                                  <TableRow key={task.id}>
+                                    <TableCell>
+                                      <div>
+                                        <span className="font-medium">{task.name}</span>
+                                        {task.description && (
+                                          <p className="text-xs text-muted-foreground mt-0.5">
+                                            {task.description}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>{task.duration_days}</TableCell>
+                                    <TableCell>
+                                      <div className="flex gap-1">
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7"
+                                          onClick={() => handleEditTask(task)}
+                                        >
+                                          <Pencil className="h-3 w-3" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 text-destructive"
+                                          onClick={() => deleteTaskMutation.mutate(task.id)}
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                {getTasksForSection(section.id).length === 0 && (
+                                  <TableRow>
+                                    <TableCell colSpan={3} className="text-center text-muted-foreground py-6">
+                                      No tasks in this section
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-3"
+                              onClick={() => handleAddTask(section.id)}
+                            >
+                              <ListPlus className="h-4 w-4 mr-2" />
+                              Add Task
+                            </Button>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border bg-card p-12 text-center text-muted-foreground">
+              <FileText className="h-16 w-16 mx-auto mb-4 opacity-30" />
+              <h3 className="font-medium text-lg mb-2">Select a Template</h3>
+              <p className="text-sm">
+                Choose a checklist template from the left to view and edit its sections and tasks
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Master Dialog */}
+      <Dialog open={masterDialogOpen} onOpenChange={setMasterDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingMaster ? "Edit Checklist Template" : "Create Checklist Template"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Template Name *</Label>
+              <Input
+                value={masterForm.name}
+                onChange={(e) => setMasterForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="e.g., Standard Store Opening Checklist"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Store Type</Label>
+              <Select
+                value={masterForm.store_type}
+                onValueChange={(v) => setMasterForm((f) => ({ ...f, store_type: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select store type (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {storeTypes.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea
+                value={masterForm.description}
+                onChange={(e) => setMasterForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="Describe this checklist template..."
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select
+                value={masterForm.status}
+                onValueChange={(v) => setMasterForm((f) => ({ ...f, status: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setMasterDialogOpen(false);
+              resetMasterForm();
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={handleMasterSubmit}>
+              {editingMaster ? "Update" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Section Dialog */}
+      <Dialog open={sectionDialogOpen} onOpenChange={setSectionDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingSection ? "Edit Section" : "Add Section"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Section Name *</Label>
+              <Input
+                value={sectionForm.name}
+                onChange={(e) => setSectionForm({ name: e.target.value })}
+                placeholder="e.g., Legal & Compliance"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setSectionDialogOpen(false);
+              setEditingSection(null);
+              setSectionForm({ name: "" });
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={handleSectionSubmit}>
+              {editingSection ? "Update" : "Add"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Task Dialog */}
+      <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingTask ? "Edit Task" : "Add Task"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Task Name *</Label>
+              <Input
+                value={taskForm.name}
+                onChange={(e) => setTaskForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="e.g., Obtain Trade License"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea
+                value={taskForm.description}
+                onChange={(e) => setTaskForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="Task details..."
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Duration (Days)</Label>
+              <Input
+                type="number"
+                min={1}
+                value={taskForm.duration_days}
+                onChange={(e) =>
+                  setTaskForm((f) => ({ ...f, duration_days: parseInt(e.target.value) || 1 }))
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Number of days this task typically takes to complete
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setTaskDialogOpen(false);
+              resetTaskForm();
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={handleTaskSubmit}>
+              {editingTask ? "Update" : "Add"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

@@ -33,6 +33,7 @@ import DepartmentMaster from "./pages/master/DepartmentMaster";
 import PositionMaster from "./pages/master/PositionMaster";
 import CategoryMaster from "./pages/master/CategoryMaster";
 import LocationMaster from "./pages/master/LocationMaster";
+import NSOChecklistMaster from "./pages/master/NSOChecklistMaster";
 import Planograms from "./pages/vm/Planograms";
 import ComplianceTasks from "./pages/vm/ComplianceTasks";
 import PhotoSubmission from "./pages/vm/PhotoSubmission";
@@ -102,6 +103,7 @@ const App = () => (
             <Route path="/master/position" element={<PositionMaster />} />
             <Route path="/master/category" element={<CategoryMaster />} />
             <Route path="/master/location" element={<LocationMaster />} />
+            <Route path="/master/nso-checklist" element={<NSOChecklistMaster />} />
             <Route path="/vm/planograms" element={<Planograms />} />
             <Route path="/vm/tasks" element={<ComplianceTasks />} />
             <Route path="/vm/submit" element={<PhotoSubmission />} />
