@@ -835,6 +835,51 @@ export type Database = {
         }
         Relationships: []
       }
+      nso_master_assets: {
+        Row: {
+          asset_master_id: string
+          created_at: string
+          id: string
+          master_id: string
+          notes: string | null
+          quantity: number
+          sort_order: number
+        }
+        Insert: {
+          asset_master_id: string
+          created_at?: string
+          id?: string
+          master_id: string
+          notes?: string | null
+          quantity?: number
+          sort_order?: number
+        }
+        Update: {
+          asset_master_id?: string
+          created_at?: string
+          id?: string
+          master_id?: string
+          notes?: string | null
+          quantity?: number
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nso_master_assets_asset_master_id_fkey"
+            columns: ["asset_master_id"]
+            isOneToOne: false
+            referencedRelation: "asset_masters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nso_master_assets_master_id_fkey"
+            columns: ["master_id"]
+            isOneToOne: false
+            referencedRelation: "nso_checklist_masters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nso_master_sections: {
         Row: {
           created_at: string
@@ -911,6 +956,60 @@ export type Database = {
             columns: ["vendor_id"]
             isOneToOne: false
             referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nso_store_assets: {
+        Row: {
+          asset_master_id: string
+          checklist_id: string
+          created_at: string
+          id: string
+          is_custom: boolean
+          notes: string | null
+          quantity: number
+          sort_order: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          asset_master_id: string
+          checklist_id: string
+          created_at?: string
+          id?: string
+          is_custom?: boolean
+          notes?: string | null
+          quantity?: number
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          asset_master_id?: string
+          checklist_id?: string
+          created_at?: string
+          id?: string
+          is_custom?: boolean
+          notes?: string | null
+          quantity?: number
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nso_store_assets_asset_master_id_fkey"
+            columns: ["asset_master_id"]
+            isOneToOne: false
+            referencedRelation: "asset_masters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nso_store_assets_checklist_id_fkey"
+            columns: ["checklist_id"]
+            isOneToOne: false
+            referencedRelation: "nso_store_checklists"
             referencedColumns: ["id"]
           },
         ]
