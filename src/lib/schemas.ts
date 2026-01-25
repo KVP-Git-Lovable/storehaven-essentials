@@ -26,9 +26,9 @@ export const productSchema = z.object({
 });
 
 export const assetSchema = z.object({
-  name: z.string().trim().min(1, "Asset name is required").max(100, "Name must be less than 100 characters"),
+  assetMasterId: z.string().min(1, "Asset master is required"),
   assetNumber: z.string().trim().min(1, "Asset number is required").max(50, "Asset number must be less than 50 characters"),
-  categoryId: z.string().min(1, "Category is required"),
+  storeId: z.string().min(1, "Store is required"),
   location: z.string().trim().min(1, "Location is required"),
   condition: z.string().trim().min(1, "Condition is required"),
   purchaseDate: z.string().min(1, "Purchase date is required"),

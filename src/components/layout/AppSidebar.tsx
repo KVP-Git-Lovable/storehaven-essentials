@@ -54,9 +54,10 @@ const navigation: NavItem[] = [
     ],
   },
   {
-    title: "Assets & Services",
+    title: "Assets & Vendors",
     icon: Package,
     children: [
+      { title: "Asset Master", href: "/assets/master" },
       { title: "Asset Register", href: "/assets/inventory" },
       { title: "Spares Management", href: "/assets/spares" },
       { title: "Service Contracts", href: "/services/contracts" },
@@ -149,7 +150,7 @@ interface AppSidebarProps {
 export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
   const location = useLocation();
   const isMobile = useIsMobile();
-  const [openMenus, setOpenMenus] = useState<string[]>(["Store Management", "Assets & Services"]);
+  const [openMenus, setOpenMenus] = useState<string[]>(["Store Management", "Assets & Vendors"]);
 
   const toggleMenu = (title: string) => {
     setOpenMenus((prev) =>

@@ -14,8 +14,98 @@ export type Database = {
   }
   public: {
     Tables: {
+      asset_master_vendors: {
+        Row: {
+          asset_master_id: string
+          category: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          vendor_id: string
+          vendor_type: string | null
+        }
+        Insert: {
+          asset_master_id: string
+          category?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          vendor_id: string
+          vendor_type?: string | null
+        }
+        Update: {
+          asset_master_id?: string
+          category?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          vendor_id?: string
+          vendor_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_master_vendors_asset_master_id_fkey"
+            columns: ["asset_master_id"]
+            isOneToOne: false
+            referencedRelation: "asset_masters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_master_vendors_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      asset_masters: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          criticality: string
+          description: string | null
+          id: string
+          investment_size: string
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          criticality?: string
+          description?: string | null
+          id?: string
+          investment_size?: string
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          criticality?: string
+          description?: string | null
+          id?: string
+          investment_size?: string
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_masters_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assets: {
         Row: {
+          asset_master_id: string | null
           asset_number: string | null
           category: string
           category_id: string | null
@@ -26,6 +116,7 @@ export type Database = {
           name: string
           oem_id: string | null
           purchase_date: string
+          store_id: string | null
           updated_at: string
           value: number
           vendor_id: string | null
@@ -33,6 +124,7 @@ export type Database = {
           warranty_start_date: string | null
         }
         Insert: {
+          asset_master_id?: string | null
           asset_number?: string | null
           category: string
           category_id?: string | null
@@ -43,6 +135,7 @@ export type Database = {
           name: string
           oem_id?: string | null
           purchase_date: string
+          store_id?: string | null
           updated_at?: string
           value: number
           vendor_id?: string | null
@@ -50,6 +143,7 @@ export type Database = {
           warranty_start_date?: string | null
         }
         Update: {
+          asset_master_id?: string | null
           asset_number?: string | null
           category?: string
           category_id?: string | null
@@ -60,6 +154,7 @@ export type Database = {
           name?: string
           oem_id?: string | null
           purchase_date?: string
+          store_id?: string | null
           updated_at?: string
           value?: number
           vendor_id?: string | null
@@ -67,6 +162,13 @@ export type Database = {
           warranty_start_date?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "assets_asset_master_id_fkey"
+            columns: ["asset_master_id"]
+            isOneToOne: false
+            referencedRelation: "asset_masters"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "assets_category_id_fkey"
             columns: ["category_id"]
@@ -79,6 +181,13 @@ export type Database = {
             columns: ["oem_id"]
             isOneToOne: false
             referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assets_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
             referencedColumns: ["id"]
           },
           {

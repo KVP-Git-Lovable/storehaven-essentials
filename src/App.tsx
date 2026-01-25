@@ -9,6 +9,8 @@ import StoresList from "./pages/stores/StoresList";
 import StoreDetails from "./pages/stores/StoreDetails";
 import Rentals from "./pages/stores/Rentals";
 import NewStoreOpening from "./pages/stores/NewStoreOpening";
+import AssetMaster from "./pages/assets/AssetMaster";
+import AssetMasterDetails from "./pages/assets/AssetMasterDetails";
 import AssetInventory from "./pages/assets/AssetInventory";
 import AssetDetails from "./pages/assets/AssetDetails";
 import SparesManagement from "./pages/assets/SparesManagement";
@@ -79,6 +81,8 @@ const App = () => (
             <Route path="/stores/:id" element={<StoreDetails />} />
             <Route path="/stores/rentals" element={<Rentals />} />
             <Route path="/stores/new-opening" element={<NewStoreOpening />} />
+            <Route path="/assets/master" element={<AssetMaster />} />
+            <Route path="/assets/master/:id" element={<AssetMasterDetails />} />
             <Route path="/assets/inventory" element={<AssetInventory />} />
             <Route path="/assets/inventory/:id" element={<AssetDetails />} />
             <Route path="/assets/spares" element={<SparesManagement />} />
