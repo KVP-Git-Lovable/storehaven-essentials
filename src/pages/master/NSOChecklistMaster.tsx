@@ -34,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   Plus,
@@ -44,6 +45,7 @@ import {
   ListPlus,
   GripVertical,
   Copy,
+  Package,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -78,17 +80,37 @@ interface Vendor {
   name: string;
 }
 
+interface AssetMaster {
+  id: string;
+  name: string;
+  criticality: string;
+  categories?: { name: string } | null;
+}
+
+interface NsoMasterAsset {
+  id: string;
+  master_id: string;
+  asset_master_id: string;
+  quantity: number;
+  notes: string | null;
+  sort_order: number;
+  asset_masters?: AssetMaster;
+}
+
 const storeTypes = ["Flagship", "Standard", "Express", "Outlet", "Kiosk"];
 
 export default function NSOChecklistMaster() {
   const queryClient = useQueryClient();
   const [selectedMaster, setSelectedMaster] = useState<ChecklistMaster | null>(null);
+  const [activeTab, setActiveTab] = useState("tasks");
   const [masterDialogOpen, setMasterDialogOpen] = useState(false);
   const [sectionDialogOpen, setSectionDialogOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [assetDialogOpen, setAssetDialogOpen] = useState(false);
   const [editingMaster, setEditingMaster] = useState<ChecklistMaster | null>(null);
   const [editingSection, setEditingSection] = useState<MasterSection | null>(null);
   const [editingTask, setEditingTask] = useState<MasterTask | null>(null);
+  const [editingAsset, setEditingAsset] = useState<NsoMasterAsset | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [masterForm, setMasterForm] = useState({
     name: "",
@@ -102,6 +124,11 @@ export default function NSOChecklistMaster() {
     description: "",
     duration_days: 1,
     vendor_id: "",
+  });
+  const [assetForm, setAssetForm] = useState({
+    asset_master_id: "",
+    quantity: 1,
+    notes: "",
   });
 
   // Fetch checklist masters
@@ -158,6 +185,36 @@ export default function NSOChecklistMaster() {
       if (error) throw error;
       return data as Vendor[];
     },
+  });
+
+  // Fetch asset masters
+  const { data: assetMasters = [] } = useQuery({
+    queryKey: ["asset-masters"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("asset_masters")
+        .select("id, name, criticality, categories(name)")
+        .eq("status", "active")
+        .order("name");
+      if (error) throw error;
+      return data as AssetMaster[];
+    },
+  });
+
+  // Fetch required assets for selected master
+  const { data: requiredAssets = [] } = useQuery({
+    queryKey: ["nso-master-assets", selectedMaster?.id],
+    queryFn: async () => {
+      if (!selectedMaster) return [];
+      const { data, error } = await supabase
+        .from("nso_master_assets")
+        .select("*, asset_masters(id, name, criticality, categories(name))")
+        .eq("master_id", selectedMaster.id)
+        .order("sort_order");
+      if (error) throw error;
+      return data as NsoMasterAsset[];
+    },
+    enabled: !!selectedMaster,
   });
 
   // Mutations
@@ -440,12 +497,107 @@ export default function NSOChecklistMaster() {
           }
         }
       }
+      // Copy required assets
+      const { data: oldAssets } = await supabase
+        .from("nso_master_assets")
+        .select("*")
+        .eq("master_id", master.id);
+
+      if (oldAssets && oldAssets.length > 0) {
+        await supabase.from("nso_master_assets").insert(
+          oldAssets.map((asset) => ({
+            master_id: newMaster.id,
+            asset_master_id: asset.asset_master_id,
+            quantity: asset.quantity,
+            notes: asset.notes,
+            sort_order: asset.sort_order,
+          }))
+        );
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["nso-checklist-masters"] });
       toast.success("Checklist master duplicated");
     },
     onError: () => toast.error("Failed to duplicate checklist master"),
+  });
+
+  // Asset mutations
+  const createAssetMutation = useMutation({
+    mutationFn: async (data: typeof assetForm & { master_id: string }) => {
+      const maxOrder = requiredAssets.length > 0 ? Math.max(...requiredAssets.map((a) => a.sort_order)) + 1 : 0;
+      
+      const { data: newAsset, error } = await supabase.from("nso_master_assets").insert({
+        master_id: data.master_id,
+        asset_master_id: data.asset_master_id,
+        quantity: data.quantity,
+        notes: data.notes || null,
+        sort_order: maxOrder,
+      }).select().single();
+      if (error) throw error;
+
+      // Propagate to all assigned store checklists
+      const { data: assignedChecklists } = await supabase
+        .from("nso_store_checklists")
+        .select("id")
+        .eq("master_id", data.master_id);
+
+      if (assignedChecklists && assignedChecklists.length > 0) {
+        const storeAssets = assignedChecklists.map(checklist => ({
+          checklist_id: checklist.id,
+          asset_master_id: data.asset_master_id,
+          quantity: data.quantity,
+          notes: data.notes || null,
+          sort_order: maxOrder,
+          is_custom: false,
+          status: "pending",
+        }));
+        await supabase.from("nso_store_assets").insert(storeAssets);
+      }
+
+      return newAsset;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-master-assets"] });
+      queryClient.invalidateQueries({ queryKey: ["nso-store-assets"] });
+      toast.success("Required asset added and synced to all assigned stores");
+      setAssetDialogOpen(false);
+      resetAssetForm();
+    },
+    onError: () => toast.error("Failed to add required asset"),
+  });
+
+  const updateAssetMutation = useMutation({
+    mutationFn: async (data: typeof assetForm & { id: string }) => {
+      const { error } = await supabase
+        .from("nso_master_assets")
+        .update({
+          asset_master_id: data.asset_master_id,
+          quantity: data.quantity,
+          notes: data.notes || null,
+        })
+        .eq("id", data.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-master-assets"] });
+      toast.success("Required asset updated");
+      setAssetDialogOpen(false);
+      resetAssetForm();
+    },
+    onError: () => toast.error("Failed to update required asset"),
+  });
+
+  const deleteAssetMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("nso_master_assets").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-master-assets"] });
+      toast.success("Required asset removed");
+    },
+    onError: () => toast.error("Failed to remove required asset"),
   });
 
   const resetMasterForm = () => {
@@ -457,6 +609,21 @@ export default function NSOChecklistMaster() {
     setTaskForm({ name: "", description: "", duration_days: 1, vendor_id: "" });
     setEditingTask(null);
     setSelectedSectionId(null);
+  };
+
+  const resetAssetForm = () => {
+    setAssetForm({ asset_master_id: "", quantity: 1, notes: "" });
+    setEditingAsset(null);
+  };
+
+  const handleEditAsset = (asset: NsoMasterAsset) => {
+    setEditingAsset(asset);
+    setAssetForm({
+      asset_master_id: asset.asset_master_id,
+      quantity: asset.quantity,
+      notes: asset.notes || "",
+    });
+    setAssetDialogOpen(true);
   };
 
   const handleEditMaster = (master: ChecklistMaster) => {
@@ -636,138 +803,249 @@ export default function NSOChecklistMaster() {
         <div className="lg:col-span-2">
           {selectedMaster ? (
             <div className="rounded-xl border bg-card">
-              <div className="p-4 border-b flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold">{selectedMaster.name}</h3>
-                  {selectedMaster.description && (
-                    <p className="text-sm text-muted-foreground">{selectedMaster.description}</p>
-                  )}
+              <div className="p-4 border-b">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold">{selectedMaster.name}</h3>
+                    {selectedMaster.description && (
+                      <p className="text-sm text-muted-foreground">{selectedMaster.description}</p>
+                    )}
+                  </div>
                 </div>
-                <Button
-                  onClick={() => {
-                    setEditingSection(null);
-                    setSectionForm({ name: "" });
-                    setSectionDialogOpen(true);
-                  }}
-                >
-                  <FolderPlus className="h-4 w-4 mr-2" />
-                  Add Section
-                </Button>
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                  <TabsList>
+                    <TabsTrigger value="tasks">
+                      <ListPlus className="h-4 w-4 mr-2" />
+                      Sections & Tasks
+                    </TabsTrigger>
+                    <TabsTrigger value="assets">
+                      <Package className="h-4 w-4 mr-2" />
+                      Required Assets
+                      {requiredAssets.length > 0 && (
+                        <Badge variant="secondary" className="ml-2">
+                          {requiredAssets.length}
+                        </Badge>
+                      )}
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
               </div>
 
-              <div className="p-4">
-                {sections.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <FolderPlus className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>No sections yet</p>
-                    <p className="text-sm">Add sections to organize your checklist tasks</p>
+              {activeTab === "tasks" && (
+                <div className="p-4">
+                  <div className="flex justify-end mb-4">
+                    <Button
+                      onClick={() => {
+                        setEditingSection(null);
+                        setSectionForm({ name: "" });
+                        setSectionDialogOpen(true);
+                      }}
+                    >
+                      <FolderPlus className="h-4 w-4 mr-2" />
+                      Add Section
+                    </Button>
                   </div>
-                ) : (
-                  <Accordion type="multiple" defaultValue={sections.map((s) => s.id)} className="space-y-3">
-                    {sections.map((section) => (
-                      <AccordionItem
-                        key={section.id}
-                        value={section.id}
-                        className="border rounded-lg px-4"
-                      >
-                        <AccordionTrigger className="hover:no-underline py-3">
-                          <div className="flex items-center gap-3 flex-1">
-                            <GripVertical className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">{section.name}</span>
-                            <Badge variant="outline" className="ml-2">
-                              {getTasksForSection(section.id).length} tasks
-                            </Badge>
-                          </div>
-                          <div className="flex gap-1 mr-2" onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => handleEditSection(section)}
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-destructive"
-                              onClick={() => deleteSectionMutation.mutate(section.id)}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent>
-                          <div className="pt-2 pb-4">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Task Name</TableHead>
-                                  <TableHead>Duration (Days)</TableHead>
-                                  <TableHead className="w-[100px]">Actions</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {getTasksForSection(section.id).map((task) => (
-                                  <TableRow key={task.id}>
-                                    <TableCell>
-                                      <div>
-                                        <span className="font-medium">{task.name}</span>
-                                        {task.description && (
-                                          <p className="text-xs text-muted-foreground mt-0.5">
-                                            {task.description}
-                                          </p>
-                                        )}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>{task.duration_days}</TableCell>
-                                    <TableCell>
-                                      <div className="flex gap-1">
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-7 w-7"
-                                          onClick={() => handleEditTask(task)}
-                                        >
-                                          <Pencil className="h-3 w-3" />
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-7 w-7 text-destructive"
-                                          onClick={() => deleteTaskMutation.mutate(task.id)}
-                                        >
-                                          <Trash2 className="h-3 w-3" />
-                                        </Button>
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                                {getTasksForSection(section.id).length === 0 && (
+                  {sections.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <FolderPlus className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>No sections yet</p>
+                      <p className="text-sm">Add sections to organize your checklist tasks</p>
+                    </div>
+                  ) : (
+                    <Accordion type="multiple" defaultValue={sections.map((s) => s.id)} className="space-y-3">
+                      {sections.map((section) => (
+                        <AccordionItem
+                          key={section.id}
+                          value={section.id}
+                          className="border rounded-lg px-4"
+                        >
+                          <AccordionTrigger className="hover:no-underline py-3">
+                            <div className="flex items-center gap-3 flex-1">
+                              <GripVertical className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">{section.name}</span>
+                              <Badge variant="outline" className="ml-2">
+                                {getTasksForSection(section.id).length} tasks
+                              </Badge>
+                            </div>
+                            <div className="flex gap-1 mr-2" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => handleEditSection(section)}
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive"
+                                onClick={() => deleteSectionMutation.mutate(section.id)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="pt-2 pb-4">
+                              <Table>
+                                <TableHeader>
                                   <TableRow>
-                                    <TableCell colSpan={3} className="text-center text-muted-foreground py-6">
-                                      No tasks in this section
-                                    </TableCell>
+                                    <TableHead>Task Name</TableHead>
+                                    <TableHead>Duration (Days)</TableHead>
+                                    <TableHead className="w-[100px]">Actions</TableHead>
                                   </TableRow>
-                                )}
-                              </TableBody>
-                            </Table>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="mt-3"
-                              onClick={() => handleAddTask(section.id)}
-                            >
-                              <ListPlus className="h-4 w-4 mr-2" />
-                              Add Task
-                            </Button>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    ))}
-                  </Accordion>
-                )}
-              </div>
+                                </TableHeader>
+                                <TableBody>
+                                  {getTasksForSection(section.id).map((task) => (
+                                    <TableRow key={task.id}>
+                                      <TableCell>
+                                        <div>
+                                          <span className="font-medium">{task.name}</span>
+                                          {task.description && (
+                                            <p className="text-xs text-muted-foreground mt-0.5">
+                                              {task.description}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell>{task.duration_days}</TableCell>
+                                      <TableCell>
+                                        <div className="flex gap-1">
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7"
+                                            onClick={() => handleEditTask(task)}
+                                          >
+                                            <Pencil className="h-3 w-3" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 text-destructive"
+                                            onClick={() => deleteTaskMutation.mutate(task.id)}
+                                          >
+                                            <Trash2 className="h-3 w-3" />
+                                          </Button>
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                  {getTasksForSection(section.id).length === 0 && (
+                                    <TableRow>
+                                      <TableCell colSpan={3} className="text-center text-muted-foreground py-6">
+                                        No tasks in this section
+                                      </TableCell>
+                                    </TableRow>
+                                  )}
+                                </TableBody>
+                              </Table>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="mt-3"
+                                onClick={() => handleAddTask(section.id)}
+                              >
+                                <ListPlus className="h-4 w-4 mr-2" />
+                                Add Task
+                              </Button>
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  )}
+                </div>
+              )}
+
+              {activeTab === "assets" && (
+                <div className="p-4">
+                  <div className="flex justify-end mb-4">
+                    <Button
+                      onClick={() => {
+                        setEditingAsset(null);
+                        resetAssetForm();
+                        setAssetDialogOpen(true);
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Required Asset
+                    </Button>
+                  </div>
+                  {requiredAssets.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>No required assets yet</p>
+                      <p className="text-sm">Add assets from Asset Master that are required for new store opening</p>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Asset Name</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Criticality</TableHead>
+                          <TableHead>Quantity</TableHead>
+                          <TableHead>Notes</TableHead>
+                          <TableHead className="w-[100px]">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {requiredAssets.map((asset) => (
+                          <TableRow key={asset.id}>
+                            <TableCell className="font-medium">
+                              {asset.asset_masters?.name || "Unknown"}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">
+                                {asset.asset_masters?.categories?.name || "-"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge 
+                                variant={
+                                  asset.asset_masters?.criticality === "high" 
+                                    ? "destructive" 
+                                    : asset.asset_masters?.criticality === "medium"
+                                    ? "default"
+                                    : "secondary"
+                                }
+                              >
+                                {asset.asset_masters?.criticality}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{asset.quantity}</TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {asset.notes || "-"}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => handleEditAsset(asset)}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-destructive"
+                                  onClick={() => deleteAssetMutation.mutate(asset.id)}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="rounded-xl border bg-card p-12 text-center text-muted-foreground">
@@ -955,6 +1233,78 @@ export default function NSOChecklistMaster() {
             </Button>
             <Button onClick={handleTaskSubmit}>
               {editingTask ? "Update" : "Add"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Asset Dialog */}
+      <Dialog open={assetDialogOpen} onOpenChange={setAssetDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingAsset ? "Edit Required Asset" : "Add Required Asset"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Asset *</Label>
+              <Select
+                value={assetForm.asset_master_id}
+                onValueChange={(v) => setAssetForm((f) => ({ ...f, asset_master_id: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select asset from Asset Master" />
+                </SelectTrigger>
+                <SelectContent>
+                  {assetMasters.map((asset) => (
+                    <SelectItem key={asset.id} value={asset.id}>
+                      {asset.name} {asset.categories?.name ? `(${asset.categories.name})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Quantity</Label>
+              <Input
+                type="number"
+                min={1}
+                value={assetForm.quantity}
+                onChange={(e) =>
+                  setAssetForm((f) => ({ ...f, quantity: parseInt(e.target.value) || 1 }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea
+                value={assetForm.notes}
+                onChange={(e) => setAssetForm((f) => ({ ...f, notes: e.target.value }))}
+                placeholder="Any additional notes..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setAssetDialogOpen(false);
+              resetAssetForm();
+            }}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                if (!assetForm.asset_master_id) {
+                  toast.error("Please select an asset");
+                  return;
+                }
+                if (editingAsset) {
+                  updateAssetMutation.mutate({ ...assetForm, id: editingAsset.id });
+                } else if (selectedMaster) {
+                  createAssetMutation.mutate({ ...assetForm, master_id: selectedMaster.id });
+                }
+              }}
+            >
+              {editingAsset ? "Update" : "Add"}
             </Button>
           </DialogFooter>
         </DialogContent>

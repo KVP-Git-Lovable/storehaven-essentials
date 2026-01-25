@@ -441,6 +441,26 @@ export default function NewStoreOpening() {
         }
       }
 
+      // Copy required assets from master
+      const { data: masterAssets } = await supabase
+        .from("nso_master_assets")
+        .select("*")
+        .eq("master_id", data.master_id)
+        .order("sort_order");
+
+      if (masterAssets && masterAssets.length > 0) {
+        const storeAssets = masterAssets.map((asset) => ({
+          checklist_id: checklist.id,
+          asset_master_id: asset.asset_master_id,
+          quantity: asset.quantity,
+          notes: asset.notes,
+          sort_order: asset.sort_order,
+          is_custom: false,
+          status: "pending",
+        }));
+        await supabase.from("nso_store_assets").insert(storeAssets);
+      }
+
       return checklist;
     },
     onSuccess: () => {
