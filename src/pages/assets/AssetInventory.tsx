@@ -55,6 +55,10 @@ type Asset = {
   oem_id: string | null;
   warranty_start_date: string | null;
   warranty_end_date: string | null;
+  asset_master_id: string | null;
+  store_id: string | null;
+  asset_masters?: { id: string; name: string; category_id: string | null; categories?: { name: string } | null } | null;
+  stores?: { id: string; name: string } | null;
 };
 
 type Vendor = {
@@ -63,10 +67,16 @@ type Vendor = {
   vendor_type: string;
 };
 
-type Category = {
+type AssetMasterOption = {
   id: string;
   name: string;
-  type: string;
+  category_id: string | null;
+  categories?: { name: string } | null;
+};
+
+type Store = {
+  id: string;
+  name: string;
 };
 
 type Location = {
@@ -92,7 +102,8 @@ export default function AssetInventory() {
   const [searchQuery, setSearchQuery] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [assetMasters, setAssetMasters] = useState<AssetMasterOption[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -101,9 +112,9 @@ export default function AssetInventory() {
   const form = useForm<AssetFormData>({
     resolver: zodResolver(assetSchema),
     defaultValues: {
-      name: "",
+      assetMasterId: "",
       assetNumber: "",
-      categoryId: "",
+      storeId: "",
       location: "",
       condition: "under-warranty",
       purchaseDate: "",
@@ -115,17 +126,23 @@ export default function AssetInventory() {
     },
   });
 
-  const selectedVendorId = form.watch("vendorId");
-
   useEffect(() => {
     fetchData();
   }, []);
 
   const fetchData = async () => {
-    const [assetsRes, vendorsRes, categoriesRes, locationsRes] = await Promise.all([
-      supabase.from("assets").select("*").order("created_at", { ascending: false }),
+    const [assetsRes, vendorsRes, assetMastersRes, storesRes, locationsRes] = await Promise.all([
+      supabase
+        .from("assets")
+        .select("*, asset_masters(id, name, category_id, categories(name)), stores(id, name)")
+        .order("created_at", { ascending: false }),
       supabase.from("vendors").select("id, name, vendor_type").order("name"),
-      supabase.from("categories").select("id, name, type").eq("type", "asset").eq("status", "active").order("name"),
+      supabase
+        .from("asset_masters")
+        .select("id, name, category_id, categories(name)")
+        .eq("status", "active")
+        .order("name"),
+      supabase.from("stores").select("id, name").eq("status", "active").order("name"),
       supabase.from("locations").select("id, name").eq("status", "active").order("name"),
     ]);
 
@@ -134,9 +151,10 @@ export default function AssetInventory() {
     } else {
       setAssets(assetsRes.data || []);
     }
-    
+
     setVendors(vendorsRes.data || []);
-    setCategories(categoriesRes.data || []);
+    setAssetMasters(assetMastersRes.data || []);
+    setStores(storesRes.data || []);
     setLocations(locationsRes.data || []);
     setLoading(false);
   };
@@ -144,13 +162,15 @@ export default function AssetInventory() {
   const oemVendors = vendors.filter((v) => v.vendor_type === "oem");
 
   const onSubmit = async (data: AssetFormData) => {
-    const selectedCategory = categories.find((c) => c.id === data.categoryId);
-    
+    const selectedAssetMaster = assetMasters.find((am) => am.id === data.assetMasterId);
+
     const { error } = await supabase.from("assets").insert({
-      name: data.name,
+      name: selectedAssetMaster?.name || "",
       asset_number: data.assetNumber,
-      category: selectedCategory?.name || "",
-      category_id: data.categoryId,
+      category: selectedAssetMaster?.categories?.name || "",
+      category_id: selectedAssetMaster?.category_id || null,
+      asset_master_id: data.assetMasterId,
+      store_id: data.storeId,
       location: data.location,
       condition: data.condition,
       purchase_date: data.purchaseDate,
@@ -175,7 +195,8 @@ export default function AssetInventory() {
     (asset) =>
       asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       asset.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (asset.asset_number && asset.asset_number.toLowerCase().includes(searchQuery.toLowerCase()))
+      (asset.asset_number && asset.asset_number.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (asset.stores?.name && asset.stores.name.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const getVendorName = (vendorId: string | null) => {
@@ -196,7 +217,7 @@ export default function AssetInventory() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Assets</h1>
+          <h1 className="text-2xl font-semibold">Asset Register</h1>
           <p className="text-muted-foreground">Track all assets across stores</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -228,13 +249,24 @@ export default function AssetInventory() {
                   />
                   <FormField
                     control={form.control}
-                    name="name"
+                    name="assetMasterId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Asset Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter asset name" {...field} />
-                        </FormControl>
+                        <FormLabel>Asset Name (Master)</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select asset master" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {assetMasters.map((am) => (
+                              <SelectItem key={am.id} value={am.id}>
+                                {am.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -243,19 +275,21 @@ export default function AssetInventory() {
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="categoryId"
+                    name="storeId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Product Category</FormLabel>
+                        <FormLabel>Store</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Select category" />
+                              <SelectValue placeholder="Select store" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {categories.map((cat) => (
-                              <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                            {stores.map((store) => (
+                              <SelectItem key={store.id} value={store.id}>
+                                {store.name}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -277,7 +311,9 @@ export default function AssetInventory() {
                           </FormControl>
                           <SelectContent>
                             {locations.map((loc) => (
-                              <SelectItem key={loc.id} value={loc.name}>{loc.name}</SelectItem>
+                              <SelectItem key={loc.id} value={loc.name}>
+                                {loc.name}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -301,7 +337,9 @@ export default function AssetInventory() {
                           </FormControl>
                           <SelectContent>
                             {vendors.map((vendor) => (
-                              <SelectItem key={vendor.id} value={vendor.id}>{vendor.name}</SelectItem>
+                              <SelectItem key={vendor.id} value={vendor.id}>
+                                {vendor.name}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -315,8 +353,8 @@ export default function AssetInventory() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>OEM Name</FormLabel>
-                        <Select 
-                          onValueChange={(value) => field.onChange(value === "none" ? "" : value)} 
+                        <Select
+                          onValueChange={(value) => field.onChange(value === "none" ? "" : value)}
                           value={field.value || "none"}
                           disabled={oemVendors.length === 0}
                         >
@@ -328,7 +366,9 @@ export default function AssetInventory() {
                           <SelectContent>
                             <SelectItem value="none">None</SelectItem>
                             {oemVendors.map((vendor) => (
-                              <SelectItem key={vendor.id} value={vendor.id}>{vendor.name}</SelectItem>
+                              <SelectItem key={vendor.id} value={vendor.id}>
+                                {vendor.name}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -407,7 +447,9 @@ export default function AssetInventory() {
                         </FormControl>
                         <SelectContent>
                           {conditionOptions.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -452,6 +494,7 @@ export default function AssetInventory() {
               <TableHead>Asset #</TableHead>
               <TableHead>Asset Name</TableHead>
               <TableHead>Category</TableHead>
+              <TableHead>Store</TableHead>
               <TableHead>Vendor</TableHead>
               <TableHead>OEM</TableHead>
               <TableHead>Location</TableHead>
@@ -462,35 +505,59 @@ export default function AssetInventory() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredAssets.map((asset) => (
-              <TableRow key={asset.id} className="cursor-pointer" onClick={() => navigate(`/assets/inventory/${asset.id}`)}>
-                <TableCell className="font-mono text-sm">{asset.asset_number || "-"}</TableCell>
-                <TableCell className="font-medium">{asset.name}</TableCell>
-                <TableCell>
-                  <Badge variant="outline">{asset.category}</Badge>
-                </TableCell>
-                <TableCell>{getVendorName(asset.vendor_id)}</TableCell>
-                <TableCell>{getVendorName(asset.oem_id)}</TableCell>
-                <TableCell>{asset.location}</TableCell>
-                <TableCell>{new Date(asset.purchase_date).toLocaleDateString()}</TableCell>
-                <TableCell>₹{Number(asset.value).toLocaleString()}</TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      asset.condition === "under-warranty" ? "default" :
-                      asset.condition === "under-amc" ? "secondary" : "destructive"
-                    }
-                  >
-                    {conditionOptions.find((o) => o.value === asset.condition)?.label || asset.condition}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); navigate(`/assets/inventory/${asset.id}`); }}>
-                    <Eye className="h-4 w-4" />
-                  </Button>
+            {filteredAssets.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                  No assets found
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              filteredAssets.map((asset) => (
+                <TableRow
+                  key={asset.id}
+                  className="cursor-pointer"
+                  onClick={() => navigate(`/assets/inventory/${asset.id}`)}
+                >
+                  <TableCell className="font-mono text-sm">{asset.asset_number || "-"}</TableCell>
+                  <TableCell className="font-medium">{asset.name}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{asset.category}</Badge>
+                  </TableCell>
+                  <TableCell>{asset.stores?.name || "-"}</TableCell>
+                  <TableCell>{getVendorName(asset.vendor_id)}</TableCell>
+                  <TableCell>{getVendorName(asset.oem_id)}</TableCell>
+                  <TableCell>{asset.location}</TableCell>
+                  <TableCell>{asset.purchase_date}</TableCell>
+                  <TableCell>₹{asset.value.toLocaleString()}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        asset.condition === "under-warranty"
+                          ? "default"
+                          : asset.condition === "under-amc"
+                          ? "secondary"
+                          : "destructive"
+                      }
+                    >
+                      {conditionOptions.find((opt) => opt.value === asset.condition)?.label || asset.condition}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/assets/inventory/${asset.id}`);
+                      }}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
