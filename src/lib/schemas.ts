@@ -31,6 +31,7 @@ export const assetSchema = z.object({
   storeId: z.string().min(1, "Store is required"),
   location: z.string().trim().min(1, "Location is required"),
   condition: z.string().trim().min(1, "Condition is required"),
+  assetStatus: z.string().min(1, "Asset status is required"),
   purchaseDate: z.string().min(1, "Purchase date is required"),
   value: z.coerce.number().min(0, "Value must be 0 or more").max(100000000, "Value seems too high"),
   vendorId: z.string().min(1, "Vendor is required"),
