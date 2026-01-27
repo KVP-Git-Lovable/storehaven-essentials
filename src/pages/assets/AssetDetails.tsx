@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Package, FileText, Zap, Loader2, Calendar, MapPin, Building2, Wrench } from "lucide-react";
+import { ArrowLeft, Package, FileText, Zap, Loader2, Calendar, MapPin, Building2, Wrench, History, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -24,6 +31,7 @@ type Asset = {
   category_id: string | null;
   location: string;
   condition: string;
+  asset_status: string;
   purchase_date: string;
   value: number;
   vendor_id: string | null;
@@ -58,16 +66,43 @@ type UtilityReading = {
   meter_master: { name: string } | null;
 };
 
+type StatusHistory = {
+  id: string;
+  asset_id: string;
+  status: string;
+  changed_at: string;
+  changed_by: string;
+};
+
 const conditionLabels: Record<string, string> = {
   "under-warranty": "Under Warranty",
   "under-amc": "Under AMC",
-  "non-operational": "Non-Operational",
+  "need-based-support": "Need Based Support",
+  "no-service-support": "No Service Support",
 };
 
 const conditionColors: Record<string, string> = {
   "under-warranty": "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
   "under-amc": "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
-  "non-operational": "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
+  "need-based-support": "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+  "no-service-support": "bg-muted text-muted-foreground",
+};
+
+const assetStatusOptions = [
+  { value: "requisition-raised", label: "Requisition Raised" },
+  { value: "procurement-planned", label: "Procurement Planned" },
+  { value: "po-issued", label: "PO Issued" },
+  { value: "product-received", label: "Product Received" },
+  { value: "shipped-to-store", label: "Shipped to Store" },
+  { value: "installation-fixed", label: "Installation Fixed" },
+  { value: "installed", label: "Installed" },
+  { value: "working", label: "Working" },
+  { value: "withdrawn", label: "Withdrawn" },
+  { value: "drop", label: "Drop" },
+];
+
+const getStatusLabel = (status: string) => {
+  return assetStatusOptions.find((opt) => opt.value === status)?.label || status;
 };
 
 export default function AssetDetails() {
@@ -79,7 +114,9 @@ export default function AssetDetails() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [serviceContracts, setServiceContracts] = useState<ServiceContract[]>([]);
   const [utilityReadings, setUtilityReadings] = useState<UtilityReading[]>([]);
+  const [statusHistory, setStatusHistory] = useState<StatusHistory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -106,7 +143,7 @@ export default function AssetDetails() {
     setAsset(assetData);
 
     // Fetch related data in parallel
-    const [vendorsRes, contractAssetsRes, readingsRes] = await Promise.all([
+    const [vendorsRes, contractAssetsRes, readingsRes, historyRes] = await Promise.all([
       supabase.from("vendors").select("id, name, vendor_type"),
       supabase
         .from("service_contract_assets")
@@ -118,10 +155,16 @@ export default function AssetDetails() {
         .eq("asset_id", id)
         .order("reading_date", { ascending: false })
         .limit(10),
+      supabase
+        .from("asset_status_history")
+        .select("*")
+        .eq("asset_id", id)
+        .order("changed_at", { ascending: false }),
     ]);
 
     setVendors(vendorsRes.data || []);
     setUtilityReadings(readingsRes.data as UtilityReading[] || []);
+    setStatusHistory(historyRes.data || []);
 
     // Fetch service contracts if there are linked ones
     if (contractAssetsRes.data && contractAssetsRes.data.length > 0) {
@@ -138,6 +181,43 @@ export default function AssetDetails() {
     setLoading(false);
   };
 
+  const handleStatusChange = async (newStatus: string) => {
+    if (!asset || newStatus === asset.asset_status) return;
+    
+    setUpdatingStatus(true);
+    
+    // Update asset status
+    const { error: updateError } = await supabase
+      .from("assets")
+      .update({ asset_status: newStatus })
+      .eq("id", asset.id);
+    
+    if (updateError) {
+      toast({ title: "Error", description: "Failed to update status", variant: "destructive" });
+      setUpdatingStatus(false);
+      return;
+    }
+    
+    // Insert status history record
+    const { error: historyError } = await supabase
+      .from("asset_status_history")
+      .insert({
+        asset_id: asset.id,
+        status: newStatus,
+        changed_by: "System",
+      });
+    
+    if (historyError) {
+      console.error("Failed to record status history:", historyError);
+    }
+    
+    toast({ title: "Status Updated", description: `Asset status changed to ${getStatusLabel(newStatus)}` });
+    
+    // Refresh data
+    await fetchAssetDetails();
+    setUpdatingStatus(false);
+  };
+
   const getVendorName = (vendorId: string | null) => {
     if (!vendorId) return "-";
     const vendor = vendors.find((v) => v.id === vendorId);
@@ -147,6 +227,11 @@ export default function AssetDetails() {
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "-";
     return new Date(dateStr).toLocaleDateString();
+  };
+
+  const formatDateTime = (dateStr: string | null) => {
+    if (!dateStr) return "-";
+    return new Date(dateStr).toLocaleString();
   };
 
   const getStatusBadge = (status: string) => {
@@ -187,6 +272,40 @@ export default function AssetDetails() {
           <p className="text-muted-foreground font-mono">{asset.asset_number || "No Asset #"}</p>
         </div>
       </div>
+
+      {/* Asset Status Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5" />
+            Asset Status
+          </CardTitle>
+          <CardDescription>
+            Current lifecycle stage of this asset
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-4">
+            <Select
+              value={asset.asset_status || "requisition-raised"}
+              onValueChange={handleStatusChange}
+              disabled={updatingStatus}
+            >
+              <SelectTrigger className="w-[280px]">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                {assetStatusOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {updatingStatus && <Loader2 className="h-4 w-4 animate-spin" />}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Asset Information */}
       <div className="grid gap-6 md:grid-cols-2">
@@ -281,6 +400,50 @@ export default function AssetDetails() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Audit Trail */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-5 w-5" />
+            Audit Trail
+          </CardTitle>
+          <CardDescription>
+            Status change history for this asset
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {statusHistory.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <History className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p>No status changes recorded yet</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Changed At</TableHead>
+                  <TableHead>Changed By</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {statusHistory.map((record) => (
+                  <TableRow key={record.id}>
+                    <TableCell>
+                      <Badge variant="secondary">
+                        {getStatusLabel(record.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{formatDateTime(record.changed_at)}</TableCell>
+                    <TableCell>{record.changed_by}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Service Contracts */}
       <Card>

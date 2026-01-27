@@ -49,6 +49,7 @@ type Asset = {
   category_id: string | null;
   location: string;
   condition: string;
+  asset_status: string;
   purchase_date: string;
   value: number;
   vendor_id: string | null;
@@ -59,6 +60,14 @@ type Asset = {
   store_id: string | null;
   asset_masters?: { id: string; name: string; category_id: string | null; categories?: { name: string } | null } | null;
   stores?: { id: string; name: string } | null;
+};
+
+type StatusHistory = {
+  id: string;
+  asset_id: string;
+  status: string;
+  changed_at: string;
+  changed_by: string;
 };
 
 type Vendor = {
@@ -87,7 +96,21 @@ type Location = {
 const conditionOptions = [
   { value: "under-warranty", label: "Under Warranty" },
   { value: "under-amc", label: "Under AMC" },
-  { value: "non-operational", label: "Non-Operational" },
+  { value: "need-based-support", label: "Need Based Support" },
+  { value: "no-service-support", label: "No Service Support" },
+];
+
+const assetStatusOptions = [
+  { value: "requisition-raised", label: "Requisition Raised" },
+  { value: "procurement-planned", label: "Procurement Planned" },
+  { value: "po-issued", label: "PO Issued" },
+  { value: "product-received", label: "Product Received" },
+  { value: "shipped-to-store", label: "Shipped to Store" },
+  { value: "installation-fixed", label: "Installation Fixed" },
+  { value: "installed", label: "Installed" },
+  { value: "working", label: "Working" },
+  { value: "withdrawn", label: "Withdrawn" },
+  { value: "drop", label: "Drop" },
 ];
 
 const stats = [
@@ -117,6 +140,7 @@ export default function AssetInventory() {
       storeId: "",
       location: "",
       condition: "under-warranty",
+      assetStatus: "requisition-raised",
       purchaseDate: "",
       value: 0,
       vendorId: "",
@@ -164,7 +188,7 @@ export default function AssetInventory() {
   const onSubmit = async (data: AssetFormData) => {
     const selectedAssetMaster = assetMasters.find((am) => am.id === data.assetMasterId);
 
-    const { error } = await supabase.from("assets").insert({
+    const { data: insertedAsset, error } = await supabase.from("assets").insert({
       name: selectedAssetMaster?.name || "",
       asset_number: data.assetNumber,
       category: selectedAssetMaster?.categories?.name || "",
@@ -173,17 +197,25 @@ export default function AssetInventory() {
       store_id: data.storeId,
       location: data.location,
       condition: data.condition,
+      asset_status: data.assetStatus,
       purchase_date: data.purchaseDate,
       value: data.value,
       vendor_id: data.vendorId,
       oem_id: data.oemId || null,
       warranty_start_date: data.warrantyStartDate || null,
       warranty_end_date: data.warrantyEndDate || null,
-    });
+    }).select().single();
 
     if (error) {
       toast({ title: "Error", description: "Failed to add asset", variant: "destructive" });
     } else {
+      // Insert initial status history record
+      await supabase.from("asset_status_history").insert({
+        asset_id: insertedAsset.id,
+        status: data.assetStatus,
+        changed_by: "System",
+      });
+      
       toast({ title: "Asset added", description: `Asset has been registered.` });
       form.reset();
       setOpen(false);
@@ -433,30 +465,56 @@ export default function AssetInventory() {
                     )}
                   />
                 </div>
-                <FormField
-                  control={form.control}
-                  name="condition"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Condition</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select condition" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {conditionOptions.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="condition"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Service Engagement</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select service engagement" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {conditionOptions.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="assetStatus"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Asset Status</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select status" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {assetStatusOptions.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                     Cancel
@@ -495,19 +553,17 @@ export default function AssetInventory() {
               <TableHead>Asset Name</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Store</TableHead>
-              <TableHead>Vendor</TableHead>
-              <TableHead>OEM</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead>Location</TableHead>
-              <TableHead>Purchase Date</TableHead>
               <TableHead>Value</TableHead>
-              <TableHead>Condition</TableHead>
+              <TableHead>Service Engagement</TableHead>
               <TableHead className="w-[80px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredAssets.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                   No assets found
                 </TableCell>
               </TableRow>
@@ -524,10 +580,12 @@ export default function AssetInventory() {
                     <Badge variant="outline">{asset.category}</Badge>
                   </TableCell>
                   <TableCell>{asset.stores?.name || "-"}</TableCell>
-                  <TableCell>{getVendorName(asset.vendor_id)}</TableCell>
-                  <TableCell>{getVendorName(asset.oem_id)}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">
+                      {assetStatusOptions.find((opt) => opt.value === asset.asset_status)?.label || asset.asset_status || "-"}
+                    </Badge>
+                  </TableCell>
                   <TableCell>{asset.location}</TableCell>
-                  <TableCell>{asset.purchase_date}</TableCell>
                   <TableCell>₹{asset.value.toLocaleString()}</TableCell>
                   <TableCell>
                     <Badge
@@ -536,7 +594,7 @@ export default function AssetInventory() {
                           ? "default"
                           : asset.condition === "under-amc"
                           ? "secondary"
-                          : "destructive"
+                          : "outline"
                       }
                     >
                       {conditionOptions.find((opt) => opt.value === asset.condition)?.label || asset.condition}

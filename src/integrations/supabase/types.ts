@@ -103,10 +103,46 @@ export type Database = {
           },
         ]
       }
+      asset_status_history: {
+        Row: {
+          asset_id: string
+          changed_at: string
+          changed_by: string
+          created_at: string
+          id: string
+          status: string
+        }
+        Insert: {
+          asset_id: string
+          changed_at?: string
+          changed_by?: string
+          created_at?: string
+          id?: string
+          status: string
+        }
+        Update: {
+          asset_id?: string
+          changed_at?: string
+          changed_by?: string
+          created_at?: string
+          id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_status_history_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assets: {
         Row: {
           asset_master_id: string | null
           asset_number: string | null
+          asset_status: string
           category: string
           category_id: string | null
           condition: string
@@ -126,6 +162,7 @@ export type Database = {
         Insert: {
           asset_master_id?: string | null
           asset_number?: string | null
+          asset_status?: string
           category: string
           category_id?: string | null
           condition: string
@@ -145,6 +182,7 @@ export type Database = {
         Update: {
           asset_master_id?: string | null
           asset_number?: string | null
+          asset_status?: string
           category?: string
           category_id?: string | null
           condition?: string
