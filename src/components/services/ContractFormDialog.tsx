@@ -113,7 +113,14 @@ const contractSchema = z.object({
 type ContractFormData = z.infer<typeof contractSchema>;
 
 type Vendor = { id: string; name: string };
-type Asset = { id: string; name: string; asset_number: string | null };
+type Asset = { 
+  id: string; 
+  name: string; 
+  asset_number: string | null;
+  store?: { name: string } | null;
+  condition: string;
+  asset_status: string;
+};
 type Store = { id: string; name: string };
 
 interface ContractFormDialogProps {
@@ -179,7 +186,7 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
   const fetchReferenceData = async () => {
     const [vendorsRes, assetsRes, storesRes] = await Promise.all([
       supabase.from("vendors").select("id, name").order("name"),
-      supabase.from("assets").select("id, name, asset_number").order("name"),
+      supabase.from("assets").select("id, name, asset_number, condition, asset_status, store:store_id(name)").order("name"),
       supabase.from("stores").select("id, name").order("name"),
     ]);
     
@@ -354,14 +361,14 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="px-6 pt-6 pb-0">
           <DialogTitle>New Service Contract</DialogTitle>
         </DialogHeader>
         
-        <ScrollArea className="flex-1 pr-4">
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pb-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
               {/* Section 1: Parties and Dates */}
               <Collapsible open={expandedSections.parties}>
                 <SectionHeader id="parties" title="1. Parties & Contract Period" />
@@ -568,10 +575,10 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                           })}
                         </div>
                       )}
-                      <ScrollArea className="h-32">
+                      <ScrollArea className="h-48">
                         <div className="space-y-1">
                           {assets.map(asset => (
-                            <div key={asset.id} className="flex items-center gap-2">
+                            <div key={asset.id} className="flex items-center gap-2 py-1 hover:bg-muted/50 px-1 rounded">
                               <Checkbox
                                 checked={selectedAssets.includes(asset.id)}
                                 onCheckedChange={(checked) => {
@@ -582,9 +589,19 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                                   }
                                 }}
                               />
-                              <span className="text-sm">
-                                {asset.asset_number ? `${asset.asset_number} - ` : ""}{asset.name}
-                              </span>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-sm font-medium">
+                                  {asset.asset_number ? `${asset.asset_number} - ` : ""}{asset.name}
+                                </span>
+                                {asset.store?.name && (
+                                  <span className="text-xs text-muted-foreground ml-2">
+                                    @ {asset.store.name}
+                                  </span>
+                                )}
+                              </div>
+                              <Badge variant="outline" className="text-xs shrink-0">
+                                {asset.asset_status}
+                              </Badge>
                             </div>
                           ))}
                         </div>
@@ -1094,7 +1111,7 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                 )}
               />
 
-              <div className="flex justify-end gap-2 pt-4 sticky bottom-0 bg-background">
+              <div className="flex justify-end gap-2 pt-4 sticky bottom-0 bg-background pb-2 border-t mt-4">
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                   Cancel
                 </Button>
@@ -1104,7 +1121,7 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
               </div>
             </form>
           </Form>
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
