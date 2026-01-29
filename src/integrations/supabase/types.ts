@@ -768,6 +768,7 @@ export type Database = {
           id: string
           last_done: string
           next_due: string
+          service_contract_id: string | null
           status: string
           store_id: string | null
           task_type: string
@@ -782,6 +783,7 @@ export type Database = {
           id?: string
           last_done: string
           next_due: string
+          service_contract_id?: string | null
           status?: string
           store_id?: string | null
           task_type: string
@@ -796,6 +798,7 @@ export type Database = {
           id?: string
           last_done?: string
           next_due?: string
+          service_contract_id?: string | null
           status?: string
           store_id?: string | null
           task_type?: string
@@ -807,6 +810,13 @@ export type Database = {
             columns: ["asset_id"]
             isOneToOne: false
             referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_tasks_service_contract_id_fkey"
+            columns: ["service_contract_id"]
+            isOneToOne: false
+            referencedRelation: "service_contracts"
             referencedColumns: ["id"]
           },
           {
@@ -2796,7 +2806,9 @@ export type Database = {
           penalty_rate_percent: number | null
           penalty_type: string | null
           pm_checklist_attached: boolean | null
+          pm_checklist_items: string[] | null
           pm_frequency: string | null
+          pm_task_type: string | null
           pricing_model: string | null
           renewal_notice_days: number | null
           service_provider_id: string | null
@@ -2866,7 +2878,9 @@ export type Database = {
           penalty_rate_percent?: number | null
           penalty_type?: string | null
           pm_checklist_attached?: boolean | null
+          pm_checklist_items?: string[] | null
           pm_frequency?: string | null
+          pm_task_type?: string | null
           pricing_model?: string | null
           renewal_notice_days?: number | null
           service_provider_id?: string | null
@@ -2936,7 +2950,9 @@ export type Database = {
           penalty_rate_percent?: number | null
           penalty_type?: string | null
           pm_checklist_attached?: boolean | null
+          pm_checklist_items?: string[] | null
           pm_frequency?: string | null
+          pm_task_type?: string | null
           pricing_model?: string | null
           renewal_notice_days?: number | null
           service_provider_id?: string | null

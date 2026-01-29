@@ -38,11 +38,24 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
+const PM_CHECKLIST_OPTIONS = [
+  { value: "filter_cleaning", label: "Filter Cleaning/Replacement" },
+  { value: "coil_cleaning", label: "Coil/Condenser Cleaning" },
+  { value: "lubrication", label: "Lubrication of Moving Parts" },
+  { value: "electrical_check", label: "Electrical Connection Check" },
+  { value: "refrigerant_check", label: "Refrigerant Level Check" },
+  { value: "performance_test", label: "Performance/Load Testing" },
+  { value: "calibration", label: "Calibration & Adjustment" },
+  { value: "safety_check", label: "Safety Device Inspection" },
+  { value: "belt_inspection", label: "Belt/Drive Inspection" },
+  { value: "drain_cleaning", label: "Drain Line Cleaning" },
+  { value: "thermostat_check", label: "Thermostat Check" },
+  { value: "visual_inspection", label: "Visual Inspection & Report" },
+];
+
 const contractSchema = z.object({
   // Parties
-  customer_name: z.string().min(1, "Customer name is required"),
-  customer_address: z.string().optional(),
-  service_provider_id: z.string().optional(),
+  service_provider_id: z.string().min(1, "Service provider is required"),
   
   // Dates
   effective_date: z.string().min(1, "Effective date is required"),
@@ -97,6 +110,9 @@ const contractSchema = z.object({
   
   // PM
   pm_frequency: z.string().optional(),
+  pm_checklist_items: z.array(z.string()).default([]),
+  pm_task_type: z.string().default("preventive-maintenance"),
+  auto_create_pm: z.boolean().default(true),
   
   // Uptime
   target_uptime_percent: z.coerce.number().optional(),
@@ -179,7 +195,6 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
   const form = useForm<ContractFormData>({
     resolver: zodResolver(contractSchema),
     defaultValues: {
-      customer_name: "",
       contract_type: "amc",
       service_types: [],
       labour_included: true,
@@ -193,6 +208,9 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
       contract_value: 0,
       invoice_frequency: "monthly",
       auto_renewal: false,
+      pm_checklist_items: [],
+      pm_task_type: "preventive-maintenance",
+      auto_create_pm: true,
     },
   });
 
@@ -235,8 +253,7 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
         .from("service_contracts")
         .insert({
           contract_number: contractNumber,
-          customer_name: data.customer_name,
-          customer_address: data.customer_address || null,
+          customer_name: "-", // Placeholder - contract is linked via assets/locations
           service_provider_id: data.service_provider_id || null,
           effective_date: data.effective_date,
           start_date: data.start_date,
@@ -279,6 +296,8 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
           sla_penalties: data.sla_penalties,
           sla_penalty_details: data.sla_penalty_details || null,
           pm_frequency: data.pm_frequency || null,
+          pm_checklist_items: data.pm_checklist_items || [],
+          pm_task_type: data.pm_task_type || "preventive-maintenance",
           target_uptime_percent: data.target_uptime_percent || null,
           pricing_model: data.pricing_model,
           contract_value: data.contract_value,
@@ -347,6 +366,53 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
         }
       }
 
+      // Auto-create PM schedules if enabled
+      if (data.auto_create_pm && data.pm_frequency && selectedAssets.length > 0) {
+        const vendorName = vendors.find(v => v.id === data.service_provider_id)?.name || "Vendor";
+        const pmChecklistDesc = data.pm_checklist_items.length > 0 
+          ? PM_CHECKLIST_OPTIONS.filter(opt => data.pm_checklist_items.includes(opt.value))
+              .map(opt => opt.label).join(", ")
+          : "Preventive Maintenance";
+        
+        // Calculate next due date based on frequency
+        const startDate = new Date(data.start_date);
+        let nextDue = new Date(startDate);
+        switch (data.pm_frequency) {
+          case "monthly":
+            nextDue.setMonth(nextDue.getMonth() + 1);
+            break;
+          case "quarterly":
+            nextDue.setMonth(nextDue.getMonth() + 3);
+            break;
+          case "biannual":
+            nextDue.setMonth(nextDue.getMonth() + 6);
+            break;
+          case "annual":
+            nextDue.setFullYear(nextDue.getFullYear() + 1);
+            break;
+          default:
+            nextDue.setMonth(nextDue.getMonth() + 1);
+        }
+
+        // Create PM tasks for each selected asset
+        for (const assetId of selectedAssets) {
+          const asset = assets.find(a => a.id === assetId);
+          if (asset) {
+            await supabase.from("maintenance_tasks").insert({
+              asset: asset.name,
+              asset_id: assetId,
+              task_type: pmChecklistDesc.length > 50 ? pmChecklistDesc.substring(0, 47) + "..." : pmChecklistDesc,
+              frequency: data.pm_frequency === "biannual" ? "quarterly" : data.pm_frequency,
+              last_done: "-",
+              next_due: nextDue.toISOString().split("T")[0],
+              assigned_to: vendorName,
+              status: "scheduled",
+              service_contract_id: newContract.id,
+            });
+          }
+        }
+      }
+
       toast({
         title: "Contract created",
         description: `Contract ${contractNumber} has been created successfully.`,
@@ -406,53 +472,24 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
               <Collapsible open={expandedSections.parties}>
                 <SectionHeader id="parties" title="1. Parties & Contract Period" />
                 <CollapsibleContent className="pt-4 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="customer_name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Customer Name *</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Customer legal entity" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="service_provider_id"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Service Provider</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select vendor" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {vendors.map(v => (
-                                <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
                   <FormField
                     control={form.control}
-                    name="customer_address"
+                    name="service_provider_id"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Customer Address</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Full address" {...field} />
-                        </FormControl>
+                        <FormLabel>Service Provider *</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select vendor" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {vendors.map(v => (
+                              <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1147,27 +1184,106 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
               <Collapsible open={expandedSections.pm}>
                 <SectionHeader id="pm" title="6. Preventive Maintenance Program" />
                 <CollapsibleContent className="pt-4 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="pm_frequency"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>PM Frequency</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select frequency" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="monthly">Monthly</SelectItem>
+                              <SelectItem value="quarterly">Quarterly</SelectItem>
+                              <SelectItem value="biannual">Bi-Annual</SelectItem>
+                              <SelectItem value="annual">Annual</SelectItem>
+                              <SelectItem value="meter-based">Meter-Based</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="pm_task_type"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>PM Task Type</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="preventive-maintenance">Preventive Maintenance</SelectItem>
+                              <SelectItem value="routine-inspection">Routine Inspection</SelectItem>
+                              <SelectItem value="deep-cleaning">Deep Cleaning</SelectItem>
+                              <SelectItem value="calibration">Calibration</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <FormLabel>PM Checklist - What's Covered</FormLabel>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Select the maintenance activities included in this contract
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 border rounded-lg p-4 bg-muted/30">
+                      {PM_CHECKLIST_OPTIONS.map((option) => (
+                        <FormField
+                          key={option.value}
+                          control={form.control}
+                          name="pm_checklist_items"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center gap-2 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(option.value)}
+                                  onCheckedChange={(checked) => {
+                                    const current = field.value || [];
+                                    if (checked) {
+                                      field.onChange([...current, option.value]);
+                                    } else {
+                                      field.onChange(current.filter((v: string) => v !== option.value));
+                                    }
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel className="!mt-0 text-sm font-normal cursor-pointer">
+                                {option.label}
+                              </FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
                   <FormField
                     control={form.control}
-                    name="pm_frequency"
+                    name="auto_create_pm"
                     render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>PM Frequency</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select frequency" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="monthly">Monthly</SelectItem>
-                            <SelectItem value="quarterly">Quarterly</SelectItem>
-                            <SelectItem value="biannual">Bi-Annual</SelectItem>
-                            <SelectItem value="annual">Annual</SelectItem>
-                            <SelectItem value="meter-based">Meter-Based</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
+                      <FormItem className="flex items-center gap-2 p-3 border rounded-lg bg-primary/5">
+                        <FormControl>
+                          <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                        </FormControl>
+                        <div>
+                          <FormLabel className="!mt-0 font-medium">Auto-create PM Schedules</FormLabel>
+                          <p className="text-xs text-muted-foreground">
+                            Automatically schedule preventive maintenance tasks for covered assets based on frequency
+                          </p>
+                        </div>
                       </FormItem>
                     )}
                   />
