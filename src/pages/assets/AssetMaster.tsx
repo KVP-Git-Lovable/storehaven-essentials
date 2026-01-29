@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Package, Loader2, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, Loader2, Edit, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -50,6 +50,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { HierarchicalCategorySelector } from "@/components/assets/HierarchicalCategorySelector";
 
 const assetMasterSchema = z.object({
   name: z.string().trim().min(1, "Asset name is required").max(100, "Name must be less than 100 characters"),
@@ -70,12 +71,7 @@ type AssetMaster = {
   description: string | null;
   status: string;
   created_at: string;
-  categories?: { name: string } | null;
-};
-
-type Category = {
-  id: string;
-  name: string;
+  categories?: { name: string; type: string } | null;
 };
 
 const criticalityOptions = [
@@ -94,7 +90,6 @@ export default function AssetMaster() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [assetMasters, setAssetMasters] = useState<AssetMaster[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<AssetMaster | null>(null);
@@ -117,26 +112,16 @@ export default function AssetMaster() {
   }, []);
 
   const fetchData = async () => {
-    const [assetMastersRes, categoriesRes] = await Promise.all([
-      supabase
-        .from("asset_masters")
-        .select("*, categories(name)")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("categories")
-        .select("id, name")
-        .eq("type", "asset")
-        .eq("status", "active")
-        .order("name"),
-    ]);
+    const { data, error } = await supabase
+      .from("asset_masters")
+      .select("*, categories(name, type)")
+      .order("created_at", { ascending: false });
 
-    if (assetMastersRes.error) {
+    if (error) {
       toast({ title: "Error", description: "Failed to load asset masters", variant: "destructive" });
     } else {
-      setAssetMasters(assetMastersRes.data || []);
+      setAssetMasters(data || []);
     }
-
-    setCategories(categoriesRes.data || []);
     setLoading(false);
   };
 
@@ -275,21 +260,13 @@ export default function AssetMaster() {
                   name="category_id"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Category</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select category" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {categories.map((cat) => (
-                            <SelectItem key={cat.id} value={cat.id}>
-                              {cat.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <HierarchicalCategorySelector
+                        value={field.value || null}
+                        onChange={(categoryId) => field.onChange(categoryId || "")}
+                        initialCategoryType={
+                          editingAsset?.categories?.type || undefined
+                        }
+                      />
                       <FormMessage />
                     </FormItem>
                   )}
