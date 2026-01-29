@@ -55,9 +55,10 @@ import { format } from "date-fns";
 
 const categorySchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(100, "Name must be less than 100 characters"),
-  type: z.enum(["product", "asset", "spare", "vendor", "expense"]),
+  type: z.enum(["product", "service", "spare-parts"]),
   description: z.string().max(500, "Description must be less than 500 characters").optional(),
   status: z.enum(["active", "inactive"]),
+  parent_id: z.string().optional(),
 });
 
 type CategoryFormData = z.infer<typeof categorySchema>;
@@ -68,16 +69,16 @@ interface Category {
   type: string;
   description: string | null;
   status: string;
+  parent_id: string | null;
   created_at: string;
   updated_at: string;
+  parent?: { id: string; name: string } | null;
 }
 
 const categoryTypes = [
   { value: "product", label: "Product" },
-  { value: "asset", label: "Asset" },
-  { value: "spare", label: "Spare" },
-  { value: "vendor", label: "Vendor" },
-  { value: "expense", label: "Expense" },
+  { value: "service", label: "Service" },
+  { value: "spare-parts", label: "Spare Parts" },
 ];
 
 export default function CategoryMaster() {
@@ -93,6 +94,7 @@ export default function CategoryMaster() {
       type: "product",
       description: "",
       status: "active",
+      parent_id: "",
     },
   });
 
@@ -104,7 +106,7 @@ export default function CategoryMaster() {
     try {
       const { data, error } = await supabase
         .from("categories")
-        .select("*")
+        .select("*, parent:parent_id(id, name)")
         .order("type", { ascending: true })
         .order("name", { ascending: true });
 
@@ -125,6 +127,7 @@ export default function CategoryMaster() {
         type: data.type,
         description: data.description || null,
         status: data.status,
+        parent_id: data.parent_id && data.parent_id !== "none" ? data.parent_id : null,
       };
 
       if (editingCategory) {
@@ -165,6 +168,7 @@ export default function CategoryMaster() {
       type: category.type as CategoryFormData["type"],
       description: category.description || "",
       status: category.status as "active" | "inactive",
+      parent_id: category.parent_id || "",
     });
     setOpen(true);
   };
@@ -201,17 +205,20 @@ export default function CategoryMaster() {
     switch (type) {
       case "product":
         return "default";
-      case "asset":
+      case "service":
         return "secondary";
-      case "spare":
+      case "spare-parts":
         return "outline";
-      case "vendor":
-        return "default";
-      case "expense":
-        return "destructive";
       default:
         return "default";
     }
+  };
+
+  // Filter categories for parent selection (exclude current category when editing)
+  const getParentOptions = () => {
+    return categories.filter(cat => 
+      !editingCategory || cat.id !== editingCategory.id
+    );
   };
 
   if (loading) {
@@ -297,6 +304,32 @@ export default function CategoryMaster() {
 
                 <FormField
                   control={form.control}
+                  name="parent_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Parent Category</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || "none"}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select parent category (optional)" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">No Parent (Root Category)</SelectItem>
+                          {getParentOptions().map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id}>
+                              {cat.name} ({getTypeLabel(cat.type)})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
                   name="status"
                   render={({ field }) => (
                     <FormItem>
@@ -342,6 +375,7 @@ export default function CategoryMaster() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
+                    <TableHead>Parent</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead className="hidden sm:table-cell">Description</TableHead>
                     <TableHead>Status</TableHead>
@@ -353,6 +387,9 @@ export default function CategoryMaster() {
                   {categories.map((cat) => (
                     <TableRow key={cat.id}>
                       <TableCell className="font-medium">{cat.name}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {cat.parent?.name || "-"}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={getTypeBadgeVariant(cat.type)}>
                           {getTypeLabel(cat.type)}
