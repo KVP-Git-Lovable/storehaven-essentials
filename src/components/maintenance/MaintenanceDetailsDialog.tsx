@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Edit, Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,8 +19,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { KnowledgeBaseSuggestions } from "@/components/knowledge/KnowledgeBaseSuggestions";
 
 type MaintenanceTask = {
   id: string;
@@ -53,6 +56,26 @@ export function MaintenanceDetailsDialog({
   onDeleted,
 }: MaintenanceDetailsDialogProps) {
   const { toast } = useToast();
+  const [assetMasterId, setAssetMasterId] = useState<string | null>(null);
+
+  // Fetch asset master ID from asset
+  useEffect(() => {
+    const fetchAssetMaster = async () => {
+      if (task?.asset_id) {
+        const { data } = await supabase
+          .from("assets")
+          .select("asset_master_id")
+          .eq("id", task.asset_id)
+          .maybeSingle();
+        setAssetMasterId(data?.asset_master_id || null);
+      } else {
+        setAssetMasterId(null);
+      }
+    };
+    if (open && task) {
+      fetchAssetMaster();
+    }
+  }, [open, task]);
 
   if (!task) return null;
 
@@ -95,7 +118,7 @@ export function MaintenanceDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Maintenance Schedule Details</DialogTitle>
         </DialogHeader>
@@ -176,6 +199,14 @@ export function MaintenanceDetailsDialog({
               <p className="font-medium">{task.assigned_to}</p>
             </div>
           </div>
+
+          {/* Knowledge Base Suggestions */}
+          <Separator />
+          <KnowledgeBaseSuggestions 
+            assetMasterId={assetMasterId} 
+            searchContext={task.task_type}
+            compact 
+          />
         </div>
       </DialogContent>
     </Dialog>

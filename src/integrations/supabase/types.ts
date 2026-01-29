@@ -725,6 +725,65 @@ export type Database = {
         }
         Relationships: []
       }
+      knowledge_base_articles: {
+        Row: {
+          article_type: string
+          asset_master_id: string | null
+          category: string
+          content: string
+          created_at: string
+          created_by: string | null
+          helpful_count: number | null
+          id: string
+          keywords: string[] | null
+          status: string
+          summary: string | null
+          title: string
+          updated_at: string
+          views_count: number | null
+        }
+        Insert: {
+          article_type?: string
+          asset_master_id?: string | null
+          category?: string
+          content: string
+          created_at?: string
+          created_by?: string | null
+          helpful_count?: number | null
+          id?: string
+          keywords?: string[] | null
+          status?: string
+          summary?: string | null
+          title: string
+          updated_at?: string
+          views_count?: number | null
+        }
+        Update: {
+          article_type?: string
+          asset_master_id?: string | null
+          category?: string
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          helpful_count?: number | null
+          id?: string
+          keywords?: string[] | null
+          status?: string
+          summary?: string | null
+          title?: string
+          updated_at?: string
+          views_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_base_articles_asset_master_id_fkey"
+            columns: ["asset_master_id"]
+            isOneToOne: false
+            referencedRelation: "asset_masters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       locations: {
         Row: {
           address: string | null
@@ -4634,7 +4693,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      search_knowledge_base: {
+        Args: { search_query: string }
+        Returns: {
+          article_type: string
+          asset_master_id: string | null
+          category: string
+          content: string
+          created_at: string
+          created_by: string | null
+          helpful_count: number | null
+          id: string
+          keywords: string[] | null
+          status: string
+          summary: string | null
+          title: string
+          updated_at: string
+          views_count: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "knowledge_base_articles"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
     }
     Enums: {
       frequency_type: "daily" | "weekly" | "monthly" | "custom"

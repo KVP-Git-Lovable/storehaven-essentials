@@ -63,6 +63,7 @@ const navigation: NavItem[] = [
       { title: "Service Contracts", href: "/services/contracts" },
       { title: "Preventive Maintenance", href: "/services/maintenance" },
       { title: "Service Tickets", href: "/services/tickets" },
+      { title: "Knowledge Base", href: "/services/knowledge-base" },
     ],
   },
   { title: "Vendors", href: "/vendors", icon: Building2 },
