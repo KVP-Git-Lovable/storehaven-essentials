@@ -14,6 +14,7 @@ import {
   Edit,
   Save,
   X,
+  BookOpen,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { KnowledgeBaseSuggestions } from "@/components/knowledge/KnowledgeBaseSuggestions";
 
 type ServiceContract = {
   id: string;
@@ -128,6 +130,7 @@ export function ServiceTicketDetailsDialog({
   const [contract, setContract] = useState<ServiceContract | null>(null);
   const [contracts, setContracts] = useState<ServiceContract[]>([]);
   const [adherenceItems, setAdherenceItems] = useState<AdherenceItem[]>([]);
+  const [assetMasterId, setAssetMasterId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -208,6 +211,18 @@ export function ServiceTicketDetailsDialog({
         setContract(contractData as ServiceContract);
       } else {
         setContract(null);
+      }
+
+      // Fetch asset master ID for KB suggestions
+      if (ticketData.asset_id) {
+        const { data: assetData } = await supabase
+          .from("assets")
+          .select("asset_master_id")
+          .eq("id", ticketData.asset_id)
+          .maybeSingle();
+        setAssetMasterId(assetData?.asset_master_id || null);
+      } else {
+        setAssetMasterId(null);
       }
     }
 
@@ -819,6 +834,23 @@ export function ServiceTicketDetailsDialog({
                     })}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Knowledge Base Suggestions */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <BookOpen className="h-4 w-4" />
+                  Knowledge Base
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <KnowledgeBaseSuggestions 
+                  assetMasterId={assetMasterId} 
+                  searchContext={ticket.title}
+                  compact 
+                />
               </CardContent>
             </Card>
           </div>
