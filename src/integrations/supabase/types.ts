@@ -2775,7 +2775,9 @@ export type Database = {
           exclusions: string | null
           id: string
           invoice_frequency: string | null
+          labour_hours_included: number | null
           labour_included: boolean | null
+          labour_rate_per_hour: number | null
           notes: string | null
           p1_resolution_hrs: number | null
           p1_response_mins: number | null
@@ -2786,6 +2788,13 @@ export type Database = {
           p4_resolution_hrs: number | null
           p4_response_mins: number | null
           payment_terms_days: number | null
+          penalty_applicable: boolean | null
+          penalty_calculation_basis: string | null
+          penalty_grace_period_days: number | null
+          penalty_max_percent: number | null
+          penalty_notes: string | null
+          penalty_rate_percent: number | null
+          penalty_type: string | null
           pm_checklist_attached: boolean | null
           pm_frequency: string | null
           pricing_model: string | null
@@ -2794,7 +2803,10 @@ export type Database = {
           service_types: string[] | null
           sla_penalties: boolean | null
           sla_penalty_details: string | null
+          spares_coverage_percent: number | null
+          spares_excluded_items: string | null
           spares_included: boolean | null
+          spares_max_value: number | null
           start_date: string
           status: string
           support_hours: string | null
@@ -2802,6 +2814,7 @@ export type Database = {
           target_uptime_percent: number | null
           travel_included: boolean | null
           travel_radius_km: number | null
+          travel_rate_per_km: number | null
           updated_at: string
           uptime_measurement_method: string | null
           visit_charge: number | null
@@ -2832,7 +2845,9 @@ export type Database = {
           exclusions?: string | null
           id?: string
           invoice_frequency?: string | null
+          labour_hours_included?: number | null
           labour_included?: boolean | null
+          labour_rate_per_hour?: number | null
           notes?: string | null
           p1_resolution_hrs?: number | null
           p1_response_mins?: number | null
@@ -2843,6 +2858,13 @@ export type Database = {
           p4_resolution_hrs?: number | null
           p4_response_mins?: number | null
           payment_terms_days?: number | null
+          penalty_applicable?: boolean | null
+          penalty_calculation_basis?: string | null
+          penalty_grace_period_days?: number | null
+          penalty_max_percent?: number | null
+          penalty_notes?: string | null
+          penalty_rate_percent?: number | null
+          penalty_type?: string | null
           pm_checklist_attached?: boolean | null
           pm_frequency?: string | null
           pricing_model?: string | null
@@ -2851,7 +2873,10 @@ export type Database = {
           service_types?: string[] | null
           sla_penalties?: boolean | null
           sla_penalty_details?: string | null
+          spares_coverage_percent?: number | null
+          spares_excluded_items?: string | null
           spares_included?: boolean | null
+          spares_max_value?: number | null
           start_date: string
           status?: string
           support_hours?: string | null
@@ -2859,6 +2884,7 @@ export type Database = {
           target_uptime_percent?: number | null
           travel_included?: boolean | null
           travel_radius_km?: number | null
+          travel_rate_per_km?: number | null
           updated_at?: string
           uptime_measurement_method?: string | null
           visit_charge?: number | null
@@ -2889,7 +2915,9 @@ export type Database = {
           exclusions?: string | null
           id?: string
           invoice_frequency?: string | null
+          labour_hours_included?: number | null
           labour_included?: boolean | null
+          labour_rate_per_hour?: number | null
           notes?: string | null
           p1_resolution_hrs?: number | null
           p1_response_mins?: number | null
@@ -2900,6 +2928,13 @@ export type Database = {
           p4_resolution_hrs?: number | null
           p4_response_mins?: number | null
           payment_terms_days?: number | null
+          penalty_applicable?: boolean | null
+          penalty_calculation_basis?: string | null
+          penalty_grace_period_days?: number | null
+          penalty_max_percent?: number | null
+          penalty_notes?: string | null
+          penalty_rate_percent?: number | null
+          penalty_type?: string | null
           pm_checklist_attached?: boolean | null
           pm_frequency?: string | null
           pricing_model?: string | null
@@ -2908,7 +2943,10 @@ export type Database = {
           service_types?: string[] | null
           sla_penalties?: boolean | null
           sla_penalty_details?: string | null
+          spares_coverage_percent?: number | null
+          spares_excluded_items?: string | null
           spares_included?: boolean | null
+          spares_max_value?: number | null
           start_date?: string
           status?: string
           support_hours?: string | null
@@ -2916,6 +2954,7 @@ export type Database = {
           target_uptime_percent?: number | null
           travel_included?: boolean | null
           travel_radius_km?: number | null
+          travel_rate_per_km?: number | null
           updated_at?: string
           uptime_measurement_method?: string | null
           visit_charge?: number | null
