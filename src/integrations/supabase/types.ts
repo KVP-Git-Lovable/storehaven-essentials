@@ -2037,7 +2037,7 @@ export type Database = {
           requested_at: string
           requested_by: string
           requisition_number: string
-          source_warehouse_id: string
+          source_warehouse_id: string | null
           status: string
           store_id: string
           updated_at: string
@@ -2052,7 +2052,7 @@ export type Database = {
           requested_at?: string
           requested_by: string
           requisition_number: string
-          source_warehouse_id: string
+          source_warehouse_id?: string | null
           status?: string
           store_id: string
           updated_at?: string
@@ -2067,7 +2067,7 @@ export type Database = {
           requested_at?: string
           requested_by?: string
           requisition_number?: string
-          source_warehouse_id?: string
+          source_warehouse_id?: string | null
           status?: string
           store_id?: string
           updated_at?: string
