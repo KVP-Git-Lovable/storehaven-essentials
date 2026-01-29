@@ -1621,6 +1621,161 @@ export type Database = {
           },
         ]
       }
+      pm_checklist_masters: {
+        Row: {
+          asset_master_id: string | null
+          brand: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          status: string
+          task_type: string
+          updated_at: string
+        }
+        Insert: {
+          asset_master_id?: string | null
+          brand?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          status?: string
+          task_type: string
+          updated_at?: string
+        }
+        Update: {
+          asset_master_id?: string | null
+          brand?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          status?: string
+          task_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_checklist_masters_asset_master_id_fkey"
+            columns: ["asset_master_id"]
+            isOneToOne: false
+            referencedRelation: "asset_masters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pm_master_sections: {
+        Row: {
+          created_at: string
+          id: string
+          master_id: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          master_id: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          master_id?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_master_sections_master_id_fkey"
+            columns: ["master_id"]
+            isOneToOne: false
+            referencedRelation: "pm_checklist_masters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pm_master_tasks: {
+        Row: {
+          created_at: string
+          duration_hours: number | null
+          id: string
+          instruction: string | null
+          name: string
+          section_id: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          duration_hours?: number | null
+          id?: string
+          instruction?: string | null
+          name: string
+          section_id: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          duration_hours?: number | null
+          id?: string
+          instruction?: string | null
+          name?: string
+          section_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_master_tasks_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "pm_master_sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pm_task_attachments: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_size: number | null
+          file_type: string | null
+          file_url: string
+          id: string
+          task_id: string
+          uploaded_by: string
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          task_id: string
+          uploaded_by?: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          task_id?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_task_attachments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "pm_master_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       positions: {
         Row: {
           created_at: string
