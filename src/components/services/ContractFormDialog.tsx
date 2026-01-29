@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, X, Upload, FileText, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, X, Upload, FileText, Trash2, ChevronDown, ChevronRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -57,11 +57,26 @@ const contractSchema = z.object({
   
   // Coverage
   labour_included: z.boolean().default(true),
+  labour_rate_per_hour: z.coerce.number().optional(),
+  labour_hours_included: z.coerce.number().optional(),
   travel_included: z.boolean().default(true),
   travel_radius_km: z.coerce.number().optional(),
+  travel_rate_per_km: z.coerce.number().optional(),
   spares_included: z.boolean().default(false),
+  spares_coverage_percent: z.coerce.number().optional(),
+  spares_max_value: z.coerce.number().optional(),
+  spares_excluded_items: z.string().optional(),
   consumables_included: z.boolean().default(false),
   consumables_limit: z.coerce.number().optional(),
+  
+  // Penalty Clause
+  penalty_applicable: z.boolean().default(false),
+  penalty_type: z.string().optional(),
+  penalty_rate_percent: z.coerce.number().optional(),
+  penalty_max_percent: z.coerce.number().optional(),
+  penalty_grace_period_days: z.coerce.number().optional(),
+  penalty_calculation_basis: z.string().optional(),
+  penalty_notes: z.string().optional(),
   
   // Exclusions
   exclusions: z.string().optional(),
@@ -147,10 +162,13 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [assetSearch, setAssetSearch] = useState("");
+  const [locationSearch, setLocationSearch] = useState("");
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     parties: true,
     scope: true,
     coverage: false,
+    penalty: false,
     sla: false,
     pm: false,
     commercial: true,
@@ -168,6 +186,7 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
       travel_included: true,
       spares_included: false,
       consumables_included: false,
+      penalty_applicable: false,
       support_hours: "business",
       sla_penalties: false,
       pricing_model: "fixed",
@@ -227,11 +246,25 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
           contract_type: data.contract_type,
           service_types: data.service_types,
           labour_included: data.labour_included,
+          labour_rate_per_hour: data.labour_rate_per_hour || null,
+          labour_hours_included: data.labour_hours_included || null,
           travel_included: data.travel_included,
           travel_radius_km: data.travel_radius_km || null,
+          travel_rate_per_km: data.travel_rate_per_km || null,
           spares_included: data.spares_included,
+          spares_coverage_percent: data.spares_coverage_percent || null,
+          spares_max_value: data.spares_max_value || null,
+          spares_excluded_items: data.spares_excluded_items || null,
           consumables_included: data.consumables_included,
           consumables_limit: data.consumables_limit || null,
+          // Penalty clause
+          penalty_applicable: data.penalty_applicable,
+          penalty_type: data.penalty_type || null,
+          penalty_rate_percent: data.penalty_rate_percent || null,
+          penalty_max_percent: data.penalty_max_percent || null,
+          penalty_grace_period_days: data.penalty_grace_period_days || null,
+          penalty_calculation_basis: data.penalty_calculation_basis || null,
+          penalty_notes: data.penalty_notes || null,
           exclusions: data.exclusions || null,
           support_hours: data.support_hours,
           support_hours_custom: data.support_hours_custom || null,
@@ -575,9 +608,27 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                           })}
                         </div>
                       )}
+                      <div className="relative mb-2">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search assets..."
+                          value={assetSearch}
+                          onChange={(e) => setAssetSearch(e.target.value)}
+                          className="pl-8 h-8"
+                        />
+                      </div>
                       <ScrollArea className="h-48">
                         <div className="space-y-1">
-                          {assets.map(asset => (
+                          {assets
+                            .filter(asset => {
+                              const searchLower = assetSearch.toLowerCase();
+                              return (
+                                asset.name.toLowerCase().includes(searchLower) ||
+                                (asset.asset_number?.toLowerCase().includes(searchLower)) ||
+                                (asset.store?.name?.toLowerCase().includes(searchLower))
+                              );
+                            })
+                            .map(asset => (
                             <div key={asset.id} className="flex items-center gap-2 py-1 hover:bg-muted/50 px-1 rounded">
                               <Checkbox
                                 checked={selectedAssets.includes(asset.id)}
@@ -631,10 +682,21 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                           })}
                         </div>
                       )}
+                      <div className="relative mb-2">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search locations..."
+                          value={locationSearch}
+                          onChange={(e) => setLocationSearch(e.target.value)}
+                          className="pl-8 h-8"
+                        />
+                      </div>
                       <ScrollArea className="h-32">
                         <div className="space-y-1">
-                          {stores.map(store => (
-                            <div key={store.id} className="flex items-center gap-2">
+                          {stores
+                            .filter(store => store.name.toLowerCase().includes(locationSearch.toLowerCase()))
+                            .map(store => (
+                            <div key={store.id} className="flex items-center gap-2 py-1 hover:bg-muted/50 px-1 rounded">
                               <Checkbox
                                 checked={selectedLocations.includes(store.id)}
                                 onCheckedChange={(checked) => {
@@ -659,7 +721,8 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
               <Collapsible open={expandedSections.coverage}>
                 <SectionHeader id="coverage" title="3. Coverage & Entitlements" />
                 <CollapsibleContent className="pt-4 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* Labour Coverage */}
+                  <div className="border rounded-md p-3 space-y-3">
                     <FormField
                       control={form.control}
                       name="labour_included"
@@ -668,10 +731,42 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                           <FormControl>
                             <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                           </FormControl>
-                          <FormLabel className="!mt-0">Labour Included</FormLabel>
+                          <FormLabel className="!mt-0 font-medium">Labour Included</FormLabel>
                         </FormItem>
                       )}
                     />
+                    {form.watch("labour_included") && (
+                      <div className="grid grid-cols-2 gap-4 pl-6 border-l-2 border-primary/20">
+                        <FormField
+                          control={form.control}
+                          name="labour_rate_per_hour"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Rate per Hour (₹)</FormLabel>
+                              <FormControl>
+                                <Input type="number" placeholder="0" {...field} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="labour_hours_included"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Hours Included (per year)</FormLabel>
+                              <FormControl>
+                                <Input type="number" placeholder="Unlimited" {...field} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Travel Coverage */}
+                  <div className="border rounded-md p-3 space-y-3">
                     <FormField
                       control={form.control}
                       name="travel_included"
@@ -680,10 +775,42 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                           <FormControl>
                             <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                           </FormControl>
-                          <FormLabel className="!mt-0">Travel Included</FormLabel>
+                          <FormLabel className="!mt-0 font-medium">Travel Included</FormLabel>
                         </FormItem>
                       )}
                     />
+                    {form.watch("travel_included") && (
+                      <div className="grid grid-cols-2 gap-4 pl-6 border-l-2 border-primary/20">
+                        <FormField
+                          control={form.control}
+                          name="travel_radius_km"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Coverage Radius (km)</FormLabel>
+                              <FormControl>
+                                <Input type="number" placeholder="e.g., 50" {...field} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="travel_rate_per_km"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Rate per KM (₹) - beyond radius</FormLabel>
+                              <FormControl>
+                                <Input type="number" placeholder="0" {...field} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Spares Coverage */}
+                  <div className="border rounded-md p-3 space-y-3">
                     <FormField
                       control={form.control}
                       name="spares_included"
@@ -692,10 +819,56 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                           <FormControl>
                             <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                           </FormControl>
-                          <FormLabel className="!mt-0">Spares Included</FormLabel>
+                          <FormLabel className="!mt-0 font-medium">Spares Included</FormLabel>
                         </FormItem>
                       )}
                     />
+                    {form.watch("spares_included") && (
+                      <div className="space-y-4 pl-6 border-l-2 border-primary/20">
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={form.control}
+                            name="spares_coverage_percent"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Coverage Percentage (%)</FormLabel>
+                                <FormControl>
+                                  <Input type="number" placeholder="100" {...field} />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="spares_max_value"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Max Value per Year (₹)</FormLabel>
+                                <FormControl>
+                                  <Input type="number" placeholder="Unlimited" {...field} />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <FormField
+                          control={form.control}
+                          name="spares_excluded_items"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Excluded Spare Items</FormLabel>
+                              <FormControl>
+                                <Textarea placeholder="List any excluded spare parts..." {...field} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Consumables Coverage */}
+                  <div className="border rounded-md p-3 space-y-3">
                     <FormField
                       control={form.control}
                       name="consumables_included"
@@ -704,32 +877,34 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                           <FormControl>
                             <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                           </FormControl>
-                          <FormLabel className="!mt-0">Consumables Included</FormLabel>
+                          <FormLabel className="!mt-0 font-medium">Consumables Included</FormLabel>
                         </FormItem>
                       )}
                     />
-                  </div>
-
-                  <FormField
-                    control={form.control}
-                    name="travel_radius_km"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Travel Radius (km)</FormLabel>
-                        <FormControl>
-                          <Input type="number" placeholder="e.g., 50" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+                    {form.watch("consumables_included") && (
+                      <div className="pl-6 border-l-2 border-primary/20">
+                        <FormField
+                          control={form.control}
+                          name="consumables_limit"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Annual Consumables Limit (₹)</FormLabel>
+                              <FormControl>
+                                <Input type="number" placeholder="Unlimited" {...field} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
                     )}
-                  />
+                  </div>
 
                   <FormField
                     control={form.control}
                     name="exclusions"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Exclusions</FormLabel>
+                        <FormLabel>General Exclusions</FormLabel>
                         <FormControl>
                           <Textarea 
                             placeholder="List any exclusions (power issues, physical damage, etc.)" 
@@ -743,9 +918,134 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                 </CollapsibleContent>
               </Collapsible>
 
-              {/* Section 4: SLA */}
+              {/* Section 4: Penalty Clause */}
+              <Collapsible open={expandedSections.penalty}>
+                <SectionHeader id="penalty" title="4. Penalty Clause" />
+                <CollapsibleContent className="pt-4 space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="penalty_applicable"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center gap-2">
+                        <FormControl>
+                          <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                        </FormControl>
+                        <FormLabel className="!mt-0 font-medium">Penalty Clause Applicable</FormLabel>
+                      </FormItem>
+                    )}
+                  />
+                  
+                  {form.watch("penalty_applicable") && (
+                    <div className="space-y-4 border-l-2 border-destructive/20 pl-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="penalty_type"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Penalty Type</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select type" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="fixed">Fixed Amount</SelectItem>
+                                  <SelectItem value="percentage">Percentage of Contract Value</SelectItem>
+                                  <SelectItem value="sla-based">SLA-Based Deduction</SelectItem>
+                                  <SelectItem value="tiered">Tiered Penalty</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="penalty_calculation_basis"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Calculation Basis</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select basis" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="per-incident">Per Incident</SelectItem>
+                                  <SelectItem value="monthly">Monthly</SelectItem>
+                                  <SelectItem value="quarterly">Quarterly</SelectItem>
+                                  <SelectItem value="cumulative">Cumulative</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="penalty_rate_percent"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Penalty Rate (%)</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.1" placeholder="e.g., 1.0" {...field} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="penalty_max_percent"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Max Penalty (%)</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.1" placeholder="e.g., 10" {...field} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="penalty_grace_period_days"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Grace Period (days)</FormLabel>
+                              <FormControl>
+                                <Input type="number" placeholder="e.g., 7" {...field} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="penalty_notes"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Penalty Terms & Notes</FormLabel>
+                            <FormControl>
+                              <Textarea 
+                                placeholder="Describe penalty conditions, escalation, exceptions..." 
+                                {...field} 
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+
+              {/* Section 5: SLA */}
               <Collapsible open={expandedSections.sla}>
-                <SectionHeader id="sla" title="4. Service Level Agreement (SLA)" />
+                <SectionHeader id="sla" title="5. Service Level Agreement (SLA)" />
                 <CollapsibleContent className="pt-4 space-y-4">
                   <FormField
                     control={form.control}
@@ -843,9 +1143,9 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                 </CollapsibleContent>
               </Collapsible>
 
-              {/* Section 5: PM Program */}
+              {/* Section 6: PM Program */}
               <Collapsible open={expandedSections.pm}>
-                <SectionHeader id="pm" title="5. Preventive Maintenance Program" />
+                <SectionHeader id="pm" title="6. Preventive Maintenance Program" />
                 <CollapsibleContent className="pt-4 space-y-4">
                   <FormField
                     control={form.control}
@@ -874,9 +1174,9 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                 </CollapsibleContent>
               </Collapsible>
 
-              {/* Section 6: Commercial Terms */}
+              {/* Section 7: Commercial Terms */}
               <Collapsible open={expandedSections.commercial}>
-                <SectionHeader id="commercial" title="6. Commercial Terms" />
+                <SectionHeader id="commercial" title="7. Commercial Terms" />
                 <CollapsibleContent className="pt-4 space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
@@ -1000,9 +1300,9 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                 </CollapsibleContent>
               </Collapsible>
 
-              {/* Section 7: Escalation Matrix */}
+              {/* Section 8: Escalation Matrix */}
               <Collapsible open={expandedSections.escalation}>
-                <SectionHeader id="escalation" title="7. Escalation Matrix" />
+                <SectionHeader id="escalation" title="8. Escalation Matrix" />
                 <CollapsibleContent className="pt-4 space-y-4">
                   {[1, 2, 3].map(level => (
                     <div key={level} className="grid grid-cols-3 gap-4">
