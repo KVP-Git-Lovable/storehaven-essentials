@@ -138,6 +138,7 @@ const navigation: NavItem[] = [
       { title: "Category Master", href: "/master/category" },
       { title: "Location Master", href: "/master/location" },
       { title: "NSO Checklist Master", href: "/master/nso-checklist" },
+      { title: "PM Checklist Master", href: "/master/pm-checklist" },
     ],
   },
 ];
