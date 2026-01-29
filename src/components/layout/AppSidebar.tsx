@@ -105,7 +105,6 @@ const navigation: NavItem[] = [
     title: "Inventory",
     icon: Boxes,
     children: [
-      { title: "Warehouses", href: "/inventory/warehouses" },
       { title: "Inventory Items", href: "/inventory/items" },
       { title: "Requisitions", href: "/inventory/requisitions" },
       { title: "Shipment Tracking", href: "/inventory/shipments" },

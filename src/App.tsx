@@ -42,7 +42,6 @@ import Planograms from "./pages/vm/Planograms";
 import ComplianceTasks from "./pages/vm/ComplianceTasks";
 import PhotoSubmission from "./pages/vm/PhotoSubmission";
 import ReviewSubmissions from "./pages/vm/ReviewSubmissions";
-import Warehouses from "./pages/inventory/Warehouses";
 import InventoryItems from "./pages/inventory/InventoryItems";
 import Requisitions from "./pages/inventory/Requisitions";
 import ShipmentTracking from "./pages/inventory/ShipmentTracking";
@@ -116,7 +115,6 @@ const App = () => (
             <Route path="/vm/tasks" element={<ComplianceTasks />} />
             <Route path="/vm/submit" element={<PhotoSubmission />} />
             <Route path="/vm/review" element={<ReviewSubmissions />} />
-            <Route path="/inventory/warehouses" element={<Warehouses />} />
             <Route path="/inventory/items" element={<InventoryItems />} />
             <Route path="/inventory/requisitions" element={<Requisitions />} />
             <Route path="/inventory/shipments" element={<ShipmentTracking />} />
