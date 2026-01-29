@@ -3140,6 +3140,59 @@ export type Database = {
           },
         ]
       }
+      service_ticket_adherence: {
+        Row: {
+          actual_value: string | null
+          category: string
+          checked_at: string | null
+          checked_by: string | null
+          created_at: string
+          expected_value: string | null
+          id: string
+          is_compliant: boolean | null
+          item_name: string
+          notes: string | null
+          service_ticket_id: string
+          weight: number | null
+        }
+        Insert: {
+          actual_value?: string | null
+          category: string
+          checked_at?: string | null
+          checked_by?: string | null
+          created_at?: string
+          expected_value?: string | null
+          id?: string
+          is_compliant?: boolean | null
+          item_name: string
+          notes?: string | null
+          service_ticket_id: string
+          weight?: number | null
+        }
+        Update: {
+          actual_value?: string | null
+          category?: string
+          checked_at?: string | null
+          checked_by?: string | null
+          created_at?: string
+          expected_value?: string | null
+          id?: string
+          is_compliant?: boolean | null
+          item_name?: string
+          notes?: string | null
+          service_ticket_id?: string
+          weight?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_ticket_adherence_service_ticket_id_fkey"
+            columns: ["service_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "service_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_tickets: {
         Row: {
           asset_id: string | null
@@ -3147,7 +3200,10 @@ export type Database = {
           closed_at: string | null
           created_at: string
           description: string | null
+          first_response_at: string | null
           id: string
+          labour_cost: number | null
+          labour_hours: number | null
           manager_confirmed: boolean | null
           manager_confirmed_at: string | null
           manager_feedback: string | null
@@ -3157,13 +3213,22 @@ export type Database = {
           resolution_time_hours: number | null
           resolved_at: string | null
           resolved_by: string | null
+          response_time_mins: number | null
+          service_contract_id: string | null
+          service_score: number | null
           sla_due_date: string | null
+          sla_resolution_met: boolean | null
+          sla_response_met: boolean | null
           solution_provided: string | null
+          spares_cost: number | null
+          spares_used: boolean | null
           started_at: string | null
           status: string
           store_id: string
           ticket_number: string
           title: string
+          travel_cost: number | null
+          travel_distance_km: number | null
           updated_at: string
         }
         Insert: {
@@ -3172,7 +3237,10 @@ export type Database = {
           closed_at?: string | null
           created_at?: string
           description?: string | null
+          first_response_at?: string | null
           id?: string
+          labour_cost?: number | null
+          labour_hours?: number | null
           manager_confirmed?: boolean | null
           manager_confirmed_at?: string | null
           manager_feedback?: string | null
@@ -3182,13 +3250,22 @@ export type Database = {
           resolution_time_hours?: number | null
           resolved_at?: string | null
           resolved_by?: string | null
+          response_time_mins?: number | null
+          service_contract_id?: string | null
+          service_score?: number | null
           sla_due_date?: string | null
+          sla_resolution_met?: boolean | null
+          sla_response_met?: boolean | null
           solution_provided?: string | null
+          spares_cost?: number | null
+          spares_used?: boolean | null
           started_at?: string | null
           status?: string
           store_id: string
           ticket_number: string
           title: string
+          travel_cost?: number | null
+          travel_distance_km?: number | null
           updated_at?: string
         }
         Update: {
@@ -3197,7 +3274,10 @@ export type Database = {
           closed_at?: string | null
           created_at?: string
           description?: string | null
+          first_response_at?: string | null
           id?: string
+          labour_cost?: number | null
+          labour_hours?: number | null
           manager_confirmed?: boolean | null
           manager_confirmed_at?: string | null
           manager_feedback?: string | null
@@ -3207,13 +3287,22 @@ export type Database = {
           resolution_time_hours?: number | null
           resolved_at?: string | null
           resolved_by?: string | null
+          response_time_mins?: number | null
+          service_contract_id?: string | null
+          service_score?: number | null
           sla_due_date?: string | null
+          sla_resolution_met?: boolean | null
+          sla_response_met?: boolean | null
           solution_provided?: string | null
+          spares_cost?: number | null
+          spares_used?: boolean | null
           started_at?: string | null
           status?: string
           store_id?: string
           ticket_number?: string
           title?: string
+          travel_cost?: number | null
+          travel_distance_km?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -3222,6 +3311,13 @@ export type Database = {
             columns: ["asset_id"]
             isOneToOne: false
             referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_tickets_service_contract_id_fkey"
+            columns: ["service_contract_id"]
+            isOneToOne: false
+            referencedRelation: "service_contracts"
             referencedColumns: ["id"]
           },
           {
