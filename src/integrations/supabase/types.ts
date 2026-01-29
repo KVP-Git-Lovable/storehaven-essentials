@@ -2668,41 +2668,267 @@ export type Database = {
           },
         ]
       }
-      service_contracts: {
+      service_contract_attachments: {
+        Row: {
+          attachment_type: string | null
+          file_name: string
+          file_size: number | null
+          file_type: string | null
+          file_url: string
+          id: string
+          service_contract_id: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          attachment_type?: string | null
+          file_name: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          service_contract_id: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          attachment_type?: string | null
+          file_name?: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          service_contract_id?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_contract_attachments_service_contract_id_fkey"
+            columns: ["service_contract_id"]
+            isOneToOne: false
+            referencedRelation: "service_contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_contract_locations: {
         Row: {
           created_at: string
-          end_date: string
           id: string
-          service_type: string
-          start_date: string
-          status: string
-          updated_at: string
-          value: number
-          vendor: string
+          service_contract_id: string
+          store_id: string
         }
         Insert: {
           created_at?: string
-          end_date: string
           id?: string
-          service_type: string
-          start_date: string
-          status?: string
-          updated_at?: string
-          value: number
-          vendor: string
+          service_contract_id: string
+          store_id: string
         }
         Update: {
           created_at?: string
-          end_date?: string
           id?: string
-          service_type?: string
+          service_contract_id?: string
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_contract_locations_service_contract_id_fkey"
+            columns: ["service_contract_id"]
+            isOneToOne: false
+            referencedRelation: "service_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_contract_locations_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_contracts: {
+        Row: {
+          after_hours_multiplier: number | null
+          annual_escalation_percent: number | null
+          auto_renewal: boolean | null
+          consumables_included: boolean | null
+          consumables_limit: number | null
+          contract_number: string
+          contract_type: string
+          contract_value: number
+          created_at: string
+          customer_address: string | null
+          customer_name: string
+          effective_date: string
+          end_date: string
+          escalation_l1_email: string | null
+          escalation_l1_name: string | null
+          escalation_l1_phone: string | null
+          escalation_l2_email: string | null
+          escalation_l2_name: string | null
+          escalation_l2_phone: string | null
+          escalation_l3_email: string | null
+          escalation_l3_name: string | null
+          escalation_l3_phone: string | null
+          exclusions: string | null
+          id: string
+          invoice_frequency: string | null
+          labour_included: boolean | null
+          notes: string | null
+          p1_resolution_hrs: number | null
+          p1_response_mins: number | null
+          p2_resolution_hrs: number | null
+          p2_response_mins: number | null
+          p3_resolution_hrs: number | null
+          p3_response_mins: number | null
+          p4_resolution_hrs: number | null
+          p4_response_mins: number | null
+          payment_terms_days: number | null
+          pm_checklist_attached: boolean | null
+          pm_frequency: string | null
+          pricing_model: string | null
+          renewal_notice_days: number | null
+          service_provider_id: string | null
+          service_types: string[] | null
+          sla_penalties: boolean | null
+          sla_penalty_details: string | null
+          spares_included: boolean | null
+          start_date: string
+          status: string
+          support_hours: string | null
+          support_hours_custom: string | null
+          target_uptime_percent: number | null
+          travel_included: boolean | null
+          travel_radius_km: number | null
+          updated_at: string
+          uptime_measurement_method: string | null
+          visit_charge: number | null
+        }
+        Insert: {
+          after_hours_multiplier?: number | null
+          annual_escalation_percent?: number | null
+          auto_renewal?: boolean | null
+          consumables_included?: boolean | null
+          consumables_limit?: number | null
+          contract_number: string
+          contract_type?: string
+          contract_value?: number
+          created_at?: string
+          customer_address?: string | null
+          customer_name: string
+          effective_date: string
+          end_date: string
+          escalation_l1_email?: string | null
+          escalation_l1_name?: string | null
+          escalation_l1_phone?: string | null
+          escalation_l2_email?: string | null
+          escalation_l2_name?: string | null
+          escalation_l2_phone?: string | null
+          escalation_l3_email?: string | null
+          escalation_l3_name?: string | null
+          escalation_l3_phone?: string | null
+          exclusions?: string | null
+          id?: string
+          invoice_frequency?: string | null
+          labour_included?: boolean | null
+          notes?: string | null
+          p1_resolution_hrs?: number | null
+          p1_response_mins?: number | null
+          p2_resolution_hrs?: number | null
+          p2_response_mins?: number | null
+          p3_resolution_hrs?: number | null
+          p3_response_mins?: number | null
+          p4_resolution_hrs?: number | null
+          p4_response_mins?: number | null
+          payment_terms_days?: number | null
+          pm_checklist_attached?: boolean | null
+          pm_frequency?: string | null
+          pricing_model?: string | null
+          renewal_notice_days?: number | null
+          service_provider_id?: string | null
+          service_types?: string[] | null
+          sla_penalties?: boolean | null
+          sla_penalty_details?: string | null
+          spares_included?: boolean | null
+          start_date: string
+          status?: string
+          support_hours?: string | null
+          support_hours_custom?: string | null
+          target_uptime_percent?: number | null
+          travel_included?: boolean | null
+          travel_radius_km?: number | null
+          updated_at?: string
+          uptime_measurement_method?: string | null
+          visit_charge?: number | null
+        }
+        Update: {
+          after_hours_multiplier?: number | null
+          annual_escalation_percent?: number | null
+          auto_renewal?: boolean | null
+          consumables_included?: boolean | null
+          consumables_limit?: number | null
+          contract_number?: string
+          contract_type?: string
+          contract_value?: number
+          created_at?: string
+          customer_address?: string | null
+          customer_name?: string
+          effective_date?: string
+          end_date?: string
+          escalation_l1_email?: string | null
+          escalation_l1_name?: string | null
+          escalation_l1_phone?: string | null
+          escalation_l2_email?: string | null
+          escalation_l2_name?: string | null
+          escalation_l2_phone?: string | null
+          escalation_l3_email?: string | null
+          escalation_l3_name?: string | null
+          escalation_l3_phone?: string | null
+          exclusions?: string | null
+          id?: string
+          invoice_frequency?: string | null
+          labour_included?: boolean | null
+          notes?: string | null
+          p1_resolution_hrs?: number | null
+          p1_response_mins?: number | null
+          p2_resolution_hrs?: number | null
+          p2_response_mins?: number | null
+          p3_resolution_hrs?: number | null
+          p3_response_mins?: number | null
+          p4_resolution_hrs?: number | null
+          p4_response_mins?: number | null
+          payment_terms_days?: number | null
+          pm_checklist_attached?: boolean | null
+          pm_frequency?: string | null
+          pricing_model?: string | null
+          renewal_notice_days?: number | null
+          service_provider_id?: string | null
+          service_types?: string[] | null
+          sla_penalties?: boolean | null
+          sla_penalty_details?: string | null
+          spares_included?: boolean | null
           start_date?: string
           status?: string
+          support_hours?: string | null
+          support_hours_custom?: string | null
+          target_uptime_percent?: number | null
+          travel_included?: boolean | null
+          travel_radius_km?: number | null
           updated_at?: string
-          value?: number
-          vendor?: string
+          uptime_measurement_method?: string | null
+          visit_charge?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "service_contracts_service_provider_id_fkey"
+            columns: ["service_provider_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       service_tickets: {
         Row: {

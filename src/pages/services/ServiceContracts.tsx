@@ -1,34 +1,9 @@
 import { useState, useEffect } from "react";
-import { Plus, FileText, CheckCircle, Clock, AlertTriangle, Loader2, X } from "lucide-react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { Plus, FileText, CheckCircle, Clock, AlertTriangle, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/dashboard/StatCard";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
 import {
   Select,
   SelectContent,
@@ -36,141 +11,137 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { serviceContractSchema, type ServiceContractFormData } from "@/lib/schemas";
 import { supabase } from "@/integrations/supabase/client";
-
-const serviceTypes = ["HVAC AMC", "CCTV Maintenance", "Generator Service", "POS Maintenance", "Fire Safety", "Electrical AMC"];
+import { ContractSummaryCard } from "@/components/services/ContractSummaryCard";
+import { ContractFormDialog } from "@/components/services/ContractFormDialog";
+import { differenceInDays } from "date-fns";
 
 type ServiceContract = {
   id: string;
-  vendor: string;
-  service_type: string;
+  contract_number: string;
+  customer_name: string;
+  contract_type: string;
+  contract_value: number;
   start_date: string;
   end_date: string;
-  value: number;
   status: string;
+  service_provider?: { name: string } | null;
 };
 
-type Asset = {
-  id: string;
-  name: string;
-  asset_number: string | null;
+type ContractWithCounts = ServiceContract & {
+  assets_count?: number;
+  locations_count?: number;
 };
-
-type Vendor = {
-  id: string;
-  name: string;
-};
-
-const stats = [
-  { title: "Total Contracts", value: "24", icon: FileText, iconColor: "bg-primary/10 text-primary" },
-  { title: "Active", value: "18", icon: CheckCircle, iconColor: "bg-success/10 text-success" },
-  { title: "Expiring Soon", value: "4", icon: Clock, iconColor: "bg-warning/10 text-warning" },
-  { title: "Expired", value: "2", icon: AlertTriangle, iconColor: "bg-destructive/10 text-destructive" },
-];
 
 export default function ServiceContracts() {
-  const [contracts, setContracts] = useState<ServiceContract[]>([]);
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [contractAssets, setContractAssets] = useState<Record<string, string[]>>({});
+  const [contracts, setContracts] = useState<ContractWithCounts[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
   const { toast } = useToast();
 
-  const form = useForm<ServiceContractFormData>({
-    resolver: zodResolver(serviceContractSchema),
-    defaultValues: {
-      vendor: "",
-      serviceType: "",
-      startDate: "",
-      endDate: "",
-      value: 0,
-      assetIds: [],
-    },
-  });
-
   useEffect(() => {
-    fetchData();
+    fetchContracts();
   }, []);
 
-  const fetchData = async () => {
-    const [contractsRes, assetsRes, vendorsRes, contractAssetsRes] = await Promise.all([
-      supabase.from("service_contracts").select("*").order("created_at", { ascending: false }),
-      supabase.from("assets").select("id, name, asset_number").order("name"),
-      supabase.from("vendors").select("id, name").order("name"),
-      supabase.from("service_contract_assets").select("*"),
-    ]);
+  const fetchContracts = async () => {
+    setLoading(true);
+    
+    // Fetch contracts with service provider
+    const { data: contractsData, error } = await supabase
+      .from("service_contracts")
+      .select(`
+        id,
+        contract_number,
+        customer_name,
+        contract_type,
+        contract_value,
+        start_date,
+        end_date,
+        status,
+        service_provider:service_provider_id(name)
+      `)
+      .order("created_at", { ascending: false });
 
-    if (contractsRes.error) {
+    if (error) {
       toast({ title: "Error", description: "Failed to load contracts", variant: "destructive" });
-    } else {
-      setContracts(contractsRes.data || []);
-    }
-
-    setAssets(assetsRes.data || []);
-    setVendors(vendorsRes.data || []);
-
-    // Map contract IDs to asset IDs
-    if (contractAssetsRes.data) {
-      const mapping: Record<string, string[]> = {};
-      contractAssetsRes.data.forEach((ca: { service_contract_id: string; asset_id: string }) => {
-        if (!mapping[ca.service_contract_id]) {
-          mapping[ca.service_contract_id] = [];
-        }
-        mapping[ca.service_contract_id].push(ca.asset_id);
-      });
-      setContractAssets(mapping);
-    }
-
-    setLoading(false);
-  };
-
-  const onSubmit = async (data: ServiceContractFormData) => {
-    // Insert the service contract
-    const { data: newContract, error } = await supabase.from("service_contracts").insert({
-      vendor: data.vendor,
-      service_type: data.serviceType,
-      start_date: data.startDate,
-      end_date: data.endDate,
-      value: data.value,
-      status: "active",
-    }).select().single();
-
-    if (error || !newContract) {
-      toast({ title: "Error", description: "Failed to add contract", variant: "destructive" });
+      setLoading(false);
       return;
     }
 
-    // Insert the contract-asset relationships
-    if (data.assetIds.length > 0) {
-      const assetLinks = data.assetIds.map((assetId) => ({
-        service_contract_id: newContract.id,
-        asset_id: assetId,
-      }));
+    // Fetch asset and location counts
+    const [assetsRes, locationsRes] = await Promise.all([
+      supabase.from("service_contract_assets").select("service_contract_id"),
+      supabase.from("service_contract_locations").select("service_contract_id"),
+    ]);
 
-      const { error: linkError } = await supabase.from("service_contract_assets").insert(assetLinks);
-      if (linkError) {
-        toast({ title: "Warning", description: "Contract created but failed to link assets", variant: "destructive" });
-      }
-    }
+    const assetCounts: Record<string, number> = {};
+    const locationCounts: Record<string, number> = {};
 
-    toast({ title: "Contract added", description: `Service contract with ${data.vendor} has been created.` });
-    form.reset();
-    setOpen(false);
-    fetchData();
+    (assetsRes.data || []).forEach((a: { service_contract_id: string }) => {
+      assetCounts[a.service_contract_id] = (assetCounts[a.service_contract_id] || 0) + 1;
+    });
+
+    (locationsRes.data || []).forEach((l: { service_contract_id: string }) => {
+      locationCounts[l.service_contract_id] = (locationCounts[l.service_contract_id] || 0) + 1;
+    });
+
+    const enrichedContracts = (contractsData || []).map(c => ({
+      ...c,
+      assets_count: assetCounts[c.id] || 0,
+      locations_count: locationCounts[c.id] || 0,
+    }));
+
+    setContracts(enrichedContracts);
+    setLoading(false);
   };
 
-  const getAssetNames = (contractId: string) => {
-    const assetIds = contractAssets[contractId] || [];
-    return assetIds.map(id => {
-      const asset = assets.find(a => a.id === id);
-      return asset?.name || "Unknown";
-    }).join(", ") || "-";
-  };
+  // Calculate stats
+  const stats = [
+    { 
+      title: "Total Contracts", 
+      value: contracts.length.toString(), 
+      icon: FileText, 
+      iconColor: "bg-primary/10 text-primary" 
+    },
+    { 
+      title: "Active", 
+      value: contracts.filter(c => c.status === "active").length.toString(), 
+      icon: CheckCircle, 
+      iconColor: "bg-success/10 text-success" 
+    },
+    { 
+      title: "Expiring Soon", 
+      value: contracts.filter(c => {
+        const days = differenceInDays(new Date(c.end_date), new Date());
+        return days > 0 && days <= 30;
+      }).length.toString(), 
+      icon: Clock, 
+      iconColor: "bg-warning/10 text-warning" 
+    },
+    { 
+      title: "Expired", 
+      value: contracts.filter(c => differenceInDays(new Date(c.end_date), new Date()) <= 0).length.toString(), 
+      icon: AlertTriangle, 
+      iconColor: "bg-destructive/10 text-destructive" 
+    },
+  ];
+
+  // Filter contracts
+  const filteredContracts = contracts.filter(contract => {
+    const matchesSearch = 
+      contract.contract_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      contract.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (contract.service_provider?.name?.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    const matchesStatus = statusFilter === "all" || contract.status === statusFilter;
+    const matchesType = typeFilter === "all" || contract.contract_type === typeFilter;
+    
+    return matchesSearch && matchesStatus && matchesType;
+  });
 
   if (loading) {
     return (
@@ -185,169 +156,12 @@ export default function ServiceContracts() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Service Contracts</h1>
-          <p className="text-muted-foreground">Manage AMC and service agreements</p>
+          <p className="text-muted-foreground">Manage AMC, warranty, and service agreements</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              Add Contract
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Add Service Contract</DialogTitle>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="vendor"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Vendor</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select vendor" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {vendors.map((vendor) => (
-                            <SelectItem key={vendor.id} value={vendor.name}>{vendor.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="serviceType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Service Type</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select type" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {serviceTypes.map((type) => (
-                            <SelectItem key={type} value={type}>{type}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="assetIds"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Assets Covered</FormLabel>
-                      <div className="border rounded-md p-2">
-                        {field.value.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mb-2">
-                            {field.value.map((assetId) => {
-                              const asset = assets.find(a => a.id === assetId);
-                              return (
-                                <Badge key={assetId} variant="secondary" className="gap-1">
-                                  {asset?.name || assetId}
-                                  <button
-                                    type="button"
-                                    onClick={() => field.onChange(field.value.filter(id => id !== assetId))}
-                                    className="ml-1 hover:text-destructive"
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </button>
-                                </Badge>
-                              );
-                            })}
-                          </div>
-                        )}
-                        <ScrollArea className="h-40">
-                          <div className="space-y-2">
-                            {assets.map((asset) => (
-                              <div key={asset.id} className="flex items-center space-x-2">
-                                <Checkbox
-                                  id={asset.id}
-                                  checked={field.value.includes(asset.id)}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      field.onChange([...field.value, asset.id]);
-                                    } else {
-                                      field.onChange(field.value.filter(id => id !== asset.id));
-                                    }
-                                  }}
-                                />
-                                <label htmlFor={asset.id} className="text-sm cursor-pointer">
-                                  {asset.asset_number ? `${asset.asset_number} - ` : ""}{asset.name}
-                                </label>
-                              </div>
-                            ))}
-                          </div>
-                        </ScrollArea>
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="value"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Contract Value (₹)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="Contract value" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="startDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Start Date</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="endDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>End Date</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit">Add Contract</Button>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+        <Button className="gap-2" onClick={() => setOpen(true)}>
+          <Plus className="h-4 w-4" />
+          New Contract
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -356,43 +170,71 @@ export default function ServiceContracts() {
         ))}
       </div>
 
-      <div className="rounded-xl border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Vendor</TableHead>
-              <TableHead>Service Type</TableHead>
-              <TableHead>Assets</TableHead>
-              <TableHead>Value</TableHead>
-              <TableHead>Period</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {contracts.map((contract) => (
-              <TableRow key={contract.id}>
-                <TableCell className="font-medium">{contract.vendor}</TableCell>
-                <TableCell>{contract.service_type}</TableCell>
-                <TableCell className="max-w-[200px] truncate">{getAssetNames(contract.id)}</TableCell>
-                <TableCell>₹{Number(contract.value).toLocaleString()}</TableCell>
-                <TableCell className="text-sm">
-                  {new Date(contract.start_date).toLocaleDateString()} - {new Date(contract.end_date).toLocaleDateString()}
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      contract.status === "active" ? "default" :
-                      contract.status === "expiring" ? "secondary" : "destructive"
-                    }
-                  >
-                    {contract.status}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+      {/* Filters */}
+      <div className="flex flex-wrap gap-4">
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search contracts..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="expiring">Expiring</SelectItem>
+            <SelectItem value="expired">Expired</SelectItem>
+            <SelectItem value="terminated">Terminated</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Types</SelectItem>
+            <SelectItem value="amc">AMC</SelectItem>
+            <SelectItem value="warranty">Warranty</SelectItem>
+            <SelectItem value="sla">SLA</SelectItem>
+            <SelectItem value="hybrid">Hybrid</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
+
+      {/* Contracts Grid */}
+      {filteredContracts.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          <p className="text-lg font-medium">No contracts found</p>
+          <p className="text-sm">Create a new contract to get started</p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredContracts.map((contract) => (
+            <ContractSummaryCard
+              key={contract.id}
+              contract={contract}
+              onClick={() => {
+                // TODO: Open contract details
+                toast({ title: "Coming soon", description: "Contract details view will be available soon" });
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      <ContractFormDialog
+        open={open}
+        onOpenChange={setOpen}
+        onSuccess={fetchContracts}
+      />
     </div>
   );
 }

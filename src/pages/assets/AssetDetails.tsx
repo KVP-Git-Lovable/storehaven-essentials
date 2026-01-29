@@ -50,12 +50,14 @@ type Vendor = {
 
 type ServiceContract = {
   id: string;
-  service_type: string;
-  vendor: string;
+  contract_number: string;
+  customer_name: string;
+  contract_type: string;
+  contract_value: number;
   start_date: string;
   end_date: string;
-  value: number;
   status: string;
+  service_provider?: { name: string } | null;
 };
 
 type UtilityReading = {
@@ -171,11 +173,11 @@ export default function AssetDetails() {
       const contractIds = contractAssetsRes.data.map((ca) => ca.service_contract_id);
       const { data: contractsData } = await supabase
         .from("service_contracts")
-        .select("*")
+        .select("id, contract_number, customer_name, contract_type, contract_value, start_date, end_date, status, service_provider:service_provider_id(name)")
         .in("id", contractIds)
         .order("end_date", { ascending: false });
       
-      setServiceContracts(contractsData || []);
+      setServiceContracts(contractsData as ServiceContract[] || []);
     }
 
     setLoading(false);
@@ -466,10 +468,10 @@ export default function AssetDetails() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Service Type</TableHead>
-                  <TableHead>Vendor</TableHead>
-                  <TableHead>Start Date</TableHead>
-                  <TableHead>End Date</TableHead>
+                  <TableHead>Contract #</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Provider</TableHead>
+                  <TableHead>Period</TableHead>
                   <TableHead>Value</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
@@ -477,11 +479,13 @@ export default function AssetDetails() {
               <TableBody>
                 {serviceContracts.map((contract) => (
                   <TableRow key={contract.id}>
-                    <TableCell className="font-medium">{contract.service_type}</TableCell>
-                    <TableCell>{contract.vendor}</TableCell>
-                    <TableCell>{formatDate(contract.start_date)}</TableCell>
-                    <TableCell>{formatDate(contract.end_date)}</TableCell>
-                    <TableCell>₹{Number(contract.value).toLocaleString()}</TableCell>
+                    <TableCell className="font-medium">{contract.contract_number}</TableCell>
+                    <TableCell className="capitalize">{contract.contract_type}</TableCell>
+                    <TableCell>{contract.service_provider?.name || "-"}</TableCell>
+                    <TableCell>
+                      {formatDate(contract.start_date)} - {formatDate(contract.end_date)}
+                    </TableCell>
+                    <TableCell>₹{Number(contract.contract_value).toLocaleString()}</TableCell>
                     <TableCell>
                       <Badge className={getStatusBadge(contract.status)}>
                         {contract.status}
