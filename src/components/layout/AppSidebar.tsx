@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -7,7 +7,6 @@ import {
   Users,
   DollarSign,
   Gauge,
-  ClipboardList,
   ShieldCheck,
   ChevronDown,
   UserCheck,
@@ -18,127 +17,156 @@ import {
   Boxes,
   ClipboardCheck,
   ShoppingCart,
+  UserCog,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
+interface NavChild {
+  title: string;
+  href: string;
+  moduleKey?: string;
+}
 
 interface NavItem {
   title: string;
   href?: string;
   icon: React.ElementType;
-  children?: { title: string; href: string }[];
+  moduleKey?: string;
+  children?: NavChild[];
 }
 
 const navigation: NavItem[] = [
-  { title: "Dashboard", href: "/", icon: LayoutDashboard },
+  { title: "Dashboard", href: "/", icon: LayoutDashboard, moduleKey: "dashboard" },
   {
     title: "Point of Sale",
     icon: ShoppingCart,
+    moduleKey: "pos",
     children: [
-      { title: "Quick Sale", href: "/pos" },
-      { title: "Product Master", href: "/pos/products" },
-      { title: "Order History", href: "/pos/orders" },
-      { title: "Schemes", href: "/pos/schemes" },
+      { title: "Quick Sale", href: "/pos", moduleKey: "pos.quicksale" },
+      { title: "Product Master", href: "/pos/products", moduleKey: "pos.products" },
+      { title: "Order History", href: "/pos/orders", moduleKey: "pos.orders" },
+      { title: "Schemes", href: "/pos/schemes", moduleKey: "pos.schemes" },
     ],
   },
   {
     title: "Store Management",
     icon: Store,
+    moduleKey: "stores",
     children: [
-      { title: "All Stores", href: "/stores" },
-      { title: "Rentals & Leases", href: "/stores/rentals" },
-      { title: "New Store Opening", href: "/stores/new-opening" },
+      { title: "All Stores", href: "/stores", moduleKey: "stores.all" },
+      { title: "Rentals & Leases", href: "/stores/rentals", moduleKey: "stores.rentals" },
+      { title: "New Store Opening", href: "/stores/new-opening", moduleKey: "stores.nso" },
     ],
   },
   {
     title: "Assets & Vendors",
     icon: Package,
+    moduleKey: "assets",
     children: [
-      { title: "Asset Master", href: "/assets/master" },
-      { title: "Asset Register", href: "/assets/inventory" },
-      { title: "Spares Management", href: "/assets/spares" },
-      { title: "Service Contracts", href: "/services/contracts" },
-      { title: "Preventive Maintenance", href: "/services/maintenance" },
-      { title: "Service Tickets", href: "/services/tickets" },
-      { title: "Knowledge Base", href: "/services/knowledge-base" },
+      { title: "Asset Master", href: "/assets/master", moduleKey: "assets.master" },
+      { title: "Asset Register", href: "/assets/inventory", moduleKey: "assets.register" },
+      { title: "Spares Management", href: "/assets/spares", moduleKey: "assets.spares" },
+      { title: "Service Contracts", href: "/services/contracts", moduleKey: "assets.contracts" },
+      { title: "Preventive Maintenance", href: "/services/maintenance", moduleKey: "assets.maintenance" },
+      { title: "Service Tickets", href: "/services/tickets", moduleKey: "assets.tickets" },
+      { title: "Knowledge Base", href: "/services/knowledge-base", moduleKey: "assets.knowledge" },
     ],
   },
-  { title: "Vendors", href: "/vendors", icon: Building2 },
-  { title: "Petty Cash", href: "/petty-cash", icon: DollarSign },
-  { title: "Utilities", href: "/utilities", icon: Gauge },
+  { title: "Vendors", href: "/vendors", icon: Building2, moduleKey: "vendors" },
+  { title: "Petty Cash", href: "/petty-cash", icon: DollarSign, moduleKey: "pettycash" },
+  { title: "Utilities", href: "/utilities", icon: Gauge, moduleKey: "utilities" },
   {
     title: "Staff Management",
     icon: Users,
+    moduleKey: "staff",
     children: [
-      { title: "Employees", href: "/staff/employees" },
-      { title: "Attendance & Leave", href: "/staff/attendance" },
+      { title: "Employees", href: "/staff/employees", moduleKey: "staff.employees" },
+      { title: "Attendance & Leave", href: "/staff/attendance", moduleKey: "staff.attendance" },
     ],
   },
   {
     title: "Security",
     icon: ShieldCheck,
+    moduleKey: "security",
     children: [
-      { title: "Dashboard", href: "/security" },
-      { title: "Guards", href: "/security/guards" },
-      { title: "Roster", href: "/security/roster" },
-      { title: "Patrol Points", href: "/security/patrol-points" },
-      { title: "Patrol Scan", href: "/security/scan" },
-      { title: "Feedback", href: "/security/feedback" },
-      { title: "Gamification", href: "/security/gamification" },
+      { title: "Dashboard", href: "/security", moduleKey: "security.dashboard" },
+      { title: "Guards", href: "/security/guards", moduleKey: "security.guards" },
+      { title: "Roster", href: "/security/roster", moduleKey: "security.roster" },
+      { title: "Patrol Points", href: "/security/patrol-points", moduleKey: "security.patrol" },
+      { title: "Patrol Scan", href: "/security/scan", moduleKey: "security.scan" },
+      { title: "Feedback", href: "/security/feedback", moduleKey: "security.feedback" },
+      { title: "Gamification", href: "/security/gamification", moduleKey: "security.gamification" },
     ],
   },
-  { title: "Footfall", href: "/footfall", icon: UserCheck },
+  { title: "Footfall", href: "/footfall", icon: UserCheck, moduleKey: "footfall" },
   {
     title: "Visual Merchandising",
     icon: Eye,
+    moduleKey: "vm",
     children: [
-      { title: "Planograms", href: "/vm/planograms" },
-      { title: "Compliance Tasks", href: "/vm/tasks" },
-      { title: "Submit Photo", href: "/vm/submit" },
-      { title: "Review Submissions", href: "/vm/review" },
+      { title: "Planograms", href: "/vm/planograms", moduleKey: "vm.planograms" },
+      { title: "Compliance Tasks", href: "/vm/tasks", moduleKey: "vm.tasks" },
+      { title: "Submit Photo", href: "/vm/submit", moduleKey: "vm.submit" },
+      { title: "Review Submissions", href: "/vm/review", moduleKey: "vm.review" },
     ],
   },
   {
     title: "Inventory",
     icon: Boxes,
+    moduleKey: "inventory",
     children: [
-      { title: "Inventory Items", href: "/inventory/items" },
-      { title: "Requisitions", href: "/inventory/requisitions" },
-      { title: "Shipment Tracking", href: "/inventory/shipments" },
-      { title: "Goods Receipt", href: "/inventory/grn" },
-      { title: "Stock Audit", href: "/inventory/audit" },
-      { title: "Consumption Log", href: "/inventory/consumption" },
-      { title: "Expiry Management", href: "/inventory/expiry" },
-      { title: "Return to Vendor", href: "/inventory/rtv" },
-      { title: "Store Transfers", href: "/inventory/transfers" },
-      { title: "Low Stock Alerts", href: "/inventory/alerts" },
+      { title: "Inventory Items", href: "/inventory/items", moduleKey: "inventory.items" },
+      { title: "Requisitions", href: "/inventory/requisitions", moduleKey: "inventory.requisitions" },
+      { title: "Shipment Tracking", href: "/inventory/shipments", moduleKey: "inventory.shipments" },
+      { title: "Goods Receipt", href: "/inventory/grn", moduleKey: "inventory.grn" },
+      { title: "Stock Audit", href: "/inventory/audit", moduleKey: "inventory.audit" },
+      { title: "Consumption Log", href: "/inventory/consumption", moduleKey: "inventory.consumption" },
+      { title: "Expiry Management", href: "/inventory/expiry", moduleKey: "inventory.expiry" },
+      { title: "Return to Vendor", href: "/inventory/rtv", moduleKey: "inventory.rtv" },
+      { title: "Store Transfers", href: "/inventory/transfers", moduleKey: "inventory.transfers" },
+      { title: "Low Stock Alerts", href: "/inventory/alerts", moduleKey: "inventory.alerts" },
     ],
   },
   {
     title: "Store Operations",
     icon: ClipboardCheck,
+    moduleKey: "operations",
     children: [
-      { title: "Task Master", href: "/operations/tasks" },
-      { title: "Role Master", href: "/operations/roles" },
-      { title: "Task Templates", href: "/operations/templates" },
-      { title: "Task Adherence", href: "/operations/adherence" },
-      { title: "Store Heatmap", href: "/operations/heatmap" },
+      { title: "Task Master", href: "/operations/tasks", moduleKey: "operations.tasks" },
+      { title: "Role Master", href: "/operations/roles", moduleKey: "operations.roles" },
+      { title: "Task Templates", href: "/operations/templates", moduleKey: "operations.templates" },
+      { title: "Task Adherence", href: "/operations/adherence", moduleKey: "operations.adherence" },
+      { title: "Store Heatmap", href: "/operations/heatmap", moduleKey: "operations.heatmap" },
     ],
   },
   {
     title: "Master",
     icon: Database,
+    moduleKey: "master",
     children: [
-      { title: "Meter Master", href: "/master/meter" },
-      { title: "Department Master", href: "/master/department" },
-      { title: "Position Master", href: "/master/position" },
-      { title: "Category Master", href: "/master/category" },
-      { title: "Location Master", href: "/master/location" },
-      { title: "NSO Checklist Master", href: "/master/nso-checklist" },
-      { title: "PM Checklist Master", href: "/master/pm-checklist" },
+      { title: "Meter Master", href: "/master/meter", moduleKey: "master.meter" },
+      { title: "Department Master", href: "/master/department", moduleKey: "master.department" },
+      { title: "Position Master", href: "/master/position", moduleKey: "master.position" },
+      { title: "Category Master", href: "/master/category", moduleKey: "master.category" },
+      { title: "Location Master", href: "/master/location", moduleKey: "master.location" },
+      { title: "NSO Checklist Master", href: "/master/nso-checklist", moduleKey: "master.nso" },
+      { title: "PM Checklist Master", href: "/master/pm-checklist", moduleKey: "master.pm" },
+    ],
+  },
+  {
+    title: "User Management",
+    icon: UserCog,
+    moduleKey: "usermanagement",
+    children: [
+      { title: "Users", href: "/admin/users", moduleKey: "usermanagement.users" },
+      { title: "User Roles", href: "/admin/roles", moduleKey: "usermanagement.roles" },
+      { title: "User Hierarchy", href: "/admin/hierarchy", moduleKey: "usermanagement.hierarchy" },
+      { title: "Role Permissions", href: "/admin/permissions", moduleKey: "usermanagement.permissions" },
     ],
   },
 ];
@@ -151,7 +179,41 @@ interface AppSidebarProps {
 export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
   const location = useLocation();
   const isMobile = useIsMobile();
+  const { hasPermission, isAdmin, loading } = usePermissions();
   const [openMenus, setOpenMenus] = useState<string[]>(["Store Management", "Assets & Vendors"]);
+
+  // Filter navigation based on permissions
+  const filteredNavigation = useMemo(() => {
+    if (loading) return [];
+    
+    return navigation
+      .map((item) => {
+        // Check if user has access to this module
+        if (item.moduleKey && !isAdmin && !hasPermission(item.moduleKey, "view")) {
+          // Check if any children are accessible
+          if (item.children) {
+            const accessibleChildren = item.children.filter(
+              (child) => !child.moduleKey || hasPermission(child.moduleKey, "view")
+            );
+            if (accessibleChildren.length === 0) return null;
+            return { ...item, children: accessibleChildren };
+          }
+          return null;
+        }
+
+        // Filter children
+        if (item.children) {
+          const accessibleChildren = item.children.filter(
+            (child) => !child.moduleKey || isAdmin || hasPermission(child.moduleKey, "view")
+          );
+          if (accessibleChildren.length === 0 && !item.href) return null;
+          return { ...item, children: accessibleChildren };
+        }
+
+        return item;
+      })
+      .filter(Boolean) as NavItem[];
+  }, [loading, isAdmin, hasPermission]);
 
   const toggleMenu = (title: string) => {
     setOpenMenus((prev) =>
@@ -187,7 +249,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
 
       <ScrollArea className="flex-1">
         <nav className="space-y-1 p-3 md:p-4">
-          {navigation.map((item) => (
+          {filteredNavigation.map((item) => (
             <div key={item.title}>
               {item.href ? (
                 <NavLink

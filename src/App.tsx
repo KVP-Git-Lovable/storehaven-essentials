@@ -3,7 +3,10 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "./components/auth/AuthProvider";
+import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { AppLayout } from "./components/layout/AppLayout";
+import Login from "./pages/auth/Login";
 import Dashboard from "./pages/Dashboard";
 import StoresList from "./pages/stores/StoresList";
 import StoreDetails from "./pages/stores/StoreDetails";
@@ -61,6 +64,10 @@ import PointOfSale from "./pages/pos/PointOfSale";
 import OrderHistory from "./pages/pos/OrderHistory";
 import Schemes from "./pages/pos/Schemes";
 import ProductMaster from "./pages/pos/ProductMaster";
+import Users from "./pages/admin/Users";
+import UserRoles from "./pages/admin/UserRoles";
+import UserHierarchy from "./pages/admin/UserHierarchy";
+import RolePermissions from "./pages/admin/RolePermissions";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -71,68 +78,84 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route element={<AppLayout />}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/pos" element={<PointOfSale />} />
-            <Route path="/pos/products" element={<ProductMaster />} />
-            <Route path="/pos/orders" element={<OrderHistory />} />
-            <Route path="/pos/schemes" element={<Schemes />} />
-            <Route path="/stores" element={<StoresList />} />
-            <Route path="/stores/:id" element={<StoreDetails />} />
-            <Route path="/stores/rentals" element={<Rentals />} />
-            <Route path="/stores/new-opening" element={<NewStoreOpening />} />
-            <Route path="/assets/master" element={<AssetMaster />} />
-            <Route path="/assets/master/:id" element={<AssetMasterDetails />} />
-            <Route path="/assets/inventory" element={<AssetInventory />} />
-            <Route path="/assets/inventory/:id" element={<AssetDetails />} />
-            <Route path="/assets/spares" element={<SparesManagement />} />
-            <Route path="/services/contracts" element={<ServiceContracts />} />
-            <Route path="/services/maintenance" element={<PreventiveMaintenance />} />
-            <Route path="/services/tickets" element={<ServiceTickets />} />
-            <Route path="/services/knowledge-base" element={<KnowledgeBase />} />
-            <Route path="/vendors" element={<Vendors />} />
-            <Route path="/petty-cash" element={<PettyCash />} />
-            <Route path="/utilities" element={<Utilities />} />
-            <Route path="/staff/employees" element={<Employees />} />
-            <Route path="/staff/attendance" element={<Attendance />} />
-            <Route path="/security" element={<SecurityDashboard />} />
-            <Route path="/security/guards" element={<SecurityGuards />} />
-            <Route path="/security/roster" element={<SecurityRoster />} />
-            <Route path="/security/patrol-points" element={<PatrolPoints />} />
-            <Route path="/security/scan" element={<PatrolScan />} />
-            <Route path="/security/feedback" element={<GuardFeedback />} />
-            <Route path="/security/gamification" element={<Gamification />} />
-            <Route path="/footfall" element={<Footfall />} />
-            <Route path="/master/meter" element={<MeterMaster />} />
-            <Route path="/master/department" element={<DepartmentMaster />} />
-            <Route path="/master/position" element={<PositionMaster />} />
-            <Route path="/master/category" element={<CategoryMaster />} />
-            <Route path="/master/location" element={<LocationMaster />} />
-            <Route path="/master/nso-checklist" element={<NSOChecklistMaster />} />
-            <Route path="/master/pm-checklist" element={<PMChecklistMaster />} />
-            <Route path="/vm/planograms" element={<Planograms />} />
-            <Route path="/vm/tasks" element={<ComplianceTasks />} />
-            <Route path="/vm/submit" element={<PhotoSubmission />} />
-            <Route path="/vm/review" element={<ReviewSubmissions />} />
-            <Route path="/inventory/items" element={<InventoryItems />} />
-            <Route path="/inventory/requisitions" element={<Requisitions />} />
-            <Route path="/inventory/shipments" element={<ShipmentTracking />} />
-            <Route path="/inventory/grn" element={<GoodsReceipt />} />
-            <Route path="/inventory/audit" element={<StockAudit />} />
-            <Route path="/inventory/consumption" element={<ConsumptionLog />} />
-            <Route path="/inventory/expiry" element={<ExpiryManagement />} />
-            <Route path="/inventory/rtv" element={<ReturnToVendor />} />
-            <Route path="/inventory/transfers" element={<StoreTransfers />} />
-            <Route path="/inventory/alerts" element={<LowStockAlerts />} />
-            <Route path="/operations/tasks" element={<TaskMaster />} />
-            <Route path="/operations/roles" element={<RoleMaster />} />
-            <Route path="/operations/templates" element={<TaskTemplates />} />
-            <Route path="/operations/adherence" element={<TaskAdherence />} />
-            <Route path="/operations/heatmap" element={<StoreHeatmap />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            {/* Public route */}
+            <Route path="/login" element={<Login />} />
+            
+            {/* Protected routes */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/pos" element={<PointOfSale />} />
+              <Route path="/pos/products" element={<ProductMaster />} />
+              <Route path="/pos/orders" element={<OrderHistory />} />
+              <Route path="/pos/schemes" element={<Schemes />} />
+              <Route path="/stores" element={<StoresList />} />
+              <Route path="/stores/:id" element={<StoreDetails />} />
+              <Route path="/stores/rentals" element={<Rentals />} />
+              <Route path="/stores/new-opening" element={<NewStoreOpening />} />
+              <Route path="/assets/master" element={<AssetMaster />} />
+              <Route path="/assets/master/:id" element={<AssetMasterDetails />} />
+              <Route path="/assets/inventory" element={<AssetInventory />} />
+              <Route path="/assets/inventory/:id" element={<AssetDetails />} />
+              <Route path="/assets/spares" element={<SparesManagement />} />
+              <Route path="/services/contracts" element={<ServiceContracts />} />
+              <Route path="/services/maintenance" element={<PreventiveMaintenance />} />
+              <Route path="/services/tickets" element={<ServiceTickets />} />
+              <Route path="/services/knowledge-base" element={<KnowledgeBase />} />
+              <Route path="/vendors" element={<Vendors />} />
+              <Route path="/petty-cash" element={<PettyCash />} />
+              <Route path="/utilities" element={<Utilities />} />
+              <Route path="/staff/employees" element={<Employees />} />
+              <Route path="/staff/attendance" element={<Attendance />} />
+              <Route path="/security" element={<SecurityDashboard />} />
+              <Route path="/security/guards" element={<SecurityGuards />} />
+              <Route path="/security/roster" element={<SecurityRoster />} />
+              <Route path="/security/patrol-points" element={<PatrolPoints />} />
+              <Route path="/security/scan" element={<PatrolScan />} />
+              <Route path="/security/feedback" element={<GuardFeedback />} />
+              <Route path="/security/gamification" element={<Gamification />} />
+              <Route path="/footfall" element={<Footfall />} />
+              <Route path="/master/meter" element={<MeterMaster />} />
+              <Route path="/master/department" element={<DepartmentMaster />} />
+              <Route path="/master/position" element={<PositionMaster />} />
+              <Route path="/master/category" element={<CategoryMaster />} />
+              <Route path="/master/location" element={<LocationMaster />} />
+              <Route path="/master/nso-checklist" element={<NSOChecklistMaster />} />
+              <Route path="/master/pm-checklist" element={<PMChecklistMaster />} />
+              <Route path="/vm/planograms" element={<Planograms />} />
+              <Route path="/vm/tasks" element={<ComplianceTasks />} />
+              <Route path="/vm/submit" element={<PhotoSubmission />} />
+              <Route path="/vm/review" element={<ReviewSubmissions />} />
+              <Route path="/inventory/items" element={<InventoryItems />} />
+              <Route path="/inventory/requisitions" element={<Requisitions />} />
+              <Route path="/inventory/shipments" element={<ShipmentTracking />} />
+              <Route path="/inventory/grn" element={<GoodsReceipt />} />
+              <Route path="/inventory/audit" element={<StockAudit />} />
+              <Route path="/inventory/consumption" element={<ConsumptionLog />} />
+              <Route path="/inventory/expiry" element={<ExpiryManagement />} />
+              <Route path="/inventory/rtv" element={<ReturnToVendor />} />
+              <Route path="/inventory/transfers" element={<StoreTransfers />} />
+              <Route path="/inventory/alerts" element={<LowStockAlerts />} />
+              <Route path="/operations/tasks" element={<TaskMaster />} />
+              <Route path="/operations/roles" element={<RoleMaster />} />
+              <Route path="/operations/templates" element={<TaskTemplates />} />
+              <Route path="/operations/adherence" element={<TaskAdherence />} />
+              <Route path="/operations/heatmap" element={<StoreHeatmap />} />
+              <Route path="/admin/users" element={<Users />} />
+              <Route path="/admin/roles" element={<UserRoles />} />
+              <Route path="/admin/hierarchy" element={<UserHierarchy />} />
+              <Route path="/admin/permissions" element={<RolePermissions />} />
+            </Route>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
