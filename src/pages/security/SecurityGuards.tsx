@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Edit, Trash2, Eye } from "lucide-react";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -71,18 +72,23 @@ export default function SecurityGuards() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedGuard, setSelectedGuard] = useState<Guard | null>(null);
   const { hasPermission } = usePermissions();
+  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
   const canCreate = hasPermission("security.guards", "create");
   const canEdit = hasPermission("security.guards", "edit");
   const canDelete = hasPermission("security.guards", "delete");
 
   useEffect(() => {
-    fetchGuards();
-  }, []);
+    if (!accessLoading) {
+      fetchGuards();
+    }
+  }, [accessLoading, accessibleStoreIds]);
 
   const fetchGuards = async () => {
     try {
-      const { data, error } = await supabase
+      const storeIds = Array.from(accessibleStoreIds);
+      
+      let query = supabase
         .from("security_guards")
         .select(`
           *,
@@ -90,6 +96,13 @@ export default function SecurityGuards() {
           stores(name)
         `)
         .order("created_at", { ascending: false });
+      
+      // Apply store filter for non-admins
+      if (!isAdmin && storeIds.length > 0) {
+        query = query.in("store_id", storeIds);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setGuards(data as Guard[]);
@@ -126,7 +139,7 @@ export default function SecurityGuards() {
     guard.phone.includes(searchQuery)
   );
 
-  if (loading) {
+  if (loading || accessLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

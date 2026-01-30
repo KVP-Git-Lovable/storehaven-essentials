@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Edit, Trash2, QrCode, Download, MapPin } from "lucide-react";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -67,6 +68,7 @@ export default function PatrolPoints() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState<PatrolPoint | null>(null);
   const [selectedStore, setSelectedStore] = useState<string>("all");
+  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
   const [form, setForm] = useState({
     store_id: "",
@@ -77,18 +79,30 @@ export default function PatrolPoints() {
   });
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!accessLoading) {
+      fetchData();
+    }
+  }, [accessLoading, accessibleStoreIds]);
 
   const fetchData = async () => {
     try {
+      const storeIds = Array.from(accessibleStoreIds);
+      
+      // Build points query with store filter
+      let pointsQuery = supabase.from("security_patrol_points").select(`*, stores(name)`).order("name");
+      if (!isAdmin && storeIds.length > 0) {
+        pointsQuery = pointsQuery.in("store_id", storeIds);
+      }
+      
       const [pointsRes, storesRes] = await Promise.all([
-        supabase.from("security_patrol_points").select(`*, stores(name)`).order("name"),
+        pointsQuery,
         supabase.from("stores").select("id, name").eq("status", "active"),
       ]);
 
       if (pointsRes.data) setPoints(pointsRes.data);
-      if (storesRes.data) setStores(storesRes.data);
+      // Filter stores for non-admins
+      const allStores = storesRes.data || [];
+      setStores(isAdmin ? allStores : allStores.filter(s => accessibleStoreIds.has(s.id)));
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to fetch patrol points");
@@ -208,7 +222,7 @@ export default function PatrolPoints() {
     return matchesSearch && matchesStore;
   });
 
-  if (loading) {
+  if (loading || accessLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

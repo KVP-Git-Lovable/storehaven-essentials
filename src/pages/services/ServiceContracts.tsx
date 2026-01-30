@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, FileText, CheckCircle, Clock, AlertTriangle, Loader2, Search } from "lucide-react";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -44,12 +45,15 @@ export default function ServiceContracts() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const { toast } = useToast();
   const { hasPermission } = usePermissions();
+  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
   const canCreate = hasPermission("services.contracts", "create");
 
   useEffect(() => {
-    fetchContracts();
-  }, []);
+    if (!accessLoading) {
+      fetchContracts();
+    }
+  }, [accessLoading, accessibleStoreIds]);
 
   const fetchContracts = async () => {
     setLoading(true);
@@ -79,21 +83,35 @@ export default function ServiceContracts() {
     // Fetch asset and location counts
     const [assetsRes, locationsRes] = await Promise.all([
       supabase.from("service_contract_assets").select("service_contract_id"),
-      supabase.from("service_contract_locations").select("service_contract_id"),
+      supabase.from("service_contract_locations").select("service_contract_id, store_id"),
     ]);
 
     const assetCounts: Record<string, number> = {};
     const locationCounts: Record<string, number> = {};
+    const contractStoreMap: Record<string, Set<string>> = {};
 
     (assetsRes.data || []).forEach((a: { service_contract_id: string }) => {
       assetCounts[a.service_contract_id] = (assetCounts[a.service_contract_id] || 0) + 1;
     });
 
-    (locationsRes.data || []).forEach((l: { service_contract_id: string }) => {
+    (locationsRes.data || []).forEach((l: { service_contract_id: string; store_id: string }) => {
       locationCounts[l.service_contract_id] = (locationCounts[l.service_contract_id] || 0) + 1;
+      if (!contractStoreMap[l.service_contract_id]) {
+        contractStoreMap[l.service_contract_id] = new Set();
+      }
+      contractStoreMap[l.service_contract_id].add(l.store_id);
     });
 
-    const enrichedContracts = (contractsData || []).map(c => ({
+    // Filter contracts by accessible stores for non-admins
+    const storeIds = Array.from(accessibleStoreIds);
+    const filteredContracts = (contractsData || []).filter(c => {
+      if (isAdmin) return true;
+      const contractStores = contractStoreMap[c.id];
+      if (!contractStores || contractStores.size === 0) return true; // Include contracts without store associations
+      return storeIds.some(storeId => contractStores.has(storeId));
+    });
+
+    const enrichedContracts = filteredContracts.map(c => ({
       ...c,
       assets_count: assetCounts[c.id] || 0,
       locations_count: locationCounts[c.id] || 0,
@@ -147,7 +165,7 @@ export default function ServiceContracts() {
     return matchesSearch && matchesStatus && matchesType;
   });
 
-  if (loading) {
+  if (loading || accessLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

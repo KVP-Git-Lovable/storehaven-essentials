@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { Plus, Search, Package, CheckCircle, AlertTriangle, FileCheck, ScanLine } from "lucide-react";
 import { format } from "date-fns";
 import { BarcodeScanner } from "@/components/inventory/BarcodeScanner";
@@ -85,6 +86,7 @@ export default function GoodsReceipt() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
   const form = useForm<GRNFormData>({
     resolver: zodResolver(grnSchema),
@@ -97,16 +99,27 @@ export default function GoodsReceipt() {
   });
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!accessLoading) {
+      fetchData();
+    }
+  }, [accessLoading, accessibleStoreIds]);
 
   const fetchData = async () => {
     try {
+      const storeIds = Array.from(accessibleStoreIds);
+      
+      // Build GRN query with store filter
+      let grnQuery = supabase
+        .from("grn")
+        .select("*, stores(name), shipments(shipment_number)")
+        .order("created_at", { ascending: false });
+      
+      if (!isAdmin && storeIds.length > 0) {
+        grnQuery = grnQuery.in("store_id", storeIds);
+      }
+      
       const [grnRes, storeRes, shipRes] = await Promise.all([
-        supabase
-          .from("grn")
-          .select("*, stores(name), shipments(shipment_number)")
-          .order("created_at", { ascending: false }),
+        grnQuery,
         supabase.from("stores").select("id, name").eq("status", "active"),
         supabase.from("shipments").select("id, shipment_number, status")
           .in("status", ["dispatched", "in_transit", "out_for_delivery"]),
@@ -117,7 +130,9 @@ export default function GoodsReceipt() {
       if (shipRes.error) throw shipRes.error;
 
       setGrns(grnRes.data || []);
-      setStores(storeRes.data || []);
+      // Filter stores for non-admins
+      const allStores = storeRes.data || [];
+      setStores(isAdmin ? allStores : allStores.filter(s => accessibleStoreIds.has(s.id)));
       setShipments(shipRes.data || []);
     } catch (error) {
       console.error("Error fetching data:", error);

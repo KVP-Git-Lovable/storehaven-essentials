@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { Plus, Search, ArrowRightLeft, Truck, CheckCircle, Package, Trash2, Send, PackageCheck } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -105,6 +106,7 @@ export default function StoreTransfers() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
   const form = useForm<TransferFormData>({
     resolver: zodResolver(transferSchema),
@@ -124,20 +126,32 @@ export default function StoreTransfers() {
   });
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!accessLoading) {
+      fetchData();
+    }
+  }, [accessLoading, accessibleStoreIds]);
 
   const fetchData = async () => {
     try {
+      const storeIds = Array.from(accessibleStoreIds);
+      
+      // Build transfers query with store filter
+      let transferQuery = supabase
+        .from("store_transfers")
+        .select(`
+          *,
+          from_store:stores!store_transfers_from_store_id_fkey(name, address),
+          to_store:stores!store_transfers_to_store_id_fkey(name, address)
+        `)
+        .order("created_at", { ascending: false });
+      
+      if (!isAdmin && storeIds.length > 0) {
+        // Show transfers where user has access to either source or destination store
+        transferQuery = transferQuery.or(`from_store_id.in.(${storeIds.join(',')}),to_store_id.in.(${storeIds.join(',')})`);
+      }
+      
       const [transferRes, storeRes, itemRes] = await Promise.all([
-        supabase
-          .from("store_transfers")
-          .select(`
-            *,
-            from_store:stores!store_transfers_from_store_id_fkey(name, address),
-            to_store:stores!store_transfers_to_store_id_fkey(name, address)
-          `)
-          .order("created_at", { ascending: false }),
+        transferQuery,
         supabase.from("stores").select("id, name, address, manager").eq("status", "active"),
         supabase.from("inventory_items").select("id, name, unit_cost, sku").eq("status", "active"),
       ]);
@@ -147,7 +161,9 @@ export default function StoreTransfers() {
       if (itemRes.error) throw itemRes.error;
 
       setTransfers(transferRes.data || []);
-      setStores(storeRes.data || []);
+      // Filter stores for non-admins
+      const allStores = storeRes.data || [];
+      setStores(isAdmin ? allStores : allStores.filter(s => accessibleStoreIds.has(s.id)));
       setItems(itemRes.data || []);
     } catch (error) {
       console.error("Error fetching data:", error);

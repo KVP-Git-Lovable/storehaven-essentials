@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Search, Package, CheckCircle, AlertTriangle, XCircle, Loader2, Eye } from "lucide-react";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -131,6 +132,7 @@ export default function AssetInventory() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
+  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
   const form = useForm<AssetFormData>({
     resolver: zodResolver(assetSchema),
@@ -151,15 +153,27 @@ export default function AssetInventory() {
   });
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!accessLoading) {
+      fetchData();
+    }
+  }, [accessLoading, accessibleStoreIds]);
 
   const fetchData = async () => {
+    const storeIds = Array.from(accessibleStoreIds);
+    
+    // Build assets query with store filter
+    let assetsQuery = supabase
+      .from("assets")
+      .select("*, asset_masters(id, name, category_id, categories(name)), stores(id, name)")
+      .order("created_at", { ascending: false });
+    
+    // Apply store filter for non-admins
+    if (!isAdmin && storeIds.length > 0) {
+      assetsQuery = assetsQuery.in("store_id", storeIds);
+    }
+    
     const [assetsRes, vendorsRes, assetMastersRes, storesRes, locationsRes] = await Promise.all([
-      supabase
-        .from("assets")
-        .select("*, asset_masters(id, name, category_id, categories(name)), stores(id, name)")
-        .order("created_at", { ascending: false }),
+      assetsQuery,
       supabase.from("vendors").select("id, name, vendor_type").order("name"),
       supabase
         .from("asset_masters")
@@ -178,7 +192,9 @@ export default function AssetInventory() {
 
     setVendors(vendorsRes.data || []);
     setAssetMasters(assetMastersRes.data || []);
-    setStores(storesRes.data || []);
+    // Filter stores for non-admins
+    const allStores = storesRes.data || [];
+    setStores(isAdmin ? allStores : allStores.filter(s => accessibleStoreIds.has(s.id)));
     setLocations(locationsRes.data || []);
     setLoading(false);
   };
@@ -237,7 +253,7 @@ export default function AssetInventory() {
     return vendor?.name || "-";
   };
 
-  if (loading) {
+  if (loading || accessLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
