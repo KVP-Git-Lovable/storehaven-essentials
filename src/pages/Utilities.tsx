@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Plus, Gauge, Zap, Droplets, Fuel, Loader2, Pencil, Trash2, Save, X } from "lucide-react";
+import { MeterReadingsSection } from "@/components/utilities/MeterReadingsSection";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -101,6 +102,7 @@ export default function Utilities() {
   const [viewOpen, setViewOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const { toast } = useToast();
 
   // Form state
@@ -292,6 +294,7 @@ export default function Utilities() {
       resetForm();
       setOpen(false);
       fetchData();
+      setRefreshTrigger(prev => prev + 1);
     }
   };
 
@@ -322,6 +325,7 @@ export default function Utilities() {
       setIsEditing(false);
       setViewOpen(false);
       fetchData();
+      setRefreshTrigger(prev => prev + 1);
     }
   };
 
@@ -337,6 +341,7 @@ export default function Utilities() {
       setDeleteId(null);
       setViewOpen(false);
       fetchData();
+      setRefreshTrigger(prev => prev + 1);
     }
   };
 
@@ -351,7 +356,7 @@ export default function Utilities() {
     setSelectedMeterMaster(null);
   };
 
-  const openViewDialog = (reading: UtilityReading) => {
+  const openViewDialog = useCallback((reading: UtilityReading) => {
     setSelectedReading(reading);
     setFormData({
       store: reading.store,
@@ -361,10 +366,25 @@ export default function Utilities() {
       readings: reading.readings,
     });
     const master = meterMasters.find(m => m.id === reading.meter_master_id);
-    setSelectedMeterMaster(master || null);
-    setIsEditing(false);
+    // Handle solar_custom case
+    if (reading.meter_master_id === "solar_custom") {
+      setSelectedMeterMaster({
+        id: "solar_custom",
+        name: "Solar",
+        reading_parameter_count: 1,
+        reading_parameters: ["KWH"],
+        details_to_capture: "Both",
+      });
+    } else {
+      setSelectedMeterMaster(master || null);
+    }
+    setIsEditing(true);
     setViewOpen(true);
-  };
+  }, [meterMasters]);
+
+  const handleMeterReadingEdit = useCallback((reading: UtilityReading) => {
+    openViewDialog(reading);
+  }, [openViewDialog]);
 
   if (loading) {
     return (
@@ -591,6 +611,12 @@ export default function Utilities() {
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* Meter Readings Section - Date-wise for Electricity & Solar */}
+      <MeterReadingsSection 
+        onEditReading={handleMeterReadingEdit}
+        refreshTrigger={refreshTrigger}
+      />
 
       <div className="rounded-xl border bg-card">
         <div className="p-4 border-b">
