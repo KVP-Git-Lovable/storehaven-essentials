@@ -3,14 +3,6 @@ import { ChevronDown, ChevronRight, User, GitBranch, List, Users } from "lucide-
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -23,21 +15,152 @@ interface UserNode {
   reports_to?: string | null;
   reports_to_name?: string;
   children: UserNode[];
+  level?: number;
+}
+
+// Get level background color
+const getLevelBgColor = (level: number) => {
+  switch (level) {
+    case 0:
+      return "bg-muted/60";
+    case 1:
+      return "bg-blue-50 dark:bg-blue-950/30";
+    case 2:
+      return "bg-green-50 dark:bg-green-950/30";
+    case 3:
+      return "bg-yellow-50 dark:bg-yellow-950/30";
+    default:
+      return "bg-amber-50 dark:bg-amber-950/30";
+  }
+};
+
+// Get level badge color
+const getLevelBadgeColor = (level: number) => {
+  switch (level) {
+    case 0:
+      return "bg-muted-foreground/20 text-foreground";
+    case 1:
+      return "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300";
+    case 2:
+      return "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300";
+    case 3:
+      return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300";
+    default:
+      return "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300";
+  }
+};
+
+// Get initials from name
+const getInitials = (name: string) => {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+};
+
+// Count all descendants recursively
+const countDescendants = (node: UserNode): number => {
+  if (node.children.length === 0) return 0;
+  return node.children.reduce((sum, child) => sum + 1 + countDescendants(child), 0);
+};
+
+// Hierarchical List Row Component
+function HierarchyListRow({ 
+  node, 
+  level = 0,
+  isLast = false 
+}: { 
+  node: UserNode; 
+  level?: number;
+  isLast?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const hasChildren = node.children.length > 0;
+  const directReportsCount = node.children.length;
+
+  return (
+    <div className="relative">
+      {/* Left connector line */}
+      {level > 0 && (
+        <div 
+          className="absolute left-0 top-0 bottom-0 w-px bg-border"
+          style={{ left: `${(level - 1) * 24 + 12}px` }}
+        />
+      )}
+      
+      {/* Row */}
+      <div
+        className={cn(
+          "flex items-center gap-3 p-3 rounded-lg transition-colors mb-1",
+          getLevelBgColor(level),
+          hasChildren && "cursor-pointer hover:opacity-90"
+        )}
+        style={{ marginLeft: `${level * 24}px` }}
+        onClick={() => hasChildren && setExpanded(!expanded)}
+      >
+        {/* Expand/Collapse Button */}
+        {hasChildren ? (
+          <button className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors">
+            {expanded ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+          </button>
+        ) : (
+          <div className="w-4 flex-shrink-0" />
+        )}
+
+        {/* Avatar */}
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-background border-2 border-border flex-shrink-0">
+          <span className="text-sm font-semibold text-foreground">
+            {getInitials(node.username)}
+          </span>
+        </div>
+
+        {/* Name */}
+        <span className="font-medium text-foreground">{node.username}</span>
+
+        {/* Level Badge */}
+        <Badge 
+          variant="secondary" 
+          className={cn("text-xs px-2", getLevelBadgeColor(level))}
+        >
+          L{level}
+        </Badge>
+
+        {/* Direct Reports Count */}
+        {hasChildren && (
+          <div className="flex items-center gap-1 text-muted-foreground">
+            <Users className="h-3.5 w-3.5" />
+            <span className="text-xs">{directReportsCount}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Children */}
+      {expanded && hasChildren && (
+        <div className="relative">
+          {node.children.map((child, index) => (
+            <HierarchyListRow
+              key={child.id}
+              node={child}
+              level={level + 1}
+              isLast={index === node.children.length - 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Tree Node Component - Org Chart Style
 function OrgChartNode({ node, isRoot = false }: { node: UserNode; isRoot?: boolean }) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children.length > 0;
-
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
 
   // Get color based on role
   const getRoleColor = (role?: string) => {
@@ -101,7 +224,7 @@ function OrgChartNode({ node, isRoot = false }: { node: UserNode; isRoot?: boole
           )}
           
           <div className="flex gap-6 pt-4">
-            {node.children.map((child, index) => (
+            {node.children.map((child) => (
               <div key={child.id} className="relative">
                 {/* Vertical line to child */}
                 <div className="absolute left-1/2 -top-4 w-px h-4 bg-border" />
@@ -109,61 +232,6 @@ function OrgChartNode({ node, isRoot = false }: { node: UserNode; isRoot?: boole
               </div>
             ))}
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Collapsible Tree Node for compact view
-function TreeNode({ node, level = 0 }: { node: UserNode; level?: number }) {
-  const [expanded, setExpanded] = useState(true);
-  const hasChildren = node.children.length > 0;
-
-  return (
-    <div className="select-none">
-      <div
-        className={cn(
-          "flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors",
-          level > 0 && "ml-6"
-        )}
-        onClick={() => hasChildren && setExpanded(!expanded)}
-      >
-        {hasChildren ? (
-          expanded ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          )
-        ) : (
-          <div className="w-4" />
-        )}
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-          <User className="h-4 w-4 text-primary" />
-        </div>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <span className="font-medium">{node.username}</span>
-            {node.role_name && (
-              <Badge variant="secondary" className="text-xs">
-                {node.role_name}
-              </Badge>
-            )}
-            <Badge
-              variant={node.status === "active" ? "default" : "outline"}
-              className="text-xs"
-            >
-              {node.status}
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">{node.email}</p>
-        </div>
-      </div>
-      {expanded && hasChildren && (
-        <div className="border-l-2 border-muted ml-5">
-          {node.children.map((child) => (
-            <TreeNode key={child.id} node={child} level={level + 1} />
-          ))}
         </div>
       )}
     </div>
@@ -287,57 +355,17 @@ export default function UserHierarchy() {
               </div>
             </div>
           ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Reports To</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {flatUsers.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                            <User className="h-4 w-4 text-primary" />
-                          </div>
-                          <span className="font-medium">{user.username}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{user.email}</TableCell>
-                      <TableCell>
-                        {user.role_name ? (
-                          <Badge variant="secondary">{user.role_name}</Badge>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {user.reports_to_name ? (
-                          <div className="flex items-center gap-2">
-                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted">
-                              <User className="h-3 w-3 text-muted-foreground" />
-                            </div>
-                            <span>{user.reports_to_name}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={user.status === "active" ? "default" : "outline"}>
-                          {user.status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 mb-4">
+                <Users className="h-5 w-5 text-muted-foreground" />
+                <h2 className="text-lg font-semibold">Team Hierarchy</h2>
+              </div>
+              <p className="text-sm text-muted-foreground mb-6">
+                Expand nodes to view reporting structure
+              </p>
+              {hierarchy.map((node) => (
+                <HierarchyListRow key={node.id} node={node} level={0} />
+              ))}
             </div>
           )}
         </CardContent>
