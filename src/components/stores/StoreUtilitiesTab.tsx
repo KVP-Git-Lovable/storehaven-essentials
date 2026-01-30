@@ -222,6 +222,50 @@ export function StoreUtilitiesTab({ storeId, storeName, deployedAssetIds }: Stor
                       </div>
                     ))}
                   </div>
+
+                  {/* Consumption Preview Section */}
+                  {selectedMeterMaster.reading_parameters.includes("KWH") && 
+                   selectedMeterMaster.details_to_capture === "Both" && (
+                    <div className="space-y-3 pt-4 border-t bg-muted/30 p-4 rounded-lg">
+                      <h4 className="font-medium text-sm">Consumption Preview (End - Start)</h4>
+                      <div className="grid grid-cols-3 gap-4">
+                        {selectedMeterMaster.reading_parameters.map((param) => {
+                          const startVal = formData.readings[`${param}_start`] || 0;
+                          const endVal = formData.readings[`${param}_end`] || 0;
+                          const consumption = endVal - startVal;
+                          return (
+                            <div key={param} className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">{param} Consumption</Label>
+                              <div className="text-lg font-semibold">{consumption.toFixed(2)}</div>
+                            </div>
+                          );
+                        })}
+                        
+                        {/* Consumed Units = (KWH End - KWH Start) x 7500 */}
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Consumed Units</Label>
+                          <div className="text-lg font-semibold">
+                            {(((formData.readings["KWH_end"] || 0) - (formData.readings["KWH_start"] || 0)) * 7500).toFixed(2)}
+                          </div>
+                        </div>
+                        
+                        {/* Power Factor = KWH / KVAH */}
+                        {selectedMeterMaster.reading_parameters.includes("KVAH") && (
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Power Factor</Label>
+                            <div className="text-lg font-semibold">
+                              {(() => {
+                                const kwhConsumption = (formData.readings["KWH_end"] || 0) - (formData.readings["KWH_start"] || 0);
+                                const kvahConsumption = (formData.readings["KVAH_end"] || 0) - (formData.readings["KVAH_start"] || 0);
+                                if (kvahConsumption === 0) return "—";
+                                return (kwhConsumption / kvahConsumption).toFixed(3);
+                              })()}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
