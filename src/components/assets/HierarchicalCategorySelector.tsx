@@ -52,6 +52,7 @@ interface HierarchicalCategorySelectorProps {
   onChange: (categoryId: string | null, categoryPath: Category[]) => void;
   initialCategoryType?: string;
   disabled?: boolean;
+  refreshKey?: number; // Used to trigger a refresh of categories
 }
 
 export function HierarchicalCategorySelector({
@@ -59,6 +60,7 @@ export function HierarchicalCategorySelector({
   onChange,
   initialCategoryType,
   disabled = false,
+  refreshKey,
 }: HierarchicalCategorySelectorProps) {
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [categoryType, setCategoryType] = useState<string>(initialCategoryType || "");
@@ -67,9 +69,10 @@ export function HierarchicalCategorySelector({
   ]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch all categories once
+  // Fetch all categories - refetch when refreshKey changes
   useEffect(() => {
     const fetchCategories = async () => {
+      setLoading(true);
       const { data, error } = await supabase
         .from("categories")
         .select("id, name, type, parent_id")
@@ -83,7 +86,7 @@ export function HierarchicalCategorySelector({
     };
 
     fetchCategories();
-  }, []);
+  }, [refreshKey]);
 
   // Initialize from existing value when editing
   useEffect(() => {
