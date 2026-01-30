@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Plus,
   Search,
@@ -9,6 +9,13 @@ import {
   Trash2,
   Loader2,
   Filter,
+  Upload,
+  Video,
+  Users,
+  Building2,
+  FileText,
+  X,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +24,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -49,6 +58,20 @@ type AssetMaster = {
   name: string;
 };
 
+type Vendor = {
+  id: string;
+  name: string;
+  vendor_type: string | null;
+};
+
+type KBAttachment = {
+  id: string;
+  file_name: string;
+  file_url: string;
+  file_type: string | null;
+  file_size: number | null;
+};
+
 type KBArticle = {
   id: string;
   title: string;
@@ -64,7 +87,12 @@ type KBArticle = {
   created_by: string;
   created_at: string;
   updated_at: string;
+  video_urls: string[] | null;
+  sme_names: string[] | null;
   asset_master?: { name: string } | null;
+  kb_article_assets?: { asset_master_id: string; asset_master: { name: string } }[];
+  kb_article_vendors?: { vendor_id: string; vendor_role: string; vendor: { name: string } }[];
+  kb_article_attachments?: KBAttachment[];
 };
 
 const ARTICLE_TYPES = ["guide", "troubleshooting", "procedure", "reference", "faq"];
@@ -82,6 +110,7 @@ const CATEGORIES = [
 export default function KnowledgeBase() {
   const [articles, setArticles] = useState<KBArticle[]>([]);
   const [assetMasters, setAssetMasters] = useState<AssetMaster[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
@@ -91,21 +120,30 @@ export default function KnowledgeBase() {
   const [viewOpen, setViewOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<KBArticle | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [formData, setFormData] = useState({
     title: "",
     content: "",
     summary: "",
-    asset_master_id: "",
     category: "general",
     article_type: "guide",
     keywords: "",
     status: "active",
+    video_urls: "",
+    sme_names: "",
+    linked_asset_ids: [] as string[],
+    linked_vendor_ids: [] as string[],
+    attachments: [] as { file_name: string; file_url: string; file_type: string; file_size: number }[],
   });
+  
   const { toast } = useToast();
 
   useEffect(() => {
     fetchArticles();
     fetchAssetMasters();
+    fetchVendors();
   }, []);
 
   const fetchAssetMasters = async () => {
@@ -117,11 +155,26 @@ export default function KnowledgeBase() {
     setAssetMasters(data || []);
   };
 
+  const fetchVendors = async () => {
+    const { data } = await supabase
+      .from("vendors")
+      .select("id, name, vendor_type")
+      .eq("status", "active")
+      .order("name");
+    setVendors(data || []);
+  };
+
   const fetchArticles = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("knowledge_base_articles")
-      .select("*, asset_master:asset_master_id(name)")
+      .select(`
+        *,
+        asset_master:asset_master_id(name),
+        kb_article_assets(asset_master_id, asset_master:asset_master_id(name)),
+        kb_article_vendors(vendor_id, vendor_role, vendor:vendor_id(name)),
+        kb_article_attachments(id, file_name, file_url, file_type, file_size)
+      `)
       .order("updated_at", { ascending: false });
 
     if (error) {
@@ -141,7 +194,13 @@ export default function KnowledgeBase() {
     setLoading(true);
     const { data, error } = await supabase
       .from("knowledge_base_articles")
-      .select("*, asset_master:asset_master_id(name)")
+      .select(`
+        *,
+        asset_master:asset_master_id(name),
+        kb_article_assets(asset_master_id, asset_master:asset_master_id(name)),
+        kb_article_vendors(vendor_id, vendor_role, vendor:vendor_id(name)),
+        kb_article_attachments(id, file_name, file_url, file_type, file_size)
+      `)
       .or(`title.ilike.%${searchQuery}%,content.ilike.%${searchQuery}%`)
       .order("views_count", { ascending: false });
 
@@ -158,11 +217,15 @@ export default function KnowledgeBase() {
       title: "",
       content: "",
       summary: "",
-      asset_master_id: "",
       category: "general",
       article_type: "guide",
       keywords: "",
       status: "active",
+      video_urls: "",
+      sme_names: "",
+      linked_asset_ids: [],
+      linked_vendor_ids: [],
+      attachments: [],
     });
     setFormOpen(true);
   };
@@ -174,11 +237,20 @@ export default function KnowledgeBase() {
       title: article.title,
       content: article.content,
       summary: article.summary || "",
-      asset_master_id: article.asset_master_id || "",
       category: article.category,
       article_type: article.article_type,
       keywords: article.keywords?.join(", ") || "",
       status: article.status,
+      video_urls: article.video_urls?.join("\n") || "",
+      sme_names: article.sme_names?.join(", ") || "",
+      linked_asset_ids: article.kb_article_assets?.map(a => a.asset_master_id) || [],
+      linked_vendor_ids: article.kb_article_vendors?.map(v => v.vendor_id) || [],
+      attachments: article.kb_article_attachments?.map(a => ({
+        file_name: a.file_name,
+        file_url: a.file_url,
+        file_type: a.file_type || "",
+        file_size: a.file_size || 0,
+      })) || [],
     });
     setViewOpen(false);
     setFormOpen(true);
@@ -195,6 +267,66 @@ export default function KnowledgeBase() {
     setViewOpen(true);
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    const newAttachments = [...formData.attachments];
+
+    for (const file of Array.from(files)) {
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `articles/${fileName}`;
+
+      const { error } = await supabase.storage
+        .from("kb-attachments")
+        .upload(filePath, file);
+
+      if (error) {
+        toast({ title: "Upload Error", description: `Failed to upload ${file.name}`, variant: "destructive" });
+      } else {
+        const { data: urlData } = supabase.storage
+          .from("kb-attachments")
+          .getPublicUrl(filePath);
+
+        newAttachments.push({
+          file_name: file.name,
+          file_url: urlData.publicUrl,
+          file_type: file.type,
+          file_size: file.size,
+        });
+      }
+    }
+
+    setFormData({ ...formData, attachments: newAttachments });
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeAttachment = (index: number) => {
+    const newAttachments = formData.attachments.filter((_, i) => i !== index);
+    setFormData({ ...formData, attachments: newAttachments });
+  };
+
+  const toggleAsset = (assetId: string) => {
+    const current = formData.linked_asset_ids;
+    if (current.includes(assetId)) {
+      setFormData({ ...formData, linked_asset_ids: current.filter(id => id !== assetId) });
+    } else {
+      setFormData({ ...formData, linked_asset_ids: [...current, assetId] });
+    }
+  };
+
+  const toggleVendor = (vendorId: string) => {
+    const current = formData.linked_vendor_ids;
+    if (current.includes(vendorId)) {
+      setFormData({ ...formData, linked_vendor_ids: current.filter(id => id !== vendorId) });
+    } else {
+      setFormData({ ...formData, linked_vendor_ids: [...current, vendorId] });
+    }
+  };
+
   const handleSubmit = async () => {
     if (!formData.title.trim() || !formData.content.trim()) {
       toast({ title: "Error", description: "Title and content are required", variant: "destructive" });
@@ -206,15 +338,27 @@ export default function KnowledgeBase() {
       .map((k) => k.trim())
       .filter((k) => k);
 
+    const videoUrlsArray = formData.video_urls
+      .split("\n")
+      .map((v) => v.trim())
+      .filter((v) => v);
+
+    const smeNamesArray = formData.sme_names
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s);
+
     const payload = {
       title: formData.title.trim(),
       content: formData.content.trim(),
       summary: formData.summary.trim() || null,
-      asset_master_id: formData.asset_master_id || null,
+      asset_master_id: formData.linked_asset_ids[0] || null, // Keep backward compatibility
       category: formData.category,
       article_type: formData.article_type,
       keywords: keywordsArray,
       status: formData.status,
+      video_urls: videoUrlsArray,
+      sme_names: smeNamesArray,
     };
 
     if (editMode && selectedArticle) {
@@ -225,21 +369,98 @@ export default function KnowledgeBase() {
 
       if (error) {
         toast({ title: "Error", description: "Failed to update article", variant: "destructive" });
-      } else {
-        toast({ title: "Updated", description: "Article updated successfully" });
-        setFormOpen(false);
-        fetchArticles();
+        return;
       }
-    } else {
-      const { error } = await supabase.from("knowledge_base_articles").insert(payload);
 
-      if (error) {
-        toast({ title: "Error", description: "Failed to create article", variant: "destructive" });
-      } else {
-        toast({ title: "Created", description: "Article created successfully" });
-        setFormOpen(false);
-        fetchArticles();
+      // Update linked assets
+      await supabase.from("kb_article_assets").delete().eq("article_id", selectedArticle.id);
+      if (formData.linked_asset_ids.length > 0) {
+        await supabase.from("kb_article_assets").insert(
+          formData.linked_asset_ids.map(assetId => ({
+            article_id: selectedArticle.id,
+            asset_master_id: assetId,
+          }))
+        );
       }
+
+      // Update linked vendors
+      await supabase.from("kb_article_vendors").delete().eq("article_id", selectedArticle.id);
+      if (formData.linked_vendor_ids.length > 0) {
+        await supabase.from("kb_article_vendors").insert(
+          formData.linked_vendor_ids.map(vendorId => ({
+            article_id: selectedArticle.id,
+            vendor_id: vendorId,
+            vendor_role: vendors.find(v => v.id === vendorId)?.vendor_type === "OEM" ? "oem" : "vendor",
+          }))
+        );
+      }
+
+      // Update attachments
+      await supabase.from("kb_article_attachments").delete().eq("article_id", selectedArticle.id);
+      if (formData.attachments.length > 0) {
+        await supabase.from("kb_article_attachments").insert(
+          formData.attachments.map(att => ({
+            article_id: selectedArticle.id,
+            file_name: att.file_name,
+            file_url: att.file_url,
+            file_type: att.file_type,
+            file_size: att.file_size,
+          }))
+        );
+      }
+
+      toast({ title: "Updated", description: "Article updated successfully" });
+      setFormOpen(false);
+      fetchArticles();
+    } else {
+      const { data: newArticle, error } = await supabase
+        .from("knowledge_base_articles")
+        .insert(payload)
+        .select()
+        .single();
+
+      if (error || !newArticle) {
+        toast({ title: "Error", description: "Failed to create article", variant: "destructive" });
+        return;
+      }
+
+      // Insert linked assets
+      if (formData.linked_asset_ids.length > 0) {
+        await supabase.from("kb_article_assets").insert(
+          formData.linked_asset_ids.map(assetId => ({
+            article_id: newArticle.id,
+            asset_master_id: assetId,
+          }))
+        );
+      }
+
+      // Insert linked vendors
+      if (formData.linked_vendor_ids.length > 0) {
+        await supabase.from("kb_article_vendors").insert(
+          formData.linked_vendor_ids.map(vendorId => ({
+            article_id: newArticle.id,
+            vendor_id: vendorId,
+            vendor_role: vendors.find(v => v.id === vendorId)?.vendor_type === "OEM" ? "oem" : "vendor",
+          }))
+        );
+      }
+
+      // Insert attachments
+      if (formData.attachments.length > 0) {
+        await supabase.from("kb_article_attachments").insert(
+          formData.attachments.map(att => ({
+            article_id: newArticle.id,
+            file_name: att.file_name,
+            file_url: att.file_url,
+            file_type: att.file_type,
+            file_size: att.file_size,
+          }))
+        );
+      }
+
+      toast({ title: "Created", description: "Article created successfully" });
+      setFormOpen(false);
+      fetchArticles();
     }
   };
 
@@ -275,9 +496,23 @@ export default function KnowledgeBase() {
   const filteredArticles = articles.filter((article) => {
     if (filterType !== "all" && article.article_type !== filterType) return false;
     if (filterCategory !== "all" && article.category !== filterCategory) return false;
-    if (filterAsset !== "all" && article.asset_master_id !== filterAsset) return false;
+    if (filterAsset !== "all") {
+      const hasAsset = article.kb_article_assets?.some(a => a.asset_master_id === filterAsset) ||
+                       article.asset_master_id === filterAsset;
+      if (!hasAsset) return false;
+    }
     return true;
   });
+
+  const getLinkedAssetNames = (article: KBArticle) => {
+    const names: string[] = [];
+    if (article.kb_article_assets && article.kb_article_assets.length > 0) {
+      article.kb_article_assets.forEach(a => names.push(a.asset_master?.name || ""));
+    } else if (article.asset_master) {
+      names.push(article.asset_master.name);
+    }
+    return names.filter(n => n);
+  };
 
   if (loading) {
     return (
@@ -439,18 +674,24 @@ export default function KnowledgeBase() {
                 {article.summary || article.content.substring(0, 150)}...
               </p>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="outline">{article.category}</Badge>
-                  {article.asset_master && (
-                    <span>{article.asset_master.name}</span>
+                  {getLinkedAssetNames(article).slice(0, 2).map((name, i) => (
+                    <Badge key={i} variant="secondary" className="text-xs">{name}</Badge>
+                  ))}
+                  {getLinkedAssetNames(article).length > 2 && (
+                    <span className="text-xs">+{getLinkedAssetNames(article).length - 2}</span>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  {article.kb_article_attachments && article.kb_article_attachments.length > 0 && (
+                    <FileText className="h-3 w-3" />
+                  )}
+                  {article.video_urls && article.video_urls.length > 0 && (
+                    <Video className="h-3 w-3" />
+                  )}
                   <span className="flex items-center gap-1">
                     <Eye className="h-3 w-3" /> {article.views_count}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <ThumbsUp className="h-3 w-3" /> {article.helpful_count}
                   </span>
                 </div>
               </div>
@@ -466,11 +707,11 @@ export default function KnowledgeBase() {
 
       {/* Form Dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh]">
+        <DialogContent className="max-w-3xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>{editMode ? "Edit Article" : "Add New Article"}</DialogTitle>
           </DialogHeader>
-          <ScrollArea className="max-h-[70vh]">
+          <ScrollArea className="max-h-[75vh]">
             <div className="space-y-4 pr-4">
               <div className="space-y-2">
                 <Label>Title *</Label>
@@ -520,27 +761,92 @@ export default function KnowledgeBase() {
                 </div>
               </div>
 
+              {/* Multi-select Linked Assets */}
               <div className="space-y-2">
-                <Label>Linked Asset (Optional)</Label>
-                <Select
-                  value={formData.asset_master_id || "none"}
-                  onValueChange={(v) =>
-                    setFormData({ ...formData, asset_master_id: v === "none" ? "" : v })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select an asset" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {assetMasters.map((asset) => (
-                      <SelectItem key={asset.id} value={asset.id}>
-                        {asset.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Linked Assets (Multi-select)
+                </Label>
+                <div className="border rounded-md p-3 max-h-40 overflow-y-auto">
+                  {assetMasters.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No assets available</p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {assetMasters.map((asset) => (
+                        <div key={asset.id} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`asset-${asset.id}`}
+                            checked={formData.linked_asset_ids.includes(asset.id)}
+                            onCheckedChange={() => toggleAsset(asset.id)}
+                          />
+                          <label htmlFor={`asset-${asset.id}`} className="text-sm cursor-pointer">
+                            {asset.name}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {formData.linked_asset_ids.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {formData.linked_asset_ids.map(id => {
+                      const asset = assetMasters.find(a => a.id === id);
+                      return asset ? (
+                        <Badge key={id} variant="secondary" className="gap-1">
+                          {asset.name}
+                          <X className="h-3 w-3 cursor-pointer" onClick={() => toggleAsset(id)} />
+                        </Badge>
+                      ) : null;
+                    })}
+                  </div>
+                )}
               </div>
+
+              {/* Linked Vendors (OEM/Vendor) */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Associated Vendors / OEMs
+                </Label>
+                <div className="border rounded-md p-3 max-h-40 overflow-y-auto">
+                  {vendors.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No vendors available</p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {vendors.map((vendor) => (
+                        <div key={vendor.id} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`vendor-${vendor.id}`}
+                            checked={formData.linked_vendor_ids.includes(vendor.id)}
+                            onCheckedChange={() => toggleVendor(vendor.id)}
+                          />
+                          <label htmlFor={`vendor-${vendor.id}`} className="text-sm cursor-pointer">
+                            {vendor.name}
+                            {vendor.vendor_type && (
+                              <span className="text-xs text-muted-foreground ml-1">({vendor.vendor_type})</span>
+                            )}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* SME Names */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Key SME (Subject Matter Experts)
+                </Label>
+                <Input
+                  value={formData.sme_names}
+                  onChange={(e) => setFormData({ ...formData, sme_names: e.target.value })}
+                  placeholder="John Doe, Jane Smith (comma-separated)"
+                />
+              </div>
+
+              <Separator />
 
               <div className="space-y-2">
                 <Label>Summary (Short description)</Label>
@@ -558,8 +864,76 @@ export default function KnowledgeBase() {
                   value={formData.content}
                   onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                   placeholder="Full article content..."
-                  rows={10}
+                  rows={8}
                 />
+              </div>
+
+              {/* Video URLs */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Video className="h-4 w-4" />
+                  Video URLs (one per line)
+                </Label>
+                <Textarea
+                  value={formData.video_urls}
+                  onChange={(e) => setFormData({ ...formData, video_urls: e.target.value })}
+                  placeholder="https://youtube.com/watch?v=...&#10;https://vimeo.com/..."
+                  rows={3}
+                />
+              </div>
+
+              {/* Document Attachments */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Documents & Attachments
+                </Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.jpg,.jpeg,.png"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    {uploading ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4 mr-2" />
+                    )}
+                    Upload Files
+                  </Button>
+                </div>
+                {formData.attachments.length > 0 && (
+                  <div className="space-y-2 mt-2">
+                    {formData.attachments.map((att, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 border rounded-md bg-muted/50">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">{att.file_name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            ({(att.file_size / 1024).toFixed(1)} KB)
+                          </span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeAttachment(index)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -617,13 +991,45 @@ export default function KnowledgeBase() {
                   {selectedArticle?.article_type}
                 </Badge>
                 <Badge variant="outline">{selectedArticle?.category}</Badge>
-                {selectedArticle?.asset_master && (
-                  <Badge variant="secondary">{selectedArticle.asset_master.name}</Badge>
-                )}
                 <Badge variant={selectedArticle?.status === "active" ? "default" : "secondary"}>
                   {selectedArticle?.status}
                 </Badge>
               </div>
+
+              {/* Linked Assets */}
+              {selectedArticle && getLinkedAssetNames(selectedArticle).length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Assets:</span>
+                  {getLinkedAssetNames(selectedArticle).map((name, i) => (
+                    <Badge key={i} variant="secondary">{name}</Badge>
+                  ))}
+                </div>
+              )}
+
+              {/* Linked Vendors */}
+              {selectedArticle?.kb_article_vendors && selectedArticle.kb_article_vendors.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Vendors:</span>
+                  {selectedArticle.kb_article_vendors.map((v, i) => (
+                    <Badge key={i} variant="outline">
+                      {v.vendor?.name} ({v.vendor_role})
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {/* SME Names */}
+              {selectedArticle?.sme_names && selectedArticle.sme_names.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">SME:</span>
+                  {selectedArticle.sme_names.map((name, i) => (
+                    <Badge key={i} variant="secondary">{name}</Badge>
+                  ))}
+                </div>
+              )}
 
               {selectedArticle?.summary && (
                 <div className="bg-muted p-3 rounded-lg text-sm">
@@ -638,6 +1044,54 @@ export default function KnowledgeBase() {
                   }}
                 />
               </div>
+
+              {/* Video Links */}
+              {selectedArticle?.video_urls && selectedArticle.video_urls.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Video className="h-4 w-4" />
+                    Videos
+                  </div>
+                  <div className="space-y-1">
+                    {selectedArticle.video_urls.map((url, i) => (
+                      <a
+                        key={i}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-sm text-primary hover:underline truncate"
+                      >
+                        {url}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Attachments */}
+              {selectedArticle?.kb_article_attachments && selectedArticle.kb_article_attachments.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <FileText className="h-4 w-4" />
+                    Documents
+                  </div>
+                  <div className="space-y-1">
+                    {selectedArticle.kb_article_attachments.map((att) => (
+                      <a
+                        key={att.id}
+                        href={att.file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 p-2 border rounded-md hover:bg-muted"
+                      >
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">{att.file_name}</span>
+                        <Download className="h-4 w-4 ml-auto text-muted-foreground" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {selectedArticle?.keywords && selectedArticle.keywords.length > 0 && (
                 <div className="flex flex-wrap gap-1">

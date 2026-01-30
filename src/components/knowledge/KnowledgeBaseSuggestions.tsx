@@ -52,22 +52,46 @@ export function KnowledgeBaseSuggestions({
 
   const fetchSuggestions = async () => {
     setLoading(true);
-    let query = supabase
-      .from("knowledge_base_articles")
-      .select("*, asset_master:asset_master_id(name)")
-      .eq("status", "active")
-      .order("views_count", { ascending: false })
-      .limit(10);
-
-    // Filter by asset master if provided
+    
     if (assetMasterId) {
-      query = query.eq("asset_master_id", assetMasterId);
-    }
+      // First try to find articles linked via the junction table
+      const { data: linkedArticles } = await supabase
+        .from("kb_article_assets")
+        .select("article_id")
+        .eq("asset_master_id", assetMasterId);
+      
+      const linkedArticleIds = linkedArticles?.map(a => a.article_id) || [];
+      
+      // Fetch articles either from junction table or legacy asset_master_id field
+      let query = supabase
+        .from("knowledge_base_articles")
+        .select("*, asset_master:asset_master_id(name)")
+        .eq("status", "active")
+        .order("views_count", { ascending: false })
+        .limit(10);
+      
+      if (linkedArticleIds.length > 0) {
+        query = query.or(`id.in.(${linkedArticleIds.join(",")}),asset_master_id.eq.${assetMasterId}`);
+      } else {
+        query = query.eq("asset_master_id", assetMasterId);
+      }
+      
+      const { data, error } = await query;
+      if (!error && data) {
+        setArticles(data as KBArticle[]);
+      }
+    } else {
+      // No asset filter - fetch top articles
+      const { data, error } = await supabase
+        .from("knowledge_base_articles")
+        .select("*, asset_master:asset_master_id(name)")
+        .eq("status", "active")
+        .order("views_count", { ascending: false })
+        .limit(10);
 
-    const { data, error } = await query;
-
-    if (!error && data) {
-      setArticles(data as KBArticle[]);
+      if (!error && data) {
+        setArticles(data as KBArticle[]);
+      }
     }
     setLoading(false);
   };

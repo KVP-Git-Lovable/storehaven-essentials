@@ -725,6 +725,122 @@ export type Database = {
         }
         Relationships: []
       }
+      kb_article_assets: {
+        Row: {
+          article_id: string
+          asset_master_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          article_id: string
+          asset_master_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          article_id?: string
+          asset_master_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kb_article_assets_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_base_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kb_article_assets_asset_master_id_fkey"
+            columns: ["asset_master_id"]
+            isOneToOne: false
+            referencedRelation: "asset_masters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kb_article_attachments: {
+        Row: {
+          article_id: string
+          file_name: string
+          file_size: number | null
+          file_type: string | null
+          file_url: string
+          id: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          article_id: string
+          file_name: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          article_id?: string
+          file_name?: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kb_article_attachments_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_base_articles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kb_article_vendors: {
+        Row: {
+          article_id: string
+          created_at: string
+          id: string
+          vendor_id: string
+          vendor_role: string
+        }
+        Insert: {
+          article_id: string
+          created_at?: string
+          id?: string
+          vendor_id: string
+          vendor_role?: string
+        }
+        Update: {
+          article_id?: string
+          created_at?: string
+          id?: string
+          vendor_id?: string
+          vendor_role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kb_article_vendors_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_base_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kb_article_vendors_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       knowledge_base_articles: {
         Row: {
           article_type: string
@@ -736,10 +852,12 @@ export type Database = {
           helpful_count: number | null
           id: string
           keywords: string[] | null
+          sme_names: string[] | null
           status: string
           summary: string | null
           title: string
           updated_at: string
+          video_urls: string[] | null
           views_count: number | null
         }
         Insert: {
@@ -752,10 +870,12 @@ export type Database = {
           helpful_count?: number | null
           id?: string
           keywords?: string[] | null
+          sme_names?: string[] | null
           status?: string
           summary?: string | null
           title: string
           updated_at?: string
+          video_urls?: string[] | null
           views_count?: number | null
         }
         Update: {
@@ -768,10 +888,12 @@ export type Database = {
           helpful_count?: number | null
           id?: string
           keywords?: string[] | null
+          sme_names?: string[] | null
           status?: string
           summary?: string | null
           title?: string
           updated_at?: string
+          video_urls?: string[] | null
           views_count?: number | null
         }
         Relationships: [
@@ -5045,10 +5167,12 @@ export type Database = {
           helpful_count: number | null
           id: string
           keywords: string[] | null
+          sme_names: string[] | null
           status: string
           summary: string | null
           title: string
           updated_at: string
+          video_urls: string[] | null
           views_count: number | null
         }[]
         SetofOptions: {
