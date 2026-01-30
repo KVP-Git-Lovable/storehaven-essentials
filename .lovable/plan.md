@@ -1,167 +1,202 @@
 
+# Permission Set Group Implementation Plan
 
-# Permissions Management Module - Test and Improvement Plan
+## Overview
 
-## Current State Analysis
+This plan transforms the current individual user-based permission system into a **Permission Set Group** model. Instead of assigning permissions directly to individual users, you will:
 
-After thorough exploration of the codebase and database, here is the current state of the permissions system:
-
-### What Works Correctly
-
-1. **Permission Matrix UI**: The RolePermissions page correctly displays and manages:
-   - Role-based permissions (Role Permissions tab)
-   - User-specific permission overrides (User Permissions tab)
-   - Visual indicators showing "R" (from Role) and "U" (User Override) badges
-
-2. **Database Structure**:
-   - `role_permissions` table stores permissions per role
-   - `user_permissions` table stores user-specific overrides
-   - `get_user_permissions()` function merges both using COALESCE logic
-
-3. **Navigation Filtering**: The sidebar correctly filters menu items based on "view" permissions
-
-### Critical Gaps Identified
-
-1. **No Permission Enforcement on Actions**: While the permission data is stored and retrieved correctly, most pages **do not actually check permissions** before showing action buttons (Edit, Delete, Create). Examples:
-   - `Users.tsx` - Delete button always visible
-   - `UserRoles.tsx` - Delete button always visible
-   - `Vendors.tsx` - No delete functionality at all
-   - `StoresList.tsx` - No delete button, create always visible
-
-2. **PermissionGate Component Unused**: A reusable `PermissionGate` component exists but is **never imported** anywhere in the application
-
-3. **Database Function Logic**: The `get_user_permissions()` function uses `COALESCE(up.can_delete, rp.can_delete, false)` which means:
-   - User permissions **override** role permissions (not additive)
-   - If role has `can_delete=true` but user has `can_delete=false`, the result is `false`
-   - This conflicts with the current UI design that shows user permissions as "additional" (additive)
+1. Create **Permission Set Groups** (e.g., "Store Operations Team", "Finance Access", "Security Patrol Team")
+2. Configure permissions for each group across all modules
+3. Assign multiple users to one or more groups
+4. Users inherit permissions from all groups they belong to (additive)
 
 ---
 
-## Test Scenario Implementation
+## Database Changes
 
-To test the specific scenario requested (remove Delete from Store Manager role, grant Delete at user level for one user):
+### New Tables
 
-### Step 1: Update Store Manager Role Permissions
-Remove `can_delete` from the Store Manager role for a specific module (e.g., `usermanagement.users`).
+#### 1. `permission_set_groups` - Master table for groups
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| name | TEXT | Group name (e.g., "Finance Team Access") |
+| description | TEXT | Optional description |
+| status | TEXT | active/inactive |
+| created_at | TIMESTAMP | Auto-generated |
+| updated_at | TIMESTAMP | Auto-updated |
 
-### Step 2: Add User-Level Delete Permission
-Grant `can_delete` to one specific user (e.g., Suyog) for `usermanagement.users`.
+#### 2. `permission_set_group_permissions` - Permissions for each group
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| group_id | UUID | FK to permission_set_groups |
+| module_key | TEXT | Module identifier |
+| can_view | BOOLEAN | View permission |
+| can_create | BOOLEAN | Create permission |
+| can_edit | BOOLEAN | Edit permission |
+| can_delete | BOOLEAN | Delete permission |
 
-### Step 3: Verify Expected Behavior
-- User "Shravya" (Store Manager, no user override): Should NOT see delete button
-- User "Suyog" (Store Manager, with user override): Should see delete button
+#### 3. `user_permission_set_groups` - Junction table linking users to groups
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| user_id | UUID | FK to profiles |
+| group_id | UUID | FK to permission_set_groups |
+| created_at | TIMESTAMP | Auto-generated |
 
----
+### Database Function Update
 
-## Implementation Fixes Required
+Update `get_user_permissions()` to include group permissions:
 
-### 1. Enforce Permissions on Create/Edit/Delete Buttons
-
-Update affected pages to use the `PermissionGate` component or `hasPermission()` hook to conditionally render action buttons.
-
-**Files to Update:**
-- `src/pages/admin/Users.tsx`
-- `src/pages/admin/UserRoles.tsx`
-- `src/pages/Vendors.tsx`
-- `src/pages/stores/StoresList.tsx`
-- `src/pages/stores/StoreDetails.tsx`
-- `src/pages/services/ServiceContracts.tsx`
-- `src/pages/services/ServiceTickets.tsx`
-- `src/pages/security/SecurityGuards.tsx`
-- (and other CRUD pages)
-
-**Example Pattern:**
-```tsx
-import { usePermissions } from "@/hooks/usePermissions";
-
-// Inside component:
-const { hasPermission } = usePermissions();
-const canCreate = hasPermission("usermanagement.users", "create");
-const canDelete = hasPermission("usermanagement.users", "delete");
-
-// Conditional rendering:
-{canCreate && (
-  <Button onClick={() => setDialogOpen(true)}>
-    <Plus className="mr-2 h-4 w-4" />
-    Add User
-  </Button>
-)}
-
-{canDelete && (
-  <Button variant="ghost" size="icon" onClick={() => handleDelete(user)}>
-    <Trash2 className="h-4 w-4" />
-  </Button>
-)}
+```text
+Final Permission = Role Permission OR Group Permission(s)
 ```
 
-### 2. Fix Database Function Logic (Optional - Based on Desired Behavior)
+The function will:
+1. Get role-based permissions (from `role_permissions`)
+2. Get all group permissions for the user (from groups they're assigned to)
+3. Combine using OR logic (additive)
 
-If user permissions should be **additive** (grant extra permissions on top of role), modify the `get_user_permissions()` function:
+---
 
-```sql
--- Additive logic: user permissions ADD to role permissions
-SELECT 
-  COALESCE(rp.module_key, up.module_key) as module_key,
-  COALESCE(rp.can_view, false) OR COALESCE(up.can_view, false) as can_view,
-  COALESCE(rp.can_create, false) OR COALESCE(up.can_create, false) as can_create,
-  COALESCE(rp.can_edit, false) OR COALESCE(up.can_edit, false) as can_edit,
-  COALESCE(rp.can_delete, false) OR COALESCE(up.can_delete, false) as can_delete
-FROM ...
-```
+## UI Changes
 
-If user permissions should **override** role permissions (current behavior), keep the existing function but update the UI to reflect this.
+### Restructured "Permission Set" Page
 
-### 3. Add Route-Level Permission Check
+The page will have **two tabs**:
 
-Wrap routes with permission checks to prevent direct URL access:
+#### Tab 1: Role Permissions (unchanged)
+- Select a role
+- Configure permissions for that role
+- Same as current behavior
 
-```tsx
-// In App.tsx or a new ProtectedRouteWithPermission component
-<Route 
-  path="/admin/users" 
-  element={
-    <PermissionGate moduleKey="usermanagement.users" fallback={<AccessDenied />}>
-      <Users />
-    </PermissionGate>
-  } 
-/>
+#### Tab 2: Permission Set Groups (replaces "User Permissions")
+- **Groups List Panel** (left side):
+  - List all permission set groups
+  - Add New Group button
+  - Edit/Delete group buttons
+  - Active/inactive status toggle
+
+- **Group Configuration Panel** (right side when group selected):
+  - Group name and description
+  - **Permissions Matrix**: Same table as role permissions
+  - **Assigned Users Section**:
+    - List of users currently in this group
+    - Add users button (opens multi-select dialog)
+    - Remove user from group button
+
+### New Dialog: Add/Edit Permission Set Group
+- Group name (required)
+- Description (optional)
+- Status (active/inactive)
+
+### New Dialog: Assign Users to Group
+- Multi-select list of all active users
+- Shows current group membership
+- Checkbox to add/remove users
+
+---
+
+## Visual Flow
+
+```text
++--------------------------------------------------+
+| Permission Set                    [Save]          |
++--------------------------------------------------+
+| [Role Permissions] [Permission Set Groups]        |
++--------------------------------------------------+
+|                                                   |
+| PERMISSION SET GROUPS TAB:                        |
+|                                                   |
+| +----------------+  +---------------------------+ |
+| | Groups         |  | Finance Team Access       | |
+| |----------------|  |---------------------------| |
+| | + Add Group    |  | Description: Access to... | |
+| |                |  |                           | |
+| | [Finance Team] |  | PERMISSIONS:              | |
+| | [Store Ops   ] |  | +-------+---+---+---+---+ | |
+| | [Security    ] |  | |Module |All|V|C|E|D|   | |
+| |                |  | +-------+---+---+---+---+ | |
+| |                |  | |PettyCa|[x]|x|x|x|x|   | |
+| |                |  | |Utiliti|[x]|x|x|x|x|   | |
+| |                |  | +-------+---+---+---+---+ | |
+| |                |  |                           | |
+| |                |  | ASSIGNED USERS:           | |
+| |                |  | [+ Add Users]             | |
+| |                |  | - Shravya (Store Manager) | |
+| |                |  | - Suyog (Store Manager)   | |
+| +----------------+  +---------------------------+ |
++--------------------------------------------------+
 ```
 
 ---
 
-## Technical Details
+## Files to Create/Modify
 
-### Database Tables Involved
-- `role_permissions` - Role-based permission matrix
-- `user_permissions` - User-specific overrides
-- `profiles` - User profiles with role_id
+### New Files
+| File | Purpose |
+|------|---------|
+| `src/components/admin/PermissionSetGroupDialog.tsx` | Create/Edit group dialog |
+| `src/components/admin/AssignUsersDialog.tsx` | Multi-select users to assign to group |
+| `src/components/admin/PermissionSetGroupsList.tsx` | Left panel showing all groups |
+| `src/components/admin/PermissionSetGroupConfig.tsx` | Right panel with permissions matrix and users |
 
-### Key Functions
-- `get_user_permissions(_user_id uuid)` - Returns merged permissions
-- `get_role_permissions_for_user(_user_id uuid)` - Returns role-only permissions
-- `is_admin(_user_id uuid)` - Checks if user has admin role
-
-### Files to Create/Modify
-
-| File | Change Type | Description |
-|------|-------------|-------------|
-| `src/pages/admin/Users.tsx` | Modify | Add permission checks for Create/Edit/Delete |
-| `src/pages/admin/UserRoles.tsx` | Modify | Add permission checks for Create/Edit/Delete |
-| `src/pages/Vendors.tsx` | Modify | Add Edit/Delete functionality with permission checks |
-| `src/pages/stores/StoresList.tsx` | Modify | Add permission checks for Create |
-| Multiple other pages | Modify | Same pattern as above |
-| Database migration | Create | Optional: Fix function logic if additive behavior desired |
+### Modified Files
+| File | Changes |
+|------|---------|
+| `src/pages/admin/RolePermissions.tsx` | Replace "User Permissions" tab with "Permission Set Groups" |
+| `src/hooks/usePermissions.ts` | No changes needed (reads from `get_user_permissions` which will be updated) |
+| `src/components/auth/AuthProvider.tsx` | No changes needed (uses `get_user_permissions`) |
+| Database migration | New tables + updated function |
 
 ---
 
-## Verification Steps
+## Permission Resolution Logic
+
+The final permission for a user will be calculated as:
+
+```text
+User's Effective Permission = 
+    (Role Permission) 
+    OR (Group 1 Permission) 
+    OR (Group 2 Permission) 
+    OR ... 
+```
+
+**Example:**
+- User "Shravya" has role "Store Manager" with view-only on PettyCash
+- She's assigned to "Finance Team" group with full access to PettyCash
+- **Result**: She gets full access to PettyCash (additive OR logic)
+
+---
+
+## Migration Path
+
+1. Create new tables (`permission_set_groups`, `permission_set_group_permissions`, `user_permission_set_groups`)
+2. Migrate existing `user_permissions` data:
+   - For each unique set of user permissions, create a Permission Set Group
+   - Assign the user to that group
+3. Update `get_user_permissions()` function to include group permissions
+4. Drop old `user_permissions` table (optional, can keep for backup initially)
+
+---
+
+## Security Considerations
+
+- RLS policies on all new tables to ensure only admins can manage permission groups
+- The `get_user_permissions()` function remains `SECURITY DEFINER` to prevent RLS recursion
+- Admins can view and manage all groups; non-admins cannot access the configuration
+
+---
+
+## Testing Checklist
 
 After implementation:
-
-1. Log in as a Super Admin and remove Delete permission from Store Manager role for `usermanagement.users`
-2. Add Delete permission at user level for user "Suyog" on `usermanagement.users`
-3. Log in as "Shravya" (Store Manager without override) - verify Delete button is hidden on Users page
-4. Log in as "Suyog" (Store Manager with Delete override) - verify Delete button is visible on Users page
-5. Test that navigation still works correctly based on view permissions
-6. Verify that direct URL access is blocked for unauthorized modules
-
+1. Create a Permission Set Group called "Extra Store Access"
+2. Grant Petty Cash and Utilities full access to this group
+3. Assign user "Shravya" to this group
+4. Log in as Shravya and verify she has access to Petty Cash and Utilities
+5. Remove Shravya from the group and verify access is removed
+6. Verify that role-based permissions still work correctly
+7. Test a user in multiple groups to confirm additive logic works
