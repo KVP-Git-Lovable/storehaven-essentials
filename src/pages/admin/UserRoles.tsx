@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { RoleFormDialog } from "@/components/admin/RoleFormDialog";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface Role {
   id: string;
@@ -43,6 +44,11 @@ export default function UserRoles() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
+
+  const canCreate = hasPermission("usermanagement.roles", "create");
+  const canEdit = hasPermission("usermanagement.roles", "edit");
+  const canDelete = hasPermission("usermanagement.roles", "delete");
 
   const fetchRoles = async () => {
     setIsLoading(true);
@@ -161,15 +167,17 @@ export default function UserRoles() {
           <h1 className="text-2xl font-semibold">User Roles</h1>
           <p className="text-muted-foreground">Manage user roles and their definitions</p>
         </div>
-        <Button
-          onClick={() => {
-            setSelectedRole(null);
-            setDialogOpen(true);
-          }}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add Role
-        </Button>
+        {canCreate && (
+          <Button
+            onClick={() => {
+              setSelectedRole(null);
+              setDialogOpen(true);
+            }}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Role
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -232,23 +240,27 @@ export default function UserRoles() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(role)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setSelectedRole(role);
-                            setDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {canEdit && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEdit(role)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {canDelete && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setSelectedRole(role);
+                              setDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

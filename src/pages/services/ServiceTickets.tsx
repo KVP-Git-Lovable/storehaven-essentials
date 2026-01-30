@@ -42,6 +42,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ServiceTicketDetailsDialog } from "@/components/services/ServiceTicketDetailsDialog";
 import { useStoreAccess } from "@/hooks/useStoreAccess";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const ticketSchema = z.object({
   title: z.string().min(1, "Title is required").max(255),
@@ -98,6 +99,9 @@ export default function ServiceTickets() {
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const { toast } = useToast();
   const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
+  const { hasPermission } = usePermissions();
+
+  const canCreate = hasPermission("services.tickets", "create");
 
   const form = useForm<TicketFormData>({
     resolver: zodResolver(ticketSchema),
@@ -281,50 +285,140 @@ export default function ServiceTickets() {
           <h1 className="text-2xl font-semibold">Service Tickets</h1>
           <p className="text-muted-foreground">Track and manage service requests with contract adherence</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              New Ticket
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
-            <DialogHeader>
-              <DialogTitle>Create Service Ticket</DialogTitle>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 overflow-hidden">
-                <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                  <FormField
-                    control={form.control}
-                    name="title"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Title</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Brief description of the issue" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="grid grid-cols-2 gap-4">
+        {canCreate && (
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                New Ticket
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
+              <DialogHeader>
+                <DialogTitle>Create Service Ticket</DialogTitle>
+              </DialogHeader>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 overflow-hidden">
+                  <div className="flex-1 overflow-y-auto space-y-4 pr-2">
                     <FormField
                       control={form.control}
-                      name="store_id"
+                      name="title"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Store</FormLabel>
+                          <FormLabel>Title</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Brief description of the issue" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="store_id"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Store</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select store" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {stores.map((store) => (
+                                  <SelectItem key={store.id} value={store.id}>
+                                    {store.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="asset_id"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Asset (Optional)</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value} disabled={!selectedStoreId}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder={selectedStoreId ? "Select asset" : "Select store first"} />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="_none">No specific asset</SelectItem>
+                                {filteredAssets.map((asset) => (
+                                  <SelectItem key={asset.id} value={asset.id}>
+                                    {asset.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="priority"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Priority</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="low">Low (P4)</SelectItem>
+                                <SelectItem value="medium">Medium (P3)</SelectItem>
+                                <SelectItem value="high">High (P2)</SelectItem>
+                                <SelectItem value="critical">Critical (P1)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="reported_by"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Reported By</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Name of reporter" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <FormField
+                      control={form.control}
+                      name="service_contract_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Service Contract (Optional)</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Select store" />
+                                <SelectValue placeholder="Link to service contract" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {stores.map((store) => (
-                                <SelectItem key={store.id} value={store.id}>
-                                  {store.name}
+                              <SelectItem value="_none">No contract</SelectItem>
+                              {contracts.map((contract) => (
+                                <SelectItem key={contract.id} value={contract.id}>
+                                  {contract.contract_number} - {contract.service_provider?.name || "N/A"}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -335,130 +429,42 @@ export default function ServiceTickets() {
                     />
                     <FormField
                       control={form.control}
-                      name="asset_id"
+                      name="assigned_to"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Asset (Optional)</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value} disabled={!selectedStoreId}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder={selectedStoreId ? "Select asset" : "Select store first"} />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="_none">No specific asset</SelectItem>
-                              {filteredAssets.map((asset) => (
-                                <SelectItem key={asset.id} value={asset.id}>
-                                  {asset.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="priority"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Priority</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="low">Low (P4)</SelectItem>
-                              <SelectItem value="medium">Medium (P3)</SelectItem>
-                              <SelectItem value="high">High (P2)</SelectItem>
-                              <SelectItem value="critical">Critical (P1)</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <FormLabel>Assigned To (Optional)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Technician name" {...field} />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                     <FormField
                       control={form.control}
-                      name="reported_by"
+                      name="description"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Reported By</FormLabel>
+                          <FormLabel>Description</FormLabel>
                           <FormControl>
-                            <Input placeholder="Name of reporter" {...field} />
+                            <Textarea placeholder="Detailed description of the issue" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
-                  <FormField
-                    control={form.control}
-                    name="service_contract_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Service Contract (Optional)</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Link to service contract" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="_none">No contract</SelectItem>
-                            {contracts.map((contract) => (
-                              <SelectItem key={contract.id} value={contract.id}>
-                                {contract.contract_number} - {contract.service_provider?.name || "N/A"}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="assigned_to"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Assigned To (Optional)</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Technician name" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="Detailed description of the issue" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-4 border-t mt-4">
-                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit">Create Ticket</Button>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+                  <div className="flex justify-end gap-2 pt-4 border-t mt-4">
+                    <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit">Create Ticket</Button>
+                  </div>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">

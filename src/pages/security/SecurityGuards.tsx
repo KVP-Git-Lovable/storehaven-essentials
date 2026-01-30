@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { GuardFormDialog } from "@/components/security/GuardFormDialog";
 import { GuardDetailsDialog } from "@/components/security/GuardDetailsDialog";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface Guard {
   id: string;
@@ -69,6 +70,11 @@ export default function SecurityGuards() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedGuard, setSelectedGuard] = useState<Guard | null>(null);
+  const { hasPermission } = usePermissions();
+
+  const canCreate = hasPermission("security.guards", "create");
+  const canEdit = hasPermission("security.guards", "edit");
+  const canDelete = hasPermission("security.guards", "delete");
 
   useEffect(() => {
     fetchGuards();
@@ -135,10 +141,12 @@ export default function SecurityGuards() {
           <h1 className="text-2xl font-semibold">Security Guards</h1>
           <p className="text-muted-foreground">Manage security personnel onboarding</p>
         </div>
-        <Button onClick={() => { setSelectedGuard(null); setIsFormOpen(true); }}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Guard
-        </Button>
+        {canCreate && (
+          <Button onClick={() => { setSelectedGuard(null); setIsFormOpen(true); }}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Guard
+          </Button>
+        )}
       </div>
 
       <div className="flex items-center gap-4">
@@ -197,20 +205,24 @@ export default function SecurityGuards() {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => { setSelectedGuard(guard); setIsFormOpen(true); }}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => { setSelectedGuard(guard); setIsDeleteOpen(true); }}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      {canEdit && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => { setSelectedGuard(guard); setIsFormOpen(true); }}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => { setSelectedGuard(guard); setIsDeleteOpen(true); }}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

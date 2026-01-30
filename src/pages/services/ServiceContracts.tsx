@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ContractSummaryCard } from "@/components/services/ContractSummaryCard";
 import { ContractFormDialog } from "@/components/services/ContractFormDialog";
 import { differenceInDays } from "date-fns";
+import { usePermissions } from "@/hooks/usePermissions";
 
 type ServiceContract = {
   id: string;
@@ -42,6 +43,9 @@ export default function ServiceContracts() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
+
+  const canCreate = hasPermission("services.contracts", "create");
 
   useEffect(() => {
     fetchContracts();
@@ -158,10 +162,12 @@ export default function ServiceContracts() {
           <h1 className="text-2xl font-semibold">Service Contracts</h1>
           <p className="text-muted-foreground">Manage AMC, warranty, and service agreements</p>
         </div>
-        <Button className="gap-2" onClick={() => setOpen(true)}>
-          <Plus className="h-4 w-4" />
-          New Contract
-        </Button>
+        {canCreate && (
+          <Button className="gap-2" onClick={() => setOpen(true)}>
+            <Plus className="h-4 w-4" />
+            New Contract
+          </Button>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

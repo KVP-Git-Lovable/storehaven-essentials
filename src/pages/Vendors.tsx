@@ -39,6 +39,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { vendorSchema, type VendorFormData } from "@/lib/schemas";
 import { supabase } from "@/integrations/supabase/client";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const categories = ["HVAC", "Security", "Power", "IT", "Safety", "Cleaning", "Electrical", "Plumbing"];
 
@@ -74,6 +75,9 @@ export default function Vendors() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
+
+  const canCreate = hasPermission("vendors", "create");
 
   const form = useForm<VendorFormData>({
     resolver: zodResolver(vendorSchema),
@@ -152,129 +156,131 @@ export default function Vendors() {
           <h1 className="text-xl md:text-2xl font-semibold">Vendor Management</h1>
           <p className="text-sm text-muted-foreground">Manage vendors and payouts</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 w-full sm:w-auto">
-              <Plus className="h-4 w-4" />
-              Add Vendor
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Add New Vendor</DialogTitle>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Vendor Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Enter vendor name" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {canCreate && (
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2 w-full sm:w-auto">
+                <Plus className="h-4 w-4" />
+                Add Vendor
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Add New Vendor</DialogTitle>
+              </DialogHeader>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                   <FormField
                     control={form.control}
-                    name="vendorType"
+                    name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Vendor Type</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select type" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {vendorTypes.map((type) => (
-                              <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="category"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Category</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select category" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {categories.map((cat) => (
-                              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <FormField
-                  control={form.control}
-                  name="contactPerson"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Contact Person</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Contact person name" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Phone</FormLabel>
+                        <FormLabel>Vendor Name</FormLabel>
                         <FormControl>
-                          <Input placeholder="+91 98765 43210" {...field} />
+                          <Input placeholder="Enter vendor name" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="vendorType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Vendor Type</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {vendorTypes.map((type) => (
+                                <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="category"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Category</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select category" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {categories.map((cat) => (
+                                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                   <FormField
                     control={form.control}
-                    name="email"
+                    name="contactPerson"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Email</FormLabel>
+                        <FormLabel>Contact Person</FormLabel>
                         <FormControl>
-                          <Input type="email" placeholder="email@example.com" {...field} />
+                          <Input placeholder="Contact person name" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                </div>
-                <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit">Add Vendor</Button>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone</FormLabel>
+                          <FormControl>
+                            <Input placeholder="+91 98765 43210" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl>
+                            <Input type="email" placeholder="email@example.com" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4">
+                    <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit">Add Vendor</Button>
+                  </div>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
