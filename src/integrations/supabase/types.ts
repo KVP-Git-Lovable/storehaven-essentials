@@ -1458,6 +1458,71 @@ export type Database = {
           },
         ]
       }
+      permission_set_group_permissions: {
+        Row: {
+          can_create: boolean
+          can_delete: boolean
+          can_edit: boolean
+          can_view: boolean
+          group_id: string
+          id: string
+          module_key: string
+        }
+        Insert: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_view?: boolean
+          group_id: string
+          id?: string
+          module_key: string
+        }
+        Update: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_view?: boolean
+          group_id?: string
+          id?: string
+          module_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "permission_set_group_permissions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "permission_set_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      permission_set_groups: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       petty_cash: {
         Row: {
           amount: number
@@ -4484,6 +4549,42 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "task_template"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_permission_set_groups: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_permission_set_groups_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "permission_set_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_permission_set_groups_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
