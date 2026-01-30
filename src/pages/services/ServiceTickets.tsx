@@ -41,6 +41,7 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ServiceTicketDetailsDialog } from "@/components/services/ServiceTicketDetailsDialog";
+import { KnowledgeBaseSuggestions } from "@/components/knowledge/KnowledgeBaseSuggestions";
 import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -79,7 +80,13 @@ type ServiceTicket = {
 };
 
 type Store = { id: string; name: string };
-type Asset = { id: string; name: string; store_id: string | null };
+type Asset = { 
+  id: string; 
+  name: string; 
+  store_id: string | null;
+  asset_master_id: string | null;
+  service_contract_assets?: { service_contract_id: string }[];
+};
 type ServiceContract = { 
   id: string; 
   contract_number: string; 
@@ -93,6 +100,7 @@ export default function ServiceTickets() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [contracts, setContracts] = useState<ServiceContract[]>([]);
   const [filteredAssets, setFilteredAssets] = useState<Asset[]>([]);
+  const [selectedAssetMasterId, setSelectedAssetMasterId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -118,6 +126,7 @@ export default function ServiceTickets() {
   });
 
   const selectedStoreId = form.watch("store_id");
+  const selectedAssetId = form.watch("asset_id");
 
   useEffect(() => {
     if (!accessLoading) {
@@ -133,7 +142,30 @@ export default function ServiceTickets() {
       setFilteredAssets([]);
     }
     form.setValue("asset_id", "");
+    form.setValue("service_contract_id", "");
+    setSelectedAssetMasterId(null);
   }, [selectedStoreId, assets]);
+
+  // Auto-fill service contract when asset is selected
+  useEffect(() => {
+    if (selectedAssetId && selectedAssetId !== "_none") {
+      const selectedAsset = assets.find(a => a.id === selectedAssetId);
+      if (selectedAsset) {
+        setSelectedAssetMasterId(selectedAsset.asset_master_id);
+        
+        // Auto-fill service contract if asset has one linked
+        const linkedContractId = selectedAsset.service_contract_assets?.[0]?.service_contract_id;
+        if (linkedContractId) {
+          const contractExists = contracts.find(c => c.id === linkedContractId);
+          if (contractExists) {
+            form.setValue("service_contract_id", linkedContractId);
+          }
+        }
+      }
+    } else {
+      setSelectedAssetMasterId(null);
+    }
+  }, [selectedAssetId, assets, contracts]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -154,7 +186,7 @@ export default function ServiceTickets() {
     const [ticketsRes, storesRes, assetsRes, contractsRes] = await Promise.all([
       ticketsQuery,
       storesQuery,
-      supabase.from("assets").select("id, name, store_id").order("name"),
+      supabase.from("assets").select("id, name, store_id, asset_master_id, service_contract_assets(service_contract_id)").order("name"),
       supabase.from("service_contracts")
         .select("id, contract_number, service_provider:service_provider_id(name)")
         .eq("status", "active")
@@ -162,7 +194,7 @@ export default function ServiceTickets() {
     ]);
     setTickets(ticketsRes.data || []);
     setStores(storesRes.data || []);
-    setAssets(assetsRes.data || []);
+    setAssets((assetsRes.data as Asset[]) || []);
     setContracts((contractsRes.data as ServiceContract[]) || []);
     setLoading(false);
   };
@@ -453,6 +485,16 @@ export default function ServiceTickets() {
                         </FormItem>
                       )}
                     />
+
+                    {/* Knowledge Base Suggestions - shown when asset is selected */}
+                    {selectedAssetMasterId && (
+                      <div className="pt-2 border-t">
+                        <KnowledgeBaseSuggestions 
+                          assetMasterId={selectedAssetMasterId}
+                          compact
+                        />
+                      </div>
+                    )}
                   </div>
                   <div className="flex justify-end gap-2 pt-4 border-t mt-4">
                     <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
