@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Search, RefreshCw } from "lucide-react";
+import { Plus, Search, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +21,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { UsersTable, UserData } from "@/components/admin/UsersTable";
 import { RoleCountBadges } from "@/components/admin/RoleCountBadges";
 import { ColumnVisibilityDropdown } from "@/components/admin/ColumnVisibilityDropdown";
+import { useHierarchyAccess } from "@/hooks/useHierarchyAccess";
 
 export default function Users() {
   const [users, setUsers] = useState<UserData[]>([]);
@@ -41,7 +42,8 @@ export default function Users() {
     status: true,
   });
   const { toast } = useToast();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, isAdmin } = usePermissions();
+  const { accessibleUserIds, loading: hierarchyLoading } = useHierarchyAccess();
 
   const canCreate = hasPermission("usermanagement.users", "create");
   const canEdit = hasPermission("usermanagement.users", "edit");
@@ -102,13 +104,20 @@ export default function Users() {
   };
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (!hierarchyLoading) {
+      fetchUsers();
+    }
+  }, [hierarchyLoading]);
 
-  // Calculate role counts
+  // Calculate role counts based on hierarchy-filtered users
   const roleCounts = useMemo(() => {
+    // Apply hierarchy filter first
+    const hierarchyFiltered = isAdmin 
+      ? users 
+      : users.filter(user => accessibleUserIds.has(user.id));
+    
     const counts: Record<string, number> = {};
-    users.forEach((user) => {
+    hierarchyFiltered.forEach((user) => {
       const role = user.role_name || "Unassigned";
       counts[role] = (counts[role] || 0) + 1;
     });
@@ -118,11 +127,16 @@ export default function Users() {
         count,
       }))
       .sort((a, b) => b.count - a.count);
-  }, [users]);
+  }, [users, isAdmin, accessibleUserIds]);
 
-  // Filter users based on search and role
+  // Filter users based on hierarchy access, search, and role
   const filteredUsers = useMemo(() => {
-    return users.filter((user) => {
+    // First apply hierarchy filter (non-admins only see accessible users)
+    const hierarchyFiltered = isAdmin 
+      ? users 
+      : users.filter(user => accessibleUserIds.has(user.id));
+
+    return hierarchyFiltered.filter((user) => {
       const matchesSearch =
         searchQuery === "" ||
         user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -136,7 +150,7 @@ export default function Users() {
 
       return matchesSearch && matchesRole;
     });
-  }, [users, searchQuery, selectedRoleFilter]);
+  }, [users, searchQuery, selectedRoleFilter, isAdmin, accessibleUserIds]);
 
   const handleEdit = (user: UserData) => {
     setSelectedUser(user);
@@ -258,7 +272,7 @@ export default function Users() {
 
       <RoleCountBadges
         roleCounts={roleCounts}
-        totalCount={users.length}
+        totalCount={isAdmin ? users.length : Array.from(accessibleUserIds).filter(id => users.some(u => u.id === id)).length}
         selectedRole={selectedRoleFilter}
         onRoleClick={setSelectedRoleFilter}
       />

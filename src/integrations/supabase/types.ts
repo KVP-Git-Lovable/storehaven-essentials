@@ -5000,6 +5000,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_hierarchy_accessible_users: {
+        Args: { _user_id: string }
+        Returns: string[]
+      }
       get_role_permissions_for_user: {
         Args: { _user_id: string }
         Returns: {
@@ -5009,6 +5013,10 @@ export type Database = {
           can_view: boolean
           module_key: string
         }[]
+      }
+      get_subordinate_user_ids: {
+        Args: { _user_id: string }
+        Returns: string[]
       }
       get_user_permissions: {
         Args: { _user_id: string }
@@ -5021,6 +5029,10 @@ export type Database = {
         }[]
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_subordinate: {
+        Args: { _manager_id: string; _user_id: string }
+        Returns: boolean
+      }
       search_knowledge_base: {
         Args: { search_query: string }
         Returns: {
