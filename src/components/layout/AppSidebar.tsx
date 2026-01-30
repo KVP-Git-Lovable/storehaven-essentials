@@ -235,8 +235,10 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
   const sidebarContent = (
     <>
       <div className="flex h-14 md:h-16 items-center justify-between gap-2 border-b border-sidebar-border px-4 md:px-6">
-        <div className="flex items-center gap-2">
-          <img src={quickappLogo} alt="StoreOps" className="h-8 w-auto" />
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 overflow-hidden">
+            <img src={quickappLogo} alt="StoreOps" className="h-6 w-6 object-contain" />
+          </div>
           <span className="font-display text-lg font-semibold">StoreOps</span>
         </div>
         {isMobile && (
