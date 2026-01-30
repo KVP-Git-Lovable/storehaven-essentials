@@ -131,11 +131,13 @@ export default function Utilities() {
       supabase.from("assets").select("id, name, asset_number").order("name"),
     ]);
 
+    // Calculate visible stores first (needed for filtering readings too)
+    let visibleStores: { id: string; name: string; is_restricted: boolean }[] = [];
+    
     if (storesRes.error) {
       toast({ title: "Error", description: "Failed to load stores", variant: "destructive" });
     } else {
-      // Filter stores based on user access
-      let visibleStores = storesRes.data || [];
+      visibleStores = storesRes.data || [];
       
       if (user) {
         const { data: accessRecords } = await supabase
@@ -171,7 +173,12 @@ export default function Utilities() {
         readings: r.readings as Record<string, number>,
         meter_master: mastersMap.get(r.meter_master_id),
       }));
-      setReadings(enrichedReadings);
+      
+      // Filter readings to only show stores the user has access to
+      const visibleStoreNames = new Set(visibleStores.map(s => s.name));
+      const filteredReadings = enrichedReadings.filter(r => visibleStoreNames.has(r.store));
+      
+      setReadings(filteredReadings);
     }
 
     if (mastersRes.error) {
