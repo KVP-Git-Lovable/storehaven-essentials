@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Wallet, TrendingDown, ChevronDown, ChevronRight, Loader2, Trash2, Store } from "lucide-react";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,6 +90,7 @@ export default function PettyCash() {
   const [selectedPettyCashId, setSelectedPettyCashId] = useState<string | null>(null);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
   const [pcForm, setPcForm] = useState({ store_id: "", amount: "", date: format(new Date(), "yyyy-MM-dd"), description: "" });
   const [expenseForm, setExpenseForm] = useState({
@@ -97,13 +99,23 @@ export default function PettyCash() {
   });
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!accessLoading) {
+      fetchData();
+    }
+  }, [accessLoading, accessibleStoreIds]);
 
   const fetchData = async () => {
     setLoading(true);
+    const storeIds = Array.from(accessibleStoreIds);
+    
+    // Build petty cash query with store filter
+    let pcQuery = supabase.from("petty_cash").select("*").order("date", { ascending: false });
+    if (!isAdmin && storeIds.length > 0) {
+      pcQuery = pcQuery.in("store_id", storeIds);
+    }
+    
     const [pcRes, expensesRes, storesRes, vendorsRes] = await Promise.all([
-      supabase.from("petty_cash").select("*").order("date", { ascending: false }),
+      pcQuery,
       supabase.from("petty_cash_expenses").select("*, vendor:vendors(id, name)"),
       supabase.from("stores").select("id, name").order("name"),
       supabase.from("vendors").select("id, name").order("name"),
@@ -127,7 +139,9 @@ export default function PettyCash() {
       });
       setPettyCashList(enrichedPC);
     }
-    setStores(storesRes.data || []);
+    // Filter stores for non-admins
+    const allStores = storesRes.data || [];
+    setStores(isAdmin ? allStores : allStores.filter(s => accessibleStoreIds.has(s.id)));
     setVendors(vendorsRes.data || []);
     setLoading(false);
   };
@@ -230,7 +244,7 @@ export default function PettyCash() {
     { title: "Transactions", value: totalTransactions.toString(), icon: Store, iconColor: "bg-info/10 text-info" },
   ];
 
-  if (loading) {
+  if (loading || accessLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

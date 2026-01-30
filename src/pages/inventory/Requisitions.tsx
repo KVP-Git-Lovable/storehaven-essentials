@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { Plus, Search, ClipboardList, CheckCircle2, Clock, Truck, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -100,6 +101,7 @@ export default function Requisitions() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
+  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
   
   // Items being added to the requisition
   const [selectedItems, setSelectedItems] = useState<RequisitionItemEntry[]>([]);
@@ -118,16 +120,27 @@ export default function Requisitions() {
   });
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!accessLoading) {
+      fetchData();
+    }
+  }, [accessLoading, accessibleStoreIds]);
 
   const fetchData = async () => {
     try {
+      const storeIds = Array.from(accessibleStoreIds);
+      
+      // Build requisitions query with store filter
+      let reqQuery = supabase
+        .from("requisitions")
+        .select("*, stores(name), requisition_items(id, quantity_requested, inventory_items(name, unit))")
+        .order("created_at", { ascending: false });
+      
+      if (!isAdmin && storeIds.length > 0) {
+        reqQuery = reqQuery.in("store_id", storeIds);
+      }
+      
       const [reqRes, storeRes, itemsRes] = await Promise.all([
-        supabase
-          .from("requisitions")
-          .select("*, stores(name), requisition_items(id, quantity_requested, inventory_items(name, unit))")
-          .order("created_at", { ascending: false }),
+        reqQuery,
         supabase.from("stores").select("id, name").eq("status", "active"),
         supabase.from("inventory_items").select("id, name, sku, category, unit").eq("status", "active"),
       ]);
@@ -137,7 +150,9 @@ export default function Requisitions() {
       if (itemsRes.error) throw itemsRes.error;
 
       setRequisitions(reqRes.data || []);
-      setStores(storeRes.data || []);
+      // Filter stores for non-admins
+      const allStores = storeRes.data || [];
+      setStores(isAdmin ? allStores : allStores.filter(s => accessibleStoreIds.has(s.id)));
       setInventoryItems(itemsRes.data || []);
     } catch (error) {
       console.error("Error fetching data:", error);

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -105,6 +106,7 @@ export function MaintenanceFormDialog({
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { accessibleStoreIds, isAdmin } = useStoreAccess();
 
   const form = useForm<MaintenanceFormData>({
     resolver: zodResolver(maintenanceFormSchema),
@@ -169,7 +171,9 @@ export function MaintenanceFormDialog({
       supabase.from("vendors").select("id, name").order("name"),
     ]);
 
-    if (storesRes.data) setStores(storesRes.data);
+    // Filter stores for non-admins
+    const allStores = storesRes.data || [];
+    setStores(isAdmin ? allStores : allStores.filter(s => accessibleStoreIds.has(s.id)));
     if (assetsRes.data) {
       setAssets(assetsRes.data);
       setFilteredAssets(assetsRes.data);

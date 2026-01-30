@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Upload, X } from "lucide-react";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -70,6 +71,7 @@ export function GuardFormDialog({ open, onOpenChange, guard, onSuccess }: Props)
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { accessibleStoreIds, isAdmin } = useStoreAccess();
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -151,7 +153,9 @@ export function GuardFormDialog({ open, onOpenChange, guard, onSuccess }: Props)
       supabase.from("stores").select("id, name").eq("status", "active"),
     ]);
     if (vendorsRes.data) setVendors(vendorsRes.data);
-    if (storesRes.data) setStores(storesRes.data);
+    // Filter stores for non-admins
+    const allStores = storesRes.data || [];
+    setStores(isAdmin ? allStores : allStores.filter(s => accessibleStoreIds.has(s.id)));
   };
 
   const uploadFile = async (file: File, folder: string) => {

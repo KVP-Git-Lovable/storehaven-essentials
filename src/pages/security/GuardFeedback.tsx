@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, Star, Search } from "lucide-react";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -101,6 +102,7 @@ export default function GuardFeedback() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
   const [form, setForm] = useState({
     guard_id: "",
@@ -115,24 +117,37 @@ export default function GuardFeedback() {
   });
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!accessLoading) {
+      fetchData();
+    }
+  }, [accessLoading, accessibleStoreIds]);
 
   const fetchData = async () => {
     try {
+      const storeIds = Array.from(accessibleStoreIds);
+      
+      // Build feedback query with store filter
+      let feedbackQuery = supabase.from("security_guard_feedback").select(`
+        *,
+        security_guards(name),
+        stores(name)
+      `).order("feedback_date", { ascending: false });
+      
+      if (!isAdmin && storeIds.length > 0) {
+        feedbackQuery = feedbackQuery.in("store_id", storeIds);
+      }
+      
       const [feedbackRes, guardsRes, storesRes] = await Promise.all([
-        supabase.from("security_guard_feedback").select(`
-          *,
-          security_guards(name),
-          stores(name)
-        `).order("feedback_date", { ascending: false }),
+        feedbackQuery,
         supabase.from("security_guards").select("id, name").eq("status", "active"),
         supabase.from("stores").select("id, name").eq("status", "active"),
       ]);
 
       if (feedbackRes.data) setFeedbacks(feedbackRes.data);
       if (guardsRes.data) setGuards(guardsRes.data);
-      if (storesRes.data) setStores(storesRes.data);
+      // Filter stores for non-admins
+      const allStores = storesRes.data || [];
+      setStores(isAdmin ? allStores : allStores.filter(s => accessibleStoreIds.has(s.id)));
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to fetch feedback data");
@@ -140,6 +155,19 @@ export default function GuardFeedback() {
       setLoading(false);
     }
   };
+
+  const filteredFeedbacks = feedbacks.filter((fb) =>
+    fb.security_guards?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    fb.stores?.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  if (loading || accessLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   const handleSubmit = async () => {
     if (!form.guard_id || !form.store_id || !form.submitted_by) {
@@ -200,19 +228,6 @@ export default function GuardFeedback() {
       toast.error("Failed to submit feedback");
     }
   };
-
-  const filteredFeedbacks = feedbacks.filter((fb) =>
-    fb.security_guards?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    fb.stores?.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6 animate-fade-in">

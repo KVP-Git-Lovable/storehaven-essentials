@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Camera, Upload, MapPin, Clock, Loader2, CheckCircle } from "lucide-react";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,14 +38,20 @@ export default function PhotoSubmission() {
   const [gettingLocation, setGettingLocation] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
   useEffect(() => {
-    fetchTasks();
-    getLocation();
-  }, []);
+    if (!accessLoading) {
+      fetchTasks();
+      getLocation();
+    }
+  }, [accessLoading, accessibleStoreIds]);
 
   const fetchTasks = async () => {
-    const { data, error } = await supabase
+    const storeIds = Array.from(accessibleStoreIds);
+    
+    // Build tasks query with store filter
+    let tasksQuery = supabase
       .from("vm_compliance_tasks")
       .select(`
         *,
@@ -53,6 +60,12 @@ export default function PhotoSubmission() {
       `)
       .in("status", ["pending", "correction_required"])
       .order("due_date", { ascending: true });
+    
+    if (!isAdmin && storeIds.length > 0) {
+      tasksQuery = tasksQuery.in("store_id", storeIds);
+    }
+
+    const { data, error } = await tasksQuery;
 
     if (error) {
       toast({ title: "Error", description: "Failed to load tasks", variant: "destructive" });
@@ -161,7 +174,7 @@ export default function PhotoSubmission() {
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId);
 
-  if (loading) {
+  if (loading || accessLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

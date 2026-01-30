@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -99,6 +100,7 @@ export default function ComplianceTasks() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
+  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
@@ -114,19 +116,30 @@ export default function ComplianceTasks() {
   });
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!accessLoading) {
+      fetchData();
+    }
+  }, [accessLoading, accessibleStoreIds]);
 
   const fetchData = async () => {
+    const storeIds = Array.from(accessibleStoreIds);
+    
+    // Build tasks query with store filter
+    let tasksQuery = supabase
+      .from("vm_compliance_tasks")
+      .select(`
+        *,
+        planogram:planograms(id, title, zone),
+        store:stores(id, name)
+      `)
+      .order("due_date", { ascending: true });
+    
+    if (!isAdmin && storeIds.length > 0) {
+      tasksQuery = tasksQuery.in("store_id", storeIds);
+    }
+    
     const [tasksRes, planogramsRes, storesRes] = await Promise.all([
-      supabase
-        .from("vm_compliance_tasks")
-        .select(`
-          *,
-          planogram:planograms(id, title, zone),
-          store:stores(id, name)
-        `)
-        .order("due_date", { ascending: true }),
+      tasksQuery,
       supabase.from("planograms").select("id, title, zone").eq("status", "active"),
       supabase.from("stores").select("id, name").eq("status", "active"),
     ]);
@@ -137,37 +150,11 @@ export default function ComplianceTasks() {
       setTasks(tasksRes.data as ComplianceTask[] || []);
     }
     setPlanograms(planogramsRes.data || []);
-    setStores(storesRes.data || []);
+    // Filter stores for non-admins
+    const allStores = storesRes.data || [];
+    setStores(isAdmin ? allStores : allStores.filter(s => accessibleStoreIds.has(s.id)));
     setLoading(false);
   };
-
-  const onSubmit = async (data: TaskFormData) => {
-    const { error } = await supabase.from("vm_compliance_tasks").insert({
-      planogram_id: data.planogramId,
-      store_id: data.storeId,
-      title: data.title,
-      description: data.description || null,
-      frequency: data.frequency,
-      due_date: new Date(data.dueDate).toISOString(),
-      assigned_to: data.assignedTo || null,
-    });
-
-    if (error) {
-      toast({ title: "Error", description: "Failed to create task", variant: "destructive" });
-    } else {
-      toast({ title: "Success", description: "Compliance task created" });
-      form.reset();
-      setOpen(false);
-      fetchData();
-    }
-  };
-
-  const filteredTasks = tasks.filter(
-    (task) =>
-      task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.store?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.planogram?.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   const stats = [
     { 
@@ -196,13 +183,41 @@ export default function ComplianceTasks() {
     },
   ];
 
-  if (loading) {
+  if (loading || accessLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
+
+  const onSubmit = async (data: TaskFormData) => {
+    const { error } = await supabase.from("vm_compliance_tasks").insert({
+      planogram_id: data.planogramId,
+      store_id: data.storeId,
+      title: data.title,
+      description: data.description || null,
+      frequency: data.frequency,
+      due_date: new Date(data.dueDate).toISOString(),
+      assigned_to: data.assignedTo || null,
+    });
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to create task", variant: "destructive" });
+    } else {
+      toast({ title: "Success", description: "Compliance task created" });
+      form.reset();
+      setOpen(false);
+      fetchData();
+    }
+  };
+
+  const filteredTasks = tasks.filter(
+    (task) =>
+      task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      task.store?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      task.planogram?.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="space-y-6 animate-fade-in">
