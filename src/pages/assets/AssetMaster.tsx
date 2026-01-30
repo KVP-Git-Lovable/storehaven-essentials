@@ -94,6 +94,7 @@ export default function AssetMaster() {
   const [open, setOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<AssetMaster | null>(null);
   const [deleteAssetId, setDeleteAssetId] = useState<string | null>(null);
+  const [categoryRefreshKey, setCategoryRefreshKey] = useState(0);
   const { toast } = useToast();
 
   const form = useForm<AssetMasterFormData>({
@@ -228,7 +229,10 @@ export default function AssetMaster() {
         </div>
         <Dialog open={open} onOpenChange={(isOpen) => {
           if (!isOpen) handleCloseDialog();
-          else setOpen(true);
+          else {
+            setCategoryRefreshKey((k) => k + 1); // Refresh categories when dialog opens
+            setOpen(true);
+          }
         }}>
           <DialogTrigger asChild>
             <Button className="gap-2">
@@ -266,6 +270,7 @@ export default function AssetMaster() {
                         initialCategoryType={
                           editingAsset?.categories?.type || undefined
                         }
+                        refreshKey={categoryRefreshKey}
                       />
                       <FormMessage />
                     </FormItem>
