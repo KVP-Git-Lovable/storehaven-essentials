@@ -125,7 +125,7 @@ export default function Login() {
           <p className="mt-2 text-sm text-muted-foreground">
             {isLogin
               ? "Sign in to access your dashboard"
-              : "Sign up to get started with StoreOps"}
+              : "Sign up to get started with QuickApp"}
           </p>
         </div>
 
