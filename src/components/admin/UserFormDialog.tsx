@@ -156,30 +156,26 @@ export function UserFormDialog({
           description: "User has been updated successfully.",
         });
       } else {
-        // Create new user via Supabase Auth
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email: data.email,
-          password: data.password!,
-          options: {
-            emailRedirectTo: `${window.location.origin}/`,
-          },
-        });
-
-        if (authError) throw authError;
-
-        if (authData.user) {
-          // Create profile with must_reset_password flag
-          const { error: profileError } = await supabase.from("profiles").insert({
-            id: authData.user.id,
-            username: data.username,
+        // Create new user via edge function (does not affect current admin session)
+        const { data: session } = await supabase.auth.getSession();
+        
+        const response = await supabase.functions.invoke("create-user", {
+          body: {
             email: data.email,
+            password: data.password,
+            username: data.username,
             role_id: data.role_id || null,
             reports_to: data.reports_to || null,
             status: data.status,
-            must_reset_password: true, // User must reset password on first login
-          });
+          },
+        });
 
-          if (profileError) throw profileError;
+        if (response.error) {
+          throw new Error(response.error.message || "Failed to create user");
+        }
+
+        if (response.data?.error) {
+          throw new Error(response.data.error);
         }
 
         toast({
