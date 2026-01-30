@@ -26,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { UserFormDialog } from "@/components/admin/UserFormDialog";
 import { UserDetailsSheet } from "@/components/admin/UserDetailsSheet";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface User {
   id: string;
@@ -49,6 +50,11 @@ export default function Users() {
   const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
+
+  const canCreate = hasPermission("usermanagement.users", "create");
+  const canEdit = hasPermission("usermanagement.users", "edit");
+  const canDelete = hasPermission("usermanagement.users", "delete");
 
   const fetchUsers = async () => {
     setIsLoading(true);
@@ -180,15 +186,17 @@ export default function Users() {
           <h1 className="text-2xl font-semibold">Users</h1>
           <p className="text-muted-foreground">Manage user accounts and access</p>
         </div>
-        <Button
-          onClick={() => {
-            setSelectedUser(null);
-            setDialogOpen(true);
-          }}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add User
-        </Button>
+        {canCreate && (
+          <Button
+            onClick={() => {
+              setSelectedUser(null);
+              setDialogOpen(true);
+            }}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add User
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -260,23 +268,27 @@ export default function Users() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(user)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setSelectedUser(user);
-                            setDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {canEdit && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEdit(user)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {canDelete && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
