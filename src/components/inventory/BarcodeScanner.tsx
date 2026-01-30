@@ -36,11 +36,8 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
           await scanner.stop();
         }
       } catch (err) {
-        // Ignore stop errors
+        // Ignore stop errors - DOM may already be cleaned up by React
       }
-      
-      // Don't call clear() - it causes DOM conflicts with React portals
-      // React will clean up the container when the dialog unmounts
     }
     
     if (isMountedRef.current) {
@@ -94,8 +91,11 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
   const handleScanSuccess = useCallback((barcode: string) => {
     toast.success(`Scanned: ${barcode}`);
     onScan(barcode);
-    handleClose();
-  }, [onScan]);
+    // Stop scanner first, then close
+    stopScanner();
+    setIsOpen(false);
+    setError(null);
+  }, [onScan, stopScanner]);
 
   const handleOpen = useCallback(() => {
     scannerContainerId.current = `barcode-scanner-${Date.now()}`;
@@ -103,8 +103,8 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
     setError(null);
   }, []);
 
-  const handleClose = useCallback(async () => {
-    await stopScanner();
+  const handleClose = useCallback(() => {
+    stopScanner();
     setIsOpen(false);
     setError(null);
   }, [stopScanner]);
@@ -141,9 +141,13 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
         open={isOpen} 
         onOpenChange={(open) => {
           if (!open) {
-            handleClose();
+            // Stop scanner first synchronously, then close dialog
+            stopScanner();
+            setIsOpen(false);
+            setError(null);
           }
         }}
+        modal={true}
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
