@@ -396,7 +396,10 @@ export default function Utilities() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Store *</Label>
-                  <Select value={formData.store} onValueChange={(v) => setFormData(prev => ({ ...prev, store: v }))}>
+                  <Select value={formData.store} onValueChange={(v) => {
+                    setFormData(prev => ({ ...prev, store: v, meter_master_id: "", readings: {} }));
+                    setSelectedMeterMaster(null);
+                  }}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select store" />
                     </SelectTrigger>
@@ -414,13 +417,27 @@ export default function Utilities() {
                       <SelectValue placeholder="Select meter type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {/* Hide Solar-2 and Sun light, show filtered list + custom Solar option */}
-                      {meterMasters
-                        .filter(master => !["Solar-2", "Sun light"].includes(master.name))
-                        .map((master) => (
-                          <SelectItem key={master.id} value={master.id}>{master.name}</SelectItem>
-                        ))}
-                      <SelectItem value="solar_custom">Solar</SelectItem>
+                      {/* For Bharath Mall, only show Electricity (MESCOM) and Solar */}
+                      {formData.store === "Bharath Mall" ? (
+                        <>
+                          {meterMasters
+                            .filter(master => master.name === "Electricity (MESCOM)")
+                            .map((master) => (
+                              <SelectItem key={master.id} value={master.id}>{master.name}</SelectItem>
+                            ))}
+                          <SelectItem value="solar_custom">Solar</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          {/* Hide Solar-2 and Sun light, show filtered list + custom Solar option */}
+                          {meterMasters
+                            .filter(master => !["Solar-2", "Sun light"].includes(master.name))
+                            .map((master) => (
+                              <SelectItem key={master.id} value={master.id}>{master.name}</SelectItem>
+                            ))}
+                          <SelectItem value="solar_custom">Solar</SelectItem>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
