@@ -98,16 +98,39 @@ export default function UserRoles() {
   const handleDelete = async () => {
     if (!selectedRole) return;
 
+    // First, clear role_id from all users with this role
     if (selectedRole.user_count > 0) {
+      const { error: clearError } = await supabase
+        .from("profiles")
+        .update({ role_id: null })
+        .eq("role_id", selectedRole.id);
+
+      if (clearError) {
+        toast({
+          title: "Error",
+          description: "Failed to clear user role assignments",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Delete associated role permissions
+    const { error: permError } = await supabase
+      .from("role_permissions")
+      .delete()
+      .eq("role_id", selectedRole.id);
+
+    if (permError) {
       toast({
-        title: "Cannot Delete",
-        description: "This role has users assigned. Please reassign them first.",
+        title: "Error",
+        description: "Failed to delete role permissions",
         variant: "destructive",
       });
-      setDeleteDialogOpen(false);
       return;
     }
 
+    // Finally delete the role
     const { error } = await supabase
       .from("user_roles_master")
       .delete()
@@ -124,7 +147,7 @@ export default function UserRoles() {
 
     toast({
       title: "Role Deleted",
-      description: "Role has been deleted successfully.",
+      description: `Role and ${selectedRole.user_count} user assignment(s) have been cleared.`,
     });
     setDeleteDialogOpen(false);
     setSelectedRole(null);
