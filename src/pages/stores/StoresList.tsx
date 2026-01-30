@@ -102,20 +102,22 @@ export default function StoresList() {
       return;
     }
 
-    // Get user's store access for restricted stores
+    // Get user's store access records
     const { data: accessRecords } = await supabase
       .from("store_user_access")
       .select("store_id")
       .eq("user_id", user.id);
 
-    const accessibleStoreIds = new Set((accessRecords || []).map(r => r.store_id));
-
-    // Filter stores: show non-restricted OR restricted stores user has access to
-    const visibleStores = (allStores || []).filter(store => 
-      !store.is_restricted || accessibleStoreIds.has(store.id)
-    );
-
-    setStores(visibleStores);
+    // If user has specific store access records, ONLY show those stores
+    if (accessRecords && accessRecords.length > 0) {
+      const accessibleStoreIds = new Set(accessRecords.map(r => r.store_id));
+      const visibleStores = (allStores || []).filter(store => accessibleStoreIds.has(store.id));
+      setStores(visibleStores);
+    } else {
+      // User has no specific access records - show all non-restricted stores
+      setStores((allStores || []).filter(s => !s.is_restricted));
+    }
+    
     setLoading(false);
   };
 
