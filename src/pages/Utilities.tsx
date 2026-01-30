@@ -120,17 +120,43 @@ export default function Utilities() {
 
   const fetchData = async () => {
     setLoading(true);
+    
+    // Get current user first
+    const { data: { user } } = await supabase.auth.getUser();
+    
     const [readingsRes, mastersRes, storesRes, assetsRes] = await Promise.all([
       supabase.from("utility_readings").select("*").order("created_at", { ascending: false }),
       supabase.from("meter_masters").select("*").order("name"),
-      supabase.from("stores").select("id, name").order("name"),
+      supabase.from("stores").select("id, name, is_restricted").order("name"),
       supabase.from("assets").select("id, name, asset_number").order("name"),
     ]);
 
     if (storesRes.error) {
       toast({ title: "Error", description: "Failed to load stores", variant: "destructive" });
     } else {
-      setStores(storesRes.data || []);
+      // Filter stores based on user access
+      let visibleStores = storesRes.data || [];
+      
+      if (user) {
+        const { data: accessRecords } = await supabase
+          .from("store_user_access")
+          .select("store_id")
+          .eq("user_id", user.id);
+        
+        // If user has specific store access records, ONLY show those stores
+        if (accessRecords && accessRecords.length > 0) {
+          const accessibleStoreIds = new Set(accessRecords.map(r => r.store_id));
+          visibleStores = visibleStores.filter(store => accessibleStoreIds.has(store.id));
+        } else {
+          // User has no specific access - show all non-restricted stores
+          visibleStores = visibleStores.filter(s => !s.is_restricted);
+        }
+      } else {
+        // No user - show only non-restricted stores
+        visibleStores = visibleStores.filter(s => !s.is_restricted);
+      }
+      
+      setStores(visibleStores);
     }
 
     setAssets(assetsRes.data || []);
