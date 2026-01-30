@@ -19,6 +19,7 @@ import {
   ShoppingCart,
   UserCog,
 } from "lucide-react";
+import quickappLogo from "@/assets/quickapp-logo.png";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -235,10 +236,8 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
     <>
       <div className="flex h-14 md:h-16 items-center justify-between gap-2 border-b border-sidebar-border px-4 md:px-6">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <Store className="h-4 w-4 text-primary-foreground" />
-          </div>
-          <span className="font-display text-lg font-semibold">StoreOps</span>
+          <img src={quickappLogo} alt="QuickApp" className="h-8 w-auto" />
+          <span className="font-display text-lg font-semibold">QuickApp</span>
         </div>
         {isMobile && (
           <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8">
