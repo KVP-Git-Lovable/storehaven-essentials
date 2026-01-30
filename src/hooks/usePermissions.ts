@@ -9,6 +9,16 @@ export interface Permission {
   can_delete: boolean;
 }
 
+// Safe default for when auth is not ready
+const defaultPermissions = {
+  permissions: [] as Permission[],
+  hasPermission: () => false,
+  canAccessRoute: () => false,
+  getVisibleModules: () => [] as string[],
+  isAdmin: false,
+  loading: true,
+};
+
 export function usePermissions() {
   const { permissions, isAdmin, loading } = useAuth();
 
