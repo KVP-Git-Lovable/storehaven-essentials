@@ -126,11 +126,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    return { error: error as Error | null };
+
+    if (error) {
+      return { error: error as Error };
+    }
+
+    // Check if user is active
+    if (data.user) {
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("status")
+        .eq("id", data.user.id)
+        .single();
+
+      if (profileError) {
+        await supabase.auth.signOut();
+        return { error: new Error("Failed to verify user status") };
+      }
+
+      if (profileData?.status === "inactive") {
+        // Sign out the inactive user immediately
+        await supabase.auth.signOut();
+        return { error: new Error("Your account has been deactivated. Please contact an administrator.") };
+      }
+    }
+
+    return { error: null };
   };
 
   const signUp = async (email: string, password: string, username: string) => {

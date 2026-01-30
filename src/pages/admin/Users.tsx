@@ -216,9 +216,10 @@ export default function Users() {
                     <TableCell>{user.manager_name || "—"}</TableCell>
                     <TableCell>
                       <Badge
-                        variant={user.status === "active" ? "default" : "secondary"}
+                        variant={user.status === "active" ? "default" : "destructive"}
+                        className={user.status === "active" ? "" : "bg-destructive/10 text-destructive border-destructive/20"}
                       >
-                        {user.status}
+                        {user.status === "active" ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>
                     <TableCell>
