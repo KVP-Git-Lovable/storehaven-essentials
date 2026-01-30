@@ -68,6 +68,7 @@ import Users from "./pages/admin/Users";
 import UserRoles from "./pages/admin/UserRoles";
 import UserHierarchy from "./pages/admin/UserHierarchy";
 import RolePermissions from "./pages/admin/RolePermissions";
+import Profile from "./pages/admin/Profile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -152,6 +153,7 @@ const App = () => (
               <Route path="/admin/roles" element={<UserRoles />} />
               <Route path="/admin/hierarchy" element={<UserHierarchy />} />
               <Route path="/admin/permissions" element={<RolePermissions />} />
+              <Route path="/profile" element={<Profile />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
