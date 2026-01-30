@@ -118,14 +118,14 @@ export default function Login() {
       <div className="w-full max-w-md space-y-8">
         {/* Logo */}
         <div className="flex flex-col items-center">
-          <img src={quickappLogo} alt="Quickapp" className="h-20 w-auto mb-6" />
+          <img src={quickappLogo} alt="StoreOps" className="h-20 w-auto mb-6" />
           <h1 className="text-2xl font-bold text-foreground">
             {isLogin ? "Welcome Back" : "Create Account"}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {isLogin
               ? "Sign in to access your dashboard"
-              : "Sign up to get started with QuickApp"}
+              : "Sign up to get started with StoreOps"}
           </p>
         </div>
 

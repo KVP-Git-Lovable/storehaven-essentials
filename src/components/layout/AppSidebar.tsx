@@ -236,8 +236,8 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
     <>
       <div className="flex h-14 md:h-16 items-center justify-between gap-2 border-b border-sidebar-border px-4 md:px-6">
         <div className="flex items-center gap-2">
-          <img src={quickappLogo} alt="QuickApp" className="h-8 w-auto" />
-          <span className="font-display text-lg font-semibold">QuickApp</span>
+          <img src={quickappLogo} alt="StoreOps" className="h-8 w-auto" />
+          <span className="font-display text-lg font-semibold">StoreOps</span>
         </div>
         {isMobile && (
           <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8">
