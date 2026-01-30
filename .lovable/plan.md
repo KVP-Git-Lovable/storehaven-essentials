@@ -1,202 +1,233 @@
 
-# Permission Set Group Implementation Plan
 
-## Overview
+# Store Access Control - Comprehensive Fix Plan
 
-This plan transforms the current individual user-based permission system into a **Permission Set Group** model. Instead of assigning permissions directly to individual users, you will:
+## Problem Summary
 
-1. Create **Permission Set Groups** (e.g., "Store Operations Team", "Finance Access", "Security Patrol Team")
-2. Configure permissions for each group across all modules
-3. Assign multiple users to one or more groups
-4. Users inherit permissions from all groups they belong to (additive)
+Store Managers like **Suyog** (assigned to "Polar Bear - Manna Gudda") are currently able to see data from **all stores** across multiple modules. The expected behavior is that users should only see data related to their assigned store(s).
+
+**Current Data in Database:**
+- Suyog (user_id: 35a0c4d0-65ac-4d43-8a87-f59c9af2d1bd) is assigned to store "Polar Bear - Manna Gudda" (store_id: 57fc3e12-fbd3-4c86-be4b-b188310d3a8d)
+- Shravya (user_id: 4a65e375-e1a5-4d5c-9eb1-3e4f630d05c7) is assigned to store "Polar Bear - Kottara" (store_id: 799a8179-5f37-41a9-84fa-0a5419be922a)
+
+The `store_user_access` table is correctly populated via the database trigger when a store manager is assigned.
 
 ---
 
-## Database Changes
+## Root Cause Analysis
 
-### New Tables
+The application has a `useStoreAccess` hook that correctly:
+1. Fetches accessible store IDs from the `store_user_access` table
+2. Provides filtering utilities (`filterByStore`, `hasAccess`)
+3. Returns `accessibleStoreIds` for query filtering
 
-#### 1. `permission_set_groups` - Master table for groups
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| name | TEXT | Group name (e.g., "Finance Team Access") |
-| description | TEXT | Optional description |
-| status | TEXT | active/inactive |
-| created_at | TIMESTAMP | Auto-generated |
-| updated_at | TIMESTAMP | Auto-updated |
+**However, most modules do NOT use this hook** to filter their data. They fetch all data from the database without applying store-based restrictions.
 
-#### 2. `permission_set_group_permissions` - Permissions for each group
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| group_id | UUID | FK to permission_set_groups |
-| module_key | TEXT | Module identifier |
-| can_view | BOOLEAN | View permission |
-| can_create | BOOLEAN | Create permission |
-| can_edit | BOOLEAN | Edit permission |
-| can_delete | BOOLEAN | Delete permission |
+---
 
-#### 3. `user_permission_set_groups` - Junction table linking users to groups
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| user_id | UUID | FK to profiles |
-| group_id | UUID | FK to permission_set_groups |
-| created_at | TIMESTAMP | Auto-generated |
+## Current State by Module
 
-### Database Function Update
+### Modules WITH Store Filtering (Working Correctly)
+| Module | File | Status |
+|--------|------|--------|
+| Dashboard | `src/pages/Dashboard.tsx` | Uses `useStoreAccess` |
+| Service Tickets | `src/pages/services/ServiceTickets.tsx` | Uses `useStoreAccess` |
+| Preventive Maintenance | `src/pages/services/PreventiveMaintenance.tsx` | Uses `useStoreAccess` |
+| Security Dashboard | `src/pages/security/SecurityDashboard.tsx` | Uses `useStoreAccess` |
+| Recent Activity | `src/components/dashboard/RecentActivity.tsx` | Uses `useStoreAccess` |
+| Utilities | `src/pages/Utilities.tsx` | Custom implementation |
+| Stores List | `src/pages/stores/StoresList.tsx` | Custom implementation |
+| Meter Readings | `src/components/utilities/MeterReadingsSection.tsx` | Custom implementation |
 
-Update `get_user_permissions()` to include group permissions:
+### Modules WITHOUT Store Filtering (Need to be Fixed)
 
-```text
-Final Permission = Role Permission OR Group Permission(s)
+#### High Priority (User-Reported Issues)
+| Module | File | Data Table | Store Field |
+|--------|------|------------|-------------|
+| Asset Register | `src/pages/assets/AssetInventory.tsx` | `assets` | `store_id` |
+| Spares Management | `src/pages/assets/SparesManagement.tsx` | `spares` | Needs `store_id` column |
+| Service Contracts | `src/pages/services/ServiceContracts.tsx` | `service_contracts` | Via `service_contract_locations` |
+| Security Guards | `src/pages/security/SecurityGuards.tsx` | `security_guards` | `store_id` |
+
+#### Medium Priority (Other Modules)
+| Module | File | Data Table | Store Field |
+|--------|------|------------|-------------|
+| Petty Cash | `src/pages/PettyCash.tsx` | `petty_cash` | `store_id` |
+| Patrol Points | `src/pages/security/PatrolPoints.tsx` | `security_patrol_points` | `store_id` |
+| Security Roster | `src/pages/security/SecurityRoster.tsx` | `security_roster` | Via guards |
+| Guard Feedback | `src/pages/security/GuardFeedback.tsx` | `security_guard_feedback` | `store_id` |
+| Inventory Requisitions | `src/pages/inventory/Requisitions.tsx` | `inventory_requisitions` | `store_id` |
+| Goods Receipt | `src/pages/inventory/GoodsReceipt.tsx` | `goods_receipts` | `store_id` |
+| Store Transfers | `src/pages/inventory/StoreTransfers.tsx` | `store_transfers` | `source_store_id` / `destination_store_id` |
+| VM Compliance Tasks | `src/pages/vm/ComplianceTasks.tsx` | `vm_compliance_tasks` | `store_id` |
+| Photo Submissions | `src/pages/vm/PhotoSubmission.tsx` | `vm_submissions` | `store_id` |
+| Task Adherence | `src/pages/operations/TaskAdherence.tsx` | `task_completions` | Via store |
+| Task Templates | `src/pages/operations/TaskTemplates.tsx` | `task_templates` | `store_id` |
+| Store Heatmap | `src/pages/operations/StoreHeatmap.tsx` | `stores` | Direct filtering |
+
+---
+
+## Implementation Approach
+
+### Step 1: Update Modules to Use `useStoreAccess` Hook
+
+For each module that needs fixing, apply the following pattern:
+
+```tsx
+import { useStoreAccess } from "@/hooks/useStoreAccess";
+
+export default function ModuleName() {
+  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
+  
+  useEffect(() => {
+    if (!accessLoading) {
+      fetchData();
+    }
+  }, [accessLoading, accessibleStoreIds]);
+  
+  const fetchData = async () => {
+    const storeIds = Array.from(accessibleStoreIds);
+    
+    let query = supabase.from("table_name").select("*");
+    
+    // Apply store filter for non-admins
+    if (!isAdmin && storeIds.length > 0) {
+      query = query.in("store_id", storeIds);
+    }
+    
+    const { data, error } = await query;
+    // ...
+  };
+  
+  // Filter store dropdowns in forms
+  const filteredStores = stores.filter(s => 
+    isAdmin || accessibleStoreIds.has(s.id)
+  );
+}
 ```
 
-The function will:
-1. Get role-based permissions (from `role_permissions`)
-2. Get all group permissions for the user (from groups they're assigned to)
-3. Combine using OR logic (additive)
+### Step 2: Filter Store Dropdowns in Forms
 
----
+When a Store Manager creates new records, the store dropdown should only show their assigned store(s):
 
-## UI Changes
-
-### Restructured "Permission Set" Page
-
-The page will have **two tabs**:
-
-#### Tab 1: Role Permissions (unchanged)
-- Select a role
-- Configure permissions for that role
-- Same as current behavior
-
-#### Tab 2: Permission Set Groups (replaces "User Permissions")
-- **Groups List Panel** (left side):
-  - List all permission set groups
-  - Add New Group button
-  - Edit/Delete group buttons
-  - Active/inactive status toggle
-
-- **Group Configuration Panel** (right side when group selected):
-  - Group name and description
-  - **Permissions Matrix**: Same table as role permissions
-  - **Assigned Users Section**:
-    - List of users currently in this group
-    - Add users button (opens multi-select dialog)
-    - Remove user from group button
-
-### New Dialog: Add/Edit Permission Set Group
-- Group name (required)
-- Description (optional)
-- Status (active/inactive)
-
-### New Dialog: Assign Users to Group
-- Multi-select list of all active users
-- Shows current group membership
-- Checkbox to add/remove users
-
----
-
-## Visual Flow
-
-```text
-+--------------------------------------------------+
-| Permission Set                    [Save]          |
-+--------------------------------------------------+
-| [Role Permissions] [Permission Set Groups]        |
-+--------------------------------------------------+
-|                                                   |
-| PERMISSION SET GROUPS TAB:                        |
-|                                                   |
-| +----------------+  +---------------------------+ |
-| | Groups         |  | Finance Team Access       | |
-| |----------------|  |---------------------------| |
-| | + Add Group    |  | Description: Access to... | |
-| |                |  |                           | |
-| | [Finance Team] |  | PERMISSIONS:              | |
-| | [Store Ops   ] |  | +-------+---+---+---+---+ | |
-| | [Security    ] |  | |Module |All|V|C|E|D|   | |
-| |                |  | +-------+---+---+---+---+ | |
-| |                |  | |PettyCa|[x]|x|x|x|x|   | |
-| |                |  | |Utiliti|[x]|x|x|x|x|   | |
-| |                |  | +-------+---+---+---+---+ | |
-| |                |  |                           | |
-| |                |  | ASSIGNED USERS:           | |
-| |                |  | [+ Add Users]             | |
-| |                |  | - Shravya (Store Manager) | |
-| |                |  | - Suyog (Store Manager)   | |
-| +----------------+  +---------------------------+ |
-+--------------------------------------------------+
+```tsx
+// In form dialogs
+<SelectContent>
+  {stores
+    .filter(s => isAdmin || accessibleStoreIds.has(s.id))
+    .map((store) => (
+      <SelectItem key={store.id} value={store.id}>
+        {store.name}
+      </SelectItem>
+    ))}
+</SelectContent>
 ```
 
+### Step 3: Handle Tables Without Store ID
+
+Some tables like `spares` don't have a `store_id` column. Options:
+1. Add `store_id` column via migration
+2. Link through parent table (e.g., spares linked to assets which have store_id)
+
+For `service_contracts`, filter through the `service_contract_locations` junction table.
+
 ---
 
-## Files to Create/Modify
+## Files to Modify
 
-### New Files
-| File | Purpose |
-|------|---------|
-| `src/components/admin/PermissionSetGroupDialog.tsx` | Create/Edit group dialog |
-| `src/components/admin/AssignUsersDialog.tsx` | Multi-select users to assign to group |
-| `src/components/admin/PermissionSetGroupsList.tsx` | Left panel showing all groups |
-| `src/components/admin/PermissionSetGroupConfig.tsx` | Right panel with permissions matrix and users |
+### Phase 1: Critical Modules (User-Reported)
 
-### Modified Files
 | File | Changes |
 |------|---------|
-| `src/pages/admin/RolePermissions.tsx` | Replace "User Permissions" tab with "Permission Set Groups" |
-| `src/hooks/usePermissions.ts` | No changes needed (reads from `get_user_permissions` which will be updated) |
-| `src/components/auth/AuthProvider.tsx` | No changes needed (uses `get_user_permissions`) |
-| Database migration | New tables + updated function |
+| `src/pages/assets/AssetInventory.tsx` | Add `useStoreAccess`, filter assets query, filter store dropdown |
+| `src/pages/assets/SparesManagement.tsx` | Add `useStoreAccess`, filter by linked assets or add store_id |
+| `src/pages/services/ServiceContracts.tsx` | Add `useStoreAccess`, filter by contract locations |
+| `src/pages/security/SecurityGuards.tsx` | Add `useStoreAccess`, filter guards by store_id |
+
+### Phase 2: Secondary Modules
+
+| File | Changes |
+|------|---------|
+| `src/pages/PettyCash.tsx` | Add `useStoreAccess`, filter petty cash records, filter store dropdown |
+| `src/pages/security/PatrolPoints.tsx` | Add `useStoreAccess`, filter patrol points |
+| `src/pages/security/SecurityRoster.tsx` | Add `useStoreAccess`, filter roster by guard's store |
+| `src/pages/security/GuardFeedback.tsx` | Add `useStoreAccess`, filter feedback by store |
+| `src/pages/inventory/Requisitions.tsx` | Add `useStoreAccess`, filter requisitions |
+| `src/pages/inventory/GoodsReceipt.tsx` | Add `useStoreAccess`, filter GRN records |
+| `src/pages/inventory/StoreTransfers.tsx` | Add `useStoreAccess`, filter transfers |
+| `src/pages/vm/ComplianceTasks.tsx` | Add `useStoreAccess`, filter tasks |
+| `src/pages/vm/PhotoSubmission.tsx` | Add `useStoreAccess`, filter submissions |
+| `src/pages/operations/TaskAdherence.tsx` | Add `useStoreAccess`, filter adherence data |
+| `src/pages/operations/TaskTemplates.tsx` | Add `useStoreAccess`, filter templates |
+| `src/pages/operations/StoreHeatmap.tsx` | Add `useStoreAccess`, filter store list |
+| `src/components/maintenance/MaintenanceFormDialog.tsx` | Filter store dropdown |
+| `src/components/security/GuardFormDialog.tsx` | Filter store dropdown |
 
 ---
 
-## Permission Resolution Logic
+## Database Considerations
 
-The final permission for a user will be calculated as:
+### Optional: Add store_id to Spares Table
 
-```text
-User's Effective Permission = 
-    (Role Permission) 
-    OR (Group 1 Permission) 
-    OR (Group 2 Permission) 
-    OR ... 
+If spares need direct store filtering, add a migration:
+
+```sql
+ALTER TABLE spares ADD COLUMN store_id UUID REFERENCES stores(id);
 ```
 
-**Example:**
-- User "Shravya" has role "Store Manager" with view-only on PettyCash
-- She's assigned to "Finance Team" group with full access to PettyCash
-- **Result**: She gets full access to PettyCash (additive OR logic)
+### Row Level Security (Backend Safety)
+
+For defense-in-depth, consider adding RLS policies that enforce store access at the database level. This prevents data leakage even if the frontend filtering is bypassed.
+
+Example pattern:
+```sql
+CREATE POLICY "Users can only view assets for their accessible stores"
+ON assets FOR SELECT
+USING (
+  store_id IN (
+    SELECT store_id FROM store_user_access WHERE user_id = auth.uid()
+  )
+  OR is_admin(auth.uid())
+);
+```
 
 ---
 
-## Migration Path
-
-1. Create new tables (`permission_set_groups`, `permission_set_group_permissions`, `user_permission_set_groups`)
-2. Migrate existing `user_permissions` data:
-   - For each unique set of user permissions, create a Permission Set Group
-   - Assign the user to that group
-3. Update `get_user_permissions()` function to include group permissions
-4. Drop old `user_permissions` table (optional, can keep for backup initially)
-
----
-
-## Security Considerations
-
-- RLS policies on all new tables to ensure only admins can manage permission groups
-- The `get_user_permissions()` function remains `SECURITY DEFINER` to prevent RLS recursion
-- Admins can view and manage all groups; non-admins cannot access the configuration
-
----
-
-## Testing Checklist
+## Testing Plan
 
 After implementation:
-1. Create a Permission Set Group called "Extra Store Access"
-2. Grant Petty Cash and Utilities full access to this group
-3. Assign user "Shravya" to this group
-4. Log in as Shravya and verify she has access to Petty Cash and Utilities
-5. Remove Shravya from the group and verify access is removed
-6. Verify that role-based permissions still work correctly
-7. Test a user in multiple groups to confirm additive logic works
+
+1. **Login as Suyog** (Store Manager for "Polar Bear - Manna Gudda")
+2. Verify these modules show ONLY data from "Polar Bear - Manna Gudda":
+   - Asset Register
+   - Spares Management
+   - Service Contracts (if any linked to that store)
+   - Security Guards (guards assigned to that store)
+   - Petty Cash
+   - All other modules
+3. Verify store dropdowns ONLY show "Polar Bear - Manna Gudda"
+4. **Login as Admin** - verify all stores and data are visible
+5. **Login as Shravya** - verify only "Polar Bear - Kottara" data is visible
+
+---
+
+## Technical Details
+
+### Key Files Reference
+- **Hook**: `src/hooks/useStoreAccess.ts` - Provides store access utilities
+- **Auth**: `src/hooks/useAuth.ts` - Provides `isAdmin` flag
+- **Database Trigger**: `sync_store_manager_access` - Auto-populates `store_user_access` when manager is assigned
+
+### Store Access Logic Flow
+```text
+User Logs In
+    ↓
+useStoreAccess Hook Executes
+    ↓
+Checks store_user_access table for user's records
+    ↓
+If records exist → User sees ONLY those stores
+If no records → User sees all non-restricted stores
+If isAdmin → User sees ALL stores
+```
+
