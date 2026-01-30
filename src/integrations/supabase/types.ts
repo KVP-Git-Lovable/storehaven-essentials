@@ -1914,6 +1914,7 @@ export type Database = {
           created_at: string
           email: string
           id: string
+          must_reset_password: boolean | null
           reports_to: string | null
           role_id: string | null
           status: string
@@ -1924,6 +1925,7 @@ export type Database = {
           created_at?: string
           email: string
           id: string
+          must_reset_password?: boolean | null
           reports_to?: string | null
           role_id?: string | null
           status?: string
@@ -1934,6 +1936,7 @@ export type Database = {
           created_at?: string
           email?: string
           id?: string
+          must_reset_password?: boolean | null
           reports_to?: string | null
           role_id?: string | null
           status?: string

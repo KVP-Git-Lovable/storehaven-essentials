@@ -10,6 +10,7 @@ export interface UserProfile {
   reports_to: string | null;
   status: string;
   role_name?: string;
+  must_reset_password?: boolean;
 }
 
 export interface Permission {
@@ -56,6 +57,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         role_id,
         reports_to,
         status,
+        must_reset_password,
         user_roles_master (name)
       `)
       .eq("id", userId)
@@ -71,8 +73,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         reports_to: profileData.reports_to,
         status: profileData.status,
         role_name: roleName,
+        must_reset_password: profileData.must_reset_password || false,
       });
-      setIsAdmin(roleName?.toLowerCase() === "admin");
+      setIsAdmin(roleName?.toLowerCase() === "admin" || roleName?.toLowerCase() === "super admin");
     }
   };
 
