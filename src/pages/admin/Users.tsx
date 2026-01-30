@@ -132,24 +132,45 @@ export default function Users() {
   const handleDelete = async () => {
     if (!selectedUser) return;
 
-    const { error } = await supabase.from("profiles").delete().eq("id", selectedUser.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to delete users",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    if (error) {
+      const response = await supabase.functions.invoke("delete-user", {
+        body: { user_id: selectedUser.id },
+      });
+
+      if (response.error) {
+        toast({
+          title: "Error",
+          description: response.error.message || "Failed to delete user",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "User Deleted",
+        description: "User has been deleted successfully.",
+      });
+      setDeleteDialogOpen(false);
+      setSelectedUser(null);
+      fetchUsers();
+    } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to delete user",
+        description: "An unexpected error occurred while deleting the user",
         variant: "destructive",
       });
-      return;
     }
-
-    toast({
-      title: "User Deleted",
-      description: "User has been deleted successfully.",
-    });
-    setDeleteDialogOpen(false);
-    setSelectedUser(null);
-    fetchUsers();
   };
 
   return (
