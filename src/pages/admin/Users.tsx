@@ -1,17 +1,8 @@
-import { useState, useEffect } from "react";
-import { Plus, Search, Pencil, Trash2 } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Plus, Search, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,28 +18,28 @@ import { supabase } from "@/integrations/supabase/client";
 import { UserFormDialog } from "@/components/admin/UserFormDialog";
 import { UserDetailsSheet } from "@/components/admin/UserDetailsSheet";
 import { usePermissions } from "@/hooks/usePermissions";
-
-interface User {
-  id: string;
-  username: string;
-  email: string;
-  role_id: string | null;
-  reports_to: string | null;
-  status: string;
-  role_name?: string;
-  manager_name?: string;
-}
+import { UsersTable, UserData } from "@/components/admin/UsersTable";
+import { RoleCountBadges } from "@/components/admin/RoleCountBadges";
+import { ColumnVisibilityDropdown } from "@/components/admin/ColumnVisibilityDropdown";
 
 export default function Users() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserData[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState<string | null>(null);
+  const [visibleColumns, setVisibleColumns] = useState({
+    photo: true,
+    username: true,
+    email: true,
+    role: true,
+    manager: true,
+    status: true,
+  });
   const { toast } = useToast();
   const { hasPermission } = usePermissions();
 
@@ -107,7 +98,6 @@ export default function Users() {
     );
 
     setUsers(usersWithManagers);
-    setFilteredUsers(usersWithManagers);
     setIsLoading(false);
   };
 
@@ -115,17 +105,40 @@ export default function Users() {
     fetchUsers();
   }, []);
 
-  useEffect(() => {
-    const filtered = users.filter(
-      (user) =>
+  // Calculate role counts
+  const roleCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    users.forEach((user) => {
+      const role = user.role_name || "Unassigned";
+      counts[role] = (counts[role] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([role_name, count]) => ({
+        role_name: role_name === "Unassigned" ? null : role_name,
+        count,
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [users]);
+
+  // Filter users based on search and role
+  const filteredUsers = useMemo(() => {
+    return users.filter((user) => {
+      const matchesSearch =
+        searchQuery === "" ||
         user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
         user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (user.role_name && user.role_name.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
-    setFilteredUsers(filtered);
-  }, [searchQuery, users]);
+        (user.role_name && user.role_name.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  const handleEdit = (user: User) => {
+      const matchesRole =
+        selectedRoleFilter === null ||
+        (selectedRoleFilter === null && !user.role_name) ||
+        user.role_name === selectedRoleFilter;
+
+      return matchesSearch && matchesRole;
+    });
+  }, [users, searchQuery, selectedRoleFilter]);
+
+  const handleEdit = (user: UserData) => {
     setSelectedUser(user);
     setDialogOpen(true);
   };
@@ -133,6 +146,33 @@ export default function Users() {
   const handleUsernameClick = (userId: string) => {
     setSelectedUserId(userId);
     setDetailsSheetOpen(true);
+  };
+
+  const handleStatusToggle = async (user: UserData) => {
+    const newStatus = user.status === "active" ? "inactive" : "active";
+    
+    const { error } = await supabase
+      .from("profiles")
+      .update({ status: newStatus })
+      .eq("id", user.id);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update user status",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Status Updated",
+      description: `User ${user.username} is now ${newStatus}.`,
+    });
+    
+    setUsers((prev) =>
+      prev.map((u) => (u.id === user.id ? { ...u, status: newStatus } : u))
+    );
   };
 
   const handleDelete = async () => {
@@ -179,123 +219,73 @@ export default function Users() {
     }
   };
 
+  const toggleColumn = (column: string) => {
+    setVisibleColumns((prev) => ({
+      ...prev,
+      [column]: !prev[column],
+    }));
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Users</h1>
-          <p className="text-muted-foreground">Manage user accounts and access</p>
+          <h1 className="text-2xl font-semibold">Users & Roles Management</h1>
+          <p className="text-muted-foreground">View and manage all user accounts and their assigned roles</p>
         </div>
-        {canCreate && (
-          <Button
-            onClick={() => {
-              setSelectedUser(null);
-              setDialogOpen(true);
-            }}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add User
+        <div className="flex items-center gap-2">
+          <ColumnVisibilityDropdown
+            visibleColumns={visibleColumns}
+            onToggle={toggleColumn}
+          />
+          <Button variant="outline" onClick={fetchUsers} disabled={isLoading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+            Refresh
           </Button>
-        )}
+          {canCreate && (
+            <Button
+              onClick={() => {
+                setSelectedUser(null);
+                setDialogOpen(true);
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add User
+            </Button>
+          )}
+        </div>
       </div>
 
+      <RoleCountBadges
+        roleCounts={roleCounts}
+        totalCount={users.length}
+        selectedRole={selectedRoleFilter}
+        onRoleClick={setSelectedRoleFilter}
+      />
+
       <Card>
-        <CardHeader className="pb-4">
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1 max-w-sm">
+        <CardContent className="pt-6">
+          <div className="mb-4">
+            <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search users..."
+                placeholder="Search by name, email, username, or role..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
               />
             </div>
           </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Username</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Reports To</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
-                    Loading...
-                  </TableCell>
-                </TableRow>
-              ) : filteredUsers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    No users found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredUsers.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <button
-                        onClick={() => handleUsernameClick(user.id)}
-                        className="font-medium text-primary hover:underline cursor-pointer text-left"
-                      >
-                        {user.username}
-                      </button>
-                    </TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>
-                      {user.role_name ? (
-                        <Badge variant="secondary">{user.role_name}</Badge>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>{user.manager_name || "—"}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={user.status === "active" ? "default" : "destructive"}
-                        className={user.status === "active" ? "" : "bg-destructive/10 text-destructive border-destructive/20"}
-                      >
-                        {user.status === "active" ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        {canEdit && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEdit(user)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        )}
-                        {canDelete && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setSelectedUser(user);
-                              setDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+
+          <UsersTable
+            users={filteredUsers}
+            isLoading={isLoading}
+            visibleColumns={visibleColumns}
+            onUsernameClick={handleUsernameClick}
+            onEdit={handleEdit}
+            onStatusToggle={handleStatusToggle}
+            canEdit={canEdit}
+          />
         </CardContent>
       </Card>
 
