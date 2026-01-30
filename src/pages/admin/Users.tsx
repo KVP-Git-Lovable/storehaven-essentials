@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { UserFormDialog } from "@/components/admin/UserFormDialog";
+import { UserDetailsSheet } from "@/components/admin/UserDetailsSheet";
 
 interface User {
   id: string;
@@ -45,6 +46,8 @@ export default function Users() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchUsers = async () => {
@@ -119,6 +122,11 @@ export default function Users() {
   const handleEdit = (user: User) => {
     setSelectedUser(user);
     setDialogOpen(true);
+  };
+
+  const handleUsernameClick = (userId: string) => {
+    setSelectedUserId(userId);
+    setDetailsSheetOpen(true);
   };
 
   const handleDelete = async () => {
@@ -204,7 +212,14 @@ export default function Users() {
               ) : (
                 filteredUsers.map((user) => (
                   <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.username}</TableCell>
+                    <TableCell>
+                      <button
+                        onClick={() => handleUsernameClick(user.id)}
+                        className="font-medium text-primary hover:underline cursor-pointer text-left"
+                      >
+                        {user.username}
+                      </button>
+                    </TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
                       {user.role_name ? (
@@ -256,6 +271,12 @@ export default function Users() {
         onOpenChange={setDialogOpen}
         user={selectedUser}
         onSuccess={fetchUsers}
+      />
+
+      <UserDetailsSheet
+        open={detailsSheetOpen}
+        onOpenChange={setDetailsSheetOpen}
+        userId={selectedUserId}
       />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
