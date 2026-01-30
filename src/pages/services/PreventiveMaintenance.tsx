@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { MaintenanceFormDialog } from "@/components/maintenance/MaintenanceFormDialog";
 import { MaintenanceDetailsDialog } from "@/components/maintenance/MaintenanceDetailsDialog";
 import { MaintenanceCalendarView } from "@/components/maintenance/MaintenanceCalendarView";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 
 type MaintenanceTask = {
   id: string;
@@ -40,16 +41,27 @@ export default function PreventiveMaintenance() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const { toast } = useToast();
+  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
   useEffect(() => {
-    fetchSchedules();
-  }, []);
+    if (!accessLoading) {
+      fetchSchedules();
+    }
+  }, [accessLoading, accessibleStoreIds]);
 
   const fetchSchedules = async () => {
-    const { data, error } = await supabase
+    const storeIds = Array.from(accessibleStoreIds);
+    
+    let query = supabase
       .from("maintenance_tasks")
       .select("*, store:store_id(name)")
       .order("created_at", { ascending: false });
+    
+    if (!isAdmin && storeIds.length > 0) {
+      query = query.in("store_id", storeIds);
+    }
+    
+    const { data, error } = await query;
 
     if (error) {
       toast({ title: "Error", description: "Failed to load schedules", variant: "destructive" });

@@ -52,14 +52,30 @@ type Store = {
   address: string;
   phone: string;
   manager: string;
+  manager_id: string | null;
   status: string;
   assets: number;
   is_restricted: boolean;
+  manager_profile?: {
+    username: string;
+    email: string;
+  } | null;
+};
+
+type UserProfile = {
+  id: string;
+  username: string;
+  email: string;
+  status: string;
+  role?: {
+    name: string;
+  } | null;
 };
 
 export default function StoresList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [stores, setStores] = useState<Store[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
@@ -71,22 +87,36 @@ export default function StoresList() {
       address: "",
       phone: "",
       manager: "",
+      manager_id: null,
       status: "active",
     },
   });
 
   useEffect(() => {
     fetchStores();
+    fetchUsers();
   }, []);
+
+  const fetchUsers = async () => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, username, email, status, role:user_roles_master(name)")
+      .eq("status", "active")
+      .order("username");
+
+    if (!error && data) {
+      setUsers(data as UserProfile[]);
+    }
+  };
 
   const fetchStores = async () => {
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
     
-    // Fetch all stores
+    // Fetch all stores with manager profile
     const { data: allStores, error } = await supabase
       .from("stores")
-      .select("*")
+      .select("*, manager_profile:profiles!stores_manager_id_fkey(username, email)")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -122,11 +152,16 @@ export default function StoresList() {
   };
 
   const onSubmit = async (data: StoreFormData) => {
+    // Get manager name from selected user
+    const selectedUser = users.find(u => u.id === data.manager_id);
+    const managerName = selectedUser?.username || data.manager || "";
+
     const { error } = await supabase.from("stores").insert({
       name: data.name,
       address: data.address,
       phone: data.phone,
-      manager: data.manager,
+      manager: managerName,
+      manager_id: data.manager_id || null,
       status: data.status,
       assets: 0,
     });
@@ -146,6 +181,13 @@ export default function StoresList() {
       store.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       store.address.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const getManagerDisplayName = (store: Store) => {
+    if (store.manager_profile?.username) {
+      return store.manager_profile.username;
+    }
+    return store.manager || "-";
+  };
 
   if (loading) {
     return (
@@ -217,13 +259,28 @@ export default function StoresList() {
                   />
                   <FormField
                     control={form.control}
-                    name="manager"
+                    name="manager_id"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Manager</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Manager name" {...field} />
-                        </FormControl>
+                        <FormLabel>Store Manager</FormLabel>
+                        <Select 
+                          onValueChange={(value) => field.onChange(value === "none" ? null : value)} 
+                          value={field.value || "none"}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select manager" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">No manager assigned</SelectItem>
+                            {users.map((user) => (
+                              <SelectItem key={user.id} value={user.id}>
+                                {user.username} {user.role?.name ? `(${user.role.name})` : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -304,7 +361,7 @@ export default function StoresList() {
                     <span className="truncate max-w-[180px]">{store.address}</span>
                   </div>
                 </TableCell>
-                <TableCell>{store.manager}</TableCell>
+                <TableCell>{getManagerDisplayName(store)}</TableCell>
                 <TableCell>{store.assets}</TableCell>
                 <TableCell>
                   <Badge variant={store.status === "active" ? "default" : "secondary"}>

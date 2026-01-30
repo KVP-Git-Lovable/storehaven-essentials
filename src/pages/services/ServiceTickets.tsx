@@ -41,6 +41,7 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ServiceTicketDetailsDialog } from "@/components/services/ServiceTicketDetailsDialog";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 
 const ticketSchema = z.object({
   title: z.string().min(1, "Title is required").max(255),
@@ -96,6 +97,7 @@ export default function ServiceTickets() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const { toast } = useToast();
+  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
   const form = useForm<TicketFormData>({
     resolver: zodResolver(ticketSchema),
@@ -114,8 +116,10 @@ export default function ServiceTickets() {
   const selectedStoreId = form.watch("store_id");
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!accessLoading) {
+      fetchData();
+    }
+  }, [accessLoading, accessibleStoreIds]);
 
   useEffect(() => {
     if (selectedStoreId) {
@@ -129,9 +133,23 @@ export default function ServiceTickets() {
 
   const fetchData = async () => {
     setLoading(true);
+    const storeIds = Array.from(accessibleStoreIds);
+    
+    // Fetch tickets with store filter
+    let ticketsQuery = supabase.from("service_tickets").select("*").order("created_at", { ascending: false });
+    if (!isAdmin && storeIds.length > 0) {
+      ticketsQuery = ticketsQuery.in("store_id", storeIds);
+    }
+    
+    // Fetch accessible stores
+    let storesQuery = supabase.from("stores").select("id, name").order("name");
+    if (!isAdmin && storeIds.length > 0) {
+      storesQuery = storesQuery.in("id", storeIds);
+    }
+    
     const [ticketsRes, storesRes, assetsRes, contractsRes] = await Promise.all([
-      supabase.from("service_tickets").select("*").order("created_at", { ascending: false }),
-      supabase.from("stores").select("id, name").order("name"),
+      ticketsQuery,
+      storesQuery,
       supabase.from("assets").select("id, name, store_id").order("name"),
       supabase.from("service_contracts")
         .select("id, contract_number, service_provider:service_provider_id(name)")
