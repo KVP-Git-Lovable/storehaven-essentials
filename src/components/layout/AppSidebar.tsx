@@ -167,7 +167,7 @@ const navigation: NavItem[] = [
       { title: "Users", href: "/admin/users", moduleKey: "usermanagement.users" },
       { title: "User Roles", href: "/admin/roles", moduleKey: "usermanagement.roles" },
       { title: "User Hierarchy", href: "/admin/hierarchy", moduleKey: "usermanagement.hierarchy" },
-      { title: "Role Permissions", href: "/admin/permissions", moduleKey: "usermanagement.permissions" },
+      { title: "Permission Set", href: "/admin/permissions", moduleKey: "usermanagement.permissions" },
     ],
   },
 ];

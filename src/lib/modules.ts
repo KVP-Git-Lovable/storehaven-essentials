@@ -73,7 +73,7 @@ export const modules: ModuleDefinition[] = [
   { key: "usermanagement.users", name: "Users", parent: "usermanagement" },
   { key: "usermanagement.roles", name: "User Roles", parent: "usermanagement" },
   { key: "usermanagement.hierarchy", name: "User Hierarchy", parent: "usermanagement" },
-  { key: "usermanagement.permissions", name: "Role Permissions", parent: "usermanagement" },
+  { key: "usermanagement.permissions", name: "Permission Set", parent: "usermanagement" },
 ];
 
 // Get parent modules only
