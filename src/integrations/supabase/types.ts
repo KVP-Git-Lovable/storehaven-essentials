@@ -4091,6 +4091,7 @@ export type Database = {
           id: string
           is_restricted: boolean
           manager: string
+          manager_id: string | null
           name: string
           phone: string
           status: string
@@ -4103,6 +4104,7 @@ export type Database = {
           id?: string
           is_restricted?: boolean
           manager: string
+          manager_id?: string | null
           name: string
           phone: string
           status?: string
@@ -4115,12 +4117,21 @@ export type Database = {
           id?: string
           is_restricted?: boolean
           manager?: string
+          manager_id?: string | null
           name?: string
           phone?: string
           status?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "stores_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       task_completions: {
         Row: {

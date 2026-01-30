@@ -4,7 +4,8 @@ export const storeSchema = z.object({
   name: z.string().trim().min(1, "Store name is required").max(100, "Name must be less than 100 characters"),
   address: z.string().trim().min(1, "Address is required").max(255, "Address must be less than 255 characters"),
   phone: z.string().trim().min(10, "Valid phone number required").max(15, "Phone must be less than 15 characters"),
-  manager: z.string().trim().min(1, "Manager name is required").max(100, "Name must be less than 100 characters"),
+  manager: z.string().trim().max(100, "Name must be less than 100 characters").optional(),
+  manager_id: z.string().uuid().optional().nullable(),
   status: z.enum(["active", "under-renovation", "closed"]),
 });
 

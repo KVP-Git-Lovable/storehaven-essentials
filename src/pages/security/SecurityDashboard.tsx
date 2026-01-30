@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { ShieldCheck, Users, AlertTriangle, Clock, Trophy, QrCode } from "lucide-react";
+import { ShieldCheck, Users, AlertTriangle, Clock, Trophy, QrCode, Loader2 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import { useStoreAccess } from "@/hooks/useStoreAccess";
 import {
   Table,
   TableBody,
@@ -40,50 +41,90 @@ export default function SecurityDashboard() {
   const [recentVisits, setRecentVisits] = useState<RecentVisit[]>([]);
   const [topGuards, setTopGuards] = useState<GuardWithStore[]>([]);
   const [loading, setLoading] = useState(true);
+  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    if (!accessLoading) {
+      fetchDashboardData();
+    }
+  }, [accessLoading, accessibleStoreIds]);
 
   const fetchDashboardData = async () => {
     try {
-      // Get total guards
-      const { count: totalGuards } = await supabase
+      const storeIds = Array.from(accessibleStoreIds);
+      
+      // Get total guards with store filter
+      let guardsQuery = supabase
         .from("security_guards")
         .select("*", { count: "exact", head: true })
         .eq("status", "active");
+      
+      if (!isAdmin && storeIds.length > 0) {
+        guardsQuery = guardsQuery.in("store_id", storeIds);
+      }
+      const { count: totalGuards } = await guardsQuery;
 
-      // Get today's roster count
+      // Get today's roster count with store filter
       const today = new Date().toISOString().split("T")[0];
-      const { count: onDuty } = await supabase
+      let rosterQuery = supabase
         .from("security_roster_daily")
-        .select("*", { count: "exact", head: true })
+        .select("*, security_guards!inner(store_id)", { count: "exact", head: true })
         .eq("assignment_date", today)
         .eq("status", "scheduled");
+      
+      if (!isAdmin && storeIds.length > 0) {
+        rosterQuery = supabase
+          .from("security_roster_daily")
+          .select("*, security_guards!inner(store_id)", { count: "exact", head: true })
+          .eq("assignment_date", today)
+          .eq("status", "scheduled")
+          .in("security_guards.store_id", storeIds);
+      }
+      const { count: onDuty } = await rosterQuery;
 
-      // Get top guard by points
-      const { data: topGuard } = await supabase
+      // Get top guard by points with store filter
+      let topGuardQuery = supabase
         .from("security_guards")
         .select("total_points")
         .order("total_points", { ascending: false })
-        .limit(1)
-        .single();
+        .limit(1);
+      
+      if (!isAdmin && storeIds.length > 0) {
+        topGuardQuery = topGuardQuery.in("store_id", storeIds);
+      }
+      const { data: topGuard } = await topGuardQuery.single();
 
-      // Get recent visits
-      const { data: visits } = await supabase
+      // Get recent visits with store filter
+      let visitsQuery = supabase
         .from("security_patrol_visits")
         .select(`
           id,
           scanned_at,
           is_on_time,
-          security_guards(name),
+          security_guards!inner(name, store_id),
           security_patrol_points(name)
         `)
         .order("scanned_at", { ascending: false })
         .limit(5);
+      
+      if (!isAdmin && storeIds.length > 0) {
+        visitsQuery = supabase
+          .from("security_patrol_visits")
+          .select(`
+            id,
+            scanned_at,
+            is_on_time,
+            security_guards!inner(name, store_id),
+            security_patrol_points(name)
+          `)
+          .in("security_guards.store_id", storeIds)
+          .order("scanned_at", { ascending: false })
+          .limit(5);
+      }
+      const { data: visits } = await visitsQuery;
 
-      // Get top 5 guards by points
-      const { data: guards } = await supabase
+      // Get top 5 guards by points with store filter
+      let topGuardsQuery = supabase
         .from("security_guards")
         .select(`
           id,
@@ -96,6 +137,11 @@ export default function SecurityDashboard() {
         .eq("status", "active")
         .order("total_points", { ascending: false })
         .limit(5);
+      
+      if (!isAdmin && storeIds.length > 0) {
+        topGuardsQuery = topGuardsQuery.in("store_id", storeIds);
+      }
+      const { data: guards } = await topGuardsQuery;
 
       setStats({
         totalGuards: totalGuards || 0,
@@ -119,10 +165,10 @@ export default function SecurityDashboard() {
     { title: "Top Points", value: stats.topPoints.toString(), icon: Trophy, iconColor: "bg-accent/10 text-accent-foreground" },
   ];
 
-  if (loading) {
+  if (loading || accessLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }

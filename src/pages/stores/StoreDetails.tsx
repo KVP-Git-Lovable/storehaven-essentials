@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Plus, Phone, User, MapPin, Loader2, Package, Home, Trash2, Calendar, Wrench, Ticket, FileText, Check, X, Gauge, Wallet } from "lucide-react";
+import { ArrowLeft, Plus, Phone, User, MapPin, Loader2, Package, Home, Trash2, Calendar, Wrench, Ticket, FileText, Check, X, Gauge, Wallet, Pencil } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -81,10 +81,29 @@ const deploymentSchema = z.object({
   notes: z.string().optional(),
 });
 
+const storeEditSchema = z.object({
+  name: z.string().min(1, "Store name is required"),
+  address: z.string().min(1, "Address is required"),
+  phone: z.string().min(1, "Phone is required"),
+  manager_id: z.string().optional().nullable(),
+  status: z.enum(["active", "under-renovation", "closed"]),
+});
+
 type ContactFormData = z.infer<typeof contactSchema>;
 type TicketFormData = z.infer<typeof ticketSchema>;
 type PMFormData = z.infer<typeof pmSchema>;
 type DeploymentFormData = z.infer<typeof deploymentSchema>;
+type StoreEditFormData = z.infer<typeof storeEditSchema>;
+
+type UserProfile = {
+  id: string;
+  username: string;
+  email: string;
+  status: string;
+  role?: {
+    name: string;
+  } | null;
+};
 
 type Store = {
   id: string;
@@ -92,8 +111,13 @@ type Store = {
   address: string;
   phone: string;
   manager: string;
+  manager_id: string | null;
   status: string;
   assets: number;
+  manager_profile?: {
+    username: string;
+    email: string;
+  } | null;
 };
 
 type Rental = {
@@ -182,12 +206,14 @@ export default function StoreDetails() {
   const [tickets, setTickets] = useState<ServiceTicket[]>([]);
   const [pmTasks, setPmTasks] = useState<PreventiveMaintenance[]>([]);
   const [allAssets, setAllAssets] = useState<Asset[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [pmDialogOpen, setPmDialogOpen] = useState(false);
   const [deployDialogOpen, setDeployDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const contactForm = useForm<ContactFormData>({
     resolver: zodResolver(contactSchema),
@@ -209,16 +235,36 @@ export default function StoreDetails() {
     defaultValues: { asset_id: "", deployed_date: format(new Date(), "yyyy-MM-dd"), status: "active", feedback: "", notes: "" },
   });
 
+  const storeEditForm = useForm<StoreEditFormData>({
+    resolver: zodResolver(storeEditSchema),
+    defaultValues: { name: "", address: "", phone: "", manager_id: null, status: "active" },
+  });
+
   useEffect(() => {
-    if (id) fetchStoreData();
+    if (id) {
+      fetchStoreData();
+      fetchUsers();
+    }
   }, [id]);
+
+  const fetchUsers = async () => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, username, email, status, role:user_roles_master(name)")
+      .eq("status", "active")
+      .order("username");
+
+    if (!error && data) {
+      setUsers(data as UserProfile[]);
+    }
+  };
 
   const fetchStoreData = async () => {
     setLoading(true);
     
     const { data: storeData, error: storeError } = await supabase
       .from("stores")
-      .select("*")
+      .select("*, manager_profile:profiles!stores_manager_id_fkey(username, email)")
       .eq("id", id)
       .single();
 
@@ -247,6 +293,41 @@ export default function StoreDetails() {
     setAllAssets(assetsRes.data || []);
 
     setLoading(false);
+  };
+
+  const onStoreEditSubmit = async (data: StoreEditFormData) => {
+    const selectedUser = users.find(u => u.id === data.manager_id);
+    const managerName = selectedUser?.username || "";
+
+    const { error } = await supabase.from("stores").update({
+      name: data.name,
+      address: data.address,
+      phone: data.phone,
+      manager: managerName,
+      manager_id: data.manager_id || null,
+      status: data.status,
+    }).eq("id", id);
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to update store", variant: "destructive" });
+    } else {
+      toast({ title: "Store updated" });
+      setEditDialogOpen(false);
+      fetchStoreData();
+    }
+  };
+
+  const openEditDialog = () => {
+    if (store) {
+      storeEditForm.reset({
+        name: store.name,
+        address: store.address,
+        phone: store.phone,
+        manager_id: store.manager_id || null,
+        status: store.status as "active" | "under-renovation" | "closed",
+      });
+      setEditDialogOpen(true);
+    }
   };
 
   const onContactSubmit = async (data: ContactFormData) => {
@@ -420,6 +501,13 @@ export default function StoreDetails() {
     );
   }
 
+  const getManagerDisplayName = () => {
+    if (store?.manager_profile?.username) {
+      return store.manager_profile.username;
+    }
+    return store?.manager || "-";
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -437,7 +525,89 @@ export default function StoreDetails() {
             <span>{store.address}</span>
           </div>
         </div>
+        <Button variant="outline" size="sm" onClick={openEditDialog}>
+          <Pencil className="h-4 w-4 mr-2" />
+          Edit Store
+        </Button>
       </div>
+
+      {/* Edit Store Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Edit Store</DialogTitle>
+          </DialogHeader>
+          <Form {...storeEditForm}>
+            <form onSubmit={storeEditForm.handleSubmit(onStoreEditSubmit)} className="space-y-4">
+              <FormField control={storeEditForm.control} name="name" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Store Name</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={storeEditForm.control} name="address" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Address</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={storeEditForm.control} name="phone" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={storeEditForm.control} name="manager_id" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Store Manager</FormLabel>
+                    <Select 
+                      onValueChange={(value) => field.onChange(value === "none" ? null : value)} 
+                      value={field.value || "none"}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select manager" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">No manager assigned</SelectItem>
+                        {users.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.username} {user.role?.name ? `(${user.role.name})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+              <FormField control={storeEditForm.control} name="status" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="under-renovation">Under Renovation</SelectItem>
+                      <SelectItem value="closed">Closed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+                <Button type="submit">Save Changes</Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
 
       {/* Info Cards */}
       <div className="grid gap-4 md:grid-cols-5">
@@ -448,7 +618,7 @@ export default function StoreDetails() {
           <CardContent>
             <div className="flex items-center gap-2">
               <User className="h-4 w-4 text-primary" />
-              <span className="font-medium">{store.manager}</span>
+              <span className="font-medium">{getManagerDisplayName()}</span>
             </div>
           </CardContent>
         </Card>
