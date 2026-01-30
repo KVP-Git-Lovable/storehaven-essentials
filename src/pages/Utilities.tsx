@@ -157,19 +157,43 @@ export default function Utilities() {
   };
 
   const handleMeterMasterChange = (id: string) => {
-    const master = meterMasters.find(m => m.id === id);
-    setSelectedMeterMaster(master || null);
-    setFormData(prev => ({
-      ...prev,
-      meter_master_id: id,
-      readings: {},
-    }));
+    if (id === "solar_custom") {
+      // Custom Solar option with specific fields
+      const solarMaster: MeterMaster = {
+        id: "solar_custom",
+        name: "Solar",
+        reading_parameter_count: 1,
+        reading_parameters: ["KWH"],
+        details_to_capture: "Both",
+      };
+      setSelectedMeterMaster(solarMaster);
+      setFormData(prev => ({
+        ...prev,
+        meter_master_id: id,
+        readings: {},
+      }));
+    } else {
+      const master = meterMasters.find(m => m.id === id);
+      setSelectedMeterMaster(master || null);
+      setFormData(prev => ({
+        ...prev,
+        meter_master_id: id,
+        readings: {},
+      }));
+    }
   };
 
   const getReadingFields = (master: MeterMaster | null) => {
     if (!master) return [];
     
     const fields: { key: string; label: string }[] = [];
+    
+    // Custom Solar fields with Opening/Closing labels
+    if (master.id === "solar_custom") {
+      fields.push({ key: "KWH_start", label: "KWH Opening Reading" });
+      fields.push({ key: "KWH_end", label: "KWH Closing Reading" });
+      return fields;
+    }
     
     master.reading_parameters.forEach((param) => {
       if (master.details_to_capture === "Start") {
@@ -357,9 +381,13 @@ export default function Utilities() {
                       <SelectValue placeholder="Select meter type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {meterMasters.map((master) => (
-                        <SelectItem key={master.id} value={master.id}>{master.name}</SelectItem>
-                      ))}
+                      {/* Hide Solar-2 and Sun light, show filtered list + custom Solar option */}
+                      {meterMasters
+                        .filter(master => !["Solar-2", "Sun light"].includes(master.name))
+                        .map((master) => (
+                          <SelectItem key={master.id} value={master.id}>{master.name}</SelectItem>
+                        ))}
+                      <SelectItem value="solar_custom">Solar</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -416,39 +444,59 @@ export default function Utilities() {
                   {/* Live Consumption Calculation */}
                   {selectedMeterMaster.details_to_capture === "Both" && (
                     <div className="pt-4 space-y-3">
-                      <h4 className="font-medium text-sm">Consumption Preview (End - Start)</h4>
+                      <h4 className="font-medium text-sm">Consumption Preview</h4>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {calculateConsumption(formData.readings, selectedMeterMaster)?.map((c) => (
-                          <div key={c.param} className="p-3 bg-primary/10 rounded-lg">
-                            <div className="text-xs text-muted-foreground">{c.param} Consumption</div>
-                            <div className="text-lg font-semibold">{c.value.toLocaleString()}</div>
-                          </div>
-                        ))}
-                        
-                        {/* Consumed Units = (KWH End - KWH Start) × 7500 */}
-                        {selectedMeterMaster.reading_parameters.includes("KWH") && (
-                          <div className="p-3 bg-warning/10 rounded-lg">
-                            <div className="text-xs text-muted-foreground">Consumed Units</div>
-                            <div className="text-lg font-semibold">
-                              {(((formData.readings["KWH_end"] || 0) - (formData.readings["KWH_start"] || 0)) * 7500).toLocaleString()}
+                        {/* Custom Solar consumption preview */}
+                        {selectedMeterMaster.id === "solar_custom" ? (
+                          <>
+                            <div className="p-3 bg-primary/10 rounded-lg">
+                              <div className="text-xs text-muted-foreground">KWH Difference</div>
+                              <div className="text-lg font-semibold">
+                                {((formData.readings["KWH_end"] || 0) - (formData.readings["KWH_start"] || 0)).toLocaleString()}
+                              </div>
                             </div>
-                          </div>
-                        )}
-                        
-                        {/* Power Factor = KWH Consumption / KVAH Consumption */}
-                        {selectedMeterMaster.reading_parameters.includes("KWH") && 
-                         selectedMeterMaster.reading_parameters.includes("KVAH") && (
-                          <div className="p-3 bg-info/10 rounded-lg">
-                            <div className="text-xs text-muted-foreground">Power Factor</div>
-                            <div className="text-lg font-semibold">
-                              {(() => {
-                                const kwhConsumption = (formData.readings["KWH_end"] || 0) - (formData.readings["KWH_start"] || 0);
-                                const kvahConsumption = (formData.readings["KVAH_end"] || 0) - (formData.readings["KVAH_start"] || 0);
-                                if (kvahConsumption === 0) return "—";
-                                return (kwhConsumption / kvahConsumption).toFixed(3);
-                              })()}
+                            <div className="p-3 bg-warning/10 rounded-lg">
+                              <div className="text-xs text-muted-foreground">Units</div>
+                              <div className="text-lg font-semibold">
+                                {(((formData.readings["KWH_end"] || 0) - (formData.readings["KWH_start"] || 0)) * 100).toLocaleString()}
+                              </div>
                             </div>
-                          </div>
+                          </>
+                        ) : (
+                          <>
+                            {calculateConsumption(formData.readings, selectedMeterMaster)?.map((c) => (
+                              <div key={c.param} className="p-3 bg-primary/10 rounded-lg">
+                                <div className="text-xs text-muted-foreground">{c.param} Consumption</div>
+                                <div className="text-lg font-semibold">{c.value.toLocaleString()}</div>
+                              </div>
+                            ))}
+                            
+                            {/* Consumed Units = (KWH End - KWH Start) × 7500 */}
+                            {selectedMeterMaster.reading_parameters.includes("KWH") && (
+                              <div className="p-3 bg-warning/10 rounded-lg">
+                                <div className="text-xs text-muted-foreground">Consumed Units</div>
+                                <div className="text-lg font-semibold">
+                                  {(((formData.readings["KWH_end"] || 0) - (formData.readings["KWH_start"] || 0)) * 7500).toLocaleString()}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Power Factor = KWH Consumption / KVAH Consumption */}
+                            {selectedMeterMaster.reading_parameters.includes("KWH") && 
+                             selectedMeterMaster.reading_parameters.includes("KVAH") && (
+                              <div className="p-3 bg-info/10 rounded-lg">
+                                <div className="text-xs text-muted-foreground">Power Factor</div>
+                                <div className="text-lg font-semibold">
+                                  {(() => {
+                                    const kwhConsumption = (formData.readings["KWH_end"] || 0) - (formData.readings["KWH_start"] || 0);
+                                    const kvahConsumption = (formData.readings["KVAH_end"] || 0) - (formData.readings["KVAH_start"] || 0);
+                                    if (kvahConsumption === 0) return "—";
+                                    return (kwhConsumption / kvahConsumption).toFixed(3);
+                                  })()}
+                                </div>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
