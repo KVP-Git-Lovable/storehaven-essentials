@@ -415,15 +415,41 @@ export default function Utilities() {
                   
                   {/* Live Consumption Calculation */}
                   {selectedMeterMaster.details_to_capture === "Both" && (
-                    <div className="pt-4">
-                      <h4 className="font-medium text-sm mb-2">Consumption Preview (End - Start)</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="pt-4 space-y-3">
+                      <h4 className="font-medium text-sm">Consumption Preview (End - Start)</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         {calculateConsumption(formData.readings, selectedMeterMaster)?.map((c) => (
-                          <div key={c.param} className="p-2 bg-primary/10 rounded text-sm">
-                            <span className="text-muted-foreground">{c.param}:</span>
-                            <span className="font-medium ml-2">{c.value.toLocaleString()}</span>
+                          <div key={c.param} className="p-3 bg-primary/10 rounded-lg">
+                            <div className="text-xs text-muted-foreground">{c.param} Consumption</div>
+                            <div className="text-lg font-semibold">{c.value.toLocaleString()}</div>
                           </div>
                         ))}
+                        
+                        {/* Consumed Units = (KWH End - KWH Start) × 7500 */}
+                        {selectedMeterMaster.reading_parameters.includes("KWH") && (
+                          <div className="p-3 bg-warning/10 rounded-lg">
+                            <div className="text-xs text-muted-foreground">Consumed Units</div>
+                            <div className="text-lg font-semibold">
+                              {(((formData.readings["KWH_end"] || 0) - (formData.readings["KWH_start"] || 0)) * 7500).toLocaleString()}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Power Factor = KWH Consumption / KVAH Consumption */}
+                        {selectedMeterMaster.reading_parameters.includes("KWH") && 
+                         selectedMeterMaster.reading_parameters.includes("KVAH") && (
+                          <div className="p-3 bg-info/10 rounded-lg">
+                            <div className="text-xs text-muted-foreground">Power Factor</div>
+                            <div className="text-lg font-semibold">
+                              {(() => {
+                                const kwhConsumption = (formData.readings["KWH_end"] || 0) - (formData.readings["KWH_start"] || 0);
+                                const kvahConsumption = (formData.readings["KVAH_end"] || 0) - (formData.readings["KVAH_start"] || 0);
+                                if (kvahConsumption === 0) return "—";
+                                return (kwhConsumption / kvahConsumption).toFixed(3);
+                              })()}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
