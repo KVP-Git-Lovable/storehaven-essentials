@@ -283,8 +283,13 @@ export default function Users() {
             visibleColumns={visibleColumns}
             onUsernameClick={handleUsernameClick}
             onEdit={handleEdit}
+            onDelete={(user) => {
+              setSelectedUser(user);
+              setDeleteDialogOpen(true);
+            }}
             onStatusToggle={handleStatusToggle}
             canEdit={canEdit}
+            canDelete={canDelete}
           />
         </CardContent>
       </Card>

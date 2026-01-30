@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pencil, Filter, ArrowUpDown, X } from "lucide-react";
+import { Pencil, Filter, ArrowUpDown, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -44,8 +44,10 @@ interface UsersTableProps {
   visibleColumns: Record<string, boolean>;
   onUsernameClick: (userId: string) => void;
   onEdit: (user: UserData) => void;
+  onDelete: (user: UserData) => void;
   onStatusToggle: (user: UserData) => void;
   canEdit: boolean;
+  canDelete: boolean;
 }
 
 export function UsersTable({
@@ -54,8 +56,10 @@ export function UsersTable({
   visibleColumns,
   onUsernameClick,
   onEdit,
+  onDelete,
   onStatusToggle,
   canEdit,
+  canDelete,
 }: UsersTableProps) {
   const [columnFilters, setColumnFilters] = useState<ColumnFilter>({
     username: "",
@@ -361,17 +365,26 @@ export function UsersTable({
                     </TableCell>
                   )}
                   <TableCell>
-                    {canEdit && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onEdit(user)}
-                        className="gap-1"
-                      >
-                        <Pencil className="h-4 w-4" />
-                        Edit
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {canEdit && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => onEdit(user)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => onDelete(user)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
