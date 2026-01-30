@@ -54,6 +54,7 @@ type Store = {
   manager: string;
   status: string;
   assets: number;
+  is_restricted: boolean;
 };
 
 export default function StoresList() {
@@ -79,16 +80,42 @@ export default function StoresList() {
   }, []);
 
   const fetchStores = async () => {
-    const { data, error } = await supabase
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    // Fetch all stores
+    const { data: allStores, error } = await supabase
       .from("stores")
       .select("*")
       .order("created_at", { ascending: false });
 
     if (error) {
       toast({ title: "Error", description: "Failed to load stores", variant: "destructive" });
-    } else {
-      setStores(data || []);
+      setLoading(false);
+      return;
     }
+
+    if (!user) {
+      // No user logged in, show only non-restricted stores
+      setStores((allStores || []).filter(s => !s.is_restricted));
+      setLoading(false);
+      return;
+    }
+
+    // Get user's store access for restricted stores
+    const { data: accessRecords } = await supabase
+      .from("store_user_access")
+      .select("store_id")
+      .eq("user_id", user.id);
+
+    const accessibleStoreIds = new Set((accessRecords || []).map(r => r.store_id));
+
+    // Filter stores: show non-restricted OR restricted stores user has access to
+    const visibleStores = (allStores || []).filter(store => 
+      !store.is_restricted || accessibleStoreIds.has(store.id)
+    );
+
+    setStores(visibleStores);
     setLoading(false);
   };
 
