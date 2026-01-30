@@ -1,233 +1,325 @@
 
+# User Hierarchy-Based Visibility Implementation Plan
 
-# Store Access Control - Comprehensive Fix Plan
-
-## Problem Summary
-
-Store Managers like **Suyog** (assigned to "Polar Bear - Manna Gudda") are currently able to see data from **all stores** across multiple modules. The expected behavior is that users should only see data related to their assigned store(s).
-
-**Current Data in Database:**
-- Suyog (user_id: 35a0c4d0-65ac-4d43-8a87-f59c9af2d1bd) is assigned to store "Polar Bear - Manna Gudda" (store_id: 57fc3e12-fbd3-4c86-be4b-b188310d3a8d)
-- Shravya (user_id: 4a65e375-e1a5-4d5c-9eb1-3e4f630d05c7) is assigned to store "Polar Bear - Kottara" (store_id: 799a8179-5f37-41a9-84fa-0a5419be922a)
-
-The `store_user_access` table is correctly populated via the database trigger when a store manager is assigned.
+## Overview
+This plan implements a comprehensive hierarchy-based visibility system where managers can see data from their direct and nested subordinates, while regular users only see their own data. This builds upon the existing `reports_to` field in the `profiles` table.
 
 ---
 
-## Root Cause Analysis
+## Architecture Design
 
-The application has a `useStoreAccess` hook that correctly:
-1. Fetches accessible store IDs from the `store_user_access` table
-2. Provides filtering utilities (`filterByStore`, `hasAccess`)
-3. Returns `accessibleStoreIds` for query filtering
+### Current State
+- **User Hierarchy**: Already exists via `reports_to` field in `profiles` table (self-referencing UUID)
+- **Store Access**: Already implemented via `useStoreAccess` hook and `store_user_access` table
+- **Permissions**: Already implemented via `usePermissions` hook
 
-**However, most modules do NOT use this hook** to filter their data. They fetch all data from the database without applying store-based restrictions.
-
----
-
-## Current State by Module
-
-### Modules WITH Store Filtering (Working Correctly)
-| Module | File | Status |
-|--------|------|--------|
-| Dashboard | `src/pages/Dashboard.tsx` | Uses `useStoreAccess` |
-| Service Tickets | `src/pages/services/ServiceTickets.tsx` | Uses `useStoreAccess` |
-| Preventive Maintenance | `src/pages/services/PreventiveMaintenance.tsx` | Uses `useStoreAccess` |
-| Security Dashboard | `src/pages/security/SecurityDashboard.tsx` | Uses `useStoreAccess` |
-| Recent Activity | `src/components/dashboard/RecentActivity.tsx` | Uses `useStoreAccess` |
-| Utilities | `src/pages/Utilities.tsx` | Custom implementation |
-| Stores List | `src/pages/stores/StoresList.tsx` | Custom implementation |
-| Meter Readings | `src/components/utilities/MeterReadingsSection.tsx` | Custom implementation |
-
-### Modules WITHOUT Store Filtering (Need to be Fixed)
-
-#### High Priority (User-Reported Issues)
-| Module | File | Data Table | Store Field |
-|--------|------|------------|-------------|
-| Asset Register | `src/pages/assets/AssetInventory.tsx` | `assets` | `store_id` |
-| Spares Management | `src/pages/assets/SparesManagement.tsx` | `spares` | Needs `store_id` column |
-| Service Contracts | `src/pages/services/ServiceContracts.tsx` | `service_contracts` | Via `service_contract_locations` |
-| Security Guards | `src/pages/security/SecurityGuards.tsx` | `security_guards` | `store_id` |
-
-#### Medium Priority (Other Modules)
-| Module | File | Data Table | Store Field |
-|--------|------|------------|-------------|
-| Petty Cash | `src/pages/PettyCash.tsx` | `petty_cash` | `store_id` |
-| Patrol Points | `src/pages/security/PatrolPoints.tsx` | `security_patrol_points` | `store_id` |
-| Security Roster | `src/pages/security/SecurityRoster.tsx` | `security_roster` | Via guards |
-| Guard Feedback | `src/pages/security/GuardFeedback.tsx` | `security_guard_feedback` | `store_id` |
-| Inventory Requisitions | `src/pages/inventory/Requisitions.tsx` | `inventory_requisitions` | `store_id` |
-| Goods Receipt | `src/pages/inventory/GoodsReceipt.tsx` | `goods_receipts` | `store_id` |
-| Store Transfers | `src/pages/inventory/StoreTransfers.tsx` | `store_transfers` | `source_store_id` / `destination_store_id` |
-| VM Compliance Tasks | `src/pages/vm/ComplianceTasks.tsx` | `vm_compliance_tasks` | `store_id` |
-| Photo Submissions | `src/pages/vm/PhotoSubmission.tsx` | `vm_submissions` | `store_id` |
-| Task Adherence | `src/pages/operations/TaskAdherence.tsx` | `task_completions` | Via store |
-| Task Templates | `src/pages/operations/TaskTemplates.tsx` | `task_templates` | `store_id` |
-| Store Heatmap | `src/pages/operations/StoreHeatmap.tsx` | `stores` | Direct filtering |
+### New Components
+1. **Database Function**: `get_subordinate_user_ids(user_id)` - Recursively fetches all subordinate IDs
+2. **React Hook**: `useHierarchyAccess` - Provides accessible user IDs and filtering utilities
+3. **Module Updates**: Apply hierarchy filtering across all relevant modules
 
 ---
 
-## Implementation Approach
+## Database Changes
 
-### Step 1: Update Modules to Use `useStoreAccess` Hook
+### 1. Create Recursive Function to Get Subordinate User IDs
 
-For each module that needs fixing, apply the following pattern:
+```sql
+CREATE OR REPLACE FUNCTION public.get_subordinate_user_ids(_user_id uuid)
+RETURNS SETOF uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  WITH RECURSIVE subordinates AS (
+    -- Direct reports
+    SELECT id FROM public.profiles WHERE reports_to = _user_id
+    UNION ALL
+    -- Nested subordinates
+    SELECT p.id 
+    FROM public.profiles p
+    INNER JOIN subordinates s ON p.reports_to = s.id
+  )
+  SELECT id FROM subordinates;
+$$;
+```
 
-```tsx
-import { useStoreAccess } from "@/hooks/useStoreAccess";
+### 2. Create Helper Function to Check If User Is Subordinate
 
-export default function ModuleName() {
-  const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
-  
+```sql
+CREATE OR REPLACE FUNCTION public.is_subordinate(_manager_id uuid, _user_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.get_subordinate_user_ids(_manager_id) WHERE get_subordinate_user_ids = _user_id
+  )
+$$;
+```
+
+### 3. Create Function to Get All Accessible User IDs (Self + Subordinates)
+
+```sql
+CREATE OR REPLACE FUNCTION public.get_hierarchy_accessible_users(_user_id uuid)
+RETURNS SETOF uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  -- Include self
+  SELECT _user_id
+  UNION
+  -- Include all subordinates
+  SELECT id FROM public.get_subordinate_user_ids(_user_id);
+$$;
+```
+
+---
+
+## Frontend Changes
+
+### 1. Create `useHierarchyAccess` Hook
+
+**File**: `src/hooks/useHierarchyAccess.ts`
+
+This hook will:
+- Fetch subordinate user IDs via the database function
+- Provide filtering utilities similar to `useStoreAccess`
+- Cache results for performance
+
+```typescript
+type UseHierarchyAccessReturn = {
+  accessibleUserIds: Set<string>;   // Self + all subordinates
+  subordinateUserIds: Set<string>;  // Only subordinates (not including self)
+  isAdmin: boolean;
+  loading: boolean;
+  filterByUser: <T>(data: T[], userIdField?: string) => T[];
+  hasAccessToUser: (userId: string) => boolean;
+  canManageUser: (userId: string) => boolean; // True if user is subordinate
+};
+```
+
+### 2. Update Modules to Use Hierarchy Filtering
+
+The following modules need hierarchy filtering applied:
+
+| Module | File | User Field | Filtering Logic |
+|--------|------|------------|-----------------|
+| Dashboard | `src/pages/Dashboard.tsx` | Various | Filter counts by accessible users |
+| Service Tickets | `src/pages/services/ServiceTickets.tsx` | `reported_by`, `assigned_to` | Show tickets created/assigned to subordinates |
+| Task Adherence | `src/pages/operations/TaskAdherence.tsx` | `user_id` | Show task completions by team |
+| User Management | `src/pages/admin/Users.tsx` | N/A | Show only subordinates in non-admin view |
+| Approvals (Future) | N/A | `submitted_by` | See approval requests from subordinates |
+
+### 3. Filter User Dropdowns
+
+When selecting users in forms (e.g., "Assigned To"), show only:
+- For Admins: All users
+- For Managers: Self + subordinates only
+
+---
+
+## Detailed Implementation Steps
+
+### Phase 1: Database Layer (Migration)
+
+1. Create `get_subordinate_user_ids` function
+2. Create `get_hierarchy_accessible_users` function
+3. Create `is_subordinate` helper function
+4. Test with existing user hierarchy data
+
+### Phase 2: Frontend Hook
+
+**Create `src/hooks/useHierarchyAccess.ts`:**
+
+```typescript
+import { useState, useEffect, useCallback } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+
+export function useHierarchyAccess() {
+  const { user, isAdmin } = useAuth();
+  const [accessibleUserIds, setAccessibleUserIds] = useState<Set<string>>(new Set());
+  const [subordinateUserIds, setSubordinateUserIds] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    if (!accessLoading) {
-      fetchData();
-    }
-  }, [accessLoading, accessibleStoreIds]);
-  
-  const fetchData = async () => {
-    const storeIds = Array.from(accessibleStoreIds);
-    
-    let query = supabase.from("table_name").select("*");
-    
-    // Apply store filter for non-admins
-    if (!isAdmin && storeIds.length > 0) {
-      query = query.in("store_id", storeIds);
-    }
-    
-    const { data, error } = await query;
-    // ...
+    const fetchHierarchyAccess = async () => {
+      if (!user?.id) {
+        setAccessibleUserIds(new Set());
+        setSubordinateUserIds(new Set());
+        setLoading(false);
+        return;
+      }
+
+      // Admins have access to all users
+      if (isAdmin) {
+        const { data: allUsers } = await supabase
+          .from("profiles")
+          .select("id");
+        setAccessibleUserIds(new Set((allUsers || []).map(u => u.id)));
+        setSubordinateUserIds(new Set((allUsers || []).map(u => u.id)));
+        setLoading(false);
+        return;
+      }
+
+      // Get subordinates via database function
+      const { data: subordinates } = await supabase
+        .rpc("get_subordinate_user_ids", { _user_id: user.id });
+
+      const subIds = new Set((subordinates || []).map((r: { get_subordinate_user_ids: string }) => 
+        r.get_subordinate_user_ids));
+      
+      // Accessible = self + subordinates
+      const accessibleIds = new Set([user.id, ...subIds]);
+
+      setSubordinateUserIds(subIds);
+      setAccessibleUserIds(accessibleIds);
+      setLoading(false);
+    };
+
+    fetchHierarchyAccess();
+  }, [user?.id, isAdmin]);
+
+  const filterByUser = useCallback(<T extends Record<string, unknown>>(
+    data: T[],
+    userIdField = "user_id"
+  ): T[] => {
+    if (isAdmin) return data;
+    return data.filter(item => {
+      const userId = item[userIdField];
+      if (!userId) return true;
+      return accessibleUserIds.has(userId as string);
+    });
+  }, [accessibleUserIds, isAdmin]);
+
+  const hasAccessToUser = useCallback((userId: string): boolean => {
+    if (isAdmin) return true;
+    return accessibleUserIds.has(userId);
+  }, [accessibleUserIds, isAdmin]);
+
+  const canManageUser = useCallback((userId: string): boolean => {
+    if (isAdmin) return true;
+    return subordinateUserIds.has(userId);
+  }, [subordinateUserIds, isAdmin]);
+
+  return {
+    accessibleUserIds,
+    subordinateUserIds,
+    isAdmin,
+    loading,
+    filterByUser,
+    hasAccessToUser,
+    canManageUser,
   };
-  
-  // Filter store dropdowns in forms
-  const filteredStores = stores.filter(s => 
-    isAdmin || accessibleStoreIds.has(s.id)
-  );
 }
 ```
 
-### Step 2: Filter Store Dropdowns in Forms
+### Phase 3: Update User Management Module
 
-When a Store Manager creates new records, the store dropdown should only show their assigned store(s):
+**Modify `src/pages/admin/Users.tsx`:**
 
-```tsx
-// In form dialogs
-<SelectContent>
-  {stores
-    .filter(s => isAdmin || accessibleStoreIds.has(s.id))
-    .map((store) => (
-      <SelectItem key={store.id} value={store.id}>
-        {store.name}
-      </SelectItem>
-    ))}
-</SelectContent>
-```
+- Non-admin users see only their direct and nested subordinates
+- Admin users see all users (current behavior)
+- Filter user list based on `accessibleUserIds`
 
-### Step 3: Handle Tables Without Store ID
+### Phase 4: Update User Dropdowns Across Modules
 
-Some tables like `spares` don't have a `store_id` column. Options:
-1. Add `store_id` column via migration
-2. Link through parent table (e.g., spares linked to assets which have store_id)
+**Files to update:**
 
-For `service_contracts`, filter through the `service_contract_locations` junction table.
+| Component | Dropdown Field | Current Behavior | New Behavior |
+|-----------|----------------|------------------|--------------|
+| `UserFormDialog.tsx` | "Reports To" | Shows all users | Shows users in hierarchy context |
+| `MaintenanceFormDialog.tsx` | "Assigned To" | Text input | User dropdown with hierarchy filter |
+| `ServiceTicketDetailsDialog.tsx` | "Assigned To" | Text input | User dropdown with hierarchy filter |
+
+### Phase 5: Apply to Dashboard & Reports
+
+- Filter dashboard stats to show only data related to accessible users
+- Filter activity feeds to show team activities
+- Apply to any future reporting modules
 
 ---
+
+## Files to Create
+
+| File | Purpose |
+|------|---------|
+| `src/hooks/useHierarchyAccess.ts` | Hook for hierarchy-based user access |
 
 ## Files to Modify
 
-### Phase 1: Critical Modules (User-Reported)
-
 | File | Changes |
 |------|---------|
-| `src/pages/assets/AssetInventory.tsx` | Add `useStoreAccess`, filter assets query, filter store dropdown |
-| `src/pages/assets/SparesManagement.tsx` | Add `useStoreAccess`, filter by linked assets or add store_id |
-| `src/pages/services/ServiceContracts.tsx` | Add `useStoreAccess`, filter by contract locations |
-| `src/pages/security/SecurityGuards.tsx` | Add `useStoreAccess`, filter guards by store_id |
-
-### Phase 2: Secondary Modules
-
-| File | Changes |
-|------|---------|
-| `src/pages/PettyCash.tsx` | Add `useStoreAccess`, filter petty cash records, filter store dropdown |
-| `src/pages/security/PatrolPoints.tsx` | Add `useStoreAccess`, filter patrol points |
-| `src/pages/security/SecurityRoster.tsx` | Add `useStoreAccess`, filter roster by guard's store |
-| `src/pages/security/GuardFeedback.tsx` | Add `useStoreAccess`, filter feedback by store |
-| `src/pages/inventory/Requisitions.tsx` | Add `useStoreAccess`, filter requisitions |
-| `src/pages/inventory/GoodsReceipt.tsx` | Add `useStoreAccess`, filter GRN records |
-| `src/pages/inventory/StoreTransfers.tsx` | Add `useStoreAccess`, filter transfers |
-| `src/pages/vm/ComplianceTasks.tsx` | Add `useStoreAccess`, filter tasks |
-| `src/pages/vm/PhotoSubmission.tsx` | Add `useStoreAccess`, filter submissions |
-| `src/pages/operations/TaskAdherence.tsx` | Add `useStoreAccess`, filter adherence data |
-| `src/pages/operations/TaskTemplates.tsx` | Add `useStoreAccess`, filter templates |
-| `src/pages/operations/StoreHeatmap.tsx` | Add `useStoreAccess`, filter store list |
-| `src/components/maintenance/MaintenanceFormDialog.tsx` | Filter store dropdown |
-| `src/components/security/GuardFormDialog.tsx` | Filter store dropdown |
+| Database Migration | Add recursive subordinate functions |
+| `src/pages/admin/Users.tsx` | Filter users by hierarchy for non-admins |
+| `src/components/admin/UserFormDialog.tsx` | Filter "Reports To" dropdown |
+| `src/pages/services/ServiceTickets.tsx` | Optional: Filter by user hierarchy |
+| `src/pages/operations/TaskAdherence.tsx` | Filter by accessible users |
 
 ---
 
-## Database Considerations
+## Security Considerations
 
-### Optional: Add store_id to Spares Table
-
-If spares need direct store filtering, add a migration:
+### Backend Enforcement (Recommended Addition)
+While frontend filtering provides UX, consider adding RLS policies for defense-in-depth:
 
 ```sql
-ALTER TABLE spares ADD COLUMN store_id UUID REFERENCES stores(id);
-```
-
-### Row Level Security (Backend Safety)
-
-For defense-in-depth, consider adding RLS policies that enforce store access at the database level. This prevents data leakage even if the frontend filtering is bypassed.
-
-Example pattern:
-```sql
-CREATE POLICY "Users can only view assets for their accessible stores"
-ON assets FOR SELECT
+-- Example: Managers can only view profiles of their subordinates
+CREATE POLICY "Users can view own and subordinate profiles"
+ON public.profiles FOR SELECT
 USING (
-  store_id IN (
-    SELECT store_id FROM store_user_access WHERE user_id = auth.uid()
-  )
-  OR is_admin(auth.uid())
+  id = auth.uid()
+  OR public.is_subordinate(auth.uid(), id)
+  OR public.is_admin(auth.uid())
 );
 ```
 
----
-
-## Testing Plan
-
-After implementation:
-
-1. **Login as Suyog** (Store Manager for "Polar Bear - Manna Gudda")
-2. Verify these modules show ONLY data from "Polar Bear - Manna Gudda":
-   - Asset Register
-   - Spares Management
-   - Service Contracts (if any linked to that store)
-   - Security Guards (guards assigned to that store)
-   - Petty Cash
-   - All other modules
-3. Verify store dropdowns ONLY show "Polar Bear - Manna Gudda"
-4. **Login as Admin** - verify all stores and data are visible
-5. **Login as Shravya** - verify only "Polar Bear - Kottara" data is visible
+### Admin Bypass
+All hierarchy functions include admin bypass:
+- `is_admin()` check at the start
+- Admins see all data without restriction
 
 ---
 
-## Technical Details
+## Testing Scenarios
 
-### Key Files Reference
-- **Hook**: `src/hooks/useStoreAccess.ts` - Provides store access utilities
-- **Auth**: `src/hooks/useAuth.ts` - Provides `isAdmin` flag
-- **Database Trigger**: `sync_store_manager_access` - Auto-populates `store_user_access` when manager is assigned
+| Scenario | Expected Result |
+|----------|-----------------|
+| Manager with 2 direct reports | Sees self + 2 subordinates |
+| Manager with nested team (L1 > L2 > L3) | Sees all levels below |
+| Regular user (no subordinates) | Sees only own data |
+| Admin user | Sees all users |
+| New user added under manager | Auto-visible without config |
+| User moved to different manager | Visibility updates accordingly |
 
-### Store Access Logic Flow
-```text
-User Logs In
-    ↓
-useStoreAccess Hook Executes
-    ↓
-Checks store_user_access table for user's records
-    ↓
-If records exist → User sees ONLY those stores
-If no records → User sees all non-restricted stores
-If isAdmin → User sees ALL stores
-```
+---
+
+## Rollout Strategy
+
+1. **Phase 1**: Deploy database functions (no frontend impact)
+2. **Phase 2**: Deploy `useHierarchyAccess` hook (unused initially)
+3. **Phase 3**: Enable on User Management page first
+4. **Phase 4**: Gradually enable on other modules
+5. **Phase 5**: Add optional RLS policies for backend enforcement
+
+---
+
+## Technical Notes
+
+### Performance Optimization
+- Recursive queries are efficient with proper indexing on `reports_to`
+- Results are cached in React state (refreshes on auth change)
+- Consider adding index: `CREATE INDEX idx_profiles_reports_to ON profiles(reports_to)`
+
+### Edge Cases Handled
+- Users with no subordinates: Only see own data
+- Circular references: Prevented by recursive CTE (stops at visited nodes)
+- Null `reports_to`: User is at top of hierarchy, shows own subtree
+- Multiple hierarchy roots: Each root user sees only their subtree
 
