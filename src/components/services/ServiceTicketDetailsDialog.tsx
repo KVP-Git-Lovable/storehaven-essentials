@@ -135,6 +135,10 @@ export function ServiceTicketDetailsDialog({
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({
+    title: "",
+    description: "",
+    priority: "",
+    reported_by: "",
     status: "",
     assigned_to: "",
     solution_provided: "",
@@ -187,6 +191,10 @@ export function ServiceTicketDetailsDialog({
       const ticketData = ticketRes.data as ServiceTicket;
       setTicket(ticketData);
       setEditData({
+        title: ticketData.title,
+        description: ticketData.description || "",
+        priority: ticketData.priority,
+        reported_by: ticketData.reported_by,
         status: ticketData.status,
         assigned_to: ticketData.assigned_to || "",
         solution_provided: ticketData.solution_provided || "",
@@ -442,6 +450,10 @@ export function ServiceTicketDetailsDialog({
     const { error } = await supabase
       .from("service_tickets")
       .update({
+        title: editData.title,
+        description: editData.description || null,
+        priority: editData.priority,
+        reported_by: editData.reported_by,
         status: editData.status,
         assigned_to: editData.assigned_to || null,
         solution_provided: editData.solution_provided || null,
@@ -525,19 +537,42 @@ export function ServiceTicketDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
-        <DialogHeader className="p-6 pb-0">
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-0 shrink-0">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="flex-1 min-w-0">
               <DialogTitle className="flex items-center gap-2">
                 {ticket.ticket_number}
-                <Badge variant={ticket.priority === "critical" ? "destructive" : "secondary"}>
-                  {ticket.priority}
-                </Badge>
+                {editing ? (
+                  <Select value={editData.priority} onValueChange={(v) => setEditData((p) => ({ ...p, priority: v }))}>
+                    <SelectTrigger className="w-28 h-7">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low (P4)</SelectItem>
+                      <SelectItem value="medium">Medium (P3)</SelectItem>
+                      <SelectItem value="high">High (P2)</SelectItem>
+                      <SelectItem value="critical">Critical (P1)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Badge variant={ticket.priority === "critical" ? "destructive" : "secondary"}>
+                    {ticket.priority}
+                  </Badge>
+                )}
               </DialogTitle>
-              <p className="text-sm text-muted-foreground mt-1">{ticket.title}</p>
+              {editing ? (
+                <Input
+                  value={editData.title}
+                  onChange={(e) => setEditData((p) => ({ ...p, title: e.target.value }))}
+                  className="mt-2"
+                  placeholder="Ticket title"
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground mt-1">{ticket.title}</p>
+              )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0 ml-4">
               {editing ? (
                 <>
                   <Button variant="outline" size="sm" onClick={() => setEditing(false)} disabled={saving}>
@@ -559,74 +594,114 @@ export function ServiceTicketDetailsDialog({
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 p-6 pt-4">
-          <div className="space-y-6">
-            {/* Service Score Card */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" />
-                  Service Score
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-6">
-                  <div className={`text-4xl font-bold ${getScoreColor(serviceScore)}`}>
-                    {serviceScore}%
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-muted-foreground">{getScoreLabel(serviceScore)}</span>
-                      <span className="text-sm text-muted-foreground">
-                        {adherenceItems.filter((i) => i.is_compliant).length}/{adherenceItems.length} items compliant
-                      </span>
+        <div className="flex-1 overflow-hidden">
+          <ScrollArea className="h-full">
+            <div className="p-6 pt-4 space-y-6">
+              {/* Editable Basic Fields - shown when editing */}
+              {editing && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Basic Details</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <label className="text-sm text-muted-foreground">Description</label>
+                      <Textarea
+                        value={editData.description}
+                        onChange={(e) => setEditData((p) => ({ ...p, description: e.target.value }))}
+                        placeholder="Detailed description of the issue..."
+                        rows={3}
+                      />
                     </div>
-                    <Progress value={serviceScore} className="h-2" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm text-muted-foreground">Reported By</label>
+                        <Input
+                          value={editData.reported_by}
+                          onChange={(e) => setEditData((p) => ({ ...p, reported_by: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm text-muted-foreground">Status</label>
+                        <Select value={editData.status} onValueChange={(v) => setEditData((p) => ({ ...p, status: v }))}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="open">Open</SelectItem>
+                            <SelectItem value="in_progress">In Progress</SelectItem>
+                            <SelectItem value="pending_parts">Pending Parts</SelectItem>
+                            <SelectItem value="resolved">Resolved</SelectItem>
+                            <SelectItem value="closed">Closed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
-            {/* Ticket Details & Contract Link */}
-            <div className="grid grid-cols-2 gap-4">
+              {/* Service Score Card */}
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Ticket Info</CardTitle>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4" />
+                    Service Score
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="text-sm space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Store:</span>
-                    <span>{ticket.store?.name || "-"}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Asset:</span>
-                    <span>{ticket.asset?.name || "-"}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Reported:</span>
-                    <span>{format(new Date(ticket.reported_at), "dd MMM yyyy HH:mm")}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Status:</span>
-                    {editing ? (
-                      <Select value={editData.status} onValueChange={(v) => setEditData((p) => ({ ...p, status: v }))}>
-                        <SelectTrigger className="w-32 h-7">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="open">Open</SelectItem>
-                          <SelectItem value="in_progress">In Progress</SelectItem>
-                          <SelectItem value="pending_parts">Pending Parts</SelectItem>
-                          <SelectItem value="resolved">Resolved</SelectItem>
-                          <SelectItem value="closed">Closed</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Badge>{ticket.status}</Badge>
-                    )}
+                <CardContent>
+                  <div className="flex items-center gap-6">
+                    <div className={`text-4xl font-bold ${getScoreColor(serviceScore)}`}>
+                      {serviceScore}%
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm text-muted-foreground">{getScoreLabel(serviceScore)}</span>
+                        <span className="text-sm text-muted-foreground">
+                          {adherenceItems.filter((i) => i.is_compliant).length}/{adherenceItems.length} items compliant
+                        </span>
+                      </div>
+                      <Progress value={serviceScore} className="h-2" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Ticket Details & Contract Link */}
+              <div className="grid grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Ticket Info</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Store:</span>
+                      <span>{ticket.store?.name || "-"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Asset:</span>
+                      <span>{ticket.asset?.name || "-"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Reported By:</span>
+                      <span>{editing ? editData.reported_by : ticket.reported_by}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Reported:</span>
+                      <span>{format(new Date(ticket.reported_at), "dd MMM yyyy HH:mm")}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Status:</span>
+                      <Badge>{editing ? editData.status : ticket.status}</Badge>
+                    </div>
+                    {ticket.description && !editing && (
+                      <div className="pt-2 border-t">
+                        <span className="text-muted-foreground block mb-1">Description:</span>
+                        <p className="text-sm">{ticket.description}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
               <Card>
                 <CardHeader className="pb-2">
@@ -853,8 +928,9 @@ export function ServiceTicketDetailsDialog({
                 />
               </CardContent>
             </Card>
-          </div>
-        </ScrollArea>
+            </div>
+          </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
