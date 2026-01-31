@@ -5,7 +5,9 @@ import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Plus, Search, Package, Barcode, AlertTriangle, Camera, CalendarIcon } from "lucide-react";
+import { Plus, Search, Package, Barcode, AlertTriangle, Camera, CalendarIcon, Eye, Edit, Trash2 } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -107,27 +109,31 @@ export default function InventoryItems() {
   const [scanMode, setScanMode] = useState(false);
   const [assetMasters, setAssetMasters] = useState<AssetMaster[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [viewItem, setViewItem] = useState<InventoryItem | null>(null);
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+
+  const defaultFormValues = {
+    name: "",
+    sku: "",
+    barcode: "",
+    category: "",
+    unit: "pcs",
+    unit_cost: 0,
+    selling_price: 0,
+    min_stock: 5,
+    max_stock: 100,
+    expiry_tracking: false,
+    status: "active",
+    asset_master_id: "",
+    vendor_id: "",
+    rate_validity_type: "none" as const,
+    rate_validity_date: null,
+    rate_validity_days: null,
+  };
 
   const form = useForm<ItemFormData>({
     resolver: zodResolver(itemSchema),
-    defaultValues: {
-      name: "",
-      sku: "",
-      barcode: "",
-      category: "",
-      unit: "pcs",
-      unit_cost: 0,
-      selling_price: 0,
-      min_stock: 5,
-      max_stock: 100,
-      expiry_tracking: false,
-      status: "active",
-      asset_master_id: "",
-      vendor_id: "",
-      rate_validity_type: "none",
-      rate_validity_date: null,
-      rate_validity_days: null,
-    },
+    defaultValues: defaultFormValues,
   });
 
   const rateValidityType = form.watch("rate_validity_type");
@@ -187,7 +193,7 @@ export default function InventoryItems() {
 
   const onSubmit = async (data: ItemFormData) => {
     try {
-      const { error } = await supabase.from("inventory_items").insert([{
+      const payload = {
         name: data.name,
         sku: data.sku || null,
         barcode: data.barcode || null,
@@ -205,19 +211,64 @@ export default function InventoryItems() {
           ? format(data.rate_validity_date, "yyyy-MM-dd") 
           : null,
         rate_validity_days: data.rate_validity_type === "days" ? data.rate_validity_days : null,
-      }]);
-      if (error) throw error;
-      toast.success("Item added successfully");
-      form.reset();
+      };
+
+      if (editingItem) {
+        const { error } = await supabase.from("inventory_items").update(payload).eq("id", editingItem.id);
+        if (error) throw error;
+        toast.success("Item updated successfully");
+      } else {
+        const { error } = await supabase.from("inventory_items").insert([payload]);
+        if (error) throw error;
+        toast.success("Item added successfully");
+      }
+      
+      form.reset(defaultFormValues);
       setIsDialogOpen(false);
+      setEditingItem(null);
       fetchItems();
     } catch (error: any) {
-      console.error("Error adding item:", error);
+      console.error("Error saving item:", error);
       if (error.code === '23505') {
         toast.error("SKU or Barcode already exists");
       } else {
-        toast.error("Failed to add item");
+        toast.error("Failed to save item");
       }
+    }
+  };
+
+  const handleEdit = (item: InventoryItem) => {
+    setEditingItem(item);
+    form.reset({
+      name: item.name,
+      sku: item.sku || "",
+      barcode: item.barcode || "",
+      category: item.category,
+      unit: item.unit,
+      unit_cost: item.unit_cost,
+      selling_price: item.selling_price,
+      min_stock: item.min_stock,
+      max_stock: item.max_stock || 100,
+      expiry_tracking: item.expiry_tracking,
+      status: item.status,
+      asset_master_id: item.asset_master_id || "",
+      vendor_id: item.vendor_id || "",
+      rate_validity_type: item.rate_validity_date ? "date" : item.rate_validity_days ? "days" : "none",
+      rate_validity_date: item.rate_validity_date ? new Date(item.rate_validity_date) : null,
+      rate_validity_days: item.rate_validity_days,
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      const { error } = await supabase.from("inventory_items").delete().eq("id", id);
+      if (error) throw error;
+      toast.success("Item deleted successfully");
+      fetchItems();
+    } catch (error) {
+      console.error("Error deleting item:", error);
+      toast.error("Failed to delete item");
     }
   };
 
@@ -238,7 +289,13 @@ export default function InventoryItems() {
           <h1 className="text-3xl font-bold text-foreground">Inventory Items</h1>
           <p className="text-muted-foreground">Master list of all inventory items with barcode support</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) {
+            setEditingItem(null);
+            form.reset(defaultFormValues);
+          }
+        }}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" /> Add Item
@@ -246,7 +303,7 @@ export default function InventoryItems() {
           </DialogTrigger>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Add Inventory Item</DialogTitle>
+              <DialogTitle>{editingItem ? "Edit Inventory Item" : "Add Inventory Item"}</DialogTitle>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -648,22 +705,27 @@ export default function InventoryItems() {
                 <TableHead>Selling Price</TableHead>
                 <TableHead>Stock Levels</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">Loading...</TableCell>
+                  <TableCell colSpan={8} className="text-center py-8">Loading...</TableCell>
                 </TableRow>
               ) : filteredItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No items found. Add your first inventory item.
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredItems.map((item) => (
-                  <TableRow key={item.id}>
+                  <TableRow 
+                    key={item.id} 
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => setViewItem(item)}
+                  >
                     <TableCell>
                       <div className="font-medium">{item.name}</div>
                       <div className="text-sm text-muted-foreground">{item.unit}</div>
@@ -688,6 +750,35 @@ export default function InventoryItems() {
                         {item.status}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => setViewItem(item)}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Item?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will permanently delete "{item.name}". This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(item.id)}>Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -695,6 +786,99 @@ export default function InventoryItems() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* View Item Sheet */}
+      <Sheet open={!!viewItem} onOpenChange={() => setViewItem(null)}>
+        <SheetContent className="sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Item Details</SheetTitle>
+          </SheetHeader>
+          {viewItem && (
+            <div className="space-y-6 py-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-xl font-semibold">{viewItem.name}</h3>
+                  <Badge variant={viewItem.status === 'active' ? 'default' : 'secondary'} className="mt-2">
+                    {viewItem.status}
+                  </Badge>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => { setViewItem(null); handleEdit(viewItem); }}>
+                    <Edit className="h-4 w-4 mr-1" /> Edit
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">SKU</p>
+                  <p className="font-medium">{viewItem.sku || '-'}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Barcode</p>
+                  <p className="font-medium font-mono">{viewItem.barcode || '-'}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Category</p>
+                  <p className="font-medium">{viewItem.category}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Unit</p>
+                  <p className="font-medium">{viewItem.unit}</p>
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-3">Pricing</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 rounded-lg bg-muted">
+                    <p className="text-sm text-muted-foreground">Unit Cost</p>
+                    <p className="text-lg font-semibold">₹{viewItem.unit_cost.toLocaleString()}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted">
+                    <p className="text-sm text-muted-foreground">Selling Price</p>
+                    <p className="text-lg font-semibold">₹{viewItem.selling_price.toLocaleString()}</p>
+                  </div>
+                </div>
+                {viewItem.selling_price > 0 && viewItem.unit_cost > 0 && (
+                  <div className="mt-2 text-sm text-muted-foreground">
+                    Margin: {(((viewItem.selling_price - viewItem.unit_cost) / viewItem.unit_cost) * 100).toFixed(1)}%
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-3">Stock Levels</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Minimum Stock</p>
+                    <p className="font-medium">{viewItem.min_stock} {viewItem.unit}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Maximum Stock</p>
+                    <p className="font-medium">{viewItem.max_stock || 'Not set'} {viewItem.max_stock ? viewItem.unit : ''}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-3">Tracking</h4>
+                <div className="flex items-center gap-2">
+                  <Badge variant={viewItem.expiry_tracking ? 'default' : 'secondary'}>
+                    {viewItem.expiry_tracking ? 'Expiry Tracked' : 'No Expiry Tracking'}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <p className="text-xs text-muted-foreground">
+                  Created on {format(new Date(viewItem.created_at), 'PPP')}
+                </p>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
