@@ -67,10 +67,13 @@ const navigation: NavItem[] = [
     icon: ShoppingCart,
     moduleKey: "pos",
     children: [
-      { title: "Quick Sale", href: "/pos", moduleKey: "pos.quicksale" },
+      { title: "POS Dashboard", href: "/pos/dashboard", moduleKey: "pos.quicksale" },
+      { title: "Billing", href: "/pos", moduleKey: "pos.quicksale" },
       { title: "Product Master", href: "/pos/products", moduleKey: "pos.products" },
       { title: "Order History", href: "/pos/orders", moduleKey: "pos.orders" },
+      { title: "Returns & Refunds", href: "/pos/returns", moduleKey: "pos.orders" },
       { title: "Schemes", href: "/pos/schemes", moduleKey: "pos.schemes" },
+      { title: "Cashier Sessions", href: "/pos/sessions", moduleKey: "pos.quicksale" },
     ],
   },
   {

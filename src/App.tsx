@@ -64,6 +64,9 @@ import PointOfSale from "./pages/pos/PointOfSale";
 import OrderHistory from "./pages/pos/OrderHistory";
 import Schemes from "./pages/pos/Schemes";
 import ProductMaster from "./pages/pos/ProductMaster";
+import POSDashboard from "./pages/pos/POSDashboard";
+import ReturnsProcessing from "./pages/pos/ReturnsProcessing";
+import CashierSessions from "./pages/pos/CashierSessions";
 import Users from "./pages/admin/Users";
 import UserRoles from "./pages/admin/UserRoles";
 import UserHierarchy from "./pages/admin/UserHierarchy";
@@ -110,9 +113,12 @@ const App = () => (
               <Route path="/dashboards/nso" element={<NSODashboard />} />
               <Route path="/ai-insights" element={<AIInsights />} />
               <Route path="/pos" element={<PointOfSale />} />
+              <Route path="/pos/dashboard" element={<POSDashboard />} />
               <Route path="/pos/products" element={<ProductMaster />} />
               <Route path="/pos/orders" element={<OrderHistory />} />
+              <Route path="/pos/returns" element={<ReturnsProcessing />} />
               <Route path="/pos/schemes" element={<Schemes />} />
+              <Route path="/pos/sessions" element={<CashierSessions />} />
               <Route path="/stores" element={<StoresList />} />
               <Route path="/stores/:id" element={<StoreDetails />} />
               <Route path="/stores/rentals" element={<Rentals />} />
