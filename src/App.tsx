@@ -70,6 +70,13 @@ import UserHierarchy from "./pages/admin/UserHierarchy";
 import RolePermissions from "./pages/admin/RolePermissions";
 import Profile from "./pages/admin/Profile";
 import NotFound from "./pages/NotFound";
+import AssetManagementDashboard from "./pages/dashboards/AssetManagementDashboard";
+import InventoryDashboard from "./pages/dashboards/InventoryDashboard";
+import EmployeesDashboard from "./pages/dashboards/EmployeesDashboard";
+import AssetServiceDashboard from "./pages/dashboards/AssetServiceDashboard";
+import Store360Dashboard from "./pages/dashboards/Store360Dashboard";
+import VMDashboard from "./pages/dashboards/VMDashboard";
+import NSODashboard from "./pages/dashboards/NSODashboard";
 
 const queryClient = new QueryClient();
 
@@ -93,6 +100,13 @@ const App = () => (
               }
             >
               <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboards/assets" element={<AssetManagementDashboard />} />
+              <Route path="/dashboards/inventory" element={<InventoryDashboard />} />
+              <Route path="/dashboards/employees" element={<EmployeesDashboard />} />
+              <Route path="/dashboards/service" element={<AssetServiceDashboard />} />
+              <Route path="/dashboards/store360" element={<Store360Dashboard />} />
+              <Route path="/dashboards/vm" element={<VMDashboard />} />
+              <Route path="/dashboards/nso" element={<NSODashboard />} />
               <Route path="/pos" element={<PointOfSale />} />
               <Route path="/pos/products" element={<ProductMaster />} />
               <Route path="/pos/orders" element={<OrderHistory />} />
