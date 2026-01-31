@@ -77,6 +77,7 @@ import AssetServiceDashboard from "./pages/dashboards/AssetServiceDashboard";
 import Store360Dashboard from "./pages/dashboards/Store360Dashboard";
 import VMDashboard from "./pages/dashboards/VMDashboard";
 import NSODashboard from "./pages/dashboards/NSODashboard";
+import AIInsights from "./pages/AIInsights";
 
 const queryClient = new QueryClient();
 
@@ -107,6 +108,7 @@ const App = () => (
               <Route path="/dashboards/store360" element={<Store360Dashboard />} />
               <Route path="/dashboards/vm" element={<VMDashboard />} />
               <Route path="/dashboards/nso" element={<NSODashboard />} />
+              <Route path="/ai-insights" element={<AIInsights />} />
               <Route path="/pos" element={<PointOfSale />} />
               <Route path="/pos/products" element={<ProductMaster />} />
               <Route path="/pos/orders" element={<OrderHistory />} />

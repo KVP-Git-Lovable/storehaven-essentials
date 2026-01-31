@@ -17,6 +17,7 @@ import {
   Boxes,
   ClipboardCheck,
   ShoppingCart,
+  Brain,
   UserCog,
   BarChart3,
 } from "lucide-react";
@@ -44,6 +45,7 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { title: "Home", href: "/", icon: LayoutDashboard, moduleKey: "dashboard" },
+  { title: "AI Insights", href: "/ai-insights", icon: Brain, moduleKey: "dashboard" },
   {
     title: "Dashboards",
     icon: BarChart3,
