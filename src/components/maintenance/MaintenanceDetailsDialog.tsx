@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Edit, Copy, Trash2 } from "lucide-react";
+import { Edit, Copy, Trash2, ClipboardList, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,6 +20,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { KnowledgeBaseSuggestions } from "@/components/knowledge/KnowledgeBaseSuggestions";
@@ -36,6 +38,29 @@ type MaintenanceTask = {
   assigned_to: string;
   status: string;
   store?: { name: string } | null;
+  pm_checklist_master_id?: string | null;
+};
+
+type PMChecklistMaster = {
+  id: string;
+  name: string;
+  task_type: string;
+  description: string | null;
+};
+
+type PMSection = {
+  id: string;
+  name: string;
+  sort_order: number;
+  tasks: PMTask[];
+};
+
+type PMTask = {
+  id: string;
+  name: string;
+  instruction: string | null;
+  duration_hours: number | null;
+  sort_order: number;
 };
 
 type MaintenanceDetailsDialogProps = {
@@ -57,11 +82,17 @@ export function MaintenanceDetailsDialog({
 }: MaintenanceDetailsDialogProps) {
   const { toast } = useToast();
   const [assetMasterId, setAssetMasterId] = useState<string | null>(null);
+  const [checklistMaster, setChecklistMaster] = useState<PMChecklistMaster | null>(null);
+  const [checklistSections, setChecklistSections] = useState<PMSection[]>([]);
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
-  // Fetch asset master ID from asset
+  // Fetch asset master ID and checklist data
   useEffect(() => {
-    const fetchAssetMaster = async () => {
-      if (task?.asset_id) {
+    const fetchData = async () => {
+      if (!task) return;
+
+      // Fetch asset master ID
+      if (task.asset_id) {
         const { data } = await supabase
           .from("assets")
           .select("asset_master_id")
@@ -71,11 +102,74 @@ export function MaintenanceDetailsDialog({
       } else {
         setAssetMasterId(null);
       }
+
+      // Fetch linked PM checklist master and its sections/tasks
+      if (task.pm_checklist_master_id) {
+        const [masterRes, sectionsRes] = await Promise.all([
+          supabase
+            .from("pm_checklist_masters")
+            .select("id, name, task_type, description")
+            .eq("id", task.pm_checklist_master_id)
+            .maybeSingle(),
+          supabase
+            .from("pm_master_sections")
+            .select("id, name, sort_order")
+            .eq("master_id", task.pm_checklist_master_id)
+            .order("sort_order"),
+        ]);
+
+        setChecklistMaster(masterRes.data);
+
+        if (sectionsRes.data) {
+          // Fetch tasks for each section
+          const sectionIds = sectionsRes.data.map((s) => s.id);
+          const { data: tasksData } = await supabase
+            .from("pm_master_tasks")
+            .select("id, name, instruction, duration_hours, sort_order, section_id")
+            .in("section_id", sectionIds)
+            .order("sort_order");
+
+          const sectionsWithTasks: PMSection[] = sectionsRes.data.map((section) => ({
+            ...section,
+            tasks: (tasksData || [])
+              .filter((t) => t.section_id === section.id)
+              .map((t) => ({
+                id: t.id,
+                name: t.name,
+                instruction: t.instruction,
+                duration_hours: t.duration_hours,
+                sort_order: t.sort_order,
+              })),
+          }));
+
+          setChecklistSections(sectionsWithTasks);
+          // Expand first section by default
+          if (sectionsWithTasks.length > 0) {
+            setExpandedSections(new Set([sectionsWithTasks[0].id]));
+          }
+        }
+      } else {
+        setChecklistMaster(null);
+        setChecklistSections([]);
+      }
     };
+
     if (open && task) {
-      fetchAssetMaster();
+      fetchData();
     }
   }, [open, task]);
+
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) {
+        next.delete(sectionId);
+      } else {
+        next.add(sectionId);
+      }
+      return next;
+    });
+  };
 
   if (!task) return null;
 
@@ -118,7 +212,7 @@ export function MaintenanceDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Maintenance Schedule Details</DialogTitle>
         </DialogHeader>
@@ -199,6 +293,82 @@ export function MaintenanceDetailsDialog({
               <p className="font-medium">{task.assigned_to}</p>
             </div>
           </div>
+
+          {/* PM Checklist Section */}
+          {checklistMaster && (
+            <>
+              <Separator />
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ClipboardList className="h-4 w-4" />
+                    PM Checklist: {checklistMaster.name}
+                  </CardTitle>
+                  {checklistMaster.description && (
+                    <p className="text-sm text-muted-foreground">
+                      {checklistMaster.description}
+                    </p>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {checklistSections.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No checklist sections defined.
+                    </p>
+                  ) : (
+                    checklistSections.map((section) => (
+                      <Collapsible
+                        key={section.id}
+                        open={expandedSections.has(section.id)}
+                        onOpenChange={() => toggleSection(section.id)}
+                      >
+                        <CollapsibleTrigger asChild>
+                          <button className="flex items-center gap-2 w-full text-left p-2 rounded-md hover:bg-muted transition-colors">
+                            {expandedSections.has(section.id) ? (
+                              <ChevronDown className="h-4 w-4" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
+                            <span className="font-medium text-sm">{section.name}</span>
+                            <Badge variant="secondary" className="ml-auto text-xs">
+                              {section.tasks.length} tasks
+                            </Badge>
+                          </button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="ml-6 mt-1 space-y-1">
+                            {section.tasks.map((pmTask, idx) => (
+                              <div
+                                key={pmTask.id}
+                                className="flex items-start gap-2 py-1.5 px-2 text-sm border-l-2 border-muted"
+                              >
+                                <span className="text-muted-foreground min-w-[20px]">
+                                  {idx + 1}.
+                                </span>
+                                <div className="flex-1">
+                                  <p>{pmTask.name}</p>
+                                  {pmTask.instruction && (
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      {pmTask.instruction}
+                                    </p>
+                                  )}
+                                </div>
+                                {pmTask.duration_hours && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {pmTask.duration_hours}h
+                                  </Badge>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
 
           {/* Knowledge Base Suggestions */}
           <Separator />

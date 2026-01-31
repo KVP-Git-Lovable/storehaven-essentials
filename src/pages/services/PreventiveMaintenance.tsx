@@ -30,6 +30,7 @@ type MaintenanceTask = {
   assigned_to: string;
   status: string;
   store?: { name: string } | null;
+  pm_checklist_master_id?: string | null;
 };
 
 export default function PreventiveMaintenance() {
@@ -54,7 +55,7 @@ export default function PreventiveMaintenance() {
     
     let query = supabase
       .from("maintenance_tasks")
-      .select("*, store:store_id(name)")
+      .select("*, store:store_id(name), pm_checklist_master_id")
       .order("created_at", { ascending: false });
     
     if (!isAdmin && storeIds.length > 0) {

@@ -51,6 +51,7 @@ const maintenanceFormSchema = z.object({
   frequency: z.enum(["daily", "weekly", "monthly", "quarterly", "annual"]),
   assignedTo: z.string().min(1, "Assigned to is required"),
   nextDue: z.string().min(1, "Next due date is required"),
+  pmChecklistMasterId: z.string().optional(),
 });
 
 type MaintenanceFormData = z.infer<typeof maintenanceFormSchema>;
@@ -65,11 +66,22 @@ type Asset = {
   name: string;
   asset_number: string | null;
   store_id: string | null;
+  asset_master_id: string | null;
 };
 
 type Vendor = {
   id: string;
   name: string;
+};
+
+type PMChecklistMaster = {
+  id: string;
+  name: string;
+  task_type: string;
+  asset_master_id: string | null;
+  brand: string | null;
+  description: string | null;
+  status: string;
 };
 
 type MaintenanceTask = {
@@ -83,6 +95,7 @@ type MaintenanceTask = {
   next_due: string;
   assigned_to: string;
   status: string;
+  pm_checklist_master_id?: string | null;
 };
 
 type MaintenanceFormDialogProps = {
@@ -104,6 +117,8 @@ export function MaintenanceFormDialog({
   const [assets, setAssets] = useState<Asset[]>([]);
   const [filteredAssets, setFilteredAssets] = useState<Asset[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [pmChecklistMasters, setPmChecklistMasters] = useState<PMChecklistMaster[]>([]);
+  const [filteredChecklists, setFilteredChecklists] = useState<PMChecklistMaster[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { accessibleStoreIds, isAdmin } = useStoreAccess();
@@ -117,10 +132,13 @@ export function MaintenanceFormDialog({
       frequency: "monthly",
       assignedTo: "",
       nextDue: "",
+      pmChecklistMasterId: "",
     },
   });
 
   const selectedStoreId = form.watch("storeId");
+  const selectedAssetId = form.watch("assetId");
+  const selectedTaskType = form.watch("taskType");
 
   useEffect(() => {
     if (open) {
@@ -137,6 +155,7 @@ export function MaintenanceFormDialog({
         frequency: initialData.frequency as MaintenanceFormData["frequency"],
         assignedTo: initialData.assigned_to,
         nextDue: initialData.next_due,
+        pmChecklistMasterId: initialData.pm_checklist_master_id || "",
       });
     } else if (mode === "add") {
       form.reset({
@@ -146,6 +165,7 @@ export function MaintenanceFormDialog({
         frequency: "monthly",
         assignedTo: "",
         nextDue: "",
+        pmChecklistMasterId: "",
       });
     }
   }, [initialData, mode, form]);
@@ -161,14 +181,48 @@ export function MaintenanceFormDialog({
     }
   }, [selectedStoreId, assets]);
 
+  // Filter PM Checklist Masters based on selected asset and task type
+  useEffect(() => {
+    const selectedAsset = assets.find((a) => a.id === selectedAssetId);
+    const assetMasterId = selectedAsset?.asset_master_id;
+
+    let filtered = pmChecklistMasters.filter((m) => m.status === "active");
+
+    // Filter by task type if selected
+    if (selectedTaskType) {
+      filtered = filtered.filter((m) => m.task_type === selectedTaskType);
+    }
+
+    // Filter by asset master if available
+    if (assetMasterId) {
+      const matchingByAsset = filtered.filter((m) => m.asset_master_id === assetMasterId);
+      // If we have matches by asset, prefer those; otherwise show all for the task type
+      if (matchingByAsset.length > 0) {
+        filtered = matchingByAsset;
+      }
+    }
+
+    setFilteredChecklists(filtered);
+
+    // Auto-select if only one matching checklist
+    if (filtered.length === 1 && !form.getValues("pmChecklistMasterId")) {
+      form.setValue("pmChecklistMasterId", filtered[0].id);
+    }
+  }, [selectedAssetId, selectedTaskType, assets, pmChecklistMasters, form]);
+
   const fetchData = async () => {
-    const [storesRes, assetsRes, vendorsRes] = await Promise.all([
+    const [storesRes, assetsRes, vendorsRes, pmChecklistRes] = await Promise.all([
       supabase.from("stores").select("id, name").order("name"),
       supabase
         .from("assets")
-        .select("id, name, asset_number, store_id")
+        .select("id, name, asset_number, store_id, asset_master_id")
         .order("name"),
       supabase.from("vendors").select("id, name").order("name"),
+      supabase
+        .from("pm_checklist_masters")
+        .select("id, name, task_type, asset_master_id, brand, description, status")
+        .eq("status", "active")
+        .order("name"),
     ]);
 
     // Filter stores for non-admins
@@ -179,6 +233,7 @@ export function MaintenanceFormDialog({
       setFilteredAssets(assetsRes.data);
     }
     if (vendorsRes.data) setVendors(vendorsRes.data);
+    if (pmChecklistRes.data) setPmChecklistMasters(pmChecklistRes.data);
   };
 
   const onSubmit = async (data: MaintenanceFormData) => {
@@ -198,6 +253,7 @@ export function MaintenanceFormDialog({
       next_due: data.nextDue,
       assigned_to: data.assignedTo,
       status: "scheduled",
+      pm_checklist_master_id: data.pmChecklistMasterId || null,
     };
 
     let error;
@@ -388,6 +444,42 @@ export function MaintenanceFormDialog({
                 )}
               />
             </div>
+
+            <FormField
+              control={form.control}
+              name="pmChecklistMasterId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>PM Checklist Template</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder={
+                          filteredChecklists.length === 0 
+                            ? "No matching checklists" 
+                            : "Select checklist template"
+                        } />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="">None</SelectItem>
+                      {filteredChecklists.map((checklist) => (
+                        <SelectItem key={checklist.id} value={checklist.id}>
+                          {checklist.name}
+                          {checklist.brand && ` (${checklist.brand})`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {filteredChecklists.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {filteredChecklists.length} checklist{filteredChecklists.length !== 1 ? "s" : ""} available for this asset/task type
+                    </p>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <div className="flex justify-end gap-2 pt-4">
               <Button
