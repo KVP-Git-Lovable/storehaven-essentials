@@ -21,10 +21,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 const schemeSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
-  discount_type: z.enum(["percentage", "fixed", "buy_x_get_y"]),
+  discount_type: z.enum(["percentage", "fixed", "buy_x_get_y", "tiered", "bundle", "cashback", "free_shipping", "second_at_discount"]),
   discount_value: z.coerce.number().min(0, "Must be positive"),
   min_purchase_amount: z.coerce.number().min(0).optional(),
   min_quantity: z.coerce.number().min(1).optional(),
+  buy_quantity: z.coerce.number().min(1).optional(),
+  get_quantity: z.coerce.number().min(1).optional(),
+  max_discount_amount: z.coerce.number().min(0).optional(),
+  is_auto_apply: z.boolean().optional(),
   start_date: z.string().min(1, "Start date is required"),
   end_date: z.string().min(1, "End date is required"),
   status: z.enum(["active", "inactive"]),
@@ -384,9 +388,13 @@ export default function Schemes() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="percentage">Percentage</SelectItem>
-                          <SelectItem value="fixed">Fixed Amount</SelectItem>
+                          <SelectItem value="percentage">Percentage Off</SelectItem>
+                          <SelectItem value="fixed">Fixed Amount Off</SelectItem>
                           <SelectItem value="buy_x_get_y">Buy X Get Y</SelectItem>
+                          <SelectItem value="tiered">Tiered Discount</SelectItem>
+                          <SelectItem value="bundle">Bundle Price</SelectItem>
+                          <SelectItem value="cashback">Cashback</SelectItem>
+                          <SelectItem value="second_at_discount">Second Item Discount</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
