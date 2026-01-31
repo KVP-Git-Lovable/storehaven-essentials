@@ -4,7 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Search, Package, Barcode, AlertTriangle, Camera } from "lucide-react";
+import { format } from "date-fns";
+import { Plus, Search, Package, Barcode, AlertTriangle, Camera, CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -40,6 +42,9 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 const itemSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -53,6 +58,11 @@ const itemSchema = z.object({
   max_stock: z.coerce.number().min(0).optional(),
   expiry_tracking: z.boolean().optional(),
   status: z.string().min(1),
+  asset_master_id: z.string().optional(),
+  vendor_id: z.string().optional(),
+  rate_validity_type: z.enum(["date", "days", "none"]),
+  rate_validity_date: z.date().optional().nullable(),
+  rate_validity_days: z.coerce.number().min(1).optional().nullable(),
 });
 
 type ItemFormData = z.infer<typeof itemSchema>;
@@ -71,6 +81,22 @@ interface InventoryItem {
   expiry_tracking: boolean;
   status: string;
   created_at: string;
+  asset_master_id: string | null;
+  vendor_id: string | null;
+  rate_validity_date: string | null;
+  rate_validity_days: number | null;
+}
+
+interface AssetMaster {
+  id: string;
+  name: string;
+  category_id: string | null;
+}
+
+interface Vendor {
+  id: string;
+  name: string;
+  category: string;
 }
 
 export default function InventoryItems() {
@@ -79,6 +105,8 @@ export default function InventoryItems() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [scanMode, setScanMode] = useState(false);
+  const [assetMasters, setAssetMasters] = useState<AssetMaster[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
 
   const form = useForm<ItemFormData>({
     resolver: zodResolver(itemSchema),
@@ -94,11 +122,20 @@ export default function InventoryItems() {
       max_stock: 100,
       expiry_tracking: false,
       status: "active",
+      asset_master_id: "",
+      vendor_id: "",
+      rate_validity_type: "none",
+      rate_validity_date: null,
+      rate_validity_days: null,
     },
   });
 
+  const rateValidityType = form.watch("rate_validity_type");
+
   useEffect(() => {
     fetchItems();
+    fetchAssetMasters();
+    fetchVendors();
   }, []);
 
   const fetchItems = async () => {
@@ -118,6 +155,36 @@ export default function InventoryItems() {
     }
   };
 
+  const fetchAssetMasters = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("asset_masters")
+        .select("id, name, category_id")
+        .eq("status", "active")
+        .order("name");
+
+      if (error) throw error;
+      setAssetMasters(data || []);
+    } catch (error) {
+      console.error("Error fetching asset masters:", error);
+    }
+  };
+
+  const fetchVendors = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("vendors")
+        .select("id, name, category")
+        .eq("status", "active")
+        .order("name");
+
+      if (error) throw error;
+      setVendors(data || []);
+    } catch (error) {
+      console.error("Error fetching vendors:", error);
+    }
+  };
+
   const onSubmit = async (data: ItemFormData) => {
     try {
       const { error } = await supabase.from("inventory_items").insert([{
@@ -132,6 +199,12 @@ export default function InventoryItems() {
         max_stock: data.max_stock || null,
         expiry_tracking: data.expiry_tracking || false,
         status: data.status,
+        asset_master_id: data.asset_master_id || null,
+        vendor_id: data.vendor_id || null,
+        rate_validity_date: data.rate_validity_type === "date" && data.rate_validity_date 
+          ? format(data.rate_validity_date, "yyyy-MM-dd") 
+          : null,
+        rate_validity_days: data.rate_validity_type === "days" ? data.rate_validity_days : null,
       }]);
       if (error) throw error;
       toast.success("Item added successfully");
@@ -323,6 +396,138 @@ export default function InventoryItems() {
                     )}
                   />
                 </div>
+                {/* Asset Master Lookup */}
+                <FormField
+                  control={form.control}
+                  name="asset_master_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Asset Master (Optional)</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Link to asset master..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">-- None --</SelectItem>
+                          {assetMasters.map(am => (
+                            <SelectItem key={am.id} value={am.id}>{am.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>Link this item to an asset master for spares tracking</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Vendor Lookup */}
+                <FormField
+                  control={form.control}
+                  name="vendor_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Vendor (Optional)</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select vendor..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">-- None --</SelectItem>
+                          {vendors.map(v => (
+                            <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Rate Validity */}
+                <div className="space-y-3 rounded-lg border p-3">
+                  <FormField
+                    control={form.control}
+                    name="rate_validity_type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Rate Validity</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">No Validity Tracking</SelectItem>
+                            <SelectItem value="date">Valid Until Date</SelectItem>
+                            <SelectItem value="days">Valid for Days</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {rateValidityType === "date" && (
+                    <FormField
+                      control={form.control}
+                      name="rate_validity_date"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                          <FormLabel>Valid Until</FormLabel>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FormControl>
+                                <Button
+                                  variant="outline"
+                                  className={cn(
+                                    "w-full pl-3 text-left font-normal",
+                                    !field.value && "text-muted-foreground"
+                                  )}
+                                >
+                                  {field.value ? format(field.value, "PPP") : "Pick a date"}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                </Button>
+                              </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={field.value || undefined}
+                                onSelect={field.onChange}
+                                disabled={(date) => date < new Date()}
+                                initialFocus
+                                className="p-3 pointer-events-auto"
+                              />
+                            </PopoverContent>
+                          </Popover>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+
+                  {rateValidityType === "days" && (
+                    <FormField
+                      control={form.control}
+                      name="rate_validity_days"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Validity Period (Days)</FormLabel>
+                          <FormControl>
+                            <Input type="number" min={1} placeholder="e.g., 30" {...field} value={field.value ?? ""} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
+
                 <FormField
                   control={form.control}
                   name="expiry_tracking"
