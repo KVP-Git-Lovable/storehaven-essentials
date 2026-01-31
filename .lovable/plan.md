@@ -1,107 +1,121 @@
-
-# Plan: Add Sample Data to Demonstrate Store Operations Features
+# Plan: Strengthen Staff Management Module
 
 ## Overview
-This plan adds comprehensive sample data across all Store Operations modules to demonstrate the complete workflow from task definition to performance analytics.
+Comprehensive enhancement of the Staff module covering employee onboarding, attendance with face recognition, leave management, and performance tracking.
 
-## Sample Data to be Added
+## Phase 1: Enhanced Employee Data Model
 
-### 1. Task Master (10 Tasks)
-Add diverse tasks covering all categories with varying requirements:
+### Database Changes - `employees` table expansion:
+| Field | Type | Description |
+|-------|------|-------------|
+| manager_id | UUID (self-ref) | Reporting manager |
+| store_id | UUID | Assigned store |
+| aadhar_number | TEXT | Masked Aadhar |
+| pan_number | TEXT | PAN card |
+| permanent_address | TEXT | Address |
+| current_address | TEXT | Current address |
+| education_level | TEXT | Highest education |
+| emergency_contact_name | TEXT | Emergency contact |
+| emergency_contact_phone | TEXT | Emergency phone |
+| emergency_contact_relation | TEXT | Relationship |
+| face_baseline_url | TEXT | Face photo for recognition |
+| onboarding_status | TEXT | draft/pending_approval/approved/rejected |
+| onboarding_approved_by | TEXT | Approver name |
+| onboarding_approved_at | TIMESTAMP | Approval date |
 
-| Task Name | Category | Duration | Requirements |
-|-----------|----------|----------|--------------|
-| Morning Store Opening Checklist | Admin | 15 mins | Photo |
-| Restroom Deep Clean | Cleaning | 30 mins | Photo + GPS |
-| Inventory Count - Beverages | Inventory | 45 mins | Barcode Scan |
-| Fire Exit Inspection | Security | 10 mins | Photo + GPS |
-| Customer Feedback Collection | Customer Service | 20 mins | None |
-| AC Filter Check | Maintenance | 25 mins | Photo |
-| Cash Register Reconciliation | Admin | 15 mins | None |
-| Floor Mopping - Main Area | Cleaning | 20 mins | Photo |
-| Shelf Restocking | Inventory | 30 mins | Barcode Scan |
-| Evening Store Closing Checklist | Admin | 20 mins | Photo |
+### New Tables:
 
-### 2. Role Master (6 Roles)
-Verify existing roles cover all shifts and add if missing:
-- Morning Floor Manager, Morning Janitor (morning)
-- Afternoon Floor Manager, Afternoon Cashier (afternoon)
-- Evening Floor Manager, Evening Security (evening)
-- Night Security Guard (night)
+**employee_documents**
+- id, employee_id, document_type (aadhar/pan/address_proof/education/certification)
+- file_url, file_name, verified, verified_by, verified_at
 
-### 3. Task Templates (2 Templates)
-Create demonstration templates:
+**employee_competencies**
+- id, employee_id, skill_name, proficiency_level (1-5)
+- certified, certification_date, expiry_date
 
-**Template 1: "Standard Daily Operations" (Global - All Stores)**
-- Opening checklist (Morning Floor Manager, opening)
-- Restroom cleaning every 2 hours (Morning Janitor, periodic)
-- Inventory count (Afternoon Floor Manager, anytime)
-- Fire exit inspection (Evening Security, closing)
-- Closing checklist (Evening Floor Manager, closing)
+**manager_feedback**
+- id, employee_id, feedback_by, feedback_date
+- performance_rating (1-5), attitude_rating, teamwork_rating
+- strengths, areas_of_improvement, action_items
 
-**Template 2: "Mall Store Operations" (Bharath Mall only)**
-- Extended cleaning schedule for high-traffic mall environment
-- Hourly customer service checks
+## Phase 2: Attendance & Leave System
 
-### 4. Task Instances (10+ instances)
-Generate instances for today's date across stores with mixed statuses:
-- 3 Completed (on-time)
-- 2 Completed (late)
-- 2 In Progress
-- 2 Pending
-- 1 Handed Over
+### New Tables:
 
-### 5. Task Completions (5 records)
-Create completion records with:
-- Photo evidence URLs
-- GPS coordinates
-- On-time/late flags
-- Completion notes
+**attendance_records**
+- id, employee_id, store_id, attendance_date
+- check_in_time, check_out_time
+- check_in_photo_url, check_out_photo_url
+- check_in_latitude, check_in_longitude, check_in_address
+- check_out_latitude, check_out_longitude
+- status (present/late/half_day/absent)
+- face_match_score
 
-## Technical Implementation
+**leave_types**
+- id, name (Casual/Sick/Annual/Comp-off), paid, max_per_year, carry_forward
 
-### Step 1: Insert Task Master Records
-SQL migration to add 10 diverse tasks with all categories represented
+**leave_balances**
+- id, employee_id, leave_type_id, year
+- opening_balance, granted, used, lapsed, available
 
-### Step 2: Verify/Add Role Master Records
-Check existing roles, add any missing shift coverage
+**leave_requests**
+- id, employee_id, leave_type_id
+- from_date, to_date, days_count, half_day_type
+- reason, status (pending/approved/rejected)
+- approved_by, approved_at, rejection_reason
 
-### Step 3: Create Task Templates
-- Insert template header records
-- Link tasks to templates via task_template_items with proper:
-  - Role assignments
-  - Frequency settings
-  - Time windows (opening/periodic/closing)
-  - Priority levels
+**leave_transactions**
+- id, employee_id, leave_type_id, transaction_type (grant/use/lapse/adjust)
+- days, effective_date, notes
 
-### Step 4: Generate Task Instances
-Create instances for today with realistic scheduling:
-- Scheduled times throughout the day
-- Due times based on task type
-- Various status values
+## Phase 3: Performance Management
 
-### Step 5: Add Task Completions
-Insert completion records for finished tasks with evidence data
+### New Tables:
 
-## Files to Create
+**performance_reviews**
+- id, employee_id, review_period_start, review_period_end
+- reviewed_by, review_date
+- overall_rating (1-5), ranking_in_team
+- kra_achievement, competency_score
+- strengths, weaknesses
+- training_needs, career_interests
+- promotion_potential (high/medium/low)
+- status (draft/submitted/acknowledged)
 
-### 1. Database Migration
-`supabase/migrations/[timestamp]_add_store_operations_sample_data.sql`
-- Insert statements for all sample data
-- Use existing store IDs and foreign keys
-- Set realistic timestamps
+**training_recommendations**
+- id, employee_id, review_id
+- training_topic, priority (high/medium/low)
+- target_completion_date, completed_at
+
+## Files to Create/Modify
+
+### New Components:
+1. `src/components/staff/EmployeeOnboardingForm.tsx` - Multi-step onboarding
+2. `src/components/staff/DocumentUploadSection.tsx` - File uploads
+3. `src/components/staff/CompetencyMapper.tsx` - Skill mapping
+4. `src/components/staff/FaceCaptureDialog.tsx` - Face baseline capture
+5. `src/components/staff/AttendanceMarkDialog.tsx` - Mark attendance with face
+6. `src/components/staff/LeaveBalanceCard.tsx` - Balance display
+7. `src/components/staff/LeaveApplyDialog.tsx` - Apply for leave
+8. `src/components/staff/ManagerFeedbackForm.tsx` - Periodic feedback
+9. `src/components/staff/PerformanceReviewForm.tsx` - Performance review
+
+### Pages:
+1. `src/pages/staff/Employees.tsx` - Enhanced with onboarding
+2. `src/pages/staff/Attendance.tsx` - Face recognition + geo
+3. `src/pages/staff/LeaveManagement.tsx` - NEW: Leave apply/approve
+4. `src/pages/staff/PerformanceReviews.tsx` - NEW: Performance tracking
+
+## Implementation Order
+1. Database migration (all tables)
+2. Enhanced Employees page with onboarding
+3. Attendance with face capture and geo
+4. Leave management system
+5. Performance reviews
+6. Sample data for testing
 
 ## Expected Outcome
-After implementation, users can:
-1. View 10 tasks in Task Master with varied requirements
-2. See roles organized by shift in Role Master
-3. Explore 2 templates with linked tasks in Task Templates
-4. Monitor today's task progress in Task Adherence
-5. Compare store performance in Store Heatmap
-
-## Testing Walkthrough
-1. Navigate to Operations > Task Master - see 10 tasks
-2. Navigate to Operations > Role Master - see shift-based roles
-3. Navigate to Operations > Task Templates - explore linked tasks
-4. Navigate to Operations > Task Adherence - click "Generate Tasks" if needed
-5. Navigate to Operations > Store Heatmap - see performance comparison
+- Complete employee lifecycle management
+- Secure attendance with face verification
+- Leave tracking with balance calculations
+- Performance insights for talent development
