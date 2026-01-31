@@ -676,6 +676,7 @@ export type Database = {
       }
       inventory_items: {
         Row: {
+          asset_master_id: string | null
           barcode: string | null
           category: string
           created_at: string
@@ -684,14 +685,18 @@ export type Database = {
           max_stock: number | null
           min_stock: number
           name: string
+          rate_validity_date: string | null
+          rate_validity_days: number | null
           selling_price: number
           sku: string | null
           status: string
           unit: string
           unit_cost: number
           updated_at: string
+          vendor_id: string | null
         }
         Insert: {
+          asset_master_id?: string | null
           barcode?: string | null
           category: string
           created_at?: string
@@ -700,14 +705,18 @@ export type Database = {
           max_stock?: number | null
           min_stock?: number
           name: string
+          rate_validity_date?: string | null
+          rate_validity_days?: number | null
           selling_price?: number
           sku?: string | null
           status?: string
           unit?: string
           unit_cost?: number
           updated_at?: string
+          vendor_id?: string | null
         }
         Update: {
+          asset_master_id?: string | null
           barcode?: string | null
           category?: string
           created_at?: string
@@ -716,14 +725,32 @@ export type Database = {
           max_stock?: number | null
           min_stock?: number
           name?: string
+          rate_validity_date?: string | null
+          rate_validity_days?: number | null
           selling_price?: number
           sku?: string | null
           status?: string
           unit?: string
           unit_cost?: number
           updated_at?: string
+          vendor_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "inventory_items_asset_master_id_fkey"
+            columns: ["asset_master_id"]
+            isOneToOne: false
+            referencedRelation: "asset_masters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_items_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       kb_article_assets: {
         Row: {
@@ -938,6 +965,120 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      maintenance_task_labour: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string
+          id: string
+          is_billable: boolean
+          is_covered_by_contract: boolean
+          notes: string | null
+          task_id: string
+          total_cost: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          id?: string
+          is_billable?: boolean
+          is_covered_by_contract?: boolean
+          notes?: string | null
+          task_id: string
+          total_cost: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          id?: string
+          is_billable?: boolean
+          is_covered_by_contract?: boolean
+          notes?: string | null
+          task_id?: string
+          total_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_task_labour_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "maintenance_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      maintenance_task_spares: {
+        Row: {
+          asset_master_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          inventory_item_id: string | null
+          is_billable: boolean
+          is_covered_by_contract: boolean
+          notes: string | null
+          quantity: number
+          spare_name: string
+          task_id: string
+          total_cost: number | null
+          unit_cost: number
+        }
+        Insert: {
+          asset_master_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          inventory_item_id?: string | null
+          is_billable?: boolean
+          is_covered_by_contract?: boolean
+          notes?: string | null
+          quantity?: number
+          spare_name: string
+          task_id: string
+          total_cost?: number | null
+          unit_cost: number
+        }
+        Update: {
+          asset_master_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          inventory_item_id?: string | null
+          is_billable?: boolean
+          is_covered_by_contract?: boolean
+          notes?: string | null
+          quantity?: number
+          spare_name?: string
+          task_id?: string
+          total_cost?: number | null
+          unit_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_task_spares_asset_master_id_fkey"
+            columns: ["asset_master_id"]
+            isOneToOne: false
+            referencedRelation: "asset_masters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_task_spares_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_task_spares_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "maintenance_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       maintenance_tasks: {
         Row: {
@@ -3535,6 +3676,120 @@ export type Database = {
           {
             foreignKeyName: "service_ticket_adherence_service_ticket_id_fkey"
             columns: ["service_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "service_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_ticket_labour: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string
+          id: string
+          is_billable: boolean
+          is_covered_by_contract: boolean
+          notes: string | null
+          ticket_id: string
+          total_cost: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          id?: string
+          is_billable?: boolean
+          is_covered_by_contract?: boolean
+          notes?: string | null
+          ticket_id: string
+          total_cost: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          id?: string
+          is_billable?: boolean
+          is_covered_by_contract?: boolean
+          notes?: string | null
+          ticket_id?: string
+          total_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_ticket_labour_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "service_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_ticket_spares: {
+        Row: {
+          asset_master_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          inventory_item_id: string | null
+          is_billable: boolean
+          is_covered_by_contract: boolean
+          notes: string | null
+          quantity: number
+          spare_name: string
+          ticket_id: string
+          total_cost: number | null
+          unit_cost: number
+        }
+        Insert: {
+          asset_master_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          inventory_item_id?: string | null
+          is_billable?: boolean
+          is_covered_by_contract?: boolean
+          notes?: string | null
+          quantity?: number
+          spare_name: string
+          ticket_id: string
+          total_cost?: number | null
+          unit_cost: number
+        }
+        Update: {
+          asset_master_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          inventory_item_id?: string | null
+          is_billable?: boolean
+          is_covered_by_contract?: boolean
+          notes?: string | null
+          quantity?: number
+          spare_name?: string
+          ticket_id?: string
+          total_cost?: number | null
+          unit_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_ticket_spares_asset_master_id_fkey"
+            columns: ["asset_master_id"]
+            isOneToOne: false
+            referencedRelation: "asset_masters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_ticket_spares_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_ticket_spares_ticket_id_fkey"
+            columns: ["ticket_id"]
             isOneToOne: false
             referencedRelation: "service_tickets"
             referencedColumns: ["id"]

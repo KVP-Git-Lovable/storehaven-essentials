@@ -71,7 +71,6 @@ const navigation: NavItem[] = [
     children: [
       { title: "Asset Master", href: "/assets/master", moduleKey: "assets.master" },
       { title: "Asset Register", href: "/assets/inventory", moduleKey: "assets.register" },
-      { title: "Spares Management", href: "/assets/spares", moduleKey: "assets.spares" },
       { title: "Service Contracts", href: "/services/contracts", moduleKey: "assets.contracts" },
       { title: "Preventive Maintenance", href: "/services/maintenance", moduleKey: "assets.maintenance" },
       { title: "Service Tickets", href: "/services/tickets", moduleKey: "assets.tickets" },

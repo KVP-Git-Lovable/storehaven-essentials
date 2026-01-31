@@ -40,6 +40,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { KnowledgeBaseSuggestions } from "@/components/knowledge/KnowledgeBaseSuggestions";
+import { SparesLabourSection } from "@/components/services/SparesLabourSection";
 
 const TICKET_CATEGORIES = [
   { value: "general", label: "General" },
@@ -904,6 +905,21 @@ export function ServiceTicketDetailsDialog({
                 </CardContent>
               </Card>
             )}
+
+            {/* Spares & Labour Section */}
+            <SparesLabourSection
+              entityType="ticket"
+              entityId={ticket.id}
+              contractCoverage={
+                contract
+                  ? {
+                      spares_covered: contract.spares_included || false,
+                      labour_covered: contract.labour_included || false,
+                    }
+                  : null
+              }
+              readOnly={!editing}
+            />
 
             {/* Contract Adherence Checklist */}
             <Card>

@@ -25,6 +25,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { KnowledgeBaseSuggestions } from "@/components/knowledge/KnowledgeBaseSuggestions";
+import { SparesLabourSection } from "@/components/services/SparesLabourSection";
 
 type MaintenanceTask = {
   id: string;
@@ -39,6 +40,7 @@ type MaintenanceTask = {
   status: string;
   store?: { name: string } | null;
   pm_checklist_master_id?: string | null;
+  service_contract_id?: string | null;
 };
 
 type PMChecklistMaster = {
@@ -85,6 +87,10 @@ export function MaintenanceDetailsDialog({
   const [checklistMaster, setChecklistMaster] = useState<PMChecklistMaster | null>(null);
   const [checklistSections, setChecklistSections] = useState<PMSection[]>([]);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [contractCoverage, setContractCoverage] = useState<{
+    spares_covered: boolean;
+    labour_covered: boolean;
+  } | null>(null);
 
   // Fetch asset master ID and checklist data
   useEffect(() => {
@@ -151,6 +157,26 @@ export function MaintenanceDetailsDialog({
       } else {
         setChecklistMaster(null);
         setChecklistSections([]);
+      }
+
+      // Fetch contract coverage if linked to a service contract
+      if (task.service_contract_id) {
+        const { data: contractData } = await supabase
+          .from("service_contracts")
+          .select("spares_included, labour_included")
+          .eq("id", task.service_contract_id)
+          .maybeSingle();
+        
+        if (contractData) {
+          setContractCoverage({
+            spares_covered: contractData.spares_included || false,
+            labour_covered: contractData.labour_included || false,
+          });
+        } else {
+          setContractCoverage(null);
+        }
+      } else {
+        setContractCoverage(null);
       }
     };
 
@@ -369,6 +395,14 @@ export function MaintenanceDetailsDialog({
               </Card>
             </>
           )}
+
+          {/* Spares & Labour Section */}
+          <Separator />
+          <SparesLabourSection
+            entityType="maintenance"
+            entityId={task.id}
+            contractCoverage={contractCoverage}
+          />
 
           {/* Knowledge Base Suggestions */}
           <Separator />
