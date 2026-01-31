@@ -464,6 +464,62 @@ export type Database = {
         }
         Relationships: []
       }
+      footfall_records: {
+        Row: {
+          conversion_count: number | null
+          created_at: string
+          entry_count: number
+          exit_count: number
+          id: string
+          notes: string | null
+          peak_hour_count: number | null
+          peak_hour_end: string | null
+          peak_hour_start: string | null
+          record_date: string
+          recorded_by: string | null
+          store_id: string
+          updated_at: string
+        }
+        Insert: {
+          conversion_count?: number | null
+          created_at?: string
+          entry_count?: number
+          exit_count?: number
+          id?: string
+          notes?: string | null
+          peak_hour_count?: number | null
+          peak_hour_end?: string | null
+          peak_hour_start?: string | null
+          record_date: string
+          recorded_by?: string | null
+          store_id: string
+          updated_at?: string
+        }
+        Update: {
+          conversion_count?: number | null
+          created_at?: string
+          entry_count?: number
+          exit_count?: number
+          id?: string
+          notes?: string | null
+          peak_hour_count?: number | null
+          peak_hour_end?: string | null
+          peak_hour_start?: string | null
+          record_date?: string
+          recorded_by?: string | null
+          store_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "footfall_records_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       frequency_master: {
         Row: {
           created_at: string
