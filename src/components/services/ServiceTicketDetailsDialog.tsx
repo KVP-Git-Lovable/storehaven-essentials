@@ -145,6 +145,7 @@ export function ServiceTicketDetailsDialog({
   const [contracts, setContracts] = useState<ServiceContract[]>([]);
   const [adherenceItems, setAdherenceItems] = useState<AdherenceItem[]>([]);
   const [assetMasterId, setAssetMasterId] = useState<string | null>(null);
+  const [linkedVendorIds, setLinkedVendorIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -237,16 +238,36 @@ export function ServiceTicketDetailsDialog({
         setContract(null);
       }
 
-      // Fetch asset master ID for KB suggestions
+      // Fetch asset master ID and linked vendors for KB suggestions
       if (ticketData.asset_id) {
         const { data: assetData } = await supabase
           .from("assets")
-          .select("asset_master_id")
+          .select("asset_master_id, oem_id, vendor_id")
           .eq("id", ticketData.asset_id)
           .maybeSingle();
         setAssetMasterId(assetData?.asset_master_id || null);
+        
+        // Collect vendor IDs from OEM and vendor on asset
+        const vendorIds: string[] = [];
+        if (assetData?.oem_id) vendorIds.push(assetData.oem_id);
+        if (assetData?.vendor_id) vendorIds.push(assetData.vendor_id);
+        
+        // Also fetch vendors linked via asset_master_vendors (if asset_master exists)
+        if (assetData?.asset_master_id) {
+          const { data: masterVendors } = await supabase
+            .from("asset_master_vendors")
+            .select("vendor_id")
+            .eq("asset_master_id", assetData.asset_master_id);
+          if (masterVendors) {
+            masterVendors.forEach((v) => {
+              if (!vendorIds.includes(v.vendor_id)) vendorIds.push(v.vendor_id);
+            });
+          }
+        }
+        setLinkedVendorIds(vendorIds);
       } else {
         setAssetMasterId(null);
+        setLinkedVendorIds([]);
       }
     }
 
@@ -960,9 +981,11 @@ export function ServiceTicketDetailsDialog({
               </CardHeader>
               <CardContent>
                 <KnowledgeBaseSuggestions 
-                  assetMasterId={assetMasterId} 
+                  assetMasterId={assetMasterId}
+                  vendorIds={linkedVendorIds}
+                  ticketCategory={ticket.category}
                   searchContext={ticket.title}
-                  compact 
+                  grouped
                 />
               </CardContent>
             </Card>
