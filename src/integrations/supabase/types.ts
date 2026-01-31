@@ -949,6 +949,7 @@ export type Database = {
           id: string
           last_done: string
           next_due: string
+          pm_checklist_master_id: string | null
           service_contract_id: string | null
           status: string
           store_id: string | null
@@ -964,6 +965,7 @@ export type Database = {
           id?: string
           last_done: string
           next_due: string
+          pm_checklist_master_id?: string | null
           service_contract_id?: string | null
           status?: string
           store_id?: string | null
@@ -979,6 +981,7 @@ export type Database = {
           id?: string
           last_done?: string
           next_due?: string
+          pm_checklist_master_id?: string | null
           service_contract_id?: string | null
           status?: string
           store_id?: string | null
@@ -991,6 +994,13 @@ export type Database = {
             columns: ["asset_id"]
             isOneToOne: false
             referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_tasks_pm_checklist_master_id_fkey"
+            columns: ["pm_checklist_master_id"]
+            isOneToOne: false
+            referencedRelation: "pm_checklist_masters"
             referencedColumns: ["id"]
           },
           {
