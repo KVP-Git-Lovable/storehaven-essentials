@@ -16,7 +16,7 @@ import AssetMaster from "./pages/assets/AssetMaster";
 import AssetMasterDetails from "./pages/assets/AssetMasterDetails";
 import AssetInventory from "./pages/assets/AssetInventory";
 import AssetDetails from "./pages/assets/AssetDetails";
-import SparesManagement from "./pages/assets/SparesManagement";
+
 import ServiceContracts from "./pages/services/ServiceContracts";
 import PreventiveMaintenance from "./pages/services/PreventiveMaintenance";
 import ServiceTickets from "./pages/services/ServiceTickets";
@@ -105,7 +105,7 @@ const App = () => (
               <Route path="/assets/master/:id" element={<AssetMasterDetails />} />
               <Route path="/assets/inventory" element={<AssetInventory />} />
               <Route path="/assets/inventory/:id" element={<AssetDetails />} />
-              <Route path="/assets/spares" element={<SparesManagement />} />
+              
               <Route path="/services/contracts" element={<ServiceContracts />} />
               <Route path="/services/maintenance" element={<PreventiveMaintenance />} />
               <Route path="/services/tickets" element={<ServiceTickets />} />
