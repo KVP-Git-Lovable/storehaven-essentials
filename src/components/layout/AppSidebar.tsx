@@ -31,8 +31,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface NavChild {
   title: string;
-  href: string;
+  href?: string;
   moduleKey?: string;
+  isSubSection?: boolean;
+  subChildren?: NavChild[];
 }
 
 interface NavItem {
@@ -78,15 +80,27 @@ const navigation: NavItem[] = [
     children: [
       { title: "All Stores", href: "/stores", moduleKey: "stores.all" },
       { title: "Rentals & Leases", href: "/stores/rentals", moduleKey: "stores.rentals" },
-      { title: "Task Master", href: "/operations/tasks", moduleKey: "operations.tasks" },
-      { title: "Role Master", href: "/operations/roles", moduleKey: "operations.roles" },
-      { title: "Task Templates", href: "/operations/templates", moduleKey: "operations.templates" },
-      { title: "Task Adherence", href: "/operations/adherence", moduleKey: "operations.adherence" },
-      { title: "Store Heatmap", href: "/operations/heatmap", moduleKey: "operations.heatmap" },
-      { title: "Planograms", href: "/vm/planograms", moduleKey: "vm.planograms" },
-      { title: "Compliance Tasks", href: "/vm/tasks", moduleKey: "vm.tasks" },
-      { title: "Submit Photo", href: "/vm/submit", moduleKey: "vm.submit" },
-      { title: "Review Submissions", href: "/vm/review", moduleKey: "vm.review" },
+      { 
+        title: "Store Operations", 
+        isSubSection: true,
+        subChildren: [
+          { title: "Task Master", href: "/operations/tasks", moduleKey: "operations.tasks" },
+          { title: "Role Master", href: "/operations/roles", moduleKey: "operations.roles" },
+          { title: "Task Templates", href: "/operations/templates", moduleKey: "operations.templates" },
+          { title: "Task Adherence", href: "/operations/adherence", moduleKey: "operations.adherence" },
+          { title: "Store Heatmap", href: "/operations/heatmap", moduleKey: "operations.heatmap" },
+        ]
+      },
+      { 
+        title: "Visual Merchandising", 
+        isSubSection: true,
+        subChildren: [
+          { title: "Planograms", href: "/vm/planograms", moduleKey: "vm.planograms" },
+          { title: "Compliance Tasks", href: "/vm/tasks", moduleKey: "vm.tasks" },
+          { title: "Submit Photo", href: "/vm/submit", moduleKey: "vm.submit" },
+          { title: "Review Submissions", href: "/vm/review", moduleKey: "vm.review" },
+        ]
+      },
       { title: "Footfall", href: "/footfall", moduleKey: "footfall" },
       { title: "Petty Cash", href: "/petty-cash", moduleKey: "pettycash" },
       { title: "New Store Opening", href: "/stores/new-opening", moduleKey: "stores.nso" },
@@ -224,9 +238,13 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
     );
   };
 
-  const isActive = (href: string) => location.pathname === href;
-  const isChildActive = (children?: { href: string }[]) =>
-    children?.some((child) => location.pathname === child.href);
+  const isActive = (href?: string) => href ? location.pathname === href : false;
+  const isChildActive = (children?: NavChild[]): boolean =>
+    children?.some((child) => {
+      if (child.href) return location.pathname === child.href;
+      if (child.subChildren) return isChildActive(child.subChildren);
+      return false;
+    }) ?? false;
 
   const handleNavClick = () => {
     if (isMobile) {
@@ -293,19 +311,60 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
                   {openMenus.includes(item.title) && item.children && (
                     <div className="ml-4 mt-1 space-y-1 border-l border-sidebar-border pl-4">
                       {item.children.map((child) => (
-                        <NavLink
-                          key={child.href}
-                          to={child.href}
-                          onClick={handleNavClick}
-                          className={cn(
-                            "block rounded-lg px-3 py-2 text-sm transition-colors",
-                            isActive(child.href)
-                              ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                              : "text-sidebar-foreground/60 hover:text-sidebar-foreground"
-                          )}
-                        >
-                          {child.title}
-                        </NavLink>
+                        child.isSubSection ? (
+                          <div key={child.title}>
+                            <button
+                              onClick={() => toggleMenu(child.title)}
+                              className={cn(
+                                "flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors",
+                                isChildActive(child.subChildren)
+                                  ? "text-sidebar-accent-foreground"
+                                  : "text-sidebar-foreground/50 hover:text-sidebar-foreground/70"
+                              )}
+                            >
+                              {child.title}
+                              <ChevronDown
+                                className={cn(
+                                  "h-3 w-3 transition-transform",
+                                  openMenus.includes(child.title) && "rotate-180"
+                                )}
+                              />
+                            </button>
+                            {openMenus.includes(child.title) && child.subChildren && (
+                              <div className="ml-2 mt-1 space-y-1 border-l border-sidebar-border/50 pl-3">
+                                {child.subChildren.map((subChild) => (
+                                  <NavLink
+                                    key={subChild.href}
+                                    to={subChild.href!}
+                                    onClick={handleNavClick}
+                                    className={cn(
+                                      "block rounded-lg px-3 py-1.5 text-sm transition-colors",
+                                      isActive(subChild.href)
+                                        ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                                        : "text-sidebar-foreground/60 hover:text-sidebar-foreground"
+                                    )}
+                                  >
+                                    {subChild.title}
+                                  </NavLink>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <NavLink
+                            key={child.href}
+                            to={child.href!}
+                            onClick={handleNavClick}
+                            className={cn(
+                              "block rounded-lg px-3 py-2 text-sm transition-colors",
+                              isActive(child.href)
+                                ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                                : "text-sidebar-foreground/60 hover:text-sidebar-foreground"
+                            )}
+                          >
+                            {child.title}
+                          </NavLink>
+                        )
                       ))}
                     </div>
                   )}
