@@ -18,6 +18,7 @@ import {
   ClipboardCheck,
   ShoppingCart,
   UserCog,
+  BarChart3,
 } from "lucide-react";
 import quickappLogo from "@/assets/quickapp-logo.png";
 import { cn } from "@/lib/utils";
@@ -42,7 +43,21 @@ interface NavItem {
 }
 
 const navigation: NavItem[] = [
-  { title: "Dashboard", href: "/", icon: LayoutDashboard, moduleKey: "dashboard" },
+  { title: "Home", href: "/", icon: LayoutDashboard, moduleKey: "dashboard" },
+  {
+    title: "Dashboards",
+    icon: BarChart3,
+    moduleKey: "dashboards",
+    children: [
+      { title: "Asset Management", href: "/dashboards/assets", moduleKey: "dashboards.assets" },
+      { title: "Inventory", href: "/dashboards/inventory", moduleKey: "dashboards.inventory" },
+      { title: "Employees", href: "/dashboards/employees", moduleKey: "dashboards.employees" },
+      { title: "Asset Service", href: "/dashboards/service", moduleKey: "dashboards.service" },
+      { title: "Store 360", href: "/dashboards/store360", moduleKey: "dashboards.store360" },
+      { title: "Visual Merchandising", href: "/dashboards/vm", moduleKey: "dashboards.vm" },
+      { title: "New Store Opening", href: "/dashboards/nso", moduleKey: "dashboards.nso" },
+    ],
+  },
   {
     title: "Point of Sale",
     icon: ShoppingCart,

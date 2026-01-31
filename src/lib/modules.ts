@@ -6,7 +6,15 @@ export interface ModuleDefinition {
 }
 
 export const modules: ModuleDefinition[] = [
-  { key: "dashboard", name: "Dashboard" },
+  { key: "dashboard", name: "Home" },
+  { key: "dashboards", name: "Dashboards" },
+  { key: "dashboards.assets", name: "Asset Dashboard", parent: "dashboards" },
+  { key: "dashboards.inventory", name: "Inventory Dashboard", parent: "dashboards" },
+  { key: "dashboards.employees", name: "Employees Dashboard", parent: "dashboards" },
+  { key: "dashboards.service", name: "Asset Service Dashboard", parent: "dashboards" },
+  { key: "dashboards.store360", name: "Store 360 Dashboard", parent: "dashboards" },
+  { key: "dashboards.vm", name: "VM Dashboard", parent: "dashboards" },
+  { key: "dashboards.nso", name: "NSO Dashboard", parent: "dashboards" },
   { key: "pos", name: "Point of Sale" },
   { key: "pos.quicksale", name: "Quick Sale", parent: "pos" },
   { key: "pos.products", name: "Product Master", parent: "pos" },
