@@ -321,6 +321,131 @@ export type Database = {
           },
         ]
       }
+      budget_approval_history: {
+        Row: {
+          action: string
+          budget_id: string
+          comments: string | null
+          created_at: string
+          id: string
+          performed_by: string | null
+        }
+        Insert: {
+          action: string
+          budget_id: string
+          comments?: string | null
+          created_at?: string
+          id?: string
+          performed_by?: string | null
+        }
+        Update: {
+          action?: string
+          budget_id?: string
+          comments?: string | null
+          created_at?: string
+          id?: string
+          performed_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budget_approval_history_budget_id_fkey"
+            columns: ["budget_id"]
+            isOneToOne: false
+            referencedRelation: "store_budgets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      budget_master_groups: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          sort_order: number | null
+          status: string | null
+          store_type: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          sort_order?: number | null
+          status?: string | null
+          store_type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          sort_order?: number | null
+          status?: string | null
+          store_type?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      budget_master_items: {
+        Row: {
+          created_at: string
+          default_amount: number | null
+          description: string | null
+          group_id: string
+          id: string
+          inventory_item_id: string | null
+          is_recurring: boolean | null
+          item_type: string
+          name: string
+          sort_order: number | null
+          status: string | null
+        }
+        Insert: {
+          created_at?: string
+          default_amount?: number | null
+          description?: string | null
+          group_id: string
+          id?: string
+          inventory_item_id?: string | null
+          is_recurring?: boolean | null
+          item_type?: string
+          name: string
+          sort_order?: number | null
+          status?: string | null
+        }
+        Update: {
+          created_at?: string
+          default_amount?: number | null
+          description?: string | null
+          group_id?: string
+          id?: string
+          inventory_item_id?: string | null
+          is_recurring?: boolean | null
+          item_type?: string
+          name?: string
+          sort_order?: number | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budget_master_items_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "budget_master_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_master_items_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cashier_sessions: {
         Row: {
           actual_closing: number | null
@@ -5132,6 +5257,137 @@ export type Database = {
           },
           {
             foreignKeyName: "store_asset_deployments_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_budget_items: {
+        Row: {
+          actual_amount: number | null
+          ai_predicted_amount: number | null
+          budget_id: string
+          budgeted_amount: number
+          created_at: string
+          description: string | null
+          group_name: string
+          id: string
+          is_custom: boolean | null
+          item_name: string
+          item_type: string
+          master_item_id: string | null
+          sort_order: number | null
+          updated_at: string
+          variance: number | null
+        }
+        Insert: {
+          actual_amount?: number | null
+          ai_predicted_amount?: number | null
+          budget_id: string
+          budgeted_amount?: number
+          created_at?: string
+          description?: string | null
+          group_name: string
+          id?: string
+          is_custom?: boolean | null
+          item_name: string
+          item_type?: string
+          master_item_id?: string | null
+          sort_order?: number | null
+          updated_at?: string
+          variance?: number | null
+        }
+        Update: {
+          actual_amount?: number | null
+          ai_predicted_amount?: number | null
+          budget_id?: string
+          budgeted_amount?: number
+          created_at?: string
+          description?: string | null
+          group_name?: string
+          id?: string
+          is_custom?: boolean | null
+          item_name?: string
+          item_type?: string
+          master_item_id?: string | null
+          sort_order?: number | null
+          updated_at?: string
+          variance?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_budget_items_budget_id_fkey"
+            columns: ["budget_id"]
+            isOneToOne: false
+            referencedRelation: "store_budgets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_budget_items_master_item_id_fkey"
+            columns: ["master_item_id"]
+            isOneToOne: false
+            referencedRelation: "budget_master_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_budgets: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          budget_month: number | null
+          budget_type: string
+          created_at: string
+          fiscal_year: number
+          id: string
+          notes: string | null
+          rejection_reason: string | null
+          status: string | null
+          store_id: string
+          submitted_at: string | null
+          submitted_by: string | null
+          total_amount: number | null
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          budget_month?: number | null
+          budget_type?: string
+          created_at?: string
+          fiscal_year: number
+          id?: string
+          notes?: string | null
+          rejection_reason?: string | null
+          status?: string | null
+          store_id: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          total_amount?: number | null
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          budget_month?: number | null
+          budget_type?: string
+          created_at?: string
+          fiscal_year?: number
+          id?: string
+          notes?: string | null
+          rejection_reason?: string | null
+          status?: string | null
+          store_id?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          total_amount?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_budgets_store_id_fkey"
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
