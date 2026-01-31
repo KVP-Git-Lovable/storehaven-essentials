@@ -45,10 +45,31 @@ import { KnowledgeBaseSuggestions } from "@/components/knowledge/KnowledgeBaseSu
 import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { usePermissions } from "@/hooks/usePermissions";
 
+const TICKET_CATEGORIES = [
+  { value: "general", label: "General" },
+  { value: "maintenance", label: "Maintenance" },
+  { value: "repair", label: "Repair" },
+  { value: "installation", label: "Installation" },
+  { value: "safety", label: "Safety" },
+  { value: "calibration", label: "Calibration" },
+  { value: "cleaning", label: "Cleaning" },
+  { value: "inspection", label: "Inspection" },
+];
+
 const ticketSchema = z.object({
   title: z.string().min(1, "Title is required").max(255),
   store_id: z.string().min(1, "Store is required"),
   asset_id: z.string().optional(),
+  category: z.enum([
+    "general",
+    "maintenance",
+    "repair",
+    "installation",
+    "safety",
+    "calibration",
+    "cleaning",
+    "inspection",
+  ]),
   priority: z.enum(["low", "medium", "high", "critical"]),
   description: z.string().optional(),
   reported_by: z.string().min(1, "Reporter is required"),
@@ -117,6 +138,7 @@ export default function ServiceTickets() {
       title: "",
       store_id: "",
       asset_id: "",
+      category: "general",
       priority: "medium",
       description: "",
       reported_by: "",
@@ -215,6 +237,7 @@ export default function ServiceTickets() {
       title: data.title,
       store_id: data.store_id,
       asset_id: data.asset_id && data.asset_id !== "_none" ? data.asset_id : null,
+      category: data.category,
       priority: data.priority,
       description: data.description || null,
       reported_by: data.reported_by,
@@ -396,6 +419,32 @@ export default function ServiceTickets() {
                         )}
                       />
                     </div>
+
+                    <FormField
+                      control={form.control}
+                      name="category"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Category</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select category" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {TICKET_CATEGORIES.map((c) => (
+                                <SelectItem key={c.value} value={c.value}>
+                                  {c.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
                     <div className="grid grid-cols-2 gap-4">
                       <FormField
                         control={form.control}

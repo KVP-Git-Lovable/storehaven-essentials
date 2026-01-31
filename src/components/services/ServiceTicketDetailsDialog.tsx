@@ -23,7 +23,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
@@ -41,6 +40,20 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { KnowledgeBaseSuggestions } from "@/components/knowledge/KnowledgeBaseSuggestions";
+
+const TICKET_CATEGORIES = [
+  { value: "general", label: "General" },
+  { value: "maintenance", label: "Maintenance" },
+  { value: "repair", label: "Repair" },
+  { value: "installation", label: "Installation" },
+  { value: "safety", label: "Safety" },
+  { value: "calibration", label: "Calibration" },
+  { value: "cleaning", label: "Cleaning" },
+  { value: "inspection", label: "Inspection" },
+];
+
+const getCategoryLabel = (value: string) =>
+  TICKET_CATEGORIES.find((c) => c.value === value)?.label || value;
 
 type ServiceContract = {
   id: string;
@@ -89,6 +102,7 @@ type ServiceTicket = {
   asset_id: string | null;
   title: string;
   description: string | null;
+  category: string;
   priority: string;
   status: string;
   reported_by: string;
@@ -137,6 +151,7 @@ export function ServiceTicketDetailsDialog({
   const [editData, setEditData] = useState({
     title: "",
     description: "",
+    category: "general",
     priority: "",
     reported_by: "",
     status: "",
@@ -193,6 +208,7 @@ export function ServiceTicketDetailsDialog({
       setEditData({
         title: ticketData.title,
         description: ticketData.description || "",
+        category: ticketData.category || "general",
         priority: ticketData.priority,
         reported_by: ticketData.reported_by,
         status: ticketData.status,
@@ -452,6 +468,7 @@ export function ServiceTicketDetailsDialog({
       .update({
         title: editData.title,
         description: editData.description || null,
+        category: editData.category,
         priority: editData.priority,
         reported_by: editData.reported_by,
         status: editData.status,
@@ -537,7 +554,7 @@ export function ServiceTicketDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+      <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="p-6 pb-0 shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0">
@@ -594,9 +611,8 @@ export function ServiceTicketDetailsDialog({
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden">
-          <ScrollArea className="h-full">
-            <div className="p-6 pt-4 space-y-6">
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="p-6 pt-4 space-y-6">
               {/* Editable Basic Fields - shown when editing */}
               {editing && (
                 <Card>
@@ -613,13 +629,31 @@ export function ServiceTicketDetailsDialog({
                         rows={3}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div>
                         <label className="text-sm text-muted-foreground">Reported By</label>
                         <Input
                           value={editData.reported_by}
                           onChange={(e) => setEditData((p) => ({ ...p, reported_by: e.target.value }))}
                         />
+                      </div>
+                      <div>
+                        <label className="text-sm text-muted-foreground">Category</label>
+                        <Select
+                          value={editData.category}
+                          onValueChange={(v) => setEditData((p) => ({ ...p, category: v }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TICKET_CATEGORIES.map((c) => (
+                              <SelectItem key={c.value} value={c.value}>
+                                {c.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div>
                         <label className="text-sm text-muted-foreground">Status</label>
@@ -681,6 +715,10 @@ export function ServiceTicketDetailsDialog({
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Asset:</span>
                       <span>{ticket.asset?.name || "-"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Category:</span>
+                      <span>{getCategoryLabel(editing ? editData.category : ticket.category)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Reported By:</span>
@@ -928,8 +966,7 @@ export function ServiceTicketDetailsDialog({
                 />
               </CardContent>
             </Card>
-            </div>
-          </ScrollArea>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
