@@ -44,6 +44,10 @@ import CategoryMaster from "./pages/master/CategoryMaster";
 import LocationMaster from "./pages/master/LocationMaster";
 import NSOChecklistMaster from "./pages/master/NSOChecklistMaster";
 import PMChecklistMaster from "./pages/master/PMChecklistMaster";
+import StoreBudgetMaster from "./pages/master/StoreBudgetMaster";
+import StoreBudgets from "./pages/stores/StoreBudgets";
+import StoreBudgetDetails from "./pages/stores/StoreBudgetDetails";
+import StoreBudgetDashboard from "./pages/stores/StoreBudgetDashboard";
 import Planograms from "./pages/vm/Planograms";
 import ComplianceTasks from "./pages/vm/ComplianceTasks";
 import PhotoSubmission from "./pages/vm/PhotoSubmission";
@@ -129,6 +133,9 @@ const App = () => (
               <Route path="/stores/targets/dashboard" element={<StoreTargetDashboard />} />
               <Route path="/stores/targets/:id" element={<StoreTargetDetails />} />
               <Route path="/stores/targets/:id/details" element={<StoreTargetDetails />} />
+              <Route path="/stores/budget" element={<StoreBudgets />} />
+              <Route path="/stores/budget/dashboard" element={<StoreBudgetDashboard />} />
+              <Route path="/stores/budget/:id" element={<StoreBudgetDetails />} />
               <Route path="/stores/new-opening" element={<NewStoreOpening />} />
               <Route path="/assets/master" element={<AssetMaster />} />
               <Route path="/assets/master/:id" element={<AssetMasterDetails />} />
@@ -159,6 +166,7 @@ const App = () => (
               <Route path="/master/location" element={<LocationMaster />} />
               <Route path="/master/nso-checklist" element={<NSOChecklistMaster />} />
               <Route path="/master/pm-checklist" element={<PMChecklistMaster />} />
+              <Route path="/master/store-budget" element={<StoreBudgetMaster />} />
               <Route path="/vm/planograms" element={<Planograms />} />
               <Route path="/vm/tasks" element={<ComplianceTasks />} />
               <Route path="/vm/submit" element={<PhotoSubmission />} />

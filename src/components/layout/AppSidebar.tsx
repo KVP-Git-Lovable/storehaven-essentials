@@ -83,6 +83,7 @@ const navigation: NavItem[] = [
     children: [
       { title: "All Stores", href: "/stores", moduleKey: "stores.all" },
       { title: "Rentals & Leases", href: "/stores/rentals", moduleKey: "stores.rentals" },
+      { title: "Store Budget", href: "/stores/budget", moduleKey: "stores.budget" },
       { 
         title: "Store Operations", 
         isSubSection: true,
@@ -177,6 +178,7 @@ const navigation: NavItem[] = [
       { title: "Location Master", href: "/master/location", moduleKey: "master.location" },
       { title: "NSO Checklist Master", href: "/master/nso-checklist", moduleKey: "master.nso" },
       { title: "PM Checklist Master", href: "/master/pm-checklist", moduleKey: "master.pm" },
+      { title: "Store Budget Master", href: "/master/store-budget", moduleKey: "master.budget" },
     ],
   },
   {
