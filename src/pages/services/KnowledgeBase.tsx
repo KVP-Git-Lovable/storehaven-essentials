@@ -24,7 +24,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
@@ -50,6 +49,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -95,17 +95,30 @@ type KBArticle = {
   kb_article_attachments?: KBAttachment[];
 };
 
-const ARTICLE_TYPES = ["guide", "troubleshooting", "procedure", "reference", "faq"];
-const CATEGORIES = [
-  "general",
-  "maintenance",
-  "repair",
-  "installation",
-  "safety",
-  "calibration",
-  "cleaning",
-  "inspection",
+const ARTICLE_TYPES = [
+  { value: "guide", label: "Guide" },
+  { value: "troubleshooting", label: "Troubleshooting" },
+  { value: "procedure", label: "Procedure" },
+  { value: "reference", label: "Reference" },
+  { value: "faq", label: "FAQ" },
 ];
+
+const CATEGORIES = [
+  { value: "general", label: "General" },
+  { value: "maintenance", label: "Maintenance" },
+  { value: "repair", label: "Repair" },
+  { value: "installation", label: "Installation" },
+  { value: "safety", label: "Safety" },
+  { value: "calibration", label: "Calibration" },
+  { value: "cleaning", label: "Cleaning" },
+  { value: "inspection", label: "Inspection" },
+];
+
+const getArticleTypeLabel = (value: string) => 
+  ARTICLE_TYPES.find(t => t.value === value)?.label || value;
+
+const getCategoryLabel = (value: string) => 
+  CATEGORIES.find(c => c.value === value)?.label || value;
 
 export default function KnowledgeBase() {
   const [articles, setArticles] = useState<KBArticle[]>([]);
@@ -307,24 +320,6 @@ export default function KnowledgeBase() {
   const removeAttachment = (index: number) => {
     const newAttachments = formData.attachments.filter((_, i) => i !== index);
     setFormData({ ...formData, attachments: newAttachments });
-  };
-
-  const toggleAsset = (assetId: string) => {
-    const current = formData.linked_asset_ids;
-    if (current.includes(assetId)) {
-      setFormData({ ...formData, linked_asset_ids: current.filter(id => id !== assetId) });
-    } else {
-      setFormData({ ...formData, linked_asset_ids: [...current, assetId] });
-    }
-  };
-
-  const toggleVendor = (vendorId: string) => {
-    const current = formData.linked_vendor_ids;
-    if (current.includes(vendorId)) {
-      setFormData({ ...formData, linked_vendor_ids: current.filter(id => id !== vendorId) });
-    } else {
-      setFormData({ ...formData, linked_vendor_ids: [...current, vendorId] });
-    }
   };
 
   const handleSubmit = async () => {
@@ -619,8 +614,8 @@ export default function KnowledgeBase() {
           <SelectContent>
             <SelectItem value="all">All Types</SelectItem>
             {ARTICLE_TYPES.map((type) => (
-              <SelectItem key={type} value={type} className="capitalize">
-                {type}
+              <SelectItem key={type.value} value={type.value}>
+                {type.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -632,8 +627,8 @@ export default function KnowledgeBase() {
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
             {CATEGORIES.map((cat) => (
-              <SelectItem key={cat} value={cat} className="capitalize">
-                {cat}
+              <SelectItem key={cat.value} value={cat.value}>
+                {cat.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -665,7 +660,7 @@ export default function KnowledgeBase() {
               <div className="flex items-start justify-between gap-2">
                 <CardTitle className="text-base line-clamp-2">{article.title}</CardTitle>
                 <Badge className={getTypeColor(article.article_type)}>
-                  {article.article_type}
+                  {getArticleTypeLabel(article.article_type)}
                 </Badge>
               </div>
             </CardHeader>
@@ -675,7 +670,7 @@ export default function KnowledgeBase() {
               </p>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline">{article.category}</Badge>
+                  <Badge variant="outline">{getCategoryLabel(article.category)}</Badge>
                   {getLinkedAssetNames(article).slice(0, 2).map((name, i) => (
                     <Badge key={i} variant="secondary" className="text-xs">{name}</Badge>
                   ))}
@@ -734,8 +729,8 @@ export default function KnowledgeBase() {
                     </SelectTrigger>
                     <SelectContent>
                       {ARTICLE_TYPES.map((type) => (
-                        <SelectItem key={type} value={type} className="capitalize">
-                          {type}
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -752,8 +747,8 @@ export default function KnowledgeBase() {
                     </SelectTrigger>
                     <SelectContent>
                       {CATEGORIES.map((cat) => (
-                        <SelectItem key={cat} value={cat} className="capitalize">
-                          {cat}
+                        <SelectItem key={cat.value} value={cat.value}>
+                          {cat.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -765,41 +760,20 @@ export default function KnowledgeBase() {
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <Building2 className="h-4 w-4" />
-                  Linked Assets (Multi-select)
+                  Linked Assets
                 </Label>
-                <div className="border rounded-md p-3 max-h-40 overflow-y-auto">
-                  {assetMasters.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No assets available</p>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                      {assetMasters.map((asset) => (
-                        <div key={asset.id} className="flex items-center gap-2">
-                          <Checkbox
-                            id={`asset-${asset.id}`}
-                            checked={formData.linked_asset_ids.includes(asset.id)}
-                            onCheckedChange={() => toggleAsset(asset.id)}
-                          />
-                          <label htmlFor={`asset-${asset.id}`} className="text-sm cursor-pointer">
-                            {asset.name}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {formData.linked_asset_ids.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {formData.linked_asset_ids.map(id => {
-                      const asset = assetMasters.find(a => a.id === id);
-                      return asset ? (
-                        <Badge key={id} variant="secondary" className="gap-1">
-                          {asset.name}
-                          <X className="h-3 w-3 cursor-pointer" onClick={() => toggleAsset(id)} />
-                        </Badge>
-                      ) : null;
-                    })}
-                  </div>
-                )}
+                <MultiSelectCombobox
+                  options={assetMasters.map(asset => ({
+                    value: asset.id,
+                    label: asset.name,
+                  }))}
+                  selected={formData.linked_asset_ids}
+                  onChange={(ids) => setFormData({ ...formData, linked_asset_ids: ids })}
+                  placeholder="Select assets..."
+                  searchPlaceholder="Search assets..."
+                  emptyMessage="No assets found."
+                  maxDisplayedBadges={2}
+                />
               </div>
 
               {/* Linked Vendors (OEM/Vendor) */}
@@ -808,29 +782,19 @@ export default function KnowledgeBase() {
                   <Users className="h-4 w-4" />
                   Associated Vendors / OEMs
                 </Label>
-                <div className="border rounded-md p-3 max-h-40 overflow-y-auto">
-                  {vendors.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No vendors available</p>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                      {vendors.map((vendor) => (
-                        <div key={vendor.id} className="flex items-center gap-2">
-                          <Checkbox
-                            id={`vendor-${vendor.id}`}
-                            checked={formData.linked_vendor_ids.includes(vendor.id)}
-                            onCheckedChange={() => toggleVendor(vendor.id)}
-                          />
-                          <label htmlFor={`vendor-${vendor.id}`} className="text-sm cursor-pointer">
-                            {vendor.name}
-                            {vendor.vendor_type && (
-                              <span className="text-xs text-muted-foreground ml-1">({vendor.vendor_type})</span>
-                            )}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <MultiSelectCombobox
+                  options={vendors.map(vendor => ({
+                    value: vendor.id,
+                    label: vendor.name,
+                    subtitle: vendor.vendor_type || undefined,
+                  }))}
+                  selected={formData.linked_vendor_ids}
+                  onChange={(ids) => setFormData({ ...formData, linked_vendor_ids: ids })}
+                  placeholder="Select vendors..."
+                  searchPlaceholder="Search vendors..."
+                  emptyMessage="No vendors found."
+                  maxDisplayedBadges={2}
+                />
               </div>
 
               {/* SME Names */}
@@ -988,9 +952,9 @@ export default function KnowledgeBase() {
             <div className="space-y-4 pr-4">
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge className={getTypeColor(selectedArticle?.article_type || "")}>
-                  {selectedArticle?.article_type}
+                  {getArticleTypeLabel(selectedArticle?.article_type || "")}
                 </Badge>
-                <Badge variant="outline">{selectedArticle?.category}</Badge>
+                <Badge variant="outline">{getCategoryLabel(selectedArticle?.category || "")}</Badge>
                 <Badge variant={selectedArticle?.status === "active" ? "default" : "secondary"}>
                   {selectedArticle?.status}
                 </Badge>
