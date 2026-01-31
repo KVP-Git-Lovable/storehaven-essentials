@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -27,17 +27,24 @@ import {
   CheckCircle,
   Printer,
   Star,
-  Info
+  Info,
+  Coins,
+  Smartphone
 } from "lucide-react";
 import BarcodeScanner from "@/components/inventory/BarcodeScanner";
 import { QuickActionsBar } from "@/components/pos/QuickActionsBar";
 import { CategoryTabs } from "@/components/pos/CategoryTabs";
 import { HeldOrdersPanel } from "@/components/pos/HeldOrdersPanel";
 import { SplitPaymentDialog } from "@/components/pos/SplitPaymentDialog";
-import { LineItemDiscount } from "@/components/pos/LineItemDiscount";
 import { DenominationCalculator } from "@/components/pos/DenominationCalculator";
 import { Customer360Panel } from "@/components/pos/Customer360Panel";
 import { ReceiptPreview } from "@/components/pos/ReceiptPreview";
+import { AppliedSchemesBadge } from "@/components/pos/AppliedSchemesBadge";
+import { LoyaltyPointsDisplay } from "@/components/pos/LoyaltyPointsDisplay";
+import { CouponInput } from "@/components/pos/CouponInput";
+import { GiftCardInput } from "@/components/pos/GiftCardInput";
+import { PersonalizedOffers } from "@/components/pos/PersonalizedOffers";
+import { usePOSSchemes } from "@/hooks/usePOSSchemes";
 import { useAuth } from "@/hooks/useAuth";
 
 interface CartItem {
@@ -62,6 +69,8 @@ interface Customer {
   total_orders: number;
   total_spent: number;
   store_credit: number;
+  tier?: string;
+  customer_segment?: string;
 }
 
 interface Scheme {
@@ -70,9 +79,14 @@ interface Scheme {
   description: string | null;
   discount_type: string;
   discount_value: number;
-  min_purchase_amount: number;
-  min_quantity: number;
+  min_purchase_amount: number | null;
+  min_quantity: number | null;
   applicable_items: string[] | null;
+  is_auto_apply?: boolean;
+  buy_quantity?: number | null;
+  get_quantity?: number | null;
+  max_discount_amount?: number | null;
+  priority?: number;
 }
 
 interface PaymentEntry {
@@ -80,6 +94,20 @@ interface PaymentEntry {
   method: "cash" | "upi" | "card" | "loyalty_points";
   amount: number;
   reference?: string;
+}
+
+interface AppliedCoupon {
+  id: string;
+  code: string;
+  name: string;
+  discountAmount: number;
+}
+
+interface AppliedGiftCard {
+  id: string;
+  cardNumber: string;
+  balance: number;
+  amountToUse: number;
 }
 
 export default function PointOfSale() {
@@ -99,16 +127,20 @@ export default function PointOfSale() {
   const [isCustomer360Open, setIsCustomer360Open] = useState(false);
   const [isHoldDialogOpen, setIsHoldDialogOpen] = useState(false);
   const [holdNote, setHoldNote] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "upi">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "upi" | "card" | "loyalty_points">("cash");
   const [cashReceived, setCashReceived] = useState("");
-  const [upiReference, setUpiReference] = useState("");
+  const [paymentReference, setPaymentReference] = useState("");
   const [selectedStore, setSelectedStore] = useState<string>("");
-  const [appliedScheme, setAppliedScheme] = useState<Scheme | null>(null);
   const [lastOrderNumber, setLastOrderNumber] = useState("");
   const [newCustomerName, setNewCustomerName] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [showFavorites, setShowFavorites] = useState(false);
   const [completedPayments, setCompletedPayments] = useState<PaymentEntry[]>([]);
+  
+  // Coupon and Gift Card state
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
+  const [appliedGiftCard, setAppliedGiftCard] = useState<AppliedGiftCard | null>(null);
+  const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState(0);
 
   // Fetch stores
   const { data: stores = [] } = useQuery({
@@ -153,6 +185,20 @@ export default function PointOfSale() {
     },
   });
 
+  // Fetch loyalty config
+  const { data: loyaltyConfig } = useQuery({
+    queryKey: ["loyalty-config"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("loyalty_config")
+        .select("*")
+        .eq("is_active", true)
+        .single();
+      if (error && error.code !== "PGRST116") throw error;
+      return data || { points_per_rupee: 1, points_value_rupee: 1, min_points_redeem: 100 };
+    },
+  });
+
   // Fetch held orders count
   const { data: heldOrdersCount = 0 } = useQuery({
     queryKey: ["held-orders-count", selectedStore],
@@ -172,6 +218,13 @@ export default function PointOfSale() {
     },
   });
 
+  // Use schemes hook for auto-apply logic
+  const { appliedSchemeResults, totalSchemeDiscount } = usePOSSchemes(
+    cart,
+    schemes as Scheme[],
+    customer?.id
+  );
+
   // Get unique categories
   const categories = [...new Set(products.map((p) => p.category))].filter(Boolean);
 
@@ -190,12 +243,12 @@ export default function PointOfSale() {
     return data;
   };
 
-  // Create new customer
+  // Create new customer - name is now optional
   const createCustomerMutation = useMutation({
-    mutationFn: async ({ phone, name }: { phone: string; name: string }) => {
+    mutationFn: async ({ phone, name }: { phone: string; name?: string }) => {
       const { data, error } = await supabase
         .from("customers")
-        .insert({ phone, name })
+        .insert({ phone, name: name || null })
         .select()
         .single();
       if (error) throw error;
@@ -242,11 +295,19 @@ export default function PointOfSale() {
     mutationFn: async (payments?: PaymentEntry[]) => {
       const orderNumber = `ORD-${Date.now()}`;
       const subtotal = cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
-      const discountAmount = cart.reduce((sum, item) => sum + item.discountAmount, 0) + (appliedScheme ? calculateSchemeDiscount(subtotal) : 0);
+      const itemDiscounts = cart.reduce((sum, item) => sum + item.discountAmount, 0);
+      const schemeDiscount = totalSchemeDiscount;
+      const couponDiscount = appliedCoupon?.discountAmount || 0;
+      const giftCardAmount = appliedGiftCard?.amountToUse || 0;
+      const loyaltyPointsValue = loyaltyPointsToRedeem * (loyaltyConfig?.points_value_rupee || 1);
+      const totalDiscount = itemDiscounts + schemeDiscount + couponDiscount;
       const taxAmount = cart.reduce((sum, item) => sum + item.taxAmount, 0);
-      const totalAmount = subtotal - discountAmount + taxAmount;
+      const totalAmount = subtotal - totalDiscount + taxAmount - giftCardAmount - loyaltyPointsValue;
 
       const paymentMethodUsed = payments ? payments[0]?.method || "cash" : paymentMethod;
+
+      // Calculate loyalty points to earn
+      const pointsToEarn = Math.floor(subtotal * (loyaltyConfig?.points_per_rupee || 1));
 
       // Create order
       const { data: order, error: orderError } = await supabase
@@ -256,13 +317,20 @@ export default function PointOfSale() {
           store_id: selectedStore || null,
           customer_id: customer?.id || null,
           subtotal,
-          discount_amount: discountAmount,
+          discount_amount: totalDiscount,
           tax_amount: taxAmount,
           total_amount: totalAmount,
           payment_method: paymentMethodUsed,
           payment_status: "completed",
-          payment_reference: payments ? undefined : (paymentMethod === "upi" ? upiReference : null),
+          payment_reference: payments ? undefined : (paymentMethod !== "cash" ? paymentReference : null),
           status: "completed",
+          coupon_id: appliedCoupon?.id || null,
+          coupon_discount: couponDiscount,
+          gift_card_id: appliedGiftCard?.id || null,
+          gift_card_amount: giftCardAmount,
+          loyalty_points_earned: pointsToEarn,
+          loyalty_points_redeemed: loyaltyPointsToRedeem,
+          order_type: "sale",
         })
         .select()
         .single();
@@ -300,15 +368,96 @@ export default function PointOfSale() {
         await supabase.from("order_payments").insert(orderPayments);
       }
 
-      return { order, orderNumber, payments: payments || [] };
+      // Update customer loyalty points if applicable
+      if (customer?.id) {
+        const newPoints = (customer.loyalty_points || 0) + pointsToEarn - loyaltyPointsToRedeem;
+        await supabase
+          .from("customers")
+          .update({ 
+            loyalty_points: newPoints,
+            total_orders: (customer.total_orders || 0) + 1,
+            total_spent: (customer.total_spent || 0) + totalAmount,
+          })
+          .eq("id", customer.id);
+
+        // Record loyalty transaction
+        if (pointsToEarn > 0) {
+          await supabase.from("loyalty_transactions").insert({
+            customer_id: customer.id,
+            order_id: order.id,
+            transaction_type: "earn",
+            points: pointsToEarn,
+            balance_after: newPoints,
+            description: `Earned from order ${orderNumber}`,
+          });
+        }
+        if (loyaltyPointsToRedeem > 0) {
+          await supabase.from("loyalty_transactions").insert({
+            customer_id: customer.id,
+            order_id: order.id,
+            transaction_type: "redeem",
+            points: -loyaltyPointsToRedeem,
+            balance_after: newPoints,
+            description: `Redeemed on order ${orderNumber}`,
+          });
+        }
+      }
+
+      // Update gift card balance if used
+      if (appliedGiftCard) {
+        const newBalance = appliedGiftCard.balance - appliedGiftCard.amountToUse;
+        await supabase
+          .from("gift_cards")
+          .update({ 
+            current_balance: newBalance,
+            status: newBalance <= 0 ? "depleted" : "active",
+          })
+          .eq("id", appliedGiftCard.id);
+
+        await supabase.from("gift_card_transactions").insert({
+          gift_card_id: appliedGiftCard.id,
+          order_id: order.id,
+          transaction_type: "redeem",
+          amount: -appliedGiftCard.amountToUse,
+          balance_after: newBalance,
+        });
+      }
+
+      // Update coupon usage
+      if (appliedCoupon) {
+        await supabase.from("coupon_usages").insert({
+          coupon_id: appliedCoupon.id,
+          order_id: order.id,
+          customer_id: customer?.id || null,
+          discount_amount: couponDiscount,
+        });
+
+        // Increment usage count
+        const { data: currentCoupon } = await supabase
+          .from("coupons")
+          .select("usage_count")
+          .eq("id", appliedCoupon.id)
+          .single();
+
+        await supabase
+          .from("coupons")
+          .update({ usage_count: (currentCoupon?.usage_count || 0) + 1 })
+          .eq("id", appliedCoupon.id);
+      }
+
+      return { order, orderNumber, payments: payments || [], pointsToEarn };
     },
-    onSuccess: ({ orderNumber, payments }) => {
+    onSuccess: ({ orderNumber, payments, pointsToEarn }) => {
       setLastOrderNumber(orderNumber);
       setCompletedPayments(payments);
       setIsPaymentDialogOpen(false);
       setIsSplitPaymentOpen(false);
       setIsOrderCompleteDialogOpen(true);
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      
+      if (pointsToEarn > 0 && customer) {
+        toast.success(`${pointsToEarn} loyalty points earned!`);
+      }
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to create order");
@@ -327,10 +476,11 @@ export default function PointOfSale() {
       setIsCustomerDialogOpen(false);
       toast.success(`Welcome back, ${existingCustomer.name || "Customer"}!`);
     } else {
-      toast.info("Customer not found. Please enter name to create.");
+      toast.info("Customer not found. Click 'Create' to add as new customer.");
     }
   };
 
+  // Name is optional for new customers
   const handleCreateCustomer = () => {
     if (!customerPhone || customerPhone.length < 10) {
       toast.error("Please enter a valid phone number");
@@ -338,7 +488,7 @@ export default function PointOfSale() {
     }
     createCustomerMutation.mutate({ 
       phone: customerPhone, 
-      name: newCustomerName || `Customer ${customerPhone.slice(-4)}` 
+      name: newCustomerName || undefined 
     });
   };
 
@@ -404,57 +554,20 @@ export default function PointOfSale() {
     );
   };
 
-  const updateLineDiscount = (itemId: string, discountPercent: number, discountAmount: number) => {
-    setCart((prevCart) =>
-      prevCart.map((item) => {
-        if (item.id === itemId) {
-          const lineTotal = item.quantity * item.unitPrice;
-          return {
-            ...item,
-            discountPercent,
-            discountAmount,
-            totalAmount: lineTotal - discountAmount,
-          };
-        }
-        return item;
-      })
-    );
-  };
-
   const removeFromCart = (itemId: string) => {
     setCart((prevCart) => prevCart.filter((item) => item.id !== itemId));
   };
 
   const clearCart = () => {
     setCart([]);
-    setAppliedScheme(null);
-  };
-
-  const calculateSchemeDiscount = (subtotal: number): number => {
-    if (!appliedScheme) return 0;
-    
-    if (appliedScheme.min_purchase_amount && subtotal < appliedScheme.min_purchase_amount) {
-      return 0;
-    }
-
-    if (appliedScheme.discount_type === "percentage") {
-      return (subtotal * appliedScheme.discount_value) / 100;
-    } else if (appliedScheme.discount_type === "fixed") {
-      return appliedScheme.discount_value;
-    }
-    
-    return 0;
-  };
-
-  const applyScheme = (scheme: Scheme) => {
-    setAppliedScheme(scheme);
-    toast.success(`Scheme "${scheme.name}" applied`);
+    setAppliedCoupon(null);
+    setAppliedGiftCard(null);
+    setLoyaltyPointsToRedeem(0);
   };
 
   const handleRecallOrder = (cartData: any, customerId: string | null) => {
     setCart(cartData);
     if (customerId) {
-      // Fetch customer
       supabase
         .from("customers")
         .select("*")
@@ -474,13 +587,123 @@ export default function PointOfSale() {
     });
   };
 
+  // Apply coupon handler
+  const handleApplyCoupon = async (code: string): Promise<AppliedCoupon | null> => {
+    const today = new Date().toISOString().split('T')[0];
+    const { data: coupon, error } = await supabase
+      .from("coupons")
+      .select("*")
+      .eq("code", code)
+      .eq("status", "active")
+      .lte("start_date", today)
+      .gte("end_date", today)
+      .single();
+
+    if (error || !coupon) {
+      toast.error("Invalid or expired coupon code");
+      return null;
+    }
+
+    // Check min purchase
+    if (coupon.min_purchase_amount && subtotal < coupon.min_purchase_amount) {
+      toast.error(`Minimum purchase of ₹${coupon.min_purchase_amount} required`);
+      return null;
+    }
+
+    // Check usage limit
+    if (coupon.usage_limit && coupon.usage_count >= coupon.usage_limit) {
+      toast.error("Coupon usage limit reached");
+      return null;
+    }
+
+    // Calculate discount
+    let discountAmount = 0;
+    if (coupon.discount_type === "percentage") {
+      discountAmount = (subtotal * coupon.discount_value) / 100;
+    } else {
+      discountAmount = coupon.discount_value;
+    }
+
+    // Apply max discount cap
+    if (coupon.max_discount_amount && discountAmount > coupon.max_discount_amount) {
+      discountAmount = coupon.max_discount_amount;
+    }
+
+    const applied: AppliedCoupon = {
+      id: coupon.id,
+      code: coupon.code,
+      name: coupon.name,
+      discountAmount,
+    };
+
+    setAppliedCoupon(applied);
+    return applied;
+  };
+
+  // Apply gift card handler
+  const handleApplyGiftCard = async (cardNumber: string, pin?: string, amount?: number): Promise<AppliedGiftCard | null> => {
+    let query = supabase
+      .from("gift_cards")
+      .select("*")
+      .eq("card_number", cardNumber)
+      .eq("status", "active");
+
+    const { data: giftCard, error } = await query.single();
+
+    if (error || !giftCard) {
+      toast.error("Invalid or inactive gift card");
+      return null;
+    }
+
+    // Check PIN if set
+    if (giftCard.pin && giftCard.pin !== pin) {
+      toast.error("Invalid PIN");
+      return null;
+    }
+
+    // Check expiry
+    if (giftCard.expires_at && new Date(giftCard.expires_at) < new Date()) {
+      toast.error("Gift card has expired");
+      return null;
+    }
+
+    const amountToUse = Math.min(amount || giftCard.current_balance, giftCard.current_balance, grandTotal);
+
+    const applied: AppliedGiftCard = {
+      id: giftCard.id,
+      cardNumber: giftCard.card_number,
+      balance: giftCard.current_balance,
+      amountToUse,
+    };
+
+    setAppliedGiftCard(applied);
+    return applied;
+  };
+
+  // Loyalty points redemption
+  const handleRedeemLoyaltyPoints = (points: number) => {
+    const minRedeem = loyaltyConfig?.min_points_redeem || 100;
+    if (points < minRedeem) {
+      toast.error(`Minimum ${minRedeem} points required to redeem`);
+      return;
+    }
+    setLoyaltyPointsToRedeem(points);
+    toast.success(`${points} points will be redeemed (₹${points * (loyaltyConfig?.points_value_rupee || 1)})`);
+  };
+
   const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const schemeDiscount = calculateSchemeDiscount(subtotal);
   const itemDiscounts = cart.reduce((sum, item) => sum + item.discountAmount, 0);
-  const totalDiscount = schemeDiscount + itemDiscounts;
+  const schemeDiscount = totalSchemeDiscount;
+  const couponDiscount = appliedCoupon?.discountAmount || 0;
+  const giftCardAmount = appliedGiftCard?.amountToUse || 0;
+  const loyaltyPointsValue = loyaltyPointsToRedeem * (loyaltyConfig?.points_value_rupee || 1);
+  const totalDiscount = itemDiscounts + schemeDiscount + couponDiscount;
   const taxAmount = cart.reduce((sum, item) => sum + item.taxAmount, 0);
-  const grandTotal = subtotal - totalDiscount + taxAmount;
+  const grandTotal = Math.max(0, subtotal - totalDiscount + taxAmount - giftCardAmount - loyaltyPointsValue);
   const changeAmount = paymentMethod === "cash" && cashReceived ? parseFloat(cashReceived) - grandTotal : 0;
+
+  // Points to earn on this order
+  const pointsToEarn = Math.floor(subtotal * (loyaltyConfig?.points_per_rupee || 1));
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch = 
@@ -504,7 +727,7 @@ export default function PointOfSale() {
     setCustomerPhone("");
     setNewCustomerName("");
     setCashReceived("");
-    setUpiReference("");
+    setPaymentReference("");
     setCompletedPayments([]);
     setIsOrderCompleteDialogOpen(false);
     setIsCustomerDialogOpen(true);
@@ -523,9 +746,15 @@ export default function PointOfSale() {
       toast.error("Insufficient cash received");
       return;
     }
-    if (paymentMethod === "upi" && !upiReference) {
-      toast.error("Please enter UPI reference number");
+    if ((paymentMethod === "upi" || paymentMethod === "card") && !paymentReference) {
+      toast.error("Please enter reference number");
       return;
+    }
+    if (paymentMethod === "loyalty_points") {
+      if (!customer || (customer.loyalty_points || 0) < grandTotal / (loyaltyConfig?.points_value_rupee || 1)) {
+        toast.error("Insufficient loyalty points");
+        return;
+      }
     }
     createOrderMutation.mutate(undefined);
   };
@@ -598,7 +827,17 @@ export default function PointOfSale() {
               >
                 <User className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium">{customer.name || customer.phone}</span>
-                <Badge variant="secondary">{customer.loyalty_points} pts</Badge>
+                {customer.tier && (
+                  <Badge variant="outline" className="capitalize">
+                    {customer.tier}
+                  </Badge>
+                )}
+                <LoyaltyPointsDisplay
+                  availablePoints={customer.loyalty_points || 0}
+                  pointsValue={loyaltyConfig?.points_value_rupee || 1}
+                  pointsToEarn={pointsToEarn}
+                  isRedeemable={false}
+                />
                 <Info className="h-3 w-3 text-muted-foreground" />
               </div>
             )}
@@ -635,27 +874,6 @@ export default function PointOfSale() {
             onToggleFavorites={() => setShowFavorites(!showFavorites)}
             favoritesCount={favoriteProducts.length}
           />
-
-          {/* Available Schemes */}
-          {schemes.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {schemes.map((scheme) => (
-                <Button
-                  key={scheme.id}
-                  variant={appliedScheme?.id === scheme.id ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => applyScheme(scheme)}
-                  className="whitespace-nowrap gap-2"
-                >
-                  <Tag className="h-3 w-3" />
-                  {scheme.name}
-                  {scheme.discount_type === "percentage"
-                    ? ` (${scheme.discount_value}% off)`
-                    : ` (₹${scheme.discount_value} off)`}
-                </Button>
-              ))}
-            </div>
-          )}
 
           {/* Product Grid */}
           <div className="flex-1 overflow-y-auto">
@@ -724,9 +942,6 @@ export default function PointOfSale() {
                       <div className="font-medium text-sm truncate">{item.name}</div>
                       <div className="text-xs text-muted-foreground">
                         ₹{item.unitPrice} × {item.quantity}
-                        {item.discountAmount > 0 && (
-                          <span className="text-green-600 ml-1">(-₹{item.discountAmount.toFixed(0)})</span>
-                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
@@ -749,13 +964,6 @@ export default function PointOfSale() {
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
-                      <LineItemDiscount
-                        unitPrice={item.unitPrice}
-                        quantity={item.quantity}
-                        currentDiscountPercent={item.discountPercent}
-                        currentDiscountAmount={item.discountAmount}
-                        onApplyDiscount={(percent, amount) => updateLineDiscount(item.id, percent, amount)}
-                      />
                       <Button
                         variant="ghost"
                         size="icon"
@@ -777,6 +985,56 @@ export default function PointOfSale() {
             {cart.length > 0 && (
               <>
                 <Separator className="my-3" />
+
+                {/* Applied Schemes Display */}
+                {appliedSchemeResults.length > 0 && totalSchemeDiscount > 0 && (
+                  <AppliedSchemesBadge
+                    schemes={appliedSchemeResults.map((r) => r.scheme)}
+                    totalSavings={totalSchemeDiscount + couponDiscount}
+                  />
+                )}
+
+                {/* Coupon Input */}
+                <div className="mt-2">
+                  <CouponInput
+                    appliedCoupon={appliedCoupon}
+                    onApplyCoupon={handleApplyCoupon}
+                    onRemoveCoupon={() => setAppliedCoupon(null)}
+                  />
+                </div>
+
+                {/* Gift Card Input */}
+                <div className="mt-2">
+                  <GiftCardInput
+                    appliedGiftCard={appliedGiftCard}
+                    onApplyGiftCard={handleApplyGiftCard}
+                    onRemoveGiftCard={() => setAppliedGiftCard(null)}
+                    maxAmount={grandTotal + (appliedGiftCard?.amountToUse || 0)}
+                  />
+                </div>
+
+                {/* Loyalty Points Redemption */}
+                {customer && customer.loyalty_points > 0 && (
+                  <div className="mt-2">
+                    <LoyaltyPointsDisplay
+                      availablePoints={customer.loyalty_points}
+                      pointsValue={loyaltyConfig?.points_value_rupee || 1}
+                      onRedeemPoints={handleRedeemLoyaltyPoints}
+                      pointsToEarn={pointsToEarn}
+                    />
+                    {loyaltyPointsToRedeem > 0 && (
+                      <div className="flex items-center justify-between mt-1 text-sm text-amber-600">
+                        <span>Points to redeem: {loyaltyPointsToRedeem}</span>
+                        <Button variant="ghost" size="sm" className="h-6 p-0" onClick={() => setLoyaltyPointsToRedeem(0)}>
+                          Clear
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <Separator className="my-3" />
+
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
@@ -786,6 +1044,18 @@ export default function PointOfSale() {
                     <div className="flex justify-between text-green-600">
                       <span>Discount</span>
                       <span>-₹{totalDiscount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {giftCardAmount > 0 && (
+                    <div className="flex justify-between text-purple-600">
+                      <span>Gift Card</span>
+                      <span>-₹{giftCardAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {loyaltyPointsValue > 0 && (
+                    <div className="flex justify-between text-amber-600">
+                      <span>Loyalty Points</span>
+                      <span>-₹{loyaltyPointsValue.toFixed(2)}</span>
                     </div>
                   )}
                   {taxAmount > 0 && (
@@ -840,9 +1110,9 @@ export default function PointOfSale() {
             
             {customerPhone.length === 10 && !customer && (
               <div className="space-y-2">
-                <Label>Customer Name (for new customer)</Label>
+                <Label>Customer Name (Optional)</Label>
                 <Input
-                  placeholder="Enter customer name"
+                  placeholder="Enter customer name (optional)"
                   value={newCustomerName}
                   onChange={(e) => setNewCustomerName(e.target.value)}
                 />
@@ -864,7 +1134,7 @@ export default function PointOfSale() {
         </DialogContent>
       </Dialog>
 
-      {/* Payment Dialog */}
+      {/* Payment Dialog - All 4 payment methods */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -884,19 +1154,41 @@ export default function PointOfSale() {
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   variant={paymentMethod === "cash" ? "default" : "outline"}
-                  className="h-20 flex-col gap-2"
+                  className="h-16 flex-col gap-1"
                   onClick={() => setPaymentMethod("cash")}
                 >
-                  <Banknote className="h-6 w-6" />
-                  Cash
+                  <Banknote className="h-5 w-5" />
+                  <span className="text-xs">Cash</span>
                 </Button>
                 <Button
                   variant={paymentMethod === "upi" ? "default" : "outline"}
-                  className="h-20 flex-col gap-2"
+                  className="h-16 flex-col gap-1"
                   onClick={() => setPaymentMethod("upi")}
                 >
-                  <CreditCard className="h-6 w-6" />
-                  UPI
+                  <Smartphone className="h-5 w-5" />
+                  <span className="text-xs">UPI</span>
+                </Button>
+                <Button
+                  variant={paymentMethod === "card" ? "default" : "outline"}
+                  className="h-16 flex-col gap-1"
+                  onClick={() => setPaymentMethod("card")}
+                >
+                  <CreditCard className="h-5 w-5" />
+                  <span className="text-xs">Card</span>
+                </Button>
+                <Button
+                  variant={paymentMethod === "loyalty_points" ? "default" : "outline"}
+                  className="h-16 flex-col gap-1"
+                  onClick={() => setPaymentMethod("loyalty_points")}
+                  disabled={!customer || (customer.loyalty_points || 0) * (loyaltyConfig?.points_value_rupee || 1) < grandTotal}
+                >
+                  <Coins className="h-5 w-5" />
+                  <span className="text-xs">Points</span>
+                  {customer && (
+                    <span className="text-[10px] opacity-70">
+                      ({customer.loyalty_points} pts)
+                    </span>
+                  )}
                 </Button>
               </div>
             </div>
@@ -937,14 +1229,25 @@ export default function PointOfSale() {
               </div>
             )}
 
-            {paymentMethod === "upi" && (
+            {(paymentMethod === "upi" || paymentMethod === "card") && (
               <div className="space-y-2">
-                <Label>UPI Reference Number</Label>
+                <Label>{paymentMethod === "upi" ? "UPI Reference Number" : "Card Last 4 Digits"}</Label>
                 <Input
-                  placeholder="Enter UPI transaction reference"
-                  value={upiReference}
-                  onChange={(e) => setUpiReference(e.target.value)}
+                  placeholder={paymentMethod === "upi" ? "Enter UPI transaction reference" : "Enter last 4 digits"}
+                  value={paymentReference}
+                  onChange={(e) => setPaymentReference(e.target.value)}
                 />
+              </div>
+            )}
+
+            {paymentMethod === "loyalty_points" && customer && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg">
+                <div className="text-sm text-amber-700 dark:text-amber-400">
+                  Using {Math.ceil(grandTotal / (loyaltyConfig?.points_value_rupee || 1))} points for this payment
+                </div>
+                <div className="text-xs text-amber-600/70 mt-1">
+                  Remaining: {customer.loyalty_points - Math.ceil(grandTotal / (loyaltyConfig?.points_value_rupee || 1))} points
+                </div>
               </div>
             )}
           </div>
@@ -1016,7 +1319,7 @@ export default function PointOfSale() {
               discount={totalDiscount}
               tax={taxAmount}
               total={grandTotal}
-              payments={completedPayments.length > 0 ? completedPayments : [{ method: paymentMethod, amount: grandTotal, reference: upiReference || undefined }]}
+              payments={completedPayments.length > 0 ? completedPayments : [{ method: paymentMethod, amount: grandTotal, reference: paymentReference || undefined }]}
               cashReceived={paymentMethod === "cash" ? parseFloat(cashReceived) : undefined}
               changeAmount={changeAmount > 0 ? changeAmount : undefined}
               createdAt={new Date()}
