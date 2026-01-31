@@ -106,6 +106,7 @@ const navigation: NavItem[] = [
       },
       { title: "Footfall", href: "/footfall", moduleKey: "footfall" },
       { title: "Petty Cash", href: "/petty-cash", moduleKey: "pettycash" },
+      { title: "Store Targets", href: "/stores/targets", moduleKey: "stores.all" },
       { title: "New Store Opening", href: "/stores/new-opening", moduleKey: "stores.nso" },
     ],
   },

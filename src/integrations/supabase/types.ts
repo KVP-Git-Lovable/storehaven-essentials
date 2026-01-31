@@ -5296,6 +5296,181 @@ export type Database = {
           },
         ]
       }
+      store_target_members: {
+        Row: {
+          created_at: string
+          employee_id: string
+          id: string
+          month: number | null
+          store_target_id: string
+          target_amount: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          id?: string
+          month?: number | null
+          store_target_id: string
+          target_amount: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          id?: string
+          month?: number | null
+          store_target_id?: string
+          target_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_target_members_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_target_members_store_target_id_fkey"
+            columns: ["store_target_id"]
+            isOneToOne: false
+            referencedRelation: "store_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_target_months: {
+        Row: {
+          created_at: string
+          id: string
+          month: number
+          store_target_id: string
+          target_amount: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          month: number
+          store_target_id: string
+          target_amount: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          month?: number
+          store_target_id?: string
+          target_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_target_months_store_target_id_fkey"
+            columns: ["store_target_id"]
+            isOneToOne: false
+            referencedRelation: "store_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_target_products: {
+        Row: {
+          created_at: string
+          id: string
+          month: number | null
+          product_id: string
+          store_target_id: string
+          target_amount: number
+          target_quantity: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          month?: number | null
+          product_id: string
+          store_target_id: string
+          target_amount: number
+          target_quantity?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          month?: number | null
+          product_id?: string
+          store_target_id?: string
+          target_amount?: number
+          target_quantity?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_target_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_target_products_store_target_id_fkey"
+            columns: ["store_target_id"]
+            isOneToOne: false
+            referencedRelation: "store_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_targets: {
+        Row: {
+          annual_target: number
+          created_at: string
+          created_by: string | null
+          currency: string | null
+          fiscal_year: number
+          id: string
+          notes: string | null
+          status: string
+          store_id: string
+          updated_at: string
+        }
+        Insert: {
+          annual_target: number
+          created_at?: string
+          created_by?: string | null
+          currency?: string | null
+          fiscal_year: number
+          id?: string
+          notes?: string | null
+          status?: string
+          store_id: string
+          updated_at?: string
+        }
+        Update: {
+          annual_target?: number
+          created_at?: string
+          created_by?: string | null
+          currency?: string | null
+          fiscal_year?: number
+          id?: string
+          notes?: string | null
+          status?: string
+          store_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_targets_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       store_transfer_items: {
         Row: {
           created_at: string
