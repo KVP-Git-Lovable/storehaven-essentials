@@ -79,6 +79,7 @@ import UserRoles from "./pages/admin/UserRoles";
 import UserHierarchy from "./pages/admin/UserHierarchy";
 import RolePermissions from "./pages/admin/RolePermissions";
 import Profile from "./pages/admin/Profile";
+import Settings from "./pages/admin/Settings";
 import NotFound from "./pages/NotFound";
 import AssetManagementDashboard from "./pages/dashboards/AssetManagementDashboard";
 import InventoryDashboard from "./pages/dashboards/InventoryDashboard";
@@ -191,6 +192,7 @@ const App = () => (
               <Route path="/admin/hierarchy" element={<UserHierarchy />} />
               <Route path="/admin/permissions" element={<RolePermissions />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/settings" element={<Settings />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

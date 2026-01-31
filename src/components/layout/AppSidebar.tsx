@@ -5,21 +5,19 @@ import {
   Store,
   Package,
   Users,
-  DollarSign,
-  Gauge,
-  ShieldCheck,
   ChevronDown,
-  UserCheck,
   Building2,
   X,
   Database,
-  Eye,
   Boxes,
-  ClipboardCheck,
   ShoppingCart,
   Brain,
   UserCog,
   BarChart3,
+  ShieldCheck,
+  Settings,
+  PanelLeftClose,
+  PanelLeft,
 } from "lucide-react";
 import quickappLogo from "@/assets/quickapp-logo.png";
 import { cn } from "@/lib/utils";
@@ -28,6 +26,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface NavChild {
   title: string;
@@ -167,29 +166,34 @@ const navigation: NavItem[] = [
     ],
   },
   {
-    title: "Master",
-    icon: Database,
-    moduleKey: "master",
+    title: "Admin",
+    icon: Settings,
+    moduleKey: "admin",
     children: [
-      { title: "Meter Master", href: "/master/meter", moduleKey: "master.meter" },
-      { title: "Department Master", href: "/master/department", moduleKey: "master.department" },
-      { title: "Position Master", href: "/master/position", moduleKey: "master.position" },
-      { title: "Category Master", href: "/master/category", moduleKey: "master.category" },
-      { title: "Location Master", href: "/master/location", moduleKey: "master.location" },
-      { title: "NSO Checklist Master", href: "/master/nso-checklist", moduleKey: "master.nso" },
-      { title: "PM Checklist Master", href: "/master/pm-checklist", moduleKey: "master.pm" },
-      { title: "Store Budget Master", href: "/master/store-budget", moduleKey: "master.budget" },
-    ],
-  },
-  {
-    title: "User Management",
-    icon: UserCog,
-    moduleKey: "usermanagement",
-    children: [
-      { title: "Users", href: "/admin/users", moduleKey: "usermanagement.users" },
-      { title: "User Roles", href: "/admin/roles", moduleKey: "usermanagement.roles" },
-      { title: "User Hierarchy", href: "/admin/hierarchy", moduleKey: "usermanagement.hierarchy" },
-      { title: "Permission Set", href: "/admin/permissions", moduleKey: "usermanagement.permissions" },
+      { 
+        title: "Master Data", 
+        isSubSection: true,
+        subChildren: [
+          { title: "Meter Master", href: "/master/meter", moduleKey: "master.meter" },
+          { title: "Department Master", href: "/master/department", moduleKey: "master.department" },
+          { title: "Position Master", href: "/master/position", moduleKey: "master.position" },
+          { title: "Category Master", href: "/master/category", moduleKey: "master.category" },
+          { title: "Location Master", href: "/master/location", moduleKey: "master.location" },
+          { title: "NSO Checklist Master", href: "/master/nso-checklist", moduleKey: "master.nso" },
+          { title: "PM Checklist Master", href: "/master/pm-checklist", moduleKey: "master.pm" },
+          { title: "Store Budget Master", href: "/master/store-budget", moduleKey: "master.budget" },
+        ]
+      },
+      { 
+        title: "User Management", 
+        isSubSection: true,
+        subChildren: [
+          { title: "Users", href: "/admin/users", moduleKey: "usermanagement.users" },
+          { title: "User Roles", href: "/admin/roles", moduleKey: "usermanagement.roles" },
+          { title: "User Hierarchy", href: "/admin/hierarchy", moduleKey: "usermanagement.hierarchy" },
+          { title: "Permission Set", href: "/admin/permissions", moduleKey: "usermanagement.permissions" },
+        ]
+      },
     ],
   },
 ];
@@ -197,9 +201,11 @@ const navigation: NavItem[] = [
 interface AppSidebarProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
 }
 
-export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
+export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedChange }: AppSidebarProps) {
   const location = useLocation();
   const isMobile = useIsMobile();
   const { hasPermission, isAdmin, loading } = usePermissions();
@@ -260,12 +266,15 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
 
   const sidebarContent = (
     <>
-      <div className="flex h-14 md:h-16 items-center justify-between gap-2 border-b border-sidebar-border px-4 md:px-6">
+      <div className={cn(
+        "flex h-14 md:h-16 items-center justify-between gap-2 border-b border-sidebar-border",
+        collapsed ? "px-2" : "px-4 md:px-6"
+      )}>
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 overflow-hidden">
             <img src={quickappLogo} alt="StoreOps" className="h-6 w-6 object-contain" />
           </div>
-          <span className="font-display text-lg font-semibold">StoreOps</span>
+          {!collapsed && <span className="font-display text-lg font-semibold">StoreOps</span>}
         </div>
         {isMobile && (
           <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8">
@@ -275,23 +284,63 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
       </div>
 
       <ScrollArea className="flex-1">
-        <nav className="space-y-1 p-3 md:p-4">
+        <nav className={cn("space-y-1", collapsed ? "p-2" : "p-3 md:p-4")}>
           {filteredNavigation.map((item) => (
             <div key={item.title}>
               {item.href ? (
-                <NavLink
-                  to={item.href}
-                  onClick={handleNavClick}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 md:py-2 text-sm font-medium transition-colors",
-                    isActive(item.href)
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  )}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.title}
-                </NavLink>
+                collapsed ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <NavLink
+                        to={item.href}
+                        onClick={handleNavClick}
+                        className={cn(
+                          "flex items-center justify-center rounded-lg p-2.5 transition-colors",
+                          isActive(item.href)
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                        )}
+                      >
+                        <item.icon className="h-5 w-5" />
+                      </NavLink>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">{item.title}</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <NavLink
+                    to={item.href}
+                    onClick={handleNavClick}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2.5 md:py-2 text-sm font-medium transition-colors",
+                      isActive(item.href)
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.title}
+                  </NavLink>
+                )
+              ) : collapsed ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => {
+                        if (onCollapsedChange) onCollapsedChange(false);
+                        toggleMenu(item.title);
+                      }}
+                      className={cn(
+                        "flex w-full items-center justify-center rounded-lg p-2.5 transition-colors",
+                        isChildActive(item.children)
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      )}
+                    >
+                      <item.icon className="h-5 w-5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{item.title}</TooltipContent>
+                </Tooltip>
               ) : (
                 <>
                   <button
@@ -380,6 +429,30 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
           ))}
         </nav>
       </ScrollArea>
+
+      {/* Collapse Toggle Button - Desktop Only */}
+      {!isMobile && onCollapsedChange && (
+        <div className="border-t border-sidebar-border p-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onCollapsedChange(!collapsed)}
+            className={cn(
+              "w-full justify-center text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent",
+              !collapsed && "justify-start"
+            )}
+          >
+            {collapsed ? (
+              <PanelLeft className="h-4 w-4" />
+            ) : (
+              <>
+                <PanelLeftClose className="h-4 w-4 mr-2" />
+                <span>Collapse</span>
+              </>
+            )}
+          </Button>
+        </div>
+      )}
     </>
   );
 
@@ -396,7 +469,10 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
   }
 
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col">
+    <aside className={cn(
+      "fixed left-0 top-0 z-40 h-screen bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col transition-all duration-300",
+      collapsed ? "w-16" : "w-64"
+    )}>
       {sidebarContent}
     </aside>
   );
