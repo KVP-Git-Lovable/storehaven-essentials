@@ -61,37 +61,136 @@ export type Database = {
       }
       asset_masters: {
         Row: {
+          brand: string | null
+          capacity: string | null
           category_id: string | null
+          certification_required: boolean | null
+          certifications: string[] | null
           created_at: string
           criticality: string
+          currency: string | null
+          datasheet_url: string | null
           description: string | null
+          dimensions_cm: string | null
+          disposal_instructions: string | null
+          energy_rating: string | null
+          environment_impact: string | null
+          expected_lifespan_years: number | null
+          hsn_code: string | null
           id: string
+          image_url: string | null
+          installation_requirements: string | null
           investment_size: string
+          is_returnable: boolean | null
+          lead_time_days: number | null
+          maintenance_frequency: string | null
+          manual_url: string | null
+          manufacturer: string | null
+          min_order_quantity: number | null
+          model: string | null
           name: string
+          power_consumption_watts: number | null
+          refrigerant_type: string | null
+          safety_requirements: string | null
+          sku: string | null
+          spare_parts_available: boolean | null
+          standard_price: number | null
           status: string
+          temperature_range: string | null
+          unit_of_measure: string | null
+          upc_barcode: string | null
           updated_at: string
+          voltage_requirement: string | null
+          warranty_months: number | null
+          weight_kg: number | null
         }
         Insert: {
+          brand?: string | null
+          capacity?: string | null
           category_id?: string | null
+          certification_required?: boolean | null
+          certifications?: string[] | null
           created_at?: string
           criticality?: string
+          currency?: string | null
+          datasheet_url?: string | null
           description?: string | null
+          dimensions_cm?: string | null
+          disposal_instructions?: string | null
+          energy_rating?: string | null
+          environment_impact?: string | null
+          expected_lifespan_years?: number | null
+          hsn_code?: string | null
           id?: string
+          image_url?: string | null
+          installation_requirements?: string | null
           investment_size?: string
+          is_returnable?: boolean | null
+          lead_time_days?: number | null
+          maintenance_frequency?: string | null
+          manual_url?: string | null
+          manufacturer?: string | null
+          min_order_quantity?: number | null
+          model?: string | null
           name: string
+          power_consumption_watts?: number | null
+          refrigerant_type?: string | null
+          safety_requirements?: string | null
+          sku?: string | null
+          spare_parts_available?: boolean | null
+          standard_price?: number | null
           status?: string
+          temperature_range?: string | null
+          unit_of_measure?: string | null
+          upc_barcode?: string | null
           updated_at?: string
+          voltage_requirement?: string | null
+          warranty_months?: number | null
+          weight_kg?: number | null
         }
         Update: {
+          brand?: string | null
+          capacity?: string | null
           category_id?: string | null
+          certification_required?: boolean | null
+          certifications?: string[] | null
           created_at?: string
           criticality?: string
+          currency?: string | null
+          datasheet_url?: string | null
           description?: string | null
+          dimensions_cm?: string | null
+          disposal_instructions?: string | null
+          energy_rating?: string | null
+          environment_impact?: string | null
+          expected_lifespan_years?: number | null
+          hsn_code?: string | null
           id?: string
+          image_url?: string | null
+          installation_requirements?: string | null
           investment_size?: string
+          is_returnable?: boolean | null
+          lead_time_days?: number | null
+          maintenance_frequency?: string | null
+          manual_url?: string | null
+          manufacturer?: string | null
+          min_order_quantity?: number | null
+          model?: string | null
           name?: string
+          power_consumption_watts?: number | null
+          refrigerant_type?: string | null
+          safety_requirements?: string | null
+          sku?: string | null
+          spare_parts_available?: boolean | null
+          standard_price?: number | null
           status?: string
+          temperature_range?: string | null
+          unit_of_measure?: string | null
+          upc_barcode?: string | null
           updated_at?: string
+          voltage_requirement?: string | null
+          warranty_months?: number | null
+          weight_kg?: number | null
         }
         Relationships: [
           {

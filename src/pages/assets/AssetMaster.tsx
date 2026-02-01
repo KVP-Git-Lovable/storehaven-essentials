@@ -1,9 +1,6 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Loader2, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, Loader2, Edit, Trash2, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -16,20 +13,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -39,28 +22,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { HierarchicalCategorySelector } from "@/components/assets/HierarchicalCategorySelector";
+import { AssetMasterFormDialog } from "@/components/assets/AssetMasterFormDialog";
 
-const assetMasterSchema = z.object({
-  name: z.string().trim().min(1, "Asset name is required").max(100, "Name must be less than 100 characters"),
-  category_id: z.string().min(1, "Category is required"),
-  criticality: z.enum(["high", "medium", "low"]),
-  investment_size: z.enum(["high", "medium", "low"]),
-  description: z.string().max(500, "Description must be less than 500 characters").optional(),
-});
-
-type AssetMasterFormData = z.infer<typeof assetMasterSchema>;
+type Category = {
+  id: string;
+  name: string;
+  type: string;
+  parent_id: string | null;
+};
 
 type AssetMaster = {
   id: string;
@@ -69,9 +40,12 @@ type AssetMaster = {
   criticality: string;
   investment_size: string;
   description: string | null;
+  brand?: string | null;
+  model?: string | null;
+  manufacturer?: string | null;
   status: string;
   created_at: string;
-  categories?: { name: string; type: string } | null;
+  categories?: { id: string; name: string; type: string; parent_id: string | null } | null;
 };
 
 const criticalityOptions = [
@@ -80,106 +54,60 @@ const criticalityOptions = [
   { value: "low", label: "Low", color: "secondary" },
 ];
 
-const investmentOptions = [
-  { value: "high", label: "High" },
-  { value: "medium", label: "Medium" },
-  { value: "low", label: "Low" },
-];
-
 export default function AssetMaster() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [assetMasters, setAssetMasters] = useState<AssetMaster[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<AssetMaster | null>(null);
   const [deleteAssetId, setDeleteAssetId] = useState<string | null>(null);
-  const [categoryRefreshKey, setCategoryRefreshKey] = useState(0);
   const { toast } = useToast();
-
-  const form = useForm<AssetMasterFormData>({
-    resolver: zodResolver(assetMasterSchema),
-    defaultValues: {
-      name: "",
-      category_id: "",
-      criticality: "medium",
-      investment_size: "medium",
-      description: "",
-    },
-  });
 
   useEffect(() => {
     fetchData();
   }, []);
 
   const fetchData = async () => {
-    const { data, error } = await supabase
-      .from("asset_masters")
-      .select("*, categories(name, type)")
-      .order("created_at", { ascending: false });
+    const [assetsRes, categoriesRes] = await Promise.all([
+      supabase
+        .from("asset_masters")
+        .select("*, categories(id, name, type, parent_id)")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("categories")
+        .select("id, name, type, parent_id")
+        .eq("status", "active"),
+    ]);
 
-    if (error) {
+    if (assetsRes.error) {
       toast({ title: "Error", description: "Failed to load asset masters", variant: "destructive" });
     } else {
-      setAssetMasters(data || []);
+      setAssetMasters(assetsRes.data || []);
     }
+
+    if (!categoriesRes.error) {
+      setAllCategories(categoriesRes.data || []);
+    }
+
     setLoading(false);
   };
 
-  const onSubmit = async (data: AssetMasterFormData) => {
-    if (editingAsset) {
-      const { error } = await supabase
-        .from("asset_masters")
-        .update({
-          name: data.name,
-          category_id: data.category_id,
-          criticality: data.criticality,
-          investment_size: data.investment_size,
-          description: data.description || null,
-        })
-        .eq("id", editingAsset.id);
-
-      if (error) {
-        toast({ title: "Error", description: "Failed to update asset master", variant: "destructive" });
-      } else {
-        toast({ title: "Success", description: "Asset master updated" });
-        handleCloseDialog();
-        fetchData();
-      }
-    } else {
-      const { error } = await supabase.from("asset_masters").insert({
-        name: data.name,
-        category_id: data.category_id,
-        criticality: data.criticality,
-        investment_size: data.investment_size,
-        description: data.description || null,
-      });
-
-      if (error) {
-        toast({ title: "Error", description: "Failed to add asset master", variant: "destructive" });
-      } else {
-        toast({ title: "Success", description: "Asset master added" });
-        handleCloseDialog();
-        fetchData();
-      }
+  // Build category path from leaf to root
+  const getCategoryPath = (categoryId: string | null): Category[] => {
+    if (!categoryId) return [];
+    const path: Category[] = [];
+    let current = allCategories.find((c) => c.id === categoryId);
+    while (current) {
+      path.unshift(current);
+      current = allCategories.find((c) => c.id === current?.parent_id);
     }
-  };
-
-  const handleCloseDialog = () => {
-    setOpen(false);
-    setEditingAsset(null);
-    form.reset();
+    return path;
   };
 
   const handleEdit = (asset: AssetMaster) => {
     setEditingAsset(asset);
-    form.reset({
-      name: asset.name,
-      category_id: asset.category_id || "",
-      criticality: asset.criticality as "high" | "medium" | "low",
-      investment_size: asset.investment_size as "high" | "medium" | "low",
-      description: asset.description || "",
-    });
     setOpen(true);
   };
 
@@ -200,7 +128,9 @@ export default function AssetMaster() {
   const filteredAssets = assetMasters.filter(
     (asset) =>
       asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      asset.categories?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+      asset.categories?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      asset.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      asset.model?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const getCriticalityBadge = (criticality: string) => {
@@ -227,140 +157,17 @@ export default function AssetMaster() {
           <h1 className="text-2xl font-semibold">Asset Master</h1>
           <p className="text-muted-foreground">Define asset types and their properties</p>
         </div>
-        <Dialog open={open} onOpenChange={(isOpen) => {
-          if (!isOpen) handleCloseDialog();
-          else {
-            setCategoryRefreshKey((k) => k + 1); // Refresh categories when dialog opens
-            setOpen(true);
-          }
-        }}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              Add Asset Master
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>{editingAsset ? "Edit Asset Master" : "Add Asset Master"}</DialogTitle>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Asset Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g. Split AC 1.5 Ton" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="category_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <HierarchicalCategorySelector
-                        value={field.value || null}
-                        onChange={(categoryId) => field.onChange(categoryId || "")}
-                        initialCategoryType={
-                          editingAsset?.categories?.type || undefined
-                        }
-                        refreshKey={categoryRefreshKey}
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="criticality"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Criticality</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select criticality" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {criticalityOptions.map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="investment_size"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Investment Size</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select investment size" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {investmentOptions.map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Enter description..."
-                          className="resize-none"
-                          rows={3}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="outline" onClick={handleCloseDialog}>
-                    Cancel
-                  </Button>
-                  <Button type="submit">{editingAsset ? "Update" : "Add"} Asset Master</Button>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+        <Button className="gap-2" onClick={() => setOpen(true)}>
+          <Plus className="h-4 w-4" />
+          Add Asset Master
+        </Button>
       </div>
 
       <div className="flex items-center gap-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search asset masters..."
+            placeholder="Search by name, brand, model..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -373,9 +180,10 @@ export default function AssetMaster() {
           <TableHeader>
             <TableRow>
               <TableHead>Asset Name</TableHead>
-              <TableHead>Category</TableHead>
+              <TableHead>Brand / Model</TableHead>
+              <TableHead>Category Path</TableHead>
               <TableHead>Criticality</TableHead>
-              <TableHead>Investment Size</TableHead>
+              <TableHead>Investment</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-[100px]">Actions</TableHead>
             </TableRow>
@@ -383,60 +191,97 @@ export default function AssetMaster() {
           <TableBody>
             {filteredAssets.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   No asset masters found
                 </TableCell>
               </TableRow>
             ) : (
-              filteredAssets.map((asset) => (
-                <TableRow
-                  key={asset.id}
-                  className="cursor-pointer"
-                  onClick={() => navigate(`/assets/master/${asset.id}`)}
-                >
-                  <TableCell className="font-medium">{asset.name}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{asset.categories?.name || "-"}</Badge>
-                  </TableCell>
-                  <TableCell>{getCriticalityBadge(asset.criticality)}</TableCell>
-                  <TableCell className="capitalize">{asset.investment_size}</TableCell>
-                  <TableCell>
-                    <Badge variant={asset.status === "active" ? "default" : "secondary"}>
-                      {asset.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEdit(asset);
-                        }}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteAssetId(asset.id);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+              filteredAssets.map((asset) => {
+                const categoryPath = getCategoryPath(asset.category_id);
+                return (
+                  <TableRow
+                    key={asset.id}
+                    className="cursor-pointer"
+                    onClick={() => navigate(`/assets/master/${asset.id}`)}
+                  >
+                    <TableCell className="font-medium">{asset.name}</TableCell>
+                    <TableCell>
+                      {asset.brand || asset.model ? (
+                        <span className="text-sm">
+                          {asset.brand && <span>{asset.brand}</span>}
+                          {asset.brand && asset.model && <span className="text-muted-foreground"> / </span>}
+                          {asset.model && <span className="text-muted-foreground">{asset.model}</span>}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {categoryPath.length > 0 ? (
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {categoryPath.map((cat, idx) => (
+                            <span key={cat.id} className="flex items-center gap-1">
+                              {idx > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                              <Badge variant="outline" className="text-xs">
+                                {cat.name}
+                              </Badge>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>{getCriticalityBadge(asset.criticality)}</TableCell>
+                    <TableCell className="capitalize">{asset.investment_size}</TableCell>
+                    <TableCell>
+                      <Badge variant={asset.status === "active" ? "default" : "secondary"}>
+                        {asset.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(asset);
+                          }}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteAssetId(asset.id);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
       </div>
+
+      <AssetMasterFormDialog
+        open={open}
+        onOpenChange={(isOpen) => {
+          setOpen(isOpen);
+          if (!isOpen) setEditingAsset(null);
+        }}
+        editingAsset={editingAsset}
+        onSuccess={fetchData}
+      />
 
       <AlertDialog open={!!deleteAssetId} onOpenChange={() => setDeleteAssetId(null)}>
         <AlertDialogContent>
