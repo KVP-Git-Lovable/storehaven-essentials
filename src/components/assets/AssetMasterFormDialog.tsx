@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { HierarchicalCategorySelector } from "./HierarchicalCategorySelector";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -386,8 +386,8 @@ export function AssetMasterFormDialog({
                 </TabsList>
               </div>
 
-              <ScrollArea className="flex-1 px-6 py-4">
-                <TabsContent value="basic" className="mt-0 space-y-4">
+              <div className="flex-1 overflow-y-auto px-6 py-4" style={{ maxHeight: 'calc(90vh - 200px)' }}>
+                <TabsContent value="basic" className="mt-0 space-y-4 data-[state=active]:block">
                   <FormField
                     control={form.control}
                     name="name"
@@ -1105,7 +1105,7 @@ export function AssetMasterFormDialog({
                     )}
                   />
                 </TabsContent>
-              </ScrollArea>
+              </div>
             </Tabs>
 
             <div className="flex justify-end gap-2 px-6 py-4 border-t">

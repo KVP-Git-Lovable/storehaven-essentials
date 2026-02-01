@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Loader2, Edit, Trash2, ExternalLink } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Edit, Trash2, ExternalLink, Upload, FileText, Sparkles } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -29,6 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -52,6 +54,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { AssetMasterFormDialog } from "@/components/assets/AssetMasterFormDialog";
 
 const vendorAssocSchema = z.object({
   vendor_id: z.string().min(1, "Vendor is required"),
@@ -70,7 +73,47 @@ type AssetMaster = {
   investment_size: string;
   description: string | null;
   status: string;
-  categories?: { name: string } | null;
+  brand?: string | null;
+  model?: string | null;
+  manufacturer?: string | null;
+  sku?: string | null;
+  upc_barcode?: string | null;
+  hsn_code?: string | null;
+  unit_of_measure?: string | null;
+  standard_price?: number | null;
+  currency?: string | null;
+  weight_kg?: number | null;
+  dimensions_cm?: string | null;
+  power_consumption_watts?: number | null;
+  voltage_requirement?: string | null;
+  temperature_range?: string | null;
+  capacity?: string | null;
+  refrigerant_type?: string | null;
+  energy_rating?: string | null;
+  warranty_months?: number | null;
+  expected_lifespan_years?: number | null;
+  maintenance_frequency?: string | null;
+  certification_required?: boolean | null;
+  certifications?: string[] | null;
+  safety_requirements?: string | null;
+  installation_requirements?: string | null;
+  spare_parts_available?: boolean | null;
+  lead_time_days?: number | null;
+  min_order_quantity?: number | null;
+  is_returnable?: boolean | null;
+  disposal_instructions?: string | null;
+  environment_impact?: string | null;
+  image_url?: string | null;
+  datasheet_url?: string | null;
+  manual_url?: string | null;
+  categories?: { id: string; name: string; type: string } | null;
+};
+
+type Category = {
+  id: string;
+  name: string;
+  type: string;
+  parent_id: string | null;
 };
 
 type AssociatedVendor = {
@@ -100,10 +143,37 @@ type Vendor = {
   vendor_type: string;
 };
 
+// Helper component for displaying field values
+function DetailField({ label, value, type = "text" }: { label: string; value: React.ReactNode; type?: string }) {
+  return (
+    <div>
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="font-medium mt-0.5">
+        {value !== null && value !== undefined && value !== "" ? (
+          type === "url" && typeof value === "string" ? (
+            <a href={value} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1">
+              View <ExternalLink className="h-3 w-3" />
+            </a>
+          ) : type === "boolean" ? (
+            <Badge variant={value ? "default" : "secondary"}>{value ? "Yes" : "No"}</Badge>
+          ) : type === "currency" ? (
+            `₹${Number(value).toLocaleString()}`
+          ) : (
+            value
+          )
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        )}
+      </p>
+    </div>
+  );
+}
+
 export default function AssetMasterDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [assetMaster, setAssetMaster] = useState<AssetMaster | null>(null);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [associatedVendors, setAssociatedVendors] = useState<AssociatedVendor[]>([]);
   const [associatedAssets, setAssociatedAssets] = useState<AssociatedAsset[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -111,6 +181,11 @@ export default function AssetMasterDetails() {
   const [vendorDialogOpen, setVendorDialogOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<AssociatedVendor | null>(null);
   const [deleteVendorId, setDeleteVendorId] = useState<string | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteAssetOpen, setDeleteAssetOpen] = useState(false);
+  const [brochureDialogOpen, setBrochureDialogOpen] = useState(false);
+  const [brochureUploading, setBrochureUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const vendorForm = useForm<VendorAssocFormData>({
@@ -142,10 +217,10 @@ export default function AssetMasterDetails() {
   }, [selectedVendorId, vendors, editingVendor]);
 
   const fetchData = async () => {
-    const [assetMasterRes, vendorsRes, assocVendorsRes, assocAssetsRes] = await Promise.all([
+    const [assetMasterRes, vendorsRes, assocVendorsRes, assocAssetsRes, categoriesRes] = await Promise.all([
       supabase
         .from("asset_masters")
-        .select("*, categories(name)")
+        .select("*, categories(id, name, type)")
         .eq("id", id)
         .maybeSingle(),
       supabase.from("vendors").select("id, name, category, vendor_type").order("name"),
@@ -157,6 +232,10 @@ export default function AssetMasterDetails() {
         .from("assets")
         .select("id, asset_number, name, condition, location, value, store_id, stores(name)")
         .eq("asset_master_id", id),
+      supabase
+        .from("categories")
+        .select("id, name, type, parent_id")
+        .eq("status", "active"),
     ]);
 
     if (assetMasterRes.error || !assetMasterRes.data) {
@@ -169,7 +248,20 @@ export default function AssetMasterDetails() {
     setVendors(vendorsRes.data || []);
     setAssociatedVendors(assocVendorsRes.data || []);
     setAssociatedAssets(assocAssetsRes.data || []);
+    setAllCategories(categoriesRes.data || []);
     setLoading(false);
+  };
+
+  // Build category path from leaf to root
+  const getCategoryPath = (categoryId: string | null): Category[] => {
+    if (!categoryId) return [];
+    const path: Category[] = [];
+    let current = allCategories.find((c) => c.id === categoryId);
+    while (current) {
+      path.unshift(current);
+      current = allCategories.find((c) => c.id === current?.parent_id);
+    }
+    return path;
   };
 
   const onVendorSubmit = async (data: VendorAssocFormData) => {
@@ -245,6 +337,44 @@ export default function AssetMasterDetails() {
     setDeleteVendorId(null);
   };
 
+  const handleDeleteAssetMaster = async () => {
+    if (!id) return;
+
+    const { error } = await supabase.from("asset_masters").delete().eq("id", id);
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to delete asset master", variant: "destructive" });
+    } else {
+      toast({ title: "Success", description: "Asset master deleted" });
+      navigate("/assets/master");
+    }
+    setDeleteAssetOpen(false);
+  };
+
+  const handleBrochureUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setBrochureUploading(true);
+    setBrochureDialogOpen(false);
+
+    try {
+      // For now, we'll show a message that AI parsing is coming soon
+      // In a full implementation, this would use AI to parse the brochure
+      toast({
+        title: "Feature Coming Soon",
+        description: "AI-powered brochure parsing will be available soon. For now, please fill the form manually.",
+      });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to process brochure", variant: "destructive" });
+    } finally {
+      setBrochureUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -257,68 +387,204 @@ export default function AssetMasterDetails() {
     return null;
   }
 
+  const categoryPath = getCategoryPath(assetMaster.category_id);
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/assets/master")}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-semibold">{assetMaster.name}</h1>
-          <p className="text-muted-foreground">Asset Master Details</p>
+      {/* Header with actions */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/assets/master")}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-semibold">{assetMaster.name}</h1>
+            <p className="text-muted-foreground">Asset Master Details</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => setBrochureDialogOpen(true)}>
+            <Upload className="h-4 w-4" />
+            Upload Brochure
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={() => setEditDialogOpen(true)}>
+            <Edit className="h-4 w-4" />
+            Edit
+          </Button>
+          <Button variant="destructive" className="gap-2" onClick={() => setDeleteAssetOpen(true)}>
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </Button>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Asset Information</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Category</p>
-              <p className="font-medium">{assetMaster.categories?.name || "-"}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Criticality</p>
-              <Badge
-                variant={
-                  assetMaster.criticality === "high"
-                    ? "destructive"
-                    : assetMaster.criticality === "medium"
-                    ? "default"
-                    : "secondary"
-                }
-                className="mt-1"
-              >
-                {assetMaster.criticality}
-              </Badge>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Investment Size</p>
-              <p className="font-medium capitalize">{assetMaster.investment_size}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Status</p>
-              <Badge variant={assetMaster.status === "active" ? "default" : "secondary"} className="mt-1">
-                {assetMaster.status}
-              </Badge>
-            </div>
-          </div>
-          {assetMaster.description && (
-            <div className="mt-4">
-              <p className="text-sm text-muted-foreground">Description</p>
-              <p className="mt-1">{assetMaster.description}</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Tabs defaultValue="vendors" className="space-y-4">
+      {/* Main content tabs */}
+      <Tabs defaultValue="details" className="space-y-4">
         <TabsList>
+          <TabsTrigger value="details">Asset Details</TabsTrigger>
           <TabsTrigger value="vendors">Associated Vendors ({associatedVendors.length})</TabsTrigger>
           <TabsTrigger value="stores">Associated Stores ({associatedAssets.length})</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="details" className="space-y-6">
+          {/* Basic Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Basic Information</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <DetailField label="Asset Name" value={assetMaster.name} />
+                <DetailField label="Brand" value={assetMaster.brand} />
+                <DetailField label="Model" value={assetMaster.model} />
+                <DetailField label="Manufacturer" value={assetMaster.manufacturer} />
+                <div className="col-span-2 md:col-span-4">
+                  <p className="text-sm text-muted-foreground">Category Path</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {categoryPath.length > 0 ? (
+                      categoryPath.map((cat, idx) => (
+                        <span key={cat.id} className="flex items-center gap-2">
+                          {idx > 0 && <span className="text-muted-foreground">/</span>}
+                          <Badge variant="outline">{cat.name}</Badge>
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </div>
+                </div>
+                <div className="col-span-2 md:col-span-4">
+                  <DetailField label="Description" value={assetMaster.description} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Identifiers & Classification */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Identifiers</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  <DetailField label="SKU" value={assetMaster.sku} />
+                  <DetailField label="UPC/Barcode" value={assetMaster.upc_barcode} />
+                  <DetailField label="HSN Code" value={assetMaster.hsn_code} />
+                  <DetailField label="Status" value={
+                    <Badge variant={assetMaster.status === "active" ? "default" : "secondary"}>
+                      {assetMaster.status}
+                    </Badge>
+                  } />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Classification & Pricing</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  <DetailField label="Criticality" value={
+                    <Badge variant={assetMaster.criticality === "high" ? "destructive" : assetMaster.criticality === "medium" ? "default" : "secondary"}>
+                      {assetMaster.criticality}
+                    </Badge>
+                  } />
+                  <DetailField label="Investment Size" value={assetMaster.investment_size} />
+                  <DetailField label="Standard Price" value={assetMaster.standard_price} type="currency" />
+                  <DetailField label="Unit of Measure" value={assetMaster.unit_of_measure} />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Technical Specifications */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Technical Specifications</CardTitle>
+              <CardDescription>Power, temperature, and physical specifications</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <DetailField label="Power Consumption" value={assetMaster.power_consumption_watts ? `${assetMaster.power_consumption_watts}W` : null} />
+                <DetailField label="Voltage Requirement" value={assetMaster.voltage_requirement} />
+                <DetailField label="Temperature Range" value={assetMaster.temperature_range} />
+                <DetailField label="Capacity" value={assetMaster.capacity} />
+                <DetailField label="Refrigerant Type" value={assetMaster.refrigerant_type} />
+                <DetailField label="Energy Rating" value={assetMaster.energy_rating} />
+                <DetailField label="Weight" value={assetMaster.weight_kg ? `${assetMaster.weight_kg} kg` : null} />
+                <DetailField label="Dimensions (cm)" value={assetMaster.dimensions_cm} />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Lifecycle & Procurement */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Lifecycle & Procurement</CardTitle>
+              <CardDescription>Warranty, lifespan, and ordering information</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <DetailField label="Warranty Period" value={assetMaster.warranty_months ? `${assetMaster.warranty_months} months` : null} />
+                <DetailField label="Expected Lifespan" value={assetMaster.expected_lifespan_years ? `${assetMaster.expected_lifespan_years} years` : null} />
+                <DetailField label="Maintenance Frequency" value={assetMaster.maintenance_frequency} />
+                <DetailField label="Lead Time" value={assetMaster.lead_time_days ? `${assetMaster.lead_time_days} days` : null} />
+                <DetailField label="Min Order Quantity" value={assetMaster.min_order_quantity} />
+                <DetailField label="Spare Parts Available" value={assetMaster.spare_parts_available} type="boolean" />
+                <DetailField label="Is Returnable" value={assetMaster.is_returnable} type="boolean" />
+                <DetailField label="Environment Impact" value={assetMaster.environment_impact} />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Compliance & Safety */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Compliance & Safety</CardTitle>
+              <CardDescription>Certification and safety requirements</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <DetailField label="Certification Required" value={assetMaster.certification_required} type="boolean" />
+                  <div className="mt-4">
+                    <p className="text-sm text-muted-foreground">Certifications</p>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {assetMaster.certifications && assetMaster.certifications.length > 0 ? (
+                        assetMaster.certifications.map((cert, idx) => (
+                          <Badge key={idx} variant="outline">{cert}</Badge>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <DetailField label="Safety Requirements" value={assetMaster.safety_requirements} />
+                  <DetailField label="Installation Requirements" value={assetMaster.installation_requirements} />
+                  <DetailField label="Disposal Instructions" value={assetMaster.disposal_instructions} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Documents */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Documents & Links</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <DetailField label="Product Image" value={assetMaster.image_url} type="url" />
+                <DetailField label="Datasheet" value={assetMaster.datasheet_url} type="url" />
+                <DetailField label="User Manual" value={assetMaster.manual_url} type="url" />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="vendors">
           <Card>
@@ -544,6 +810,33 @@ export default function AssetMasterDetails() {
         </TabsContent>
       </Tabs>
 
+      {/* Edit Asset Master Dialog */}
+      <AssetMasterFormDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        editingAsset={assetMaster}
+        onSuccess={fetchData}
+      />
+
+      {/* Delete Asset Master Confirmation */}
+      <AlertDialog open={deleteAssetOpen} onOpenChange={setDeleteAssetOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Asset Master?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete "{assetMaster.name}" and all associated vendor links.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteAssetMaster} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Vendor Association Confirmation */}
       <AlertDialog open={!!deleteVendorId} onOpenChange={() => setDeleteVendorId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -560,6 +853,57 @@ export default function AssetMasterDetails() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Brochure Upload Dialog */}
+      <Dialog open={brochureDialogOpen} onOpenChange={setBrochureDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Upload Technical Brochure
+            </DialogTitle>
+            <DialogDescription>
+              Upload a PDF brochure or datasheet to auto-populate asset fields using AI extraction.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="border-2 border-dashed rounded-lg p-8 text-center">
+              <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-sm text-muted-foreground mb-4">
+                Drag and drop your brochure here, or click to browse
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx"
+                onChange={handleBrochureUpload}
+                className="hidden"
+                id="brochure-upload"
+              />
+              <Button
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={brochureUploading}
+              >
+                {brochureUploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Select File
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground text-center">
+              Supported formats: PDF, DOC, DOCX (Max 10MB)
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
