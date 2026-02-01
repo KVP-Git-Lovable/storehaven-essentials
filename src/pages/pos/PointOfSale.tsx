@@ -29,8 +29,10 @@ import {
   Star,
   Info,
   Coins,
-  Smartphone
+  Smartphone,
+  ChevronDown
 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import BarcodeScanner from "@/components/inventory/BarcodeScanner";
 import { QuickActionsBar } from "@/components/pos/QuickActionsBar";
 import { CategoryTabs } from "@/components/pos/CategoryTabs";
@@ -911,8 +913,8 @@ export default function PointOfSale() {
         </div>
 
         {/* Right Panel - Cart */}
-        <Card className="w-96 flex flex-col">
-          <CardHeader className="pb-2">
+        <Card className="w-96 flex flex-col min-h-0">
+          <CardHeader className="pb-2 flex-shrink-0">
             <CardTitle className="flex items-center gap-2 text-lg">
               <ShoppingCart className="h-5 w-5" />
               Current Order
@@ -923,9 +925,9 @@ export default function PointOfSale() {
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex-1 flex flex-col p-4 pt-0 min-h-0">
-            {/* Cart Items */}
-            <div className="flex-1 overflow-y-auto space-y-2">
+          <CardContent className="flex-1 flex flex-col p-4 pt-0 min-h-0 overflow-hidden">
+            {/* Cart Items - Takes priority */}
+            <div className="flex-1 overflow-y-auto space-y-2 min-h-[200px]">
               {cart.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                   <ShoppingCart className="h-12 w-12 mb-2 opacity-50" />
@@ -948,18 +950,18 @@ export default function PointOfSale() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7"
+                        className="h-6 w-6"
                         onClick={() => updateQuantity(item.id, -1)}
                       >
                         <Minus className="h-3 w-3" />
                       </Button>
-                      <span className="w-8 text-center text-sm font-medium">
+                      <span className="w-6 text-center text-sm font-medium">
                         {item.quantity}
                       </span>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7"
+                        className="h-6 w-6"
                         onClick={() => updateQuantity(item.id, 1)}
                       >
                         <Plus className="h-3 w-3" />
@@ -967,119 +969,138 @@ export default function PointOfSale() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-destructive"
+                        className="h-6 w-6 text-destructive"
                         onClick={() => removeFromCart(item.id)}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
-                    <div className="w-20 text-right font-medium text-sm">
-                      ₹{item.totalAmount.toFixed(2)}
+                    <div className="w-16 text-right font-medium text-sm">
+                      ₹{item.totalAmount.toFixed(0)}
                     </div>
                   </div>
                 ))
               )}
             </div>
 
-            {/* Cart Summary */}
+            {/* Cart Summary - Fixed at bottom */}
             {cart.length > 0 && (
-              <>
-                <Separator className="my-3" />
+              <div className="flex-shrink-0 border-t pt-3 mt-2 space-y-2">
+                {/* Compact Discounts & Offers Section */}
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="w-full justify-between h-8 px-2 text-xs">
+                      <span className="flex items-center gap-1">
+                        <Tag className="h-3 w-3" />
+                        Discounts & Offers
+                        {(appliedCoupon || appliedGiftCard || loyaltyPointsToRedeem > 0 || totalSchemeDiscount > 0) && (
+                          <Badge variant="secondary" className="h-4 text-[10px] px-1">
+                            {[
+                              appliedCoupon && "Coupon",
+                              appliedGiftCard && "Gift Card",
+                              loyaltyPointsToRedeem > 0 && "Points",
+                              totalSchemeDiscount > 0 && "Scheme"
+                            ].filter(Boolean).length} applied
+                          </Badge>
+                        )}
+                      </span>
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-2 pt-2">
+                    {/* Applied Schemes Display */}
+                    {appliedSchemeResults.length > 0 && totalSchemeDiscount > 0 && (
+                      <AppliedSchemesBadge
+                        schemes={appliedSchemeResults.map((r) => r.scheme)}
+                        totalSavings={totalSchemeDiscount + couponDiscount}
+                      />
+                    )}
 
-                {/* Applied Schemes Display */}
-                {appliedSchemeResults.length > 0 && totalSchemeDiscount > 0 && (
-                  <AppliedSchemesBadge
-                    schemes={appliedSchemeResults.map((r) => r.scheme)}
-                    totalSavings={totalSchemeDiscount + couponDiscount}
-                  />
-                )}
-
-                {/* Coupon Input */}
-                <div className="mt-2">
-                  <CouponInput
-                    appliedCoupon={appliedCoupon}
-                    onApplyCoupon={handleApplyCoupon}
-                    onRemoveCoupon={() => setAppliedCoupon(null)}
-                  />
-                </div>
-
-                {/* Gift Card Input */}
-                <div className="mt-2">
-                  <GiftCardInput
-                    appliedGiftCard={appliedGiftCard}
-                    onApplyGiftCard={handleApplyGiftCard}
-                    onRemoveGiftCard={() => setAppliedGiftCard(null)}
-                    maxAmount={grandTotal + (appliedGiftCard?.amountToUse || 0)}
-                  />
-                </div>
-
-                {/* Loyalty Points Redemption */}
-                {customer && customer.loyalty_points > 0 && (
-                  <div className="mt-2">
-                    <LoyaltyPointsDisplay
-                      availablePoints={customer.loyalty_points}
-                      pointsValue={loyaltyConfig?.points_value_rupee || 1}
-                      onRedeemPoints={handleRedeemLoyaltyPoints}
-                      pointsToEarn={pointsToEarn}
+                    {/* Coupon Input */}
+                    <CouponInput
+                      appliedCoupon={appliedCoupon}
+                      onApplyCoupon={handleApplyCoupon}
+                      onRemoveCoupon={() => setAppliedCoupon(null)}
                     />
-                    {loyaltyPointsToRedeem > 0 && (
-                      <div className="flex items-center justify-between mt-1 text-sm text-amber-600">
-                        <span>Points to redeem: {loyaltyPointsToRedeem}</span>
-                        <Button variant="ghost" size="sm" className="h-6 p-0" onClick={() => setLoyaltyPointsToRedeem(0)}>
-                          Clear
-                        </Button>
+
+                    {/* Gift Card Input */}
+                    <GiftCardInput
+                      appliedGiftCard={appliedGiftCard}
+                      onApplyGiftCard={handleApplyGiftCard}
+                      onRemoveGiftCard={() => setAppliedGiftCard(null)}
+                      maxAmount={grandTotal + (appliedGiftCard?.amountToUse || 0)}
+                    />
+
+                    {/* Loyalty Points Redemption */}
+                    {customer && customer.loyalty_points > 0 && (
+                      <div>
+                        <LoyaltyPointsDisplay
+                          availablePoints={customer.loyalty_points}
+                          pointsValue={loyaltyConfig?.points_value_rupee || 1}
+                          onRedeemPoints={handleRedeemLoyaltyPoints}
+                          pointsToEarn={pointsToEarn}
+                        />
+                        {loyaltyPointsToRedeem > 0 && (
+                          <div className="flex items-center justify-between mt-1 text-xs text-amber-600">
+                            <span>Points to redeem: {loyaltyPointsToRedeem}</span>
+                            <Button variant="ghost" size="sm" className="h-5 p-0 text-xs" onClick={() => setLoyaltyPointsToRedeem(0)}>
+                              Clear
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
+                  </CollapsibleContent>
+                </Collapsible>
 
-                <Separator className="my-3" />
-
-                <div className="space-y-2 text-sm">
+                {/* Price Summary - Always visible, compact */}
+                <div className="space-y-1 text-xs">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span>₹{subtotal.toFixed(2)}</span>
+                    <span>₹{subtotal.toFixed(0)}</span>
                   </div>
                   {totalDiscount > 0 && (
                     <div className="flex justify-between text-green-600">
                       <span>Discount</span>
-                      <span>-₹{totalDiscount.toFixed(2)}</span>
+                      <span>-₹{totalDiscount.toFixed(0)}</span>
                     </div>
                   )}
                   {giftCardAmount > 0 && (
                     <div className="flex justify-between text-purple-600">
                       <span>Gift Card</span>
-                      <span>-₹{giftCardAmount.toFixed(2)}</span>
+                      <span>-₹{giftCardAmount.toFixed(0)}</span>
                     </div>
                   )}
                   {loyaltyPointsValue > 0 && (
                     <div className="flex justify-between text-amber-600">
-                      <span>Loyalty Points</span>
-                      <span>-₹{loyaltyPointsValue.toFixed(2)}</span>
+                      <span>Points</span>
+                      <span>-₹{loyaltyPointsValue.toFixed(0)}</span>
                     </div>
                   )}
                   {taxAmount > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Tax</span>
-                      <span>₹{taxAmount.toFixed(2)}</span>
+                      <span>₹{taxAmount.toFixed(0)}</span>
                     </div>
                   )}
-                  <Separator />
-                  <div className="flex justify-between font-bold text-lg">
-                    <span>Total</span>
-                    <span className="text-primary">₹{grandTotal.toFixed(2)}</span>
-                  </div>
                 </div>
 
-                <div className="flex gap-2 mt-4">
-                  <Button variant="outline" className="flex-1" onClick={clearCart}>
+                <Separator />
+
+                <div className="flex justify-between font-bold text-base">
+                  <span>Total</span>
+                  <span className="text-primary">₹{grandTotal.toFixed(2)}</span>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="flex-1" onClick={clearCart}>
                     Clear
                   </Button>
-                  <Button className="flex-1" onClick={handleProceedToPayment}>
-                    Pay ₹{grandTotal.toFixed(2)}
+                  <Button size="sm" className="flex-1" onClick={handleProceedToPayment}>
+                    Pay ₹{grandTotal.toFixed(0)}
                   </Button>
                 </div>
-              </>
+              </div>
             )}
           </CardContent>
         </Card>
