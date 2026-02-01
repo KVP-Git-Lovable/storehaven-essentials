@@ -821,6 +821,108 @@ export default function KnowledgeBase() {
                 />
               </div>
 
+              {/* Video URLs - moved up for AI generation */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Video className="h-4 w-4" />
+                  Video URLs (one per line)
+                </Label>
+                <Textarea
+                  value={formData.video_urls}
+                  onChange={(e) => setFormData({ ...formData, video_urls: e.target.value })}
+                  placeholder="https://youtube.com/watch?v=...&#10;https://vimeo.com/..."
+                  rows={2}
+                />
+              </div>
+
+              {/* Document Attachments - moved up for AI generation */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Documents & Attachments
+                </Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.jpg,.jpeg,.png"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    {uploading ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4 mr-2" />
+                    )}
+                    Upload Files
+                  </Button>
+                </div>
+                {formData.attachments.length > 0 && (
+                  <div className="space-y-2 mt-2">
+                    {formData.attachments.map((att, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 border rounded-md bg-muted/50">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">{att.file_name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            ({(att.file_size / 1024).toFixed(1)} KB)
+                          </span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeAttachment(index)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* AI Generate Button - prominent position */}
+              <div className="p-4 border rounded-lg bg-gradient-to-r from-primary/5 to-primary/10">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      AI Auto-Fill
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Upload documents or add video URLs, then let AI populate all fields
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleGenerateAI}
+                    disabled={generatingAI || (formData.attachments.length === 0 && !formData.video_urls.trim())}
+                  >
+                    {generatingAI ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Generate Content
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <Separator />
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Article Type</Label>
@@ -935,108 +1037,6 @@ export default function KnowledgeBase() {
                   rows={8}
                 />
               </div>
-
-              {/* Video URLs */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Video className="h-4 w-4" />
-                  Video URLs (one per line)
-                </Label>
-                <Textarea
-                  value={formData.video_urls}
-                  onChange={(e) => setFormData({ ...formData, video_urls: e.target.value })}
-                  placeholder="https://youtube.com/watch?v=...&#10;https://vimeo.com/..."
-                  rows={3}
-                />
-              </div>
-
-              {/* Document Attachments */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Documents & Attachments
-                </Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.jpg,.jpeg,.png"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading}
-                  >
-                    {uploading ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Upload className="h-4 w-4 mr-2" />
-                    )}
-                    Upload Files
-                  </Button>
-                </div>
-                {formData.attachments.length > 0 && (
-                  <div className="space-y-2 mt-2">
-                    {formData.attachments.map((att, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 border rounded-md bg-muted/50">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{att.file_name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            ({(att.file_size / 1024).toFixed(1)} KB)
-                          </span>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeAttachment(index)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* AI Generate Button */}
-              <div className="p-4 border rounded-lg bg-gradient-to-r from-primary/5 to-primary/10">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-primary" />
-                      AI Auto-Fill
-                    </h4>
-                    <p className="text-sm text-muted-foreground">
-                      Upload documents or add video URLs, then let AI populate all fields
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    onClick={handleGenerateAI}
-                    disabled={generatingAI || (formData.attachments.length === 0 && !formData.video_urls.trim())}
-                  >
-                    {generatingAI ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        Generate Content
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              <Separator />
 
               {/* Do's */}
               <div className="space-y-2">
