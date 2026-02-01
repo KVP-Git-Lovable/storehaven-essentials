@@ -1762,15 +1762,20 @@ export type Database = {
       }
       knowledge_base_articles: {
         Row: {
+          ai_generated: boolean | null
+          ai_generated_at: string | null
           article_type: string
           asset_master_id: string | null
           category: string
           content: string
           created_at: string
           created_by: string | null
+          donts: string[] | null
+          dos: string[] | null
           helpful_count: number | null
           id: string
           keywords: string[] | null
+          process_steps: string[] | null
           sme_names: string[] | null
           status: string
           summary: string | null
@@ -1780,15 +1785,20 @@ export type Database = {
           views_count: number | null
         }
         Insert: {
+          ai_generated?: boolean | null
+          ai_generated_at?: string | null
           article_type?: string
           asset_master_id?: string | null
           category?: string
           content: string
           created_at?: string
           created_by?: string | null
+          donts?: string[] | null
+          dos?: string[] | null
           helpful_count?: number | null
           id?: string
           keywords?: string[] | null
+          process_steps?: string[] | null
           sme_names?: string[] | null
           status?: string
           summary?: string | null
@@ -1798,15 +1808,20 @@ export type Database = {
           views_count?: number | null
         }
         Update: {
+          ai_generated?: boolean | null
+          ai_generated_at?: string | null
           article_type?: string
           asset_master_id?: string | null
           category?: string
           content?: string
           created_at?: string
           created_by?: string | null
+          donts?: string[] | null
+          dos?: string[] | null
           helpful_count?: number | null
           id?: string
           keywords?: string[] | null
+          process_steps?: string[] | null
           sme_names?: string[] | null
           status?: string
           summary?: string | null
@@ -7614,15 +7629,20 @@ export type Database = {
       search_knowledge_base: {
         Args: { search_query: string }
         Returns: {
+          ai_generated: boolean | null
+          ai_generated_at: string | null
           article_type: string
           asset_master_id: string | null
           category: string
           content: string
           created_at: string
           created_by: string | null
+          donts: string[] | null
+          dos: string[] | null
           helpful_count: number | null
           id: string
           keywords: string[] | null
+          process_steps: string[] | null
           sme_names: string[] | null
           status: string
           summary: string | null

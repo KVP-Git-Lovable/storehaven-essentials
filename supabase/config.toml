@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.ai-insights]
 verify_jwt = false
+
+[functions.generate-kb-content]
+verify_jwt = false

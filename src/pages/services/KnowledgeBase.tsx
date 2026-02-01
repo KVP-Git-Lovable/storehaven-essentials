@@ -16,6 +16,10 @@ import {
   FileText,
   X,
   Download,
+  Sparkles,
+  CheckCircle,
+  XCircle,
+  ListOrdered,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,6 +93,10 @@ type KBArticle = {
   updated_at: string;
   video_urls: string[] | null;
   sme_names: string[] | null;
+  dos: string[] | null;
+  donts: string[] | null;
+  process_steps: string[] | null;
+  ai_generated: boolean | null;
   asset_master?: { name: string } | null;
   kb_article_assets?: { asset_master_id: string; asset_master: { name: string } }[];
   kb_article_vendors?: { vendor_id: string; vendor_role: string; vendor: { name: string } }[];
@@ -134,6 +142,7 @@ export default function KnowledgeBase() {
   const [editMode, setEditMode] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<KBArticle | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [generatingAI, setGeneratingAI] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState({
@@ -149,6 +158,9 @@ export default function KnowledgeBase() {
     linked_asset_ids: [] as string[],
     linked_vendor_ids: [] as string[],
     attachments: [] as { file_name: string; file_url: string; file_type: string; file_size: number }[],
+    dos: "",
+    donts: "",
+    process_steps: "",
   });
   
   const { toast } = useToast();
@@ -239,6 +251,9 @@ export default function KnowledgeBase() {
       linked_asset_ids: [],
       linked_vendor_ids: [],
       attachments: [],
+      dos: "",
+      donts: "",
+      process_steps: "",
     });
     setFormOpen(true);
   };
@@ -264,6 +279,9 @@ export default function KnowledgeBase() {
         file_type: a.file_type || "",
         file_size: a.file_size || 0,
       })) || [],
+      dos: article.dos?.join("\n") || "",
+      donts: article.donts?.join("\n") || "",
+      process_steps: article.process_steps?.join("\n") || "",
     });
     setViewOpen(false);
     setFormOpen(true);
@@ -322,6 +340,74 @@ export default function KnowledgeBase() {
     setFormData({ ...formData, attachments: newAttachments });
   };
 
+  const handleGenerateAI = async () => {
+    if (formData.attachments.length === 0 && !formData.video_urls.trim()) {
+      toast({ 
+        title: "No sources", 
+        description: "Please upload documents or add video URLs first", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    setGeneratingAI(true);
+    try {
+      const videoUrlsArray = formData.video_urls
+        .split("\n")
+        .map((v) => v.trim())
+        .filter((v) => v);
+
+      const { data, error } = await supabase.functions.invoke("generate-kb-content", {
+        body: {
+          documentUrls: formData.attachments,
+          videoUrls: videoUrlsArray,
+          existingTitle: formData.title || null,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.success && data?.data) {
+        const generated = data.data;
+        setFormData({
+          ...formData,
+          title: formData.title || generated.title || "",
+          summary: generated.summary || formData.summary,
+          content: generated.content || formData.content,
+          category: generated.category || formData.category,
+          article_type: generated.article_type || formData.article_type,
+          keywords: Array.isArray(generated.keywords) 
+            ? generated.keywords.join(", ") 
+            : formData.keywords,
+          dos: Array.isArray(generated.dos) 
+            ? generated.dos.join("\n") 
+            : formData.dos,
+          donts: Array.isArray(generated.donts) 
+            ? generated.donts.join("\n") 
+            : formData.donts,
+          process_steps: Array.isArray(generated.process_steps) 
+            ? generated.process_steps.join("\n") 
+            : formData.process_steps,
+        });
+        toast({ 
+          title: "AI Generated", 
+          description: "Content has been populated from your sources" 
+        });
+      } else {
+        throw new Error(data?.error || "Failed to generate content");
+      }
+    } catch (err) {
+      console.error("AI generation error:", err);
+      toast({ 
+        title: "Generation Failed", 
+        description: err instanceof Error ? err.message : "Could not generate content",
+        variant: "destructive" 
+      });
+    } finally {
+      setGeneratingAI(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!formData.title.trim() || !formData.content.trim()) {
       toast({ title: "Error", description: "Title and content are required", variant: "destructive" });
@@ -343,17 +429,35 @@ export default function KnowledgeBase() {
       .map((s) => s.trim())
       .filter((s) => s);
 
+    const dosArray = formData.dos
+      .split("\n")
+      .map((d) => d.trim())
+      .filter((d) => d);
+
+    const dontsArray = formData.donts
+      .split("\n")
+      .map((d) => d.trim())
+      .filter((d) => d);
+
+    const processStepsArray = formData.process_steps
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s);
+
     const payload = {
       title: formData.title.trim(),
       content: formData.content.trim(),
       summary: formData.summary.trim() || null,
-      asset_master_id: formData.linked_asset_ids[0] || null, // Keep backward compatibility
+      asset_master_id: formData.linked_asset_ids[0] || null,
       category: formData.category,
       article_type: formData.article_type,
       keywords: keywordsArray,
       status: formData.status,
       video_urls: videoUrlsArray,
       sme_names: smeNamesArray,
+      dos: dosArray,
+      donts: dontsArray,
+      process_steps: processStepsArray,
     };
 
     if (editMode && selectedArticle) {
@@ -900,6 +1004,84 @@ export default function KnowledgeBase() {
                 )}
               </div>
 
+              {/* AI Generate Button */}
+              <div className="p-4 border rounded-lg bg-gradient-to-r from-primary/5 to-primary/10">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      AI Auto-Fill
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Upload documents or add video URLs, then let AI populate all fields
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleGenerateAI}
+                    disabled={generatingAI || (formData.attachments.length === 0 && !formData.video_urls.trim())}
+                  >
+                    {generatingAI ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Generate Content
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Do's */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  Do's (one per line)
+                </Label>
+                <Textarea
+                  value={formData.dos}
+                  onChange={(e) => setFormData({ ...formData, dos: e.target.value })}
+                  placeholder="Always check temperature before operation&#10;Ensure proper ventilation&#10;Follow daily cleaning schedule"
+                  rows={4}
+                />
+              </div>
+
+              {/* Don'ts */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <XCircle className="h-4 w-4 text-red-600" />
+                  Don'ts (one per line)
+                </Label>
+                <Textarea
+                  value={formData.donts}
+                  onChange={(e) => setFormData({ ...formData, donts: e.target.value })}
+                  placeholder="Never operate with damaged seals&#10;Do not overload the unit&#10;Avoid using harsh chemicals"
+                  rows={4}
+                />
+              </div>
+
+              {/* Process Steps */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <ListOrdered className="h-4 w-4 text-blue-600" />
+                  Process Steps (one per line)
+                </Label>
+                <Textarea
+                  value={formData.process_steps}
+                  onChange={(e) => setFormData({ ...formData, process_steps: e.target.value })}
+                  placeholder="Step 1: Power off the equipment&#10;Step 2: Open the access panel&#10;Step 3: Check the compressor"
+                  rows={5}
+                />
+              </div>
+
+              <Separator />
+
               <div className="space-y-2">
                 <Label>Keywords (comma-separated)</Label>
                 <Input
@@ -1008,6 +1190,51 @@ export default function KnowledgeBase() {
                   }}
                 />
               </div>
+
+              {/* Do's */}
+              {selectedArticle?.dos && selectedArticle.dos.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-green-700">
+                    <CheckCircle className="h-4 w-4" />
+                    Do's
+                  </div>
+                  <ul className="space-y-1 pl-6 list-disc">
+                    {selectedArticle.dos.map((item, i) => (
+                      <li key={i} className="text-sm text-green-700">{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Don'ts */}
+              {selectedArticle?.donts && selectedArticle.donts.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-red-700">
+                    <XCircle className="h-4 w-4" />
+                    Don'ts
+                  </div>
+                  <ul className="space-y-1 pl-6 list-disc">
+                    {selectedArticle.donts.map((item, i) => (
+                      <li key={i} className="text-sm text-red-700">{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Process Steps */}
+              {selectedArticle?.process_steps && selectedArticle.process_steps.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-blue-700">
+                    <ListOrdered className="h-4 w-4" />
+                    Process Steps
+                  </div>
+                  <ol className="space-y-1 pl-6 list-decimal">
+                    {selectedArticle.process_steps.map((step, i) => (
+                      <li key={i} className="text-sm">{step}</li>
+                    ))}
+                  </ol>
+                </div>
+              )}
 
               {/* Video Links */}
               {selectedArticle?.video_urls && selectedArticle.video_urls.length > 0 && (
