@@ -43,14 +43,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { MultiSelectCombobox, MultiSelectOption } from "@/components/ui/multi-select-combobox";
+
 
 const planogramSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
   zone: z.string().min(1, "Zone is required"),
   applicableUpto: z.string().optional(),
-  storeIds: z.array(z.string()).optional(),
+  storeId: z.string().optional(),
   frequency: z.string().min(1, "Frequency is required"),
   scheduleTime: z.string().optional(),
   scheduleDaysOfWeek: z.array(z.string()).optional(), // Multiple days for weekly
@@ -157,7 +157,7 @@ export default function Planograms() {
       description: "",
       zone: "",
       applicableUpto: "",
-      storeIds: [],
+      storeId: "",
       frequency: "one-time",
       scheduleTime: "",
       scheduleDaysOfWeek: [],
@@ -212,11 +212,6 @@ export default function Planograms() {
     if (data) setUsers(data);
   };
 
-  const storeOptions: MultiSelectOption[] = stores.map((s) => ({
-    value: s.id,
-    label: s.name,
-  }));
-
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -231,7 +226,7 @@ export default function Planograms() {
       description: "",
       zone: "",
       applicableUpto: "",
-      storeIds: [],
+      storeId: "",
       frequency: "one-time",
       scheduleTime: "",
       scheduleDaysOfWeek: [],
@@ -257,8 +252,8 @@ export default function Planograms() {
     setCloneMode(false);
     setSelectedPlanogram(planogram);
     
-    // Get store IDs for this planogram
-    const storeIds = planogram.stores?.map((s) => s.store_id) || [];
+    // Get store ID for this planogram (first one if exists)
+    const storeId = planogram.stores?.[0]?.store_id || "";
     
     // Convert days of week to string array
     const scheduleDaysOfWeek = planogram.schedule_days_of_week?.map(String) || 
@@ -269,7 +264,7 @@ export default function Planograms() {
       description: planogram.description || "",
       zone: planogram.zone,
       applicableUpto: planogram.deadline ? new Date(planogram.deadline).toISOString().slice(0, 10) : "",
-      storeIds,
+      storeId,
       frequency: planogram.frequency || "one-time",
       scheduleTime: planogram.schedule_time || "",
       scheduleDaysOfWeek,
@@ -287,8 +282,8 @@ export default function Planograms() {
     setCloneMode(true);
     setSelectedPlanogram(planogram);
     
-    // Get store IDs for this planogram
-    const storeIds = planogram.stores?.map((s) => s.store_id) || [];
+    // Get store ID for this planogram (first one if exists)
+    const storeId = planogram.stores?.[0]?.store_id || "";
     
     // Convert days of week to string array
     const scheduleDaysOfWeek = planogram.schedule_days_of_week?.map(String) || 
@@ -304,7 +299,7 @@ export default function Planograms() {
       description: planogram.description || "",
       zone: planogram.zone,
       applicableUpto: planogram.deadline ? new Date(planogram.deadline).toISOString().slice(0, 10) : "",
-      storeIds,
+      storeId,
       frequency: planogram.frequency || "one-time",
       scheduleTime: planogram.schedule_time || "",
       scheduleDaysOfWeek,
@@ -392,12 +387,11 @@ export default function Planograms() {
       // Update stores - delete existing and insert new
       await supabase.from("planogram_stores").delete().eq("planogram_id", selectedPlanogram.id);
       
-      if (data.storeIds && data.storeIds.length > 0) {
-        const storeInserts = data.storeIds.map((storeId) => ({
+      if (data.storeId && data.storeId !== "none") {
+        await supabase.from("planogram_stores").insert({
           planogram_id: selectedPlanogram.id,
-          store_id: storeId,
-        }));
-        await supabase.from("planogram_stores").insert(storeInserts);
+          store_id: data.storeId,
+        });
       }
 
       toast({ title: "Success", description: "Planogram updated successfully" });
@@ -415,13 +409,12 @@ export default function Planograms() {
         return;
       }
 
-      // Insert store associations
-      if (data.storeIds && data.storeIds.length > 0) {
-        const storeInserts = data.storeIds.map((storeId) => ({
+      // Insert store association
+      if (data.storeId && data.storeId !== "none") {
+        await supabase.from("planogram_stores").insert({
           planogram_id: newPlanogram.id,
-          store_id: storeId,
-        }));
-        await supabase.from("planogram_stores").insert(storeInserts);
+          store_id: data.storeId,
+        });
       }
 
       toast({ 
@@ -686,20 +679,23 @@ export default function Planograms() {
 
                 <FormField
                   control={form.control}
-                  name="storeIds"
+                  name="storeId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Store(s)</FormLabel>
-                      <FormControl>
-                        <MultiSelectCombobox
-                          options={storeOptions}
-                          selected={field.value || []}
-                          onChange={field.onChange}
-                          placeholder="Select stores..."
-                          searchPlaceholder="Search stores..."
-                          emptyMessage="No stores found."
-                        />
-                      </FormControl>
+                      <FormLabel>Store</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select store" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">-- None --</SelectItem>
+                          {stores.map((store) => (
+                            <SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
