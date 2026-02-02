@@ -7475,6 +7475,12 @@ export type Database = {
           planogram_id: string
           status: string
           store_id: string
+          submission_notes: string | null
+          submitted_at: string | null
+          submitted_latitude: number | null
+          submitted_location_address: string | null
+          submitted_longitude: number | null
+          submitted_photo_url: string | null
           title: string
           updated_at: string
         }
@@ -7491,6 +7497,12 @@ export type Database = {
           planogram_id: string
           status?: string
           store_id: string
+          submission_notes?: string | null
+          submitted_at?: string | null
+          submitted_latitude?: number | null
+          submitted_location_address?: string | null
+          submitted_longitude?: number | null
+          submitted_photo_url?: string | null
           title: string
           updated_at?: string
         }
@@ -7507,6 +7519,12 @@ export type Database = {
           planogram_id?: string
           status?: string
           store_id?: string
+          submission_notes?: string | null
+          submitted_at?: string | null
+          submitted_latitude?: number | null
+          submitted_location_address?: string | null
+          submitted_longitude?: number | null
+          submitted_photo_url?: string | null
           title?: string
           updated_at?: string
         }

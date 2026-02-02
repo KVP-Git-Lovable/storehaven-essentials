@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Plus, Search, ClipboardCheck, Loader2, Clock, CheckCircle, AlertCircle, Store, MoreHorizontal, Pencil, Trash, Calendar, List } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Plus, Search, ClipboardCheck, Loader2, Clock, CheckCircle, AlertCircle, Store, MoreHorizontal, Pencil, Trash, Calendar, List, Camera, Upload, MapPin, Filter } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -56,14 +56,14 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { MultiSelectCombobox, MultiSelectOption } from "@/components/ui/multi-select-combobox";
 import { ComplianceCalendarView } from "@/components/vm/ComplianceCalendarView";
 
 const taskSchema = z.object({
   planogramId: z.string().min(1, "Planogram is required"),
-  storeIds: z.array(z.string()).min(1, "At least one store is required"),
+  storeId: z.string().min(1, "Store is required"),
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
   frequency: z.string().min(1, "Frequency is required"),
@@ -87,7 +87,13 @@ type ComplianceTask = {
   planogram_id: string | null;
   store_id: string | null;
   created_at: string;
-  planogram: { id: string; title: string; zone: string } | null;
+  submitted_photo_url: string | null;
+  submitted_at: string | null;
+  submitted_latitude: number | null;
+  submitted_longitude: number | null;
+  submitted_location_address: string | null;
+  submission_notes: string | null;
+  planogram: { id: string; title: string; zone: string; image_url: string } | null;
   store: { id: string; name: string } | null;
   assigned_user: { id: string; username: string } | null;
 };
@@ -96,6 +102,7 @@ type Planogram = {
   id: string;
   title: string;
   zone: string;
+  image_url: string;
 };
 
 type StoreType = {
@@ -126,6 +133,7 @@ const statusColors: Record<string, string> = {
 
 export default function ComplianceTasks() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [storeFilter, setStoreFilter] = useState<string>("all");
   const [tasks, setTasks] = useState<ComplianceTask[]>([]);
   const [planograms, setPlanograms] = useState<Planogram[]>([]);
   const [stores, setStores] = useState<StoreType[]>([]);
@@ -136,6 +144,18 @@ export default function ComplianceTasks() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<ComplianceTask | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  
+  // Photo submission state
+  const [submitPhotoOpen, setSubmitPhotoOpen] = useState(false);
+  const [selectedTaskForPhoto, setSelectedTaskForPhoto] = useState<ComplianceTask | null>(null);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [capturedFile, setCapturedFile] = useState<File | null>(null);
+  const [submissionNotes, setSubmissionNotes] = useState("");
+  const [location, setLocation] = useState<{ lat: number; lng: number; address: string } | null>(null);
+  const [gettingLocation, setGettingLocation] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const { toast } = useToast();
   const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
@@ -143,7 +163,7 @@ export default function ComplianceTasks() {
     resolver: zodResolver(taskSchema),
     defaultValues: {
       planogramId: "",
-      storeIds: [],
+      storeId: "",
       title: "",
       description: "",
       frequency: "one-time",
@@ -166,7 +186,7 @@ export default function ComplianceTasks() {
       .from("vm_compliance_tasks")
       .select(`
         *,
-        planogram:planograms(id, title, zone),
+        planogram:planograms(id, title, zone, image_url),
         store:stores(id, name),
         assigned_user:profiles!vm_compliance_tasks_assigned_to_user_id_fkey(id, username)
       `)
@@ -178,7 +198,7 @@ export default function ComplianceTasks() {
     
     const [tasksRes, planogramsRes, storesRes, usersRes] = await Promise.all([
       tasksQuery,
-      supabase.from("planograms").select("id, title, zone").eq("status", "active"),
+      supabase.from("planograms").select("id, title, zone, image_url").eq("status", "active"),
       supabase.from("stores").select("id, name").eq("status", "active"),
       supabase.from("profiles").select("id, username").eq("status", "active").order("username"),
     ]);
@@ -196,16 +216,11 @@ export default function ComplianceTasks() {
     setLoading(false);
   };
 
-  const storeOptions: MultiSelectOption[] = stores.map(s => ({
-    value: s.id,
-    label: s.name,
-  }));
-
   const handleOpenCreate = () => {
     setEditingTask(null);
     form.reset({
       planogramId: "",
-      storeIds: [],
+      storeId: "",
       title: "",
       description: "",
       frequency: "one-time",
@@ -219,7 +234,7 @@ export default function ComplianceTasks() {
     setEditingTask(task);
     form.reset({
       planogramId: task.planogram_id || "",
-      storeIds: task.store_id ? [task.store_id] : [],
+      storeId: task.store_id || "",
       title: task.title,
       description: task.description || "",
       frequency: task.frequency,
@@ -257,6 +272,107 @@ export default function ComplianceTasks() {
     setTaskToDelete(null);
   };
 
+  // Photo submission functions
+  const handleOpenPhotoSubmit = (task: ComplianceTask, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedTaskForPhoto(task);
+    setCapturedImage(null);
+    setCapturedFile(null);
+    setSubmissionNotes("");
+    setLocation(null);
+    setSubmitPhotoOpen(true);
+    getLocation();
+  };
+
+  const getLocation = () => {
+    setGettingLocation(true);
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          setLocation({
+            lat: latitude,
+            lng: longitude,
+            address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+          });
+          setGettingLocation(false);
+        },
+        (error) => {
+          console.error("Location error:", error);
+          setGettingLocation(false);
+        }
+      );
+    } else {
+      setGettingLocation(false);
+    }
+  };
+
+  const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCapturedFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCapturedImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handlePhotoSubmit = async () => {
+    if (!selectedTaskForPhoto || !capturedFile) {
+      toast({ title: "Error", description: "Please capture a photo", variant: "destructive" });
+      return;
+    }
+
+    setUploading(true);
+
+    // Upload image to storage
+    const fileExt = capturedFile.name.split(".").pop();
+    const fileName = `submissions/${selectedTaskForPhoto.id}/${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("vm-images")
+      .upload(fileName, capturedFile);
+
+    if (uploadError) {
+      toast({ title: "Error", description: "Failed to upload photo", variant: "destructive" });
+      setUploading(false);
+      return;
+    }
+
+    const { data: urlData } = supabase.storage.from("vm-images").getPublicUrl(fileName);
+
+    // Update task with submission data
+    const { error: updateError } = await supabase
+      .from("vm_compliance_tasks")
+      .update({
+        submitted_photo_url: urlData.publicUrl,
+        submitted_at: new Date().toISOString(),
+        submitted_latitude: location?.lat || null,
+        submitted_longitude: location?.lng || null,
+        submitted_location_address: location?.address || null,
+        submission_notes: submissionNotes || null,
+        status: "submitted",
+      })
+      .eq("id", selectedTaskForPhoto.id);
+
+    if (updateError) {
+      toast({ title: "Error", description: "Failed to submit photo", variant: "destructive" });
+      setUploading(false);
+      return;
+    }
+
+    toast({ title: "Success", description: "Photo submitted for review" });
+    setSubmitPhotoOpen(false);
+    setSelectedTaskForPhoto(null);
+    setCapturedImage(null);
+    setCapturedFile(null);
+    setSubmissionNotes("");
+    fetchData();
+    setUploading(false);
+  };
+
   if (loading || accessLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -275,7 +391,7 @@ export default function ComplianceTasks() {
         .from("vm_compliance_tasks")
         .update({
           planogram_id: data.planogramId,
-          store_id: data.storeIds[0], // For edit, only one store
+          store_id: data.storeId,
           title: data.title,
           description: data.description || null,
           frequency: data.frequency,
@@ -295,29 +411,22 @@ export default function ComplianceTasks() {
         fetchData();
       }
     } else {
-      // Create new tasks (bulk insert for multiple stores)
-      const tasksToInsert = data.storeIds.map(storeId => ({
+      // Create new task (single store)
+      const { error } = await supabase.from("vm_compliance_tasks").insert({
         planogram_id: data.planogramId,
-        store_id: storeId,
+        store_id: data.storeId,
         title: data.title,
         description: data.description || null,
         frequency: data.frequency,
         due_date: new Date(data.dueDate).toISOString(),
         assigned_to_user_id: assignedUserId,
         is_recurring: data.frequency !== "one-time",
-      }));
-
-      const { error } = await supabase.from("vm_compliance_tasks").insert(tasksToInsert);
+      });
 
       if (error) {
-        toast({ title: "Error", description: "Failed to create task(s)", variant: "destructive" });
+        toast({ title: "Error", description: "Failed to create task", variant: "destructive" });
       } else {
-        toast({ 
-          title: "Success", 
-          description: data.storeIds.length > 1 
-            ? `Created ${data.storeIds.length} compliance tasks` 
-            : "Compliance task created" 
-        });
+        toast({ title: "Success", description: "Compliance task created" });
         form.reset();
         setOpen(false);
         fetchData();
@@ -325,12 +434,17 @@ export default function ComplianceTasks() {
     }
   };
 
-  const filteredTasks = tasks.filter(
-    (task) =>
+  // Apply filters
+  const filteredTasks = tasks.filter((task) => {
+    const matchesSearch = 
       task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.store?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.planogram?.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      task.planogram?.title.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesStore = storeFilter === "all" || task.store_id === storeFilter;
+    
+    return matchesSearch && matchesStore;
+  });
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -353,7 +467,7 @@ export default function ComplianceTasks() {
             <DialogHeader className="flex-shrink-0">
               <DialogTitle>{editingTask ? "Edit Compliance Task" : "Create Compliance Task"}</DialogTitle>
               <DialogDescription>
-                {editingTask ? "Update task details." : "Create a new compliance task for one or more stores."}
+                {editingTask ? "Update task details." : "Create a new compliance task."}
               </DialogDescription>
             </DialogHeader>
             <div className="flex-1 overflow-y-auto pr-2">
@@ -396,38 +510,22 @@ export default function ComplianceTasks() {
                   />
                   <FormField
                     control={form.control}
-                    name="storeIds"
+                    name="storeId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{editingTask ? "Store" : "Store(s)"}</FormLabel>
-                        {editingTask ? (
-                          <Select 
-                            onValueChange={(val) => field.onChange([val])} 
-                            value={field.value[0] || ""}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select store" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {stores.map((s) => (
-                                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
+                        <FormLabel>Store</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
-                            <MultiSelectCombobox
-                              options={storeOptions}
-                              selected={field.value}
-                              onChange={field.onChange}
-                              placeholder="Select stores..."
-                              searchPlaceholder="Search stores..."
-                              emptyMessage="No stores found."
-                            />
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select store" />
+                            </SelectTrigger>
                           </FormControl>
-                        )}
+                          <SelectContent>
+                            {stores.map((s) => (
+                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -495,7 +593,7 @@ export default function ComplianceTasks() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="none">None</SelectItem>
+                            <SelectItem value="none">-- Unassigned --</SelectItem>
                             {users.map((u) => (
                               <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>
                             ))}
@@ -506,13 +604,12 @@ export default function ComplianceTasks() {
                     )}
                   />
                   <div className="flex justify-end gap-2 pt-4 sticky bottom-0 bg-background pb-2">
-                    <Button type="button" variant="outline" onClick={() => {
-                      setOpen(false);
-                      setEditingTask(null);
-                    }}>
+                    <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                       Cancel
                     </Button>
-                    <Button type="submit">{editingTask ? "Update Task" : "Create Task"}</Button>
+                    <Button type="submit">
+                      {editingTask ? "Save Changes" : "Create Task"}
+                    </Button>
                   </div>
                 </form>
               </Form>
@@ -521,88 +618,107 @@ export default function ComplianceTasks() {
         </Dialog>
       </div>
 
-      {/* View Toggle */}
-      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "calendar")}>
-        <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search tasks..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        
+        {/* Store Filter */}
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <Select value={storeFilter} onValueChange={setStoreFilter}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Filter by store" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Stores</SelectItem>
+              {stores.map((store) => (
+                <SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "calendar")} className="ml-auto">
           <TabsList>
             <TabsTrigger value="list" className="gap-2">
               <List className="h-4 w-4" />
-              List View
+              List
             </TabsTrigger>
             <TabsTrigger value="calendar" className="gap-2">
               <Calendar className="h-4 w-4" />
-              Calendar View
+              Calendar
             </TabsTrigger>
           </TabsList>
-          
-          {viewMode === "list" && (
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search tasks..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-          )}
-        </div>
+        </Tabs>
+      </div>
 
-        <TabsContent value="list" className="mt-4 space-y-4">
-          <div className="rounded-xl border bg-card overflow-x-auto">
-            <Table>
-              <TableHeader>
+      {viewMode === "list" ? (
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Task</TableHead>
+                <TableHead>Store</TableHead>
+                <TableHead>Planogram</TableHead>
+                <TableHead>Due Date</TableHead>
+                <TableHead>Frequency</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-[120px]">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredTasks.length === 0 ? (
                 <TableRow>
-                  <TableHead>Task</TableHead>
-                  <TableHead>Planogram</TableHead>
-                  <TableHead>Store</TableHead>
-                  <TableHead>Frequency</TableHead>
-                  <TableHead>Due Date</TableHead>
-                  <TableHead>Assigned To</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-10"></TableHead>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <ClipboardCheck className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No compliance tasks found</p>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredTasks.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      No compliance tasks found
+              ) : (
+                filteredTasks.map((task) => (
+                  <TableRow 
+                    key={task.id} 
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => handleRowClick(task)}
+                  >
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{task.title}</p>
+                        {task.assigned_user && (
+                          <p className="text-sm text-muted-foreground">
+                            Assigned to: {task.assigned_user.username}
+                          </p>
+                        )}
+                      </div>
                     </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredTasks.map((task) => (
-                    <TableRow 
-                      key={task.id} 
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => handleRowClick(task)}
-                    >
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          {task.title}
-                          {task.is_recurring && (
-                            <Badge variant="outline" className="text-xs">Recurring</Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{task.planogram?.title || "-"}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Store className="h-4 w-4 text-muted-foreground" />
-                          {task.store?.name || "-"}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{task.frequency}</Badge>
-                      </TableCell>
-                      <TableCell>{new Date(task.due_date).toLocaleDateString()}</TableCell>
-                      <TableCell>{task.assigned_user?.username || task.assigned_to || "-"}</TableCell>
-                      <TableCell>
-                        <Badge className={statusColors[task.status] || statusColors.pending}>
-                          {task.status.replace("_", " ")}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
+                    <TableCell>{task.store?.name || "-"}</TableCell>
+                    <TableCell>{task.planogram?.title || "-"}</TableCell>
+                    <TableCell>{new Date(task.due_date).toLocaleDateString()}</TableCell>
+                    <TableCell className="capitalize">{task.frequency}</TableCell>
+                    <TableCell>
+                      <Badge className={statusColors[task.status] || ""}>
+                        {task.status.replace("_", " ")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        {(task.status === "pending" || task.status === "correction_required") && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={(e) => handleOpenPhotoSubmit(task, e)}
+                            title="Submit Photo"
+                          >
+                            <Camera className="h-4 w-4" />
+                          </Button>
+                        )}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                             <Button variant="ghost" size="icon">
@@ -610,10 +726,7 @@ export default function ComplianceTasks() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={(e) => {
-                              e.stopPropagation();
-                              handleEdit(task);
-                            }}>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEdit(task); }}>
                               <Pencil className="h-4 w-4 mr-2" />
                               Edit
                             </DropdownMenuItem>
@@ -626,22 +739,20 @@ export default function ComplianceTasks() {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="calendar" className="mt-4">
-          <ComplianceCalendarView 
-            tasks={tasks} 
-            onTaskClick={handleEdit} 
-          />
-        </TabsContent>
-      </Tabs>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      ) : (
+        <ComplianceCalendarView 
+          tasks={filteredTasks} 
+          onTaskClick={handleEdit}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -654,12 +765,138 @@ export default function ComplianceTasks() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction 
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Photo Submission Dialog */}
+      <Dialog open={submitPhotoOpen} onOpenChange={setSubmitPhotoOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle>Submit Compliance Photo</DialogTitle>
+            <DialogDescription>
+              Capture and upload a photo for: {selectedTaskForPhoto?.title}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto pr-2">
+            <div className="space-y-4 pb-4">
+              {/* Task Info */}
+              {selectedTaskForPhoto && (
+                <div className="p-3 rounded-lg bg-muted">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium">{selectedTaskForPhoto.title}</span>
+                    <Badge>{selectedTaskForPhoto.store?.name}</Badge>
+                  </div>
+                  {selectedTaskForPhoto.description && (
+                    <p className="text-sm text-muted-foreground">{selectedTaskForPhoto.description}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Reference Planogram */}
+              {selectedTaskForPhoto?.planogram && (
+                <div>
+                  <Label className="mb-2 block">Reference Planogram</Label>
+                  <div className="rounded-lg overflow-hidden border">
+                    <img
+                      src={selectedTaskForPhoto.planogram.image_url}
+                      alt="Planogram"
+                      className="w-full h-48 object-cover"
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">{selectedTaskForPhoto.planogram.title}</p>
+                </div>
+              )}
+
+              {/* Photo Capture */}
+              <div>
+                <Label className="mb-2 block">Capture Photo</Label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleCapture}
+                  className="hidden"
+                />
+
+                {capturedImage ? (
+                  <div className="space-y-2">
+                    <div className="rounded-lg overflow-hidden border">
+                      <img src={capturedImage} alt="Captured" className="w-full h-48 object-cover" />
+                    </div>
+                    <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="w-full">
+                      <Camera className="h-4 w-4 mr-2" />
+                      Retake Photo
+                    </Button>
+                  </div>
+                ) : (
+                  <Button onClick={() => fileInputRef.current?.click()} className="w-full h-32" variant="outline">
+                    <div className="flex flex-col items-center gap-2">
+                      <Camera className="h-8 w-8" />
+                      <span>Capture Photo</span>
+                    </div>
+                  </Button>
+                )}
+              </div>
+
+              {/* Location Info */}
+              <div className="p-3 rounded-lg bg-muted">
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  {gettingLocation ? (
+                    <span className="text-sm text-muted-foreground">Getting location...</span>
+                  ) : location ? (
+                    <span className="text-sm">{location.address}</span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">Location not available</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">{new Date().toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <Label>Notes (Optional)</Label>
+                <Textarea
+                  placeholder="Add any notes about the display..."
+                  value={submissionNotes}
+                  onChange={(e) => setSubmissionNotes(e.target.value)}
+                  className="mt-2"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 sticky bottom-0 bg-background pb-2">
+                <Button type="button" variant="outline" onClick={() => setSubmitPhotoOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handlePhotoSubmit} disabled={!capturedFile || uploading}>
+                  {uploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Submit for Review
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

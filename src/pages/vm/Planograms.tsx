@@ -417,6 +417,17 @@ export default function Planograms() {
         });
       }
 
+      // Auto-generate compliance tasks from planogram schedule
+      if (data.frequency !== "one-time" && data.applicableUpto) {
+        try {
+          await supabase.functions.invoke("generate-compliance-tasks", {
+            body: { planogramId: newPlanogram.id },
+          });
+        } catch (e) {
+          console.error("Failed to generate compliance tasks:", e);
+        }
+      }
+
       toast({ 
         title: "Success", 
         description: cloneMode ? "Planogram cloned successfully" : "Planogram created successfully" 
