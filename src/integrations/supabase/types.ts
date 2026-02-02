@@ -4007,6 +4007,53 @@ export type Database = {
         }
         Relationships: []
       }
+      rental_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          due_date: string
+          id: string
+          month_year: string
+          notes: string | null
+          paid_date: string | null
+          rental_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          due_date: string
+          id?: string
+          month_year: string
+          notes?: string | null
+          paid_date?: string | null
+          rental_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          due_date?: string
+          id?: string
+          month_year?: string
+          notes?: string | null
+          paid_date?: string | null
+          rental_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_payments_rental_id_fkey"
+            columns: ["rental_id"]
+            isOneToOne: false
+            referencedRelation: "rentals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rentals: {
         Row: {
           created_at: string
