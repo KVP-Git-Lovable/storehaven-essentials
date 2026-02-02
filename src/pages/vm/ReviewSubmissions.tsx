@@ -17,29 +17,29 @@ import { ImageComparisonSlider } from "@/components/vm/ImageComparisonSlider";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
-type Submission = {
+type SubmittedTask = {
   id: string;
-  image_url: string;
-  latitude: number | null;
-  longitude: number | null;
-  location_address: string | null;
-  captured_at: string;
-  submitted_by: string;
-  notes: string | null;
-  task: {
-    id: string;
-    title: string;
-    status: string;
-    planogram: { id: string; title: string; image_url: string } | null;
-    store: { id: string; name: string } | null;
-  } | null;
+  title: string;
+  description: string | null;
+  status: string;
+  due_date: string;
+  frequency: string;
+  submitted_photo_url: string | null;
+  submitted_at: string | null;
+  submitted_latitude: number | null;
+  submitted_longitude: number | null;
+  submitted_location_address: string | null;
+  submission_notes: string | null;
+  planogram: { id: string; title: string; image_url: string } | null;
+  store: { id: string; name: string } | null;
+  assigned_user: { id: string; username: string } | null;
 };
 
 export default function ReviewSubmissions() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [tasks, setTasks] = useState<SubmittedTask[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
+  const [selectedTask, setSelectedTask] = useState<SubmittedTask | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState("");
@@ -48,38 +48,32 @@ export default function ReviewSubmissions() {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchSubmissions();
+    fetchSubmittedTasks();
   }, []);
 
-  const fetchSubmissions = async () => {
+  const fetchSubmittedTasks = async () => {
     const { data, error } = await supabase
-      .from("vm_photo_submissions")
+      .from("vm_compliance_tasks")
       .select(`
         *,
-        task:vm_compliance_tasks(
-          id,
-          title,
-          status,
-          planogram:planograms(id, title, image_url),
-          store:stores(id, name)
-        )
+        planogram:planograms(id, title, image_url),
+        store:stores(id, name),
+        assigned_user:profiles!vm_compliance_tasks_assigned_to_user_id_fkey(id, username)
       `)
-      .order("created_at", { ascending: false });
+      .eq("status", "submitted")
+      .not("submitted_photo_url", "is", null)
+      .order("submitted_at", { ascending: false });
 
     if (error) {
       toast({ title: "Error", description: "Failed to load submissions", variant: "destructive" });
     } else {
-      // Filter to only show submitted tasks (not yet reviewed)
-      const pendingSubmissions = (data as Submission[] || []).filter(
-        (s) => s.task?.status === "submitted"
-      );
-      setSubmissions(pendingSubmissions);
+      setTasks(data as SubmittedTask[] || []);
     }
     setLoading(false);
   };
 
-  const handleReview = (submission: Submission) => {
-    setSelectedSubmission(submission);
+  const handleReview = (task: SubmittedTask) => {
+    setSelectedTask(task);
     setRating(0);
     setFeedback("");
     setReviewOpen(true);
@@ -103,68 +97,39 @@ export default function ReviewSubmissions() {
   };
 
   const submitReview = async (status: "approved" | "rejected" | "correction_required") => {
-    if (!selectedSubmission || rating === 0) {
+    if (!selectedTask || rating === 0) {
       toast({ title: "Error", description: "Please provide a rating", variant: "destructive" });
       return;
     }
 
     setSubmitting(true);
 
-    // Create review record
-    const { error: reviewError } = await supabase.from("vm_reviews").insert({
-      submission_id: selectedSubmission.id,
-      task_id: selectedSubmission.task?.id,
-      rating,
-      status,
-      feedback: feedback || null,
-    });
+    // Update task status
+    const { error: updateError } = await supabase
+      .from("vm_compliance_tasks")
+      .update({ status })
+      .eq("id", selectedTask.id);
 
-    if (reviewError) {
+    if (updateError) {
       toast({ title: "Error", description: "Failed to submit review", variant: "destructive" });
       setSubmitting(false);
       return;
     }
 
-    // Update task status
-    await supabase
-      .from("vm_compliance_tasks")
-      .update({ status })
-      .eq("id", selectedSubmission.task?.id);
-
-    // Create correction task if needed
-    if (status === "correction_required" && selectedSubmission.task) {
-      await supabase.from("vm_correction_tasks").insert({
-        review_id: selectedSubmission.id,
-        original_task_id: selectedSubmission.task.id,
-        description: feedback || "Please correct the display as per feedback",
-        due_date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-      });
-    }
-
     // Auto-generate next recurring task if approved and is a recurring task
-    if (status === "approved" && selectedSubmission.task) {
-      // Fetch full task details to check frequency
-      const { data: taskData } = await supabase
-        .from("vm_compliance_tasks")
-        .select("*")
-        .eq("id", selectedSubmission.task.id)
-        .single();
-
-      if (taskData && taskData.frequency !== "one-time") {
-        const nextDueDate = calculateNextDueDate(taskData.due_date, taskData.frequency);
-        await supabase.from("vm_compliance_tasks").insert({
-          planogram_id: taskData.planogram_id,
-          store_id: taskData.store_id,
-          title: taskData.title,
-          description: taskData.description,
-          frequency: taskData.frequency,
-          due_date: nextDueDate.toISOString(),
-          assigned_to_user_id: taskData.assigned_to_user_id,
-          parent_task_id: taskData.id,
-          is_recurring: true,
-          status: "pending",
-        });
-      }
+    if (status === "approved" && selectedTask.frequency !== "one-time") {
+      const nextDueDate = calculateNextDueDate(selectedTask.due_date, selectedTask.frequency);
+      await supabase.from("vm_compliance_tasks").insert({
+        planogram_id: selectedTask.planogram?.id,
+        store_id: selectedTask.store?.id,
+        title: selectedTask.title,
+        description: selectedTask.description,
+        frequency: selectedTask.frequency,
+        due_date: nextDueDate.toISOString(),
+        parent_task_id: selectedTask.id,
+        is_recurring: true,
+        status: "pending",
+      });
     }
 
     toast({ 
@@ -172,14 +137,14 @@ export default function ReviewSubmissions() {
       description: status === "approved" ? "Submission approved!" : "Feedback sent to store" 
     });
     setReviewOpen(false);
-    fetchSubmissions();
+    fetchSubmittedTasks();
     setSubmitting(false);
   };
 
-  const filteredSubmissions = submissions.filter(
-    (s) =>
-      s.task?.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.task?.store?.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredTasks = tasks.filter(
+    (t) =>
+      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.store?.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (loading) {
@@ -209,7 +174,7 @@ export default function ReviewSubmissions() {
         </div>
       </div>
 
-      {filteredSubmissions.length === 0 ? (
+      {filteredTasks.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <CheckCircle className="h-12 w-12 mb-4 text-green-500" />
@@ -219,32 +184,34 @@ export default function ReviewSubmissions() {
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredSubmissions.map((submission) => (
-            <Card key={submission.id} className="overflow-hidden">
+          {filteredTasks.map((task) => (
+            <Card key={task.id} className="overflow-hidden">
               <div className="aspect-video relative">
                 <img
-                  src={submission.image_url}
+                  src={task.submitted_photo_url || ""}
                   alt="Submission"
                   className="w-full h-full object-cover"
                 />
                 <Badge className="absolute top-2 right-2 bg-blue-500">Pending Review</Badge>
               </div>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">{submission.task?.title}</CardTitle>
-                <CardDescription>{submission.task?.store?.name}</CardDescription>
+                <CardTitle className="text-base">{task.title}</CardTitle>
+                <CardDescription>{task.store?.name}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                  <span>{new Date(submission.captured_at).toLocaleString()}</span>
-                </div>
-                {submission.location_address && (
+                {task.submitted_at && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <MapPin className="h-4 w-4" />
-                    <span className="truncate">{submission.location_address}</span>
+                    <Clock className="h-4 w-4" />
+                    <span>{new Date(task.submitted_at).toLocaleString()}</span>
                   </div>
                 )}
-                <Button onClick={() => handleReview(submission)} className="w-full mt-2">
+                {task.submitted_location_address && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <MapPin className="h-4 w-4" />
+                    <span className="truncate">{task.submitted_location_address}</span>
+                  </div>
+                )}
+                <Button onClick={() => handleReview(task)} className="w-full mt-2">
                   Review Submission
                 </Button>
               </CardContent>
@@ -260,7 +227,7 @@ export default function ReviewSubmissions() {
             <DialogTitle>Review Compliance Photo</DialogTitle>
           </DialogHeader>
 
-          {selectedSubmission && selectedSubmission.task?.planogram && (
+          {selectedTask && selectedTask.planogram && selectedTask.submitted_photo_url && (
             <div className="space-y-4">
               <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "slider" | "side-by-side")}>
                 <TabsList>
@@ -270,8 +237,8 @@ export default function ReviewSubmissions() {
 
                 <TabsContent value="slider" className="mt-4">
                   <ImageComparisonSlider
-                    baseImage={selectedSubmission.task.planogram.image_url}
-                    actualImage={selectedSubmission.image_url}
+                    baseImage={selectedTask.planogram.image_url}
+                    actualImage={selectedTask.submitted_photo_url}
                   />
                 </TabsContent>
 
@@ -281,18 +248,18 @@ export default function ReviewSubmissions() {
                       <Label className="mb-2 block">Planogram (Base)</Label>
                       <div className="rounded-lg overflow-hidden border">
                         <img
-                          src={selectedSubmission.task.planogram.image_url}
+                          src={selectedTask.planogram.image_url}
                           alt="Planogram"
                           className="w-full h-48 object-cover"
                         />
                       </div>
                     </div>
                     <div>
-                      <Label className="mb-2 block">Actual Photo</Label>
+                      <Label className="mb-2 block">Submitted Photo</Label>
                       <div className="rounded-lg overflow-hidden border">
                         <img
-                          src={selectedSubmission.image_url}
-                          alt="Actual"
+                          src={selectedTask.submitted_photo_url}
+                          alt="Submitted"
                           className="w-full h-48 object-cover"
                         />
                       </div>
@@ -306,27 +273,29 @@ export default function ReviewSubmissions() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-muted-foreground">Store:</span>
-                    <span className="ml-2 font-medium">{selectedSubmission.task.store?.name}</span>
+                    <span className="ml-2 font-medium">{selectedTask.store?.name}</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Submitted by:</span>
-                    <span className="ml-2 font-medium">{selectedSubmission.submitted_by}</span>
+                    <span className="text-muted-foreground">Assigned to:</span>
+                    <span className="ml-2 font-medium">{selectedTask.assigned_user?.username || "Unassigned"}</span>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Captured:</span>
-                    <span className="ml-2">{new Date(selectedSubmission.captured_at).toLocaleString()}</span>
-                  </div>
-                  {selectedSubmission.location_address && (
+                  {selectedTask.submitted_at && (
+                    <div>
+                      <span className="text-muted-foreground">Submitted:</span>
+                      <span className="ml-2">{new Date(selectedTask.submitted_at).toLocaleString()}</span>
+                    </div>
+                  )}
+                  {selectedTask.submitted_location_address && (
                     <div>
                       <span className="text-muted-foreground">Location:</span>
-                      <span className="ml-2">{selectedSubmission.location_address}</span>
+                      <span className="ml-2">{selectedTask.submitted_location_address}</span>
                     </div>
                   )}
                 </div>
-                {selectedSubmission.notes && (
+                {selectedTask.submission_notes && (
                   <div className="mt-2 pt-2 border-t">
                     <span className="text-muted-foreground">Notes:</span>
-                    <p className="mt-1">{selectedSubmission.notes}</p>
+                    <p className="mt-1">{selectedTask.submission_notes}</p>
                   </div>
                 )}
               </div>
