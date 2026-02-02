@@ -105,20 +105,51 @@ export default function Rentals() {
     setLoading(false);
   };
 
+  const generateMonthlyPayments = async (rentalId: string, rent: number, startDate: string, endDate: string) => {
+    const payments = [];
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    // Set to first of each month
+    const current = new Date(start.getFullYear(), start.getMonth(), 1);
+    
+    while (current <= end) {
+      const monthYear = new Date(current);
+      const dueDate = new Date(current.getFullYear(), current.getMonth(), 5); // Due on 5th of each month
+      
+      payments.push({
+        rental_id: rentalId,
+        month_year: monthYear.toISOString().split('T')[0],
+        amount: rent,
+        due_date: dueDate.toISOString().split('T')[0],
+        status: dueDate < new Date() ? 'overdue' : 'unpaid',
+      });
+      
+      current.setMonth(current.getMonth() + 1);
+    }
+    
+    if (payments.length > 0) {
+      await supabase.from("rental_payments").insert(payments);
+    }
+  };
+
   const onSubmit = async (data: RentalFormData) => {
-    const { error } = await supabase.from("rentals").insert({
+    const { data: rental, error } = await supabase.from("rentals").insert({
       store: data.store,
       landlord: data.landlord,
       rent: data.rent,
       start_date: data.startDate,
       end_date: data.endDate,
       status: "active",
-    });
+    }).select().single();
 
     if (error) {
       toast({ title: "Error", description: "Failed to add lease", variant: "destructive" });
     } else {
-      toast({ title: "Lease added", description: `Lease for ${data.store} has been recorded.` });
+      // Generate monthly payment entries
+      await generateMonthlyPayments(rental.id, data.rent, data.startDate, data.endDate);
+      
+      toast({ title: "Lease added", description: `Lease for ${data.store} has been recorded with ${Math.ceil((new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / (1000 * 60 * 60 * 24 * 30))} monthly payments.` });
       form.reset();
       setOpen(false);
       fetchData();
