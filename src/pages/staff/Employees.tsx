@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Plus, Search, Users, UserCheck, UserX, Loader2 } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Plus, Search, Users, UserCheck, UserX, Loader2, CalendarPlus } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -54,19 +54,34 @@ type Employee = {
   status: string;
 };
 
-const stats = [
-  { title: "Total Employees", value: "156", icon: Users, iconColor: "bg-primary/10 text-primary" },
-  { title: "Active Today", value: "142", icon: UserCheck, iconColor: "bg-success/10 text-success" },
-  { title: "On Leave", value: "8", icon: UserX, iconColor: "bg-warning/10 text-warning" },
-  { title: "New This Month", value: "5", icon: Users, iconColor: "bg-info/10 text-info" },
-];
-
 export default function Employees() {
   const [searchQuery, setSearchQuery] = useState("");
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
+
+  // Calculate stats from live employee data
+  const stats = useMemo(() => {
+    const total = employees.length;
+    const active = employees.filter(e => e.status === "active").length;
+    const onLeave = employees.filter(e => e.status === "on_leave").length;
+    
+    // New this month: employees whose join_date is in the current month
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const newThisMonth = employees.filter(e => {
+      const joinDate = new Date(e.join_date);
+      return joinDate >= startOfMonth;
+    }).length;
+
+    return [
+      { title: "Total Employees", value: total.toString(), icon: Users, iconColor: "bg-primary/10 text-primary" },
+      { title: "Active Today", value: active.toString(), icon: UserCheck, iconColor: "bg-success/10 text-success" },
+      { title: "On Leave", value: onLeave.toString(), icon: UserX, iconColor: "bg-warning/10 text-warning" },
+      { title: "New This Month", value: newThisMonth.toString(), icon: CalendarPlus, iconColor: "bg-info/10 text-info" },
+    ];
+  }, [employees]);
 
   const form = useForm<EmployeeFormData>({
     resolver: zodResolver(employeeSchema),
