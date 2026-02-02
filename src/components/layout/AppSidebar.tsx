@@ -85,16 +85,10 @@ const navigation: NavItem[] = [
       { title: "Store Budget", href: "/stores/budget", moduleKey: "stores.budget" },
       { title: "Store Maintenance Tasks", href: "/operations/adherence", moduleKey: "operations.adherence" },
       { title: "Store Heatmap", href: "/operations/heatmap", moduleKey: "operations.heatmap" },
-      { 
-        title: "Visual Merchandising", 
-        isSubSection: true,
-        subChildren: [
-          { title: "Planograms", href: "/vm/planograms", moduleKey: "vm.planograms" },
-          { title: "Compliance Tasks", href: "/vm/tasks", moduleKey: "vm.tasks" },
-          { title: "Submit Photo", href: "/vm/submit", moduleKey: "vm.submit" },
-          { title: "Review Submissions", href: "/vm/review", moduleKey: "vm.review" },
-        ]
-      },
+      { title: "Planograms", href: "/vm/planograms", moduleKey: "vm.planograms" },
+      { title: "Compliance Tasks", href: "/vm/tasks", moduleKey: "vm.tasks" },
+      { title: "Submit Photo", href: "/vm/submit", moduleKey: "vm.submit" },
+      { title: "Review Submissions", href: "/vm/review", moduleKey: "vm.review" },
       { title: "Footfall", href: "/footfall", moduleKey: "footfall" },
       { title: "Petty Cash", href: "/petty-cash", moduleKey: "pettycash" },
       { title: "Store Targets", href: "/stores/targets", moduleKey: "stores.all" },
@@ -324,11 +318,9 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
               ) : collapsed ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button
-                      onClick={() => {
-                        if (onCollapsedChange) onCollapsedChange(false);
-                        toggleMenu(item.title);
-                      }}
+                    <NavLink
+                      to={item.children?.[0]?.href || item.children?.[0]?.subChildren?.[0]?.href || "/"}
+                      onClick={handleNavClick}
                       className={cn(
                         "flex w-full items-center justify-center rounded-lg p-2.5 transition-colors",
                         isChildActive(item.children)
@@ -337,7 +329,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                       )}
                     >
                       <item.icon className="h-5 w-5" />
-                    </button>
+                    </NavLink>
                   </TooltipTrigger>
                   <TooltipContent side="right">{item.title}</TooltipContent>
                 </Tooltip>
