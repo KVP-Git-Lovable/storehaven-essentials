@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, ClipboardCheck, Loader2, Clock, CheckCircle, AlertCircle, Store, MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Plus, Search, ClipboardCheck, Loader2, Clock, CheckCircle, AlertCircle, Store, MoreHorizontal, Pencil, Trash, Calendar, List } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { StatCard } from "@/components/dashboard/StatCard";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -26,6 +26,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -58,6 +59,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { MultiSelectCombobox, MultiSelectOption } from "@/components/ui/multi-select-combobox";
+import { ComplianceCalendarView } from "@/components/vm/ComplianceCalendarView";
 
 const taskSchema = z.object({
   planogramId: z.string().min(1, "Planogram is required"),
@@ -119,6 +121,7 @@ const statusColors: Record<string, string> = {
   approved: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
   rejected: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
   correction_required: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
+  expired: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300",
 };
 
 export default function ComplianceTasks() {
@@ -132,6 +135,7 @@ export default function ComplianceTasks() {
   const [editingTask, setEditingTask] = useState<ComplianceTask | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<ComplianceTask | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   const { toast } = useToast();
   const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
@@ -191,33 +195,6 @@ export default function ComplianceTasks() {
     setUsers(usersRes.data || []);
     setLoading(false);
   };
-
-  const stats = [
-    { 
-      title: "Total Tasks", 
-      value: tasks.length.toString(), 
-      icon: ClipboardCheck, 
-      iconColor: "bg-primary/10 text-primary" 
-    },
-    { 
-      title: "Pending", 
-      value: tasks.filter((t) => t.status === "pending").length.toString(), 
-      icon: Clock, 
-      iconColor: "bg-yellow-500/10 text-yellow-600" 
-    },
-    { 
-      title: "Approved", 
-      value: tasks.filter((t) => t.status === "approved").length.toString(), 
-      icon: CheckCircle, 
-      iconColor: "bg-green-500/10 text-green-600" 
-    },
-    { 
-      title: "Needs Correction", 
-      value: tasks.filter((t) => t.status === "correction_required" || t.status === "rejected").length.toString(), 
-      icon: AlertCircle, 
-      iconColor: "bg-red-500/10 text-red-600" 
-    },
-  ];
 
   const storeOptions: MultiSelectOption[] = stores.map(s => ({
     value: s.id,
@@ -289,6 +266,9 @@ export default function ComplianceTasks() {
   }
 
   const onSubmit = async (data: TaskFormData) => {
+    // Handle "none" value for user assignment
+    const assignedUserId = data.assignedToUserId === "none" ? null : data.assignedToUserId || null;
+
     if (editingTask) {
       // Update existing task
       const { error } = await supabase
@@ -300,7 +280,7 @@ export default function ComplianceTasks() {
           description: data.description || null,
           frequency: data.frequency,
           due_date: new Date(data.dueDate).toISOString(),
-          assigned_to_user_id: data.assignedToUserId || null,
+          assigned_to_user_id: assignedUserId,
           is_recurring: data.frequency !== "one-time",
         })
         .eq("id", editingTask.id);
@@ -323,7 +303,7 @@ export default function ComplianceTasks() {
         description: data.description || null,
         frequency: data.frequency,
         due_date: new Date(data.dueDate).toISOString(),
-        assigned_to_user_id: data.assignedToUserId || null,
+        assigned_to_user_id: assignedUserId,
         is_recurring: data.frequency !== "one-time",
       }));
 
@@ -369,114 +349,44 @@ export default function ComplianceTasks() {
               Create Task
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
+          <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogHeader className="flex-shrink-0">
               <DialogTitle>{editingTask ? "Edit Compliance Task" : "Create Compliance Task"}</DialogTitle>
+              <DialogDescription>
+                {editingTask ? "Update task details." : "Create a new compliance task for one or more stores."}
+              </DialogDescription>
             </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="title"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Task Title</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g. Update Spring Collection Display" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="planogramId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Planogram</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select planogram" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {planograms.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="storeIds"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{editingTask ? "Store" : "Store(s)"}</FormLabel>
-                      {editingTask ? (
-                        <Select 
-                          onValueChange={(val) => field.onChange([val])} 
-                          value={field.value[0] || ""}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select store" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {stores.map((s) => (
-                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <FormControl>
-                          <MultiSelectCombobox
-                            options={storeOptions}
-                            selected={field.value}
-                            onChange={field.onChange}
-                            placeholder="Select stores..."
-                            searchPlaceholder="Search stores..."
-                            emptyMessage="No stores found."
-                          />
-                        </FormControl>
-                      )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="Task instructions..." {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-2 gap-4">
+            <div className="flex-1 overflow-y-auto pr-2">
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pb-4">
                   <FormField
                     control={form.control}
-                    name="frequency"
+                    name="title"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Frequency</FormLabel>
+                        <FormLabel>Task Title</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. Update Spring Collection Display" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="planogramId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Planogram</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Select frequency" />
+                              <SelectValue placeholder="Select planogram" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {frequencyOptions.map((f) => (
-                              <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                            {planograms.map((p) => (
+                              <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -486,149 +396,252 @@ export default function ComplianceTasks() {
                   />
                   <FormField
                     control={form.control}
-                    name="dueDate"
+                    name="storeIds"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Due Date</FormLabel>
+                        <FormLabel>{editingTask ? "Store" : "Store(s)"}</FormLabel>
+                        {editingTask ? (
+                          <Select 
+                            onValueChange={(val) => field.onChange([val])} 
+                            value={field.value[0] || ""}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select store" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {stores.map((s) => (
+                                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <FormControl>
+                            <MultiSelectCombobox
+                              options={storeOptions}
+                              selected={field.value}
+                              onChange={field.onChange}
+                              placeholder="Select stores..."
+                              searchPlaceholder="Search stores..."
+                              emptyMessage="No stores found."
+                            />
+                          </FormControl>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description</FormLabel>
                         <FormControl>
-                          <Input type="datetime-local" {...field} />
+                          <Textarea placeholder="Task instructions..." {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                </div>
-                <FormField
-                  control={form.control}
-                  name="assignedToUserId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Assigned To (Optional)</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select user" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="none">None</SelectItem>
-                          {users.map((u) => (
-                            <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="outline" onClick={() => {
-                    setOpen(false);
-                    setEditingTask(null);
-                  }}>
-                    Cancel
-                  </Button>
-                  <Button type="submit">{editingTask ? "Update Task" : "Create Task"}</Button>
-                </div>
-              </form>
-            </Form>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="frequency"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Frequency</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select frequency" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {frequencyOptions.map((f) => (
+                                <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="dueDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Due Date & Time</FormLabel>
+                          <FormControl>
+                            <Input type="datetime-local" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name="assignedToUserId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Assigned To (Optional)</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select user" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
+                            {users.map((u) => (
+                              <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="flex justify-end gap-2 pt-4 sticky bottom-0 bg-background pb-2">
+                    <Button type="button" variant="outline" onClick={() => {
+                      setOpen(false);
+                      setEditingTask(null);
+                    }}>
+                      Cancel
+                    </Button>
+                    <Button type="submit">{editingTask ? "Update Task" : "Create Task"}</Button>
+                  </div>
+                </form>
+              </Form>
+            </div>
           </DialogContent>
         </Dialog>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <StatCard key={stat.title} {...stat} />
-        ))}
-      </div>
-
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search tasks..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
+      {/* View Toggle */}
+      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "calendar")}>
+        <div className="flex items-center justify-between gap-4">
+          <TabsList>
+            <TabsTrigger value="list" className="gap-2">
+              <List className="h-4 w-4" />
+              List View
+            </TabsTrigger>
+            <TabsTrigger value="calendar" className="gap-2">
+              <Calendar className="h-4 w-4" />
+              Calendar View
+            </TabsTrigger>
+          </TabsList>
+          
+          {viewMode === "list" && (
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search tasks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          )}
         </div>
-      </div>
 
-      <div className="rounded-xl border bg-card overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Task</TableHead>
-              <TableHead>Planogram</TableHead>
-              <TableHead>Store</TableHead>
-              <TableHead>Frequency</TableHead>
-              <TableHead>Due Date</TableHead>
-              <TableHead>Assigned To</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-10"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredTasks.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                  No compliance tasks found
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredTasks.map((task) => (
-                <TableRow 
-                  key={task.id} 
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => handleRowClick(task)}
-                >
-                  <TableCell className="font-medium">{task.title}</TableCell>
-                  <TableCell>{task.planogram?.title || "-"}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Store className="h-4 w-4 text-muted-foreground" />
-                      {task.store?.name || "-"}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{task.frequency}</Badge>
-                  </TableCell>
-                  <TableCell>{new Date(task.due_date).toLocaleDateString()}</TableCell>
-                  <TableCell>{task.assigned_user?.username || task.assigned_to || "-"}</TableCell>
-                  <TableCell>
-                    <Badge className={statusColors[task.status]}>{task.status.replace("_", " ")}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={(e) => {
-                          e.stopPropagation();
-                          handleEdit(task);
-                        }}>
-                          <Pencil className="h-4 w-4 mr-2" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={(e) => handleDeleteClick(task, e)}
-                          className="text-destructive"
-                        >
-                          <Trash className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+        <TabsContent value="list" className="mt-4 space-y-4">
+          <div className="rounded-xl border bg-card overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Task</TableHead>
+                  <TableHead>Planogram</TableHead>
+                  <TableHead>Store</TableHead>
+                  <TableHead>Frequency</TableHead>
+                  <TableHead>Due Date</TableHead>
+                  <TableHead>Assigned To</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-10"></TableHead>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              </TableHeader>
+              <TableBody>
+                {filteredTasks.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      No compliance tasks found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredTasks.map((task) => (
+                    <TableRow 
+                      key={task.id} 
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleRowClick(task)}
+                    >
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {task.title}
+                          {task.is_recurring && (
+                            <Badge variant="outline" className="text-xs">Recurring</Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>{task.planogram?.title || "-"}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Store className="h-4 w-4 text-muted-foreground" />
+                          {task.store?.name || "-"}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{task.frequency}</Badge>
+                      </TableCell>
+                      <TableCell>{new Date(task.due_date).toLocaleDateString()}</TableCell>
+                      <TableCell>{task.assigned_user?.username || task.assigned_to || "-"}</TableCell>
+                      <TableCell>
+                        <Badge className={statusColors[task.status] || statusColors.pending}>
+                          {task.status.replace("_", " ")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              handleEdit(task);
+                            }}>
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={(e) => handleDeleteClick(task, e)}
+                              className="text-destructive"
+                            >
+                              <Trash className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="calendar" className="mt-4">
+          <ComplianceCalendarView 
+            tasks={tasks} 
+            onTaskClick={handleEdit} 
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
