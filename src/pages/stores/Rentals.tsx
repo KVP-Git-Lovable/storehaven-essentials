@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Plus, Building2, Calendar, IndianRupee, AlertCircle, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -55,11 +56,20 @@ const stats = [
 ];
 
 export default function Rentals() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [leases, setLeases] = useState<Rental[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
+
+  // Auto-open dialog when action=add is in URL
+  useEffect(() => {
+    if (searchParams.get("action") === "add") {
+      setOpen(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const form = useForm<RentalFormData>({
     resolver: zodResolver(rentalSchema),
