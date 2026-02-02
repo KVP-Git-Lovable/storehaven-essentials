@@ -3526,6 +3526,7 @@ export type Database = {
           schedule_date: string | null
           schedule_day_of_month: number | null
           schedule_day_of_week: number | null
+          schedule_days_of_week: number[] | null
           schedule_time: string | null
           schedule_week_of_month: number | null
           status: string
@@ -3545,6 +3546,7 @@ export type Database = {
           schedule_date?: string | null
           schedule_day_of_month?: number | null
           schedule_day_of_week?: number | null
+          schedule_days_of_week?: number[] | null
           schedule_time?: string | null
           schedule_week_of_month?: number | null
           status?: string
@@ -3564,6 +3566,7 @@ export type Database = {
           schedule_date?: string | null
           schedule_day_of_month?: number | null
           schedule_day_of_week?: number | null
+          schedule_days_of_week?: number[] | null
           schedule_time?: string | null
           schedule_week_of_month?: number | null
           status?: string
