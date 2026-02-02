@@ -83,17 +83,8 @@ const navigation: NavItem[] = [
       { title: "All Stores", href: "/stores", moduleKey: "stores.all" },
       { title: "Rentals & Leases", href: "/stores/rentals", moduleKey: "stores.rentals" },
       { title: "Store Budget", href: "/stores/budget", moduleKey: "stores.budget" },
-      { 
-        title: "Store Operations", 
-        isSubSection: true,
-        subChildren: [
-          { title: "Task Master", href: "/operations/tasks", moduleKey: "operations.tasks" },
-          { title: "Role Master", href: "/operations/roles", moduleKey: "operations.roles" },
-          { title: "Task Templates", href: "/operations/templates", moduleKey: "operations.templates" },
-          { title: "Task Adherence", href: "/operations/adherence", moduleKey: "operations.adherence" },
-          { title: "Store Heatmap", href: "/operations/heatmap", moduleKey: "operations.heatmap" },
-        ]
-      },
+      { title: "Store Maintenance Tasks", href: "/operations/adherence", moduleKey: "operations.adherence" },
+      { title: "Store Heatmap", href: "/operations/heatmap", moduleKey: "operations.heatmap" },
       { 
         title: "Visual Merchandising", 
         isSubSection: true,
@@ -182,6 +173,15 @@ const navigation: NavItem[] = [
           { title: "NSO Checklist Master", href: "/master/nso-checklist", moduleKey: "master.nso" },
           { title: "PM Checklist Master", href: "/master/pm-checklist", moduleKey: "master.pm" },
           { title: "Store Budget Master", href: "/master/store-budget", moduleKey: "master.budget" },
+        ]
+      },
+      { 
+        title: "Task Management", 
+        isSubSection: true,
+        subChildren: [
+          { title: "Task Master", href: "/operations/tasks", moduleKey: "operations.tasks" },
+          { title: "Role Master", href: "/operations/roles", moduleKey: "operations.roles" },
+          { title: "Task Templates", href: "/operations/templates", moduleKey: "operations.templates" },
         ]
       },
       { 
