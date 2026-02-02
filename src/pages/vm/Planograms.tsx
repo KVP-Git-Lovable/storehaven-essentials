@@ -17,9 +17,20 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Form,
   FormControl,
@@ -29,7 +40,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -73,6 +83,8 @@ export default function Planograms() {
   const [editMode, setEditMode] = useState(false);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [planogramToDelete, setPlanogramToDelete] = useState<Planogram | null>(null);
   const { toast } = useToast();
 
   const form = useForm<PlanogramFormData>({
@@ -147,6 +159,11 @@ export default function Planograms() {
     setViewOpen(true);
   };
 
+  const openDeleteDialog = (planogram: Planogram) => {
+    setPlanogramToDelete(planogram);
+    setDeleteDialogOpen(true);
+  };
+
   const onSubmit = async (data: PlanogramFormData) => {
     if (!editMode && !selectedImage) {
       toast({ title: "Error", description: "Please select an image", variant: "destructive" });
@@ -219,14 +236,18 @@ export default function Planograms() {
     setUploading(false);
   };
 
-  const handleDelete = async (id: string) => {
-    const { error } = await supabase.from("planograms").delete().eq("id", id);
+  const handleDeleteConfirm = async () => {
+    if (!planogramToDelete) return;
+
+    const { error } = await supabase.from("planograms").delete().eq("id", planogramToDelete.id);
     if (error) {
       toast({ title: "Error", description: "Failed to delete planogram", variant: "destructive" });
     } else {
       toast({ title: "Deleted", description: "Planogram removed" });
       fetchPlanograms();
     }
+    setDeleteDialogOpen(false);
+    setPlanogramToDelete(null);
   };
 
   const filteredPlanograms = planograms.filter(
@@ -323,7 +344,7 @@ export default function Planograms() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleDelete(planogram.id)}
+                    onClick={() => openDeleteDialog(planogram)}
                     className="text-destructive hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -337,11 +358,14 @@ export default function Planograms() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={formOpen} onOpenChange={(open) => { setFormOpen(open); if (!open) resetForm(); }}>
-        <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>{editMode ? "Edit Planogram" : "Create Master Planogram"}</DialogTitle>
+            <DialogDescription>
+              {editMode ? "Update the planogram details below." : "Fill in the details to create a new planogram."}
+            </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="flex-1 -mx-6 px-6">
+          <div className="flex-1 overflow-y-auto pr-2">
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pb-4">
                 <FormField
@@ -421,7 +445,7 @@ export default function Planograms() {
                     )}
                   </div>
                 </div>
-                <div className="flex justify-end gap-2 pt-4">
+                <div className="flex justify-end gap-2 pt-4 sticky bottom-0 bg-background pb-2">
                   <Button type="button" variant="outline" onClick={() => { setFormOpen(false); resetForm(); }}>
                     Cancel
                   </Button>
@@ -432,18 +456,19 @@ export default function Planograms() {
                 </div>
               </form>
             </Form>
-          </ScrollArea>
+          </div>
         </DialogContent>
       </Dialog>
 
       {/* View Dialog */}
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>{selectedPlanogram?.title}</DialogTitle>
+            <DialogDescription>View planogram details and image.</DialogDescription>
           </DialogHeader>
           {selectedPlanogram && (
-            <ScrollArea className="flex-1 -mx-6 px-6">
+            <div className="flex-1 overflow-y-auto pr-2">
               <div className="space-y-4 pb-4">
                 <div className="rounded-lg overflow-hidden border">
                   <img
@@ -484,10 +509,31 @@ export default function Planograms() {
                   </Button>
                 </div>
               </div>
-            </ScrollArea>
+            </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Planogram</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{planogramToDelete?.title}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
