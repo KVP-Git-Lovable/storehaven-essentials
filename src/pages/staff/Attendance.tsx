@@ -1,19 +1,19 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO } from "date-fns";
 import { Camera, MapPin, Clock, UserCheck, UserX, Calendar, Loader2, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { FaceCaptureDialog } from "@/components/staff/FaceCaptureDialog";
 
 interface AttendanceRecord {
   id: string;
@@ -47,7 +47,7 @@ export default function Attendance() {
   const [gettingLocation, setGettingLocation] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [checkType, setCheckType] = useState<"in" | "out">("in");
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const queryClient = useQueryClient();
 
   // Get location on dialog open
@@ -122,17 +122,10 @@ export default function Attendance() {
     },
   });
 
-  // Handle camera capture
-  const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setCapturedFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setCapturedImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+  // Handle camera capture from FaceCaptureDialog
+  const handleFaceCapture = (imageData: string, file: File) => {
+    setCapturedImage(imageData);
+    setCapturedFile(file);
   };
 
   // Mark attendance mutation
@@ -310,20 +303,11 @@ export default function Attendance() {
                   </div>
                 )}
 
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="user"
-                  onChange={handleCapture}
-                  className="hidden"
-                />
-
                 {!capturedImage ? (
                   <Button
                     variant="outline"
                     className="w-full h-24"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => setIsCameraOpen(true)}
                   >
                     <div className="flex flex-col items-center gap-2">
                       <Camera className="h-8 w-8" />
@@ -331,10 +315,16 @@ export default function Attendance() {
                     </div>
                   </Button>
                 ) : (
-                  <Button variant="outline" className="w-full" onClick={() => fileInputRef.current?.click()}>
+                  <Button variant="outline" className="w-full" onClick={() => setIsCameraOpen(true)}>
                     <Camera className="h-4 w-4 mr-2" /> Retake Photo
                   </Button>
                 )}
+
+                <FaceCaptureDialog
+                  open={isCameraOpen}
+                  onOpenChange={setIsCameraOpen}
+                  onCapture={handleFaceCapture}
+                />
 
                 <div className="p-3 rounded-lg bg-muted space-y-2">
                   <div className="flex items-center gap-2">
