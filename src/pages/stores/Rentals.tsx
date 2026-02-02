@@ -3,17 +3,9 @@ import { Plus, Building2, Calendar, IndianRupee, AlertCircle, Loader2 } from "lu
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { RentalPaymentsTable } from "@/components/rentals/RentalPaymentsTable";
 import {
   Dialog,
   DialogContent,
@@ -278,41 +270,7 @@ export default function Rentals() {
         ))}
       </div>
 
-      <div className="rounded-xl border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Store</TableHead>
-              <TableHead>Landlord</TableHead>
-              <TableHead>Monthly Rent</TableHead>
-              <TableHead>Lease Period</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {leases.map((lease) => (
-              <TableRow key={lease.id}>
-                <TableCell className="font-medium">{lease.store}</TableCell>
-                <TableCell>{lease.landlord}</TableCell>
-                <TableCell>₹{Number(lease.rent).toLocaleString()}</TableCell>
-                <TableCell>
-                  {new Date(lease.start_date).toLocaleDateString()} - {new Date(lease.end_date).toLocaleDateString()}
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      lease.status === "active" ? "default" :
-                      lease.status === "renewal-due" ? "secondary" : "destructive"
-                    }
-                  >
-                    {lease.status}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      <RentalPaymentsTable leases={leases} />
     </div>
   );
 }
