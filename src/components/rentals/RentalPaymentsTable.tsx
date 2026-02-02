@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { ChevronDown, ChevronRight, Check, Clock, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronRight, Check, Clock, AlertTriangle, CreditCard } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,8 +15,23 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 type Rental = {
   id: string;
@@ -46,6 +61,10 @@ export function RentalPaymentsTable({ leases }: RentalPaymentsTableProps) {
   const [expandedLeases, setExpandedLeases] = useState<Set<string>>(new Set());
   const [payments, setPayments] = useState<Record<string, RentalPayment[]>>({});
   const [loadingPayments, setLoadingPayments] = useState<Set<string>>(new Set());
+  const [markPaidDialog, setMarkPaidDialog] = useState<{ open: boolean; payment: RentalPayment | null }>({ open: false, payment: null });
+  const [paymentDate, setPaymentDate] = useState<Date | undefined>(undefined);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
 
   const toggleLease = async (leaseId: string) => {
     const newExpanded = new Set(expandedLeases);
@@ -113,7 +132,87 @@ export function RentalPaymentsTable({ leases }: RentalPaymentsTableProps) {
     return format(new Date(dateStr), "MMMM yyyy");
   };
 
+  const openMarkPaidDialog = (payment: RentalPayment, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPaymentDate(new Date(payment.due_date));
+    setMarkPaidDialog({ open: true, payment });
+  };
+
+  const handleMarkAsPaid = async () => {
+    if (!markPaidDialog.payment || !paymentDate) return;
+    
+    setIsSubmitting(true);
+    const { error } = await supabase
+      .from("rental_payments")
+      .update({
+        status: "paid",
+        paid_date: format(paymentDate, "yyyy-MM-dd"),
+      })
+      .eq("id", markPaidDialog.payment.id);
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to update payment status", variant: "destructive" });
+    } else {
+      // Update local state
+      const rentalId = markPaidDialog.payment.rental_id;
+      setPayments(prev => ({
+        ...prev,
+        [rentalId]: prev[rentalId].map(p =>
+          p.id === markPaidDialog.payment!.id
+            ? { ...p, status: "paid", paid_date: format(paymentDate, "yyyy-MM-dd") }
+            : p
+        ),
+      }));
+      toast({ title: "Payment recorded", description: `Payment for ${formatMonthYear(markPaidDialog.payment.month_year)} marked as paid.` });
+    }
+    
+    setIsSubmitting(false);
+    setMarkPaidDialog({ open: false, payment: null });
+  };
+
   return (
+    <>
+    <AlertDialog open={markPaidDialog.open} onOpenChange={(open) => !open && setMarkPaidDialog({ open: false, payment: null })}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Mark Payment as Paid</AlertDialogTitle>
+          <AlertDialogDescription>
+            Confirm payment for {markPaidDialog.payment ? formatMonthYear(markPaidDialog.payment.month_year) : ""} 
+            {" "}(₹{markPaidDialog.payment ? Number(markPaidDialog.payment.amount).toLocaleString() : 0})
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="py-4">
+          <Label className="text-sm font-medium">Payment Date *</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-full justify-start text-left font-normal mt-2",
+                  !paymentDate && "text-muted-foreground"
+                )}
+              >
+                {paymentDate ? format(paymentDate, "PPP") : "Select payment date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={paymentDate}
+                onSelect={setPaymentDate}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={handleMarkAsPaid} disabled={isSubmitting || !paymentDate}>
+            {isSubmitting ? "Saving..." : "Confirm Payment"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     <div className="rounded-xl border bg-card">
       <Table>
         <TableHeader>
@@ -179,12 +278,28 @@ export function RentalPaymentsTable({ leases }: RentalPaymentsTableProps) {
                                 <span className="text-sm font-semibold">
                                   ₹{Number(payment.amount).toLocaleString()}
                                 </span>
-                                <div className="flex items-center justify-between mt-1">
+                              <div className="flex items-center justify-between mt-1">
                                   <span className="text-xs text-muted-foreground">
                                     Due: {format(new Date(payment.due_date), "dd MMM")}
                                   </span>
                                   {getStatusBadge(payment.status)}
                                 </div>
+                                {payment.status === "paid" && payment.paid_date && (
+                                  <span className="text-xs text-muted-foreground mt-1">
+                                    Paid: {format(new Date(payment.paid_date), "dd MMM yyyy")}
+                                  </span>
+                                )}
+                                {payment.status !== "paid" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="mt-2 w-full gap-1 text-xs h-7"
+                                    onClick={(e) => openMarkPaidDialog(payment, e)}
+                                  >
+                                    <CreditCard className="h-3 w-3" />
+                                    Mark as Paid
+                                  </Button>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -201,5 +316,6 @@ export function RentalPaymentsTable({ leases }: RentalPaymentsTableProps) {
         </TableBody>
       </Table>
     </div>
+    </>
   );
 }
