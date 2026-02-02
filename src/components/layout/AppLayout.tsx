@@ -19,11 +19,11 @@ export function AppLayout() {
         onCollapsedChange={setSidebarCollapsed}
       />
       <div className={cn(
-        "transition-all duration-300",
+        "transition-all duration-300 min-w-0",
         isMobile ? "ml-0" : sidebarCollapsed ? "ml-16" : "ml-64"
       )}>
         <AppHeader onMenuClick={() => setSidebarOpen(true)} />
-        <main className="p-4 md:p-6">
+        <main className="p-3 sm:p-4 md:p-6 overflow-x-hidden">
           <Outlet />
         </main>
       </div>

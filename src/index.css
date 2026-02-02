@@ -115,6 +115,21 @@
   }
 
   .stat-card {
-    @apply bg-card rounded-xl border border-border p-4 md:p-6 shadow-sm transition-all duration-200 hover:shadow-md;
+    @apply bg-card rounded-xl border border-border p-3 md:p-4 lg:p-6 shadow-sm transition-all duration-200 hover:shadow-md overflow-hidden;
+  }
+
+  /* Responsive text truncation */
+  .text-responsive {
+    @apply break-words overflow-hidden;
+  }
+
+  /* Responsive container that prevents overflow */
+  .container-responsive {
+    @apply w-full max-w-full overflow-x-hidden;
+  }
+
+  /* Flexible grid that adapts to container width */
+  .grid-responsive {
+    @apply grid gap-3 md:gap-4;
   }
 }

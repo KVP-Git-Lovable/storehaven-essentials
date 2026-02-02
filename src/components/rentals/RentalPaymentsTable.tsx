@@ -266,26 +266,26 @@ export function RentalPaymentsTable({ leases }: RentalPaymentsTableProps) {
                         {loadingPayments.has(lease.id) ? (
                           <p className="text-sm text-muted-foreground">Loading payments...</p>
                         ) : payments[lease.id]?.length ? (
-                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-3">
                             {payments[lease.id].map((payment) => (
                               <div
                                 key={payment.id}
-                                className="p-3 rounded-lg border bg-background flex flex-col gap-1"
+                                className="p-2 sm:p-3 rounded-lg border bg-background flex flex-col gap-1"
                               >
-                                <span className="text-xs font-medium text-muted-foreground">
+                                <span className="text-xs font-medium text-muted-foreground truncate">
                                   {formatMonthYear(payment.month_year)}
                                 </span>
                                 <span className="text-sm font-semibold">
                                   ₹{Number(payment.amount).toLocaleString()}
                                 </span>
-                              <div className="flex items-center justify-between mt-1">
+                              <div className="flex flex-wrap items-center justify-between gap-1 mt-1">
                                   <span className="text-xs text-muted-foreground">
                                     Due: {format(new Date(payment.due_date), "dd MMM")}
                                   </span>
                                   {getStatusBadge(payment.status)}
                                 </div>
                                 {payment.status === "paid" && payment.paid_date && (
-                                  <span className="text-xs text-muted-foreground mt-1">
+                                  <span className="text-xs text-muted-foreground mt-1 truncate">
                                     Paid: {format(new Date(payment.paid_date), "dd MMM yyyy")}
                                   </span>
                                 )}
@@ -297,7 +297,7 @@ export function RentalPaymentsTable({ leases }: RentalPaymentsTableProps) {
                                     onClick={(e) => openMarkPaidDialog(payment, e)}
                                   >
                                     <CreditCard className="h-3 w-3" />
-                                    Mark as Paid
+                                    Mark Paid
                                   </Button>
                                 )}
                               </div>
