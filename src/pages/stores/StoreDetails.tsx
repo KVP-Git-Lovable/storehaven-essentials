@@ -1056,7 +1056,7 @@ export default function StoreDetails() {
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-medium">Rental Agreements</h2>
             <Button asChild size="sm">
-              <Link to="/stores/rentals"><Plus className="h-4 w-4 mr-2" />Add Rental</Link>
+              <Link to="/stores/rentals?action=add"><Plus className="h-4 w-4 mr-2" />Add Rental</Link>
             </Button>
           </div>
           <div className="rounded-xl border bg-card">
