@@ -509,23 +509,23 @@ export default function StoreDetails() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 md:space-y-6 animate-fade-in overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/stores")}>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/stores")} className="shrink-0 self-start">
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold">{store.name}</h1>
-            <Badge variant={store.status === "active" ? "default" : "secondary"}>{store.status}</Badge>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <h1 className="text-xl sm:text-2xl font-semibold truncate">{store.name}</h1>
+            <Badge variant={store.status === "active" ? "default" : "secondary"} className="shrink-0">{store.status}</Badge>
           </div>
           <div className="flex items-center gap-2 text-muted-foreground mt-1">
-            <MapPin className="h-4 w-4" />
-            <span>{store.address}</span>
+            <MapPin className="h-4 w-4 shrink-0" />
+            <span className="text-sm truncate">{store.address}</span>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={openEditDialog}>
+        <Button variant="outline" size="sm" onClick={openEditDialog} className="shrink-0 w-full sm:w-auto">
           <Pencil className="h-4 w-4 mr-2" />
           Edit Store
         </Button>
@@ -610,59 +610,59 @@ export default function StoreDetails() {
       </Dialog>
 
       {/* Info Cards */}
-      <div className="grid gap-4 md:grid-cols-5">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Manager</CardTitle>
+      <div className="grid gap-3 md:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-1 md:pb-2 p-3 md:p-4">
+            <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground truncate">Manager</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-primary" />
-              <span className="font-medium">{getManagerDisplayName()}</span>
+          <CardContent className="p-3 pt-0 md:p-4 md:pt-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <User className="h-4 w-4 text-primary shrink-0" />
+              <span className="font-medium text-sm md:text-base truncate">{getManagerDisplayName()}</span>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Phone</CardTitle>
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-1 md:pb-2 p-3 md:p-4">
+            <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground truncate">Phone</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-primary" />
-              <span className="font-medium">{store.phone}</span>
+          <CardContent className="p-3 pt-0 md:p-4 md:pt-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <Phone className="h-4 w-4 text-primary shrink-0" />
+              <span className="font-medium text-sm md:text-base truncate">{store.phone}</span>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Assets Deployed</CardTitle>
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-1 md:pb-2 p-3 md:p-4">
+            <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground truncate">Assets Deployed</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-3 pt-0 md:p-4 md:pt-0">
             <div className="flex items-center gap-2">
-              <Package className="h-4 w-4 text-primary" />
-              <span className="font-medium">{deployments.length}</span>
+              <Package className="h-4 w-4 text-primary shrink-0" />
+              <span className="font-medium text-sm md:text-base">{deployments.length}</span>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Open Tickets</CardTitle>
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-1 md:pb-2 p-3 md:p-4">
+            <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground truncate">Open Tickets</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-3 pt-0 md:p-4 md:pt-0">
             <div className="flex items-center gap-2">
-              <Ticket className="h-4 w-4 text-primary" />
-              <span className="font-medium">{tickets.filter((t) => t.status === "open" || t.status === "in_progress").length}</span>
+              <Ticket className="h-4 w-4 text-primary shrink-0" />
+              <span className="font-medium text-sm md:text-base">{tickets.filter((t) => t.status === "open" || t.status === "in_progress").length}</span>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Upcoming PM</CardTitle>
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-1 md:pb-2 p-3 md:p-4">
+            <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground truncate">Upcoming PM</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-3 pt-0 md:p-4 md:pt-0">
             <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-primary" />
-              <span className="font-medium">{pmTasks.filter((p) => p.status === "scheduled").length}</span>
+              <Calendar className="h-4 w-4 text-primary shrink-0" />
+              <span className="font-medium text-sm md:text-base">{pmTasks.filter((p) => p.status === "scheduled").length}</span>
             </div>
           </CardContent>
         </Card>
@@ -670,14 +670,14 @@ export default function StoreDetails() {
 
       {/* Tabs */}
       <Tabs defaultValue="assets" className="space-y-4">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="assets">Assets Deployed</TabsTrigger>
-          <TabsTrigger value="pm">Preventive Maintenance</TabsTrigger>
-          <TabsTrigger value="tickets">Service Tickets</TabsTrigger>
-          <TabsTrigger value="utilities"><Gauge className="h-4 w-4 mr-1" />Utilities</TabsTrigger>
-          <TabsTrigger value="pettycash"><Wallet className="h-4 w-4 mr-1" />Petty Cash</TabsTrigger>
-          <TabsTrigger value="rentals">Rentals</TabsTrigger>
-          <TabsTrigger value="contacts">Contacts</TabsTrigger>
+        <TabsList className="flex flex-wrap h-auto gap-1 p-1">
+          <TabsTrigger value="assets" className="text-xs sm:text-sm">Assets</TabsTrigger>
+          <TabsTrigger value="pm" className="text-xs sm:text-sm">PM</TabsTrigger>
+          <TabsTrigger value="tickets" className="text-xs sm:text-sm">Tickets</TabsTrigger>
+          <TabsTrigger value="utilities" className="text-xs sm:text-sm"><Gauge className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />Utilities</TabsTrigger>
+          <TabsTrigger value="pettycash" className="text-xs sm:text-sm"><Wallet className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />Petty Cash</TabsTrigger>
+          <TabsTrigger value="rentals" className="text-xs sm:text-sm">Rentals</TabsTrigger>
+          <TabsTrigger value="contacts" className="text-xs sm:text-sm">Contacts</TabsTrigger>
         </TabsList>
 
         {/* Assets Deployed Tab */}

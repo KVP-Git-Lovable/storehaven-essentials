@@ -167,15 +167,15 @@ export default function Rentals() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Rentals & Leases</h1>
-          <p className="text-muted-foreground">Manage store rental agreements and lease contracts</p>
+    <div className="space-y-4 md:space-y-6 animate-fade-in overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold">Rentals & Leases</h1>
+          <p className="text-sm text-muted-foreground">Manage store rental agreements and lease contracts</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button className="gap-2 w-full sm:w-auto shrink-0">
               <Plus className="h-4 w-4" />
               Add Lease
             </Button>
