@@ -3477,44 +3477,109 @@ export type Database = {
           },
         ]
       }
+      planogram_stores: {
+        Row: {
+          created_at: string | null
+          id: string
+          planogram_id: string
+          store_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          planogram_id: string
+          store_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          planogram_id?: string
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planogram_stores_planogram_id_fkey"
+            columns: ["planogram_id"]
+            isOneToOne: false
+            referencedRelation: "planograms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planogram_stores_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       planograms: {
         Row: {
+          assigned_to_user_id: string | null
           created_at: string
           created_by: string
           deadline: string | null
           description: string | null
+          frequency: string | null
           id: string
           image_url: string
+          schedule_date: string | null
+          schedule_day_of_month: number | null
+          schedule_day_of_week: number | null
+          schedule_time: string | null
+          schedule_week_of_month: number | null
           status: string
           title: string
           updated_at: string
           zone: string
         }
         Insert: {
+          assigned_to_user_id?: string | null
           created_at?: string
           created_by?: string
           deadline?: string | null
           description?: string | null
+          frequency?: string | null
           id?: string
           image_url: string
+          schedule_date?: string | null
+          schedule_day_of_month?: number | null
+          schedule_day_of_week?: number | null
+          schedule_time?: string | null
+          schedule_week_of_month?: number | null
           status?: string
           title: string
           updated_at?: string
           zone: string
         }
         Update: {
+          assigned_to_user_id?: string | null
           created_at?: string
           created_by?: string
           deadline?: string | null
           description?: string | null
+          frequency?: string | null
           id?: string
           image_url?: string
+          schedule_date?: string | null
+          schedule_day_of_month?: number | null
+          schedule_day_of_week?: number | null
+          schedule_time?: string | null
+          schedule_week_of_month?: number | null
           status?: string
           title?: string
           updated_at?: string
           zone?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "planograms_assigned_to_user_id_fkey"
+            columns: ["assigned_to_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pm_attachments: {
         Row: {

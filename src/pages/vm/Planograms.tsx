@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Image, Calendar, Loader2, Trash2, Eye, Pencil } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { Plus, Search, Image, Calendar, Loader2, Trash2, Eye, Pencil, Clock, User, Store } from "lucide-react";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -42,12 +42,21 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { MultiSelectCombobox, MultiSelectOption } from "@/components/ui/multi-select-combobox";
 
 const planogramSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
   zone: z.string().min(1, "Zone is required"),
-  deadline: z.string().optional(),
+  applicableUpto: z.string().optional(),
+  storeIds: z.array(z.string()).optional(),
+  frequency: z.string().min(1, "Frequency is required"),
+  scheduleTime: z.string().optional(),
+  scheduleDayOfWeek: z.string().optional(),
+  scheduleDayOfMonth: z.string().optional(),
+  scheduleWeekOfMonth: z.string().optional(),
+  scheduleDate: z.string().optional(),
+  assignedToUserId: z.string().optional(),
 });
 
 type PlanogramFormData = z.infer<typeof planogramSchema>;
@@ -61,6 +70,25 @@ type Planogram = {
   deadline: string | null;
   status: string;
   created_at: string;
+  frequency: string | null;
+  schedule_time: string | null;
+  schedule_day_of_week: number | null;
+  schedule_day_of_month: number | null;
+  schedule_week_of_month: number | null;
+  schedule_date: string | null;
+  assigned_to_user_id: string | null;
+  assigned_user?: { username: string } | null;
+  stores?: { store_id: string; store?: { name: string } }[];
+};
+
+type StoreOption = {
+  id: string;
+  name: string;
+};
+
+type UserOption = {
+  id: string;
+  username: string;
 };
 
 const zoneOptions = [
@@ -72,9 +100,41 @@ const zoneOptions = [
   { value: "checkout", label: "Checkout Area" },
 ];
 
+const frequencyOptions = [
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "one-time", label: "One Time" },
+];
+
+const daysOfWeek = [
+  { value: "0", label: "Sunday" },
+  { value: "1", label: "Monday" },
+  { value: "2", label: "Tuesday" },
+  { value: "3", label: "Wednesday" },
+  { value: "4", label: "Thursday" },
+  { value: "5", label: "Friday" },
+  { value: "6", label: "Saturday" },
+];
+
+const weekOfMonthOptions = [
+  { value: "1", label: "First" },
+  { value: "2", label: "Second" },
+  { value: "3", label: "Third" },
+  { value: "4", label: "Fourth" },
+  { value: "5", label: "Last" },
+];
+
+const dayOfMonthOptions = Array.from({ length: 31 }, (_, i) => ({
+  value: String(i + 1),
+  label: String(i + 1),
+}));
+
 export default function Planograms() {
   const [searchQuery, setSearchQuery] = useState("");
   const [planograms, setPlanograms] = useState<Planogram[]>([]);
+  const [stores, setStores] = useState<StoreOption[]>([]);
+  const [users, setUsers] = useState<UserOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -93,18 +153,34 @@ export default function Planograms() {
       title: "",
       description: "",
       zone: "",
-      deadline: "",
+      applicableUpto: "",
+      storeIds: [],
+      frequency: "one-time",
+      scheduleTime: "",
+      scheduleDayOfWeek: "",
+      scheduleDayOfMonth: "",
+      scheduleWeekOfMonth: "",
+      scheduleDate: "",
+      assignedToUserId: "",
     },
   });
 
+  const frequency = useWatch({ control: form.control, name: "frequency" });
+
   useEffect(() => {
     fetchPlanograms();
+    fetchStores();
+    fetchUsers();
   }, []);
 
   const fetchPlanograms = async () => {
     const { data, error } = await supabase
       .from("planograms")
-      .select("*")
+      .select(`
+        *,
+        assigned_user:profiles!planograms_assigned_to_user_id_fkey(username),
+        stores:planogram_stores(store_id, store:stores(name))
+      `)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -114,6 +190,29 @@ export default function Planograms() {
     }
     setLoading(false);
   };
+
+  const fetchStores = async () => {
+    const { data } = await supabase
+      .from("stores")
+      .select("id, name")
+      .eq("status", "active")
+      .order("name");
+    if (data) setStores(data);
+  };
+
+  const fetchUsers = async () => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, username")
+      .eq("status", "active")
+      .order("username");
+    if (data) setUsers(data);
+  };
+
+  const storeOptions: MultiSelectOption[] = stores.map((s) => ({
+    value: s.id,
+    label: s.name,
+  }));
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -128,7 +227,15 @@ export default function Planograms() {
       title: "",
       description: "",
       zone: "",
-      deadline: "",
+      applicableUpto: "",
+      storeIds: [],
+      frequency: "one-time",
+      scheduleTime: "",
+      scheduleDayOfWeek: "",
+      scheduleDayOfMonth: "",
+      scheduleWeekOfMonth: "",
+      scheduleDate: "",
+      assignedToUserId: "",
     });
     setSelectedImage(null);
     setPreviewUrl(null);
@@ -141,14 +248,26 @@ export default function Planograms() {
     setFormOpen(true);
   };
 
-  const openEditDialog = (planogram: Planogram) => {
+  const openEditDialog = async (planogram: Planogram) => {
     setEditMode(true);
     setSelectedPlanogram(planogram);
+    
+    // Get store IDs for this planogram
+    const storeIds = planogram.stores?.map((s) => s.store_id) || [];
+    
     form.reset({
       title: planogram.title,
       description: planogram.description || "",
       zone: planogram.zone,
-      deadline: planogram.deadline ? new Date(planogram.deadline).toISOString().slice(0, 16) : "",
+      applicableUpto: planogram.deadline ? new Date(planogram.deadline).toISOString().slice(0, 10) : "",
+      storeIds,
+      frequency: planogram.frequency || "one-time",
+      scheduleTime: planogram.schedule_time || "",
+      scheduleDayOfWeek: planogram.schedule_day_of_week?.toString() || "",
+      scheduleDayOfMonth: planogram.schedule_day_of_month?.toString() || "",
+      scheduleWeekOfMonth: planogram.schedule_week_of_month?.toString() || "",
+      scheduleDate: planogram.schedule_date || "",
+      assignedToUserId: planogram.assigned_to_user_id || "",
     });
     setPreviewUrl(planogram.image_url);
     setFormOpen(true);
@@ -193,46 +312,75 @@ export default function Planograms() {
       imageUrl = urlData.publicUrl;
     }
 
+    const planogramData = {
+      title: data.title,
+      description: data.description || null,
+      zone: data.zone,
+      image_url: imageUrl,
+      deadline: data.applicableUpto ? new Date(data.applicableUpto).toISOString() : null,
+      frequency: data.frequency,
+      schedule_time: data.scheduleTime || null,
+      schedule_day_of_week: data.scheduleDayOfWeek ? parseInt(data.scheduleDayOfWeek) : null,
+      schedule_day_of_month: data.scheduleDayOfMonth ? parseInt(data.scheduleDayOfMonth) : null,
+      schedule_week_of_month: data.scheduleWeekOfMonth ? parseInt(data.scheduleWeekOfMonth) : null,
+      schedule_date: data.scheduleDate || null,
+      assigned_to_user_id: data.assignedToUserId || null,
+    };
+
     if (editMode && selectedPlanogram) {
       // Update existing planogram
       const { error } = await supabase
         .from("planograms")
-        .update({
-          title: data.title,
-          description: data.description || null,
-          zone: data.zone,
-          image_url: imageUrl,
-          deadline: data.deadline ? new Date(data.deadline).toISOString() : null,
-        })
+        .update(planogramData)
         .eq("id", selectedPlanogram.id);
 
       if (error) {
         toast({ title: "Error", description: "Failed to update planogram", variant: "destructive" });
-      } else {
-        toast({ title: "Success", description: "Planogram updated successfully" });
-        resetForm();
-        setFormOpen(false);
-        fetchPlanograms();
+        setUploading(false);
+        return;
       }
+
+      // Update stores - delete existing and insert new
+      await supabase.from("planogram_stores").delete().eq("planogram_id", selectedPlanogram.id);
+      
+      if (data.storeIds && data.storeIds.length > 0) {
+        const storeInserts = data.storeIds.map((storeId) => ({
+          planogram_id: selectedPlanogram.id,
+          store_id: storeId,
+        }));
+        await supabase.from("planogram_stores").insert(storeInserts);
+      }
+
+      toast({ title: "Success", description: "Planogram updated successfully" });
     } else {
       // Create new planogram
-      const { error } = await supabase.from("planograms").insert({
-        title: data.title,
-        description: data.description || null,
-        zone: data.zone,
-        image_url: imageUrl,
-        deadline: data.deadline ? new Date(data.deadline).toISOString() : null,
-      });
+      const { data: newPlanogram, error } = await supabase
+        .from("planograms")
+        .insert(planogramData)
+        .select()
+        .single();
 
-      if (error) {
+      if (error || !newPlanogram) {
         toast({ title: "Error", description: "Failed to create planogram", variant: "destructive" });
-      } else {
-        toast({ title: "Success", description: "Planogram created successfully" });
-        resetForm();
-        setFormOpen(false);
-        fetchPlanograms();
+        setUploading(false);
+        return;
       }
+
+      // Insert store associations
+      if (data.storeIds && data.storeIds.length > 0) {
+        const storeInserts = data.storeIds.map((storeId) => ({
+          planogram_id: newPlanogram.id,
+          store_id: storeId,
+        }));
+        await supabase.from("planogram_stores").insert(storeInserts);
+      }
+
+      toast({ title: "Success", description: "Planogram created successfully" });
     }
+
+    resetForm();
+    setFormOpen(false);
+    fetchPlanograms();
     setUploading(false);
   };
 
@@ -258,6 +406,41 @@ export default function Planograms() {
 
   const getZoneLabel = (value: string) => 
     zoneOptions.find((z) => z.value === value)?.label || value;
+
+  const getFrequencyLabel = (value: string | null) =>
+    frequencyOptions.find((f) => f.value === value)?.label || value || "One Time";
+
+  const getDayOfWeekLabel = (value: number | null) =>
+    value !== null ? daysOfWeek.find((d) => d.value === String(value))?.label : null;
+
+  const getWeekOfMonthLabel = (value: number | null) =>
+    value !== null ? weekOfMonthOptions.find((w) => w.value === String(value))?.label : null;
+
+  const formatScheduleDescription = (planogram: Planogram) => {
+    const parts: string[] = [];
+    
+    if (planogram.frequency === "daily" && planogram.schedule_time) {
+      parts.push(`Daily at ${planogram.schedule_time}`);
+    } else if (planogram.frequency === "weekly") {
+      const day = getDayOfWeekLabel(planogram.schedule_day_of_week);
+      if (day) parts.push(`Weekly on ${day}`);
+      if (planogram.schedule_time) parts.push(`at ${planogram.schedule_time}`);
+    } else if (planogram.frequency === "monthly") {
+      if (planogram.schedule_week_of_month && planogram.schedule_day_of_week !== null) {
+        const week = getWeekOfMonthLabel(planogram.schedule_week_of_month);
+        const day = getDayOfWeekLabel(planogram.schedule_day_of_week);
+        parts.push(`${week} ${day} of month`);
+      } else if (planogram.schedule_day_of_month) {
+        parts.push(`Day ${planogram.schedule_day_of_month} of month`);
+      }
+      if (planogram.schedule_time) parts.push(`at ${planogram.schedule_time}`);
+    } else if (planogram.frequency === "one-time" && planogram.schedule_date) {
+      parts.push(`On ${new Date(planogram.schedule_date).toLocaleDateString()}`);
+      if (planogram.schedule_time) parts.push(`at ${planogram.schedule_time}`);
+    }
+    
+    return parts.join(" ") || null;
+  };
 
   if (loading) {
     return (
@@ -316,11 +499,34 @@ export default function Planograms() {
                     <p className="text-sm text-muted-foreground line-clamp-2">{planogram.description}</p>
                   )}
                 </CardHeader>
-                <CardContent className="pb-2">
+                <CardContent className="pb-2 space-y-1">
                   {planogram.deadline && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Calendar className="h-4 w-4" />
-                      <span>Due: {new Date(planogram.deadline).toLocaleDateString()}</span>
+                      <span>Applicable upto: {new Date(planogram.deadline).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Clock className="h-4 w-4" />
+                    <span>{getFrequencyLabel(planogram.frequency)}</span>
+                    {formatScheduleDescription(planogram) && (
+                      <span className="text-xs">({formatScheduleDescription(planogram)})</span>
+                    )}
+                  </div>
+                  {planogram.stores && planogram.stores.length > 0 && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Store className="h-4 w-4" />
+                      <span className="truncate">
+                        {planogram.stores.length === 1
+                          ? planogram.stores[0].store?.name
+                          : `${planogram.stores.length} stores`}
+                      </span>
+                    </div>
+                  )}
+                  {planogram.assigned_user && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <User className="h-4 w-4" />
+                      <span>{planogram.assigned_user.username}</span>
                     </div>
                   )}
                 </CardContent>
@@ -358,7 +564,7 @@ export default function Planograms() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={formOpen} onOpenChange={(open) => { setFormOpen(open); if (!open) resetForm(); }}>
-        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle>{editMode ? "Edit Planogram" : "Create Master Planogram"}</DialogTitle>
             <DialogDescription>
@@ -381,6 +587,7 @@ export default function Planograms() {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="zone"
@@ -403,6 +610,52 @@ export default function Planograms() {
                     </FormItem>
                   )}
                 />
+
+                <FormField
+                  control={form.control}
+                  name="storeIds"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Store(s)</FormLabel>
+                      <FormControl>
+                        <MultiSelectCombobox
+                          options={storeOptions}
+                          selected={field.value || []}
+                          onChange={field.onChange}
+                          placeholder="Select stores..."
+                          searchPlaceholder="Search stores..."
+                          emptyMessage="No stores found."
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="assignedToUserId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Assigned User</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select user" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">-- None --</SelectItem>
+                          {users.map((user) => (
+                            <SelectItem key={user.id} value={user.id}>{user.username}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 <FormField
                   control={form.control}
                   name="description"
@@ -416,19 +669,219 @@ export default function Planograms() {
                     </FormItem>
                   )}
                 />
+
                 <FormField
                   control={form.control}
-                  name="deadline"
+                  name="applicableUpto"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Deadline</FormLabel>
+                      <FormLabel>Applicable Upto</FormLabel>
                       <FormControl>
-                        <Input type="datetime-local" {...field} />
+                        <Input type="date" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
+                <FormField
+                  control={form.control}
+                  name="frequency"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Frequency</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select frequency" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {frequencyOptions.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Dependent fields based on frequency */}
+                {frequency === "daily" && (
+                  <FormField
+                    control={form.control}
+                    name="scheduleTime"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Time of Day</FormLabel>
+                        <FormControl>
+                          <Input type="time" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {frequency === "weekly" && (
+                  <>
+                    <FormField
+                      control={form.control}
+                      name="scheduleDayOfWeek"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Day of Week</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || ""}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select day" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {daysOfWeek.map((day) => (
+                                <SelectItem key={day.value} value={day.value}>{day.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="scheduleTime"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Time</FormLabel>
+                          <FormControl>
+                            <Input type="time" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </>
+                )}
+
+                {frequency === "monthly" && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="scheduleWeekOfMonth"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Week of Month</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value || ""}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select week" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="none">-- Specific Day --</SelectItem>
+                                {weekOfMonthOptions.map((opt) => (
+                                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="scheduleDayOfWeek"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Day of Week</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value || ""} disabled={!form.watch("scheduleWeekOfMonth") || form.watch("scheduleWeekOfMonth") === "none"}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select day" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {daysOfWeek.map((day) => (
+                                  <SelectItem key={day.value} value={day.value}>{day.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <FormField
+                      control={form.control}
+                      name="scheduleDayOfMonth"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Or Specific Day of Month</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || ""} disabled={form.watch("scheduleWeekOfMonth") && form.watch("scheduleWeekOfMonth") !== "none"}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select day" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {dayOfMonthOptions.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="scheduleTime"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Time</FormLabel>
+                          <FormControl>
+                            <Input type="time" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </>
+                )}
+
+                {frequency === "one-time" && (
+                  <>
+                    <FormField
+                      control={form.control}
+                      name="scheduleDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Specific Date</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="scheduleTime"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Time</FormLabel>
+                          <FormControl>
+                            <Input type="time" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </>
+                )}
+
                 <div>
                   <FormLabel>Base Photo {editMode && "(optional - leave empty to keep current)"}</FormLabel>
                   <div className="mt-2">
@@ -445,6 +898,7 @@ export default function Planograms() {
                     )}
                   </div>
                 </div>
+
                 <div className="flex justify-end gap-2 pt-4 sticky bottom-0 bg-background pb-2">
                   <Button type="button" variant="outline" onClick={() => { setFormOpen(false); resetForm(); }}>
                     Cancel
@@ -484,8 +938,34 @@ export default function Planograms() {
                   </div>
                   {selectedPlanogram.deadline && (
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Deadline</p>
+                      <p className="text-sm font-medium text-muted-foreground">Applicable Upto</p>
                       <p className="font-medium">{new Date(selectedPlanogram.deadline).toLocaleDateString()}</p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Frequency</p>
+                    <p className="font-medium">{getFrequencyLabel(selectedPlanogram.frequency)}</p>
+                  </div>
+                  {formatScheduleDescription(selectedPlanogram) && (
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Schedule</p>
+                      <p className="font-medium">{formatScheduleDescription(selectedPlanogram)}</p>
+                    </div>
+                  )}
+                  {selectedPlanogram.assigned_user && (
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Assigned User</p>
+                      <p className="font-medium">{selectedPlanogram.assigned_user.username}</p>
+                    </div>
+                  )}
+                  {selectedPlanogram.stores && selectedPlanogram.stores.length > 0 && (
+                    <div className="col-span-2">
+                      <p className="text-sm font-medium text-muted-foreground">Stores</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {selectedPlanogram.stores.map((s) => (
+                          <Badge key={s.store_id} variant="secondary">{s.store?.name}</Badge>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
