@@ -40,8 +40,6 @@ import { useToast } from "@/hooks/use-toast";
 import { rentalSchema, type RentalFormData } from "@/lib/schemas";
 import { supabase } from "@/integrations/supabase/client";
 
-const storesList = ["Downtown Store", "Mall Outlet", "Airport Kiosk", "Suburban Store", "Highway Express", "New Location"];
-
 type Rental = {
   id: string;
   store: string;
@@ -50,6 +48,11 @@ type Rental = {
   start_date: string;
   end_date: string;
   status: string;
+};
+
+type Store = {
+  id: string;
+  name: string;
 };
 
 const stats = [
@@ -61,6 +64,7 @@ const stats = [
 
 export default function Rentals() {
   const [leases, setLeases] = useState<Rental[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
@@ -77,20 +81,27 @@ export default function Rentals() {
   });
 
   useEffect(() => {
-    fetchRentals();
+    fetchData();
   }, []);
 
-  const fetchRentals = async () => {
-    const { data, error } = await supabase
-      .from("rentals")
-      .select("*")
-      .order("created_at", { ascending: false });
+  const fetchData = async () => {
+    const [rentalsResult, storesResult] = await Promise.all([
+      supabase.from("rentals").select("*").order("created_at", { ascending: false }),
+      supabase.from("stores").select("id, name").order("name", { ascending: true })
+    ]);
 
-    if (error) {
+    if (rentalsResult.error) {
       toast({ title: "Error", description: "Failed to load rentals", variant: "destructive" });
     } else {
-      setLeases(data || []);
+      setLeases(rentalsResult.data || []);
     }
+
+    if (storesResult.error) {
+      toast({ title: "Error", description: "Failed to load stores", variant: "destructive" });
+    } else {
+      setStores(storesResult.data || []);
+    }
+    
     setLoading(false);
   };
 
@@ -110,7 +121,7 @@ export default function Rentals() {
       toast({ title: "Lease added", description: `Lease for ${data.store} has been recorded.` });
       form.reset();
       setOpen(false);
-      fetchRentals();
+      fetchData();
     }
   };
 
@@ -155,8 +166,8 @@ export default function Rentals() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {storesList.map((store) => (
-                            <SelectItem key={store} value={store}>{store}</SelectItem>
+                          {stores.map((store) => (
+                            <SelectItem key={store.id} value={store.name}>{store.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
