@@ -85,6 +85,23 @@ export default function ReviewSubmissions() {
     setReviewOpen(true);
   };
 
+  // Calculate next due date for recurring tasks
+  const calculateNextDueDate = (currentDue: string, frequency: string): Date => {
+    const date = new Date(currentDue);
+    switch (frequency) {
+      case "daily":
+        date.setDate(date.getDate() + 1);
+        break;
+      case "weekly":
+        date.setDate(date.getDate() + 7);
+        break;
+      case "monthly":
+        date.setMonth(date.getMonth() + 1);
+        break;
+    }
+    return date;
+  };
+
   const submitReview = async (status: "approved" | "rejected" | "correction_required") => {
     if (!selectedSubmission || rating === 0) {
       toast({ title: "Error", description: "Please provide a rating", variant: "destructive" });
@@ -117,11 +134,37 @@ export default function ReviewSubmissions() {
     // Create correction task if needed
     if (status === "correction_required" && selectedSubmission.task) {
       await supabase.from("vm_correction_tasks").insert({
-        review_id: selectedSubmission.id, // This will be updated with actual review id
+        review_id: selectedSubmission.id,
         original_task_id: selectedSubmission.task.id,
         description: feedback || "Please correct the display as per feedback",
-        due_date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days from now
+        due_date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
       });
+    }
+
+    // Auto-generate next recurring task if approved and is a recurring task
+    if (status === "approved" && selectedSubmission.task) {
+      // Fetch full task details to check frequency
+      const { data: taskData } = await supabase
+        .from("vm_compliance_tasks")
+        .select("*")
+        .eq("id", selectedSubmission.task.id)
+        .single();
+
+      if (taskData && taskData.frequency !== "one-time") {
+        const nextDueDate = calculateNextDueDate(taskData.due_date, taskData.frequency);
+        await supabase.from("vm_compliance_tasks").insert({
+          planogram_id: taskData.planogram_id,
+          store_id: taskData.store_id,
+          title: taskData.title,
+          description: taskData.description,
+          frequency: taskData.frequency,
+          due_date: nextDueDate.toISOString(),
+          assigned_to_user_id: taskData.assigned_to_user_id,
+          parent_task_id: taskData.id,
+          is_recurring: true,
+          status: "pending",
+        });
+      }
     }
 
     toast({ 

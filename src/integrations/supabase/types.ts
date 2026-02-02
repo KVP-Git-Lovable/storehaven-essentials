@@ -7396,11 +7396,14 @@ export type Database = {
       vm_compliance_tasks: {
         Row: {
           assigned_to: string | null
+          assigned_to_user_id: string | null
           created_at: string
           description: string | null
           due_date: string
           frequency: string
           id: string
+          is_recurring: boolean | null
+          parent_task_id: string | null
           planogram_id: string
           status: string
           store_id: string
@@ -7409,11 +7412,14 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          assigned_to_user_id?: string | null
           created_at?: string
           description?: string | null
           due_date: string
           frequency?: string
           id?: string
+          is_recurring?: boolean | null
+          parent_task_id?: string | null
           planogram_id: string
           status?: string
           store_id: string
@@ -7422,11 +7428,14 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          assigned_to_user_id?: string | null
           created_at?: string
           description?: string | null
           due_date?: string
           frequency?: string
           id?: string
+          is_recurring?: boolean | null
+          parent_task_id?: string | null
           planogram_id?: string
           status?: string
           store_id?: string
@@ -7434,6 +7443,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "vm_compliance_tasks_assigned_to_user_id_fkey"
+            columns: ["assigned_to_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vm_compliance_tasks_parent_task_id_fkey"
+            columns: ["parent_task_id"]
+            isOneToOne: false
+            referencedRelation: "vm_compliance_tasks"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "vm_compliance_tasks_planogram_id_fkey"
             columns: ["planogram_id"]
