@@ -232,10 +232,9 @@ export function ComplianceCalendarView({
 
     return (
       <div className="flex flex-col">
-        {/* Anytime Tasks Section */}
+        {/* Unscheduled Tasks Section (no label) */}
         {anytimeTasks.length > 0 && (
           <div className="border-b p-2 bg-muted/20">
-            <p className="text-xs text-muted-foreground mb-2 px-2">Anytime</p>
             <div className="flex flex-wrap gap-2 px-2">
               {anytimeTasks.map((task) => (
                 <button
@@ -413,66 +412,135 @@ export function ComplianceCalendarView({
     );
   };
 
-  // Month View Component
-  const MonthView = () => (
-    <>
-      <div className="grid grid-cols-7 border-b bg-muted/20">
-        {WEEKDAYS.map((day) => (
-          <div key={day} className="p-2 text-center text-sm font-medium text-muted-foreground">
-            {day}
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 auto-rows-[90px]">
-        {calendarDays.map((day, index) => {
-          const dayTasks = getTasksForDay(day);
-          const isCurrentMonth = isSameMonth(day, currentDate);
-          const isCurrentDay = isToday(day);
+  // Month View Component with Time Sidebar
+  const MonthView = () => {
+    // Collect all tasks with times across all days for positioning
+    const allAnytimeTasks = calendarDays.flatMap((day) =>
+      getTasksForDay(day).filter((t) => !t.scheduled_start_time)
+    );
 
-          return (
-            <div
-              key={index}
-              className={`border-b border-r p-1 ${!isCurrentMonth ? "bg-muted/30" : ""} ${isCurrentDay ? "bg-primary/5" : ""}`}
-            >
-              <button
-                onClick={() => handleDateClick(day)}
-                className={`text-sm mb-1 w-full text-left hover:text-primary ${
-                  isCurrentDay
-                    ? "bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center font-medium"
-                    : isCurrentMonth
-                      ? "text-foreground"
-                      : "text-muted-foreground"
-                }`}
-              >
-                {format(day, "d")}
-              </button>
-              <div className="space-y-0.5 overflow-auto max-h-[60px]">
-                {dayTasks.slice(0, 2).map((task) => (
-                  <button
-                    key={task.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onTaskClick(task);
-                    }}
-                    className={`w-full text-left text-xs px-1.5 py-0.5 rounded border truncate flex items-center gap-1 ${getTaskColor(task)} hover:opacity-80 transition-opacity`}
-                  >
-                    {getStatusIcon(task)}
-                    <span className="truncate">{task.store?.name || task.title}</span>
-                    <span className="text-[10px] opacity-75 ml-auto shrink-0">
-                      {task.scheduled_start_time ? task.scheduled_start_time.substring(0, 5) : ""}
-                    </span>
-                  </button>
-                ))}
-                {dayTasks.length > 2 && (
-                  <p className="text-xs text-muted-foreground px-1">+{dayTasks.length - 2} more</p>
-                )}
-              </div>
+    return (
+      <div className="flex flex-col">
+        {/* Unscheduled Tasks Row */}
+        {allAnytimeTasks.length > 0 && (
+          <div className="grid grid-cols-[64px_repeat(7,1fr)] border-b bg-muted/10">
+            <div className="p-1 border-r text-xs text-muted-foreground flex items-center justify-end pr-2" />
+            {calendarDays.slice(0, 7).map((_, idx) => {
+              // Get matching day from each week row
+              const dayAnytime = calendarDays
+                .filter((_, dayIdx) => dayIdx % 7 === idx)
+                .flatMap((day) => getTasksForDay(day).filter((t) => !t.scheduled_start_time));
+              return (
+                <div key={idx} className="border-r last:border-r-0 p-1 min-h-[32px]">
+                  <div className="flex flex-wrap gap-1">
+                    {dayAnytime.slice(0, 2).map((task) => (
+                      <button
+                        key={task.id}
+                        onClick={() => onTaskClick(task)}
+                        className={`text-[9px] px-1 py-0.5 rounded border ${getTaskColor(task)} hover:opacity-80 transition-opacity truncate max-w-full`}
+                      >
+                        {task.store?.name || task.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Day Headers */}
+        <div className="grid grid-cols-[64px_repeat(7,1fr)] border-b bg-muted/20">
+          <div className="p-2 border-r" /> {/* Empty corner */}
+          {WEEKDAYS.map((day) => (
+            <div key={day} className="p-2 text-center text-sm font-medium text-muted-foreground border-r last:border-r-0">
+              {day}
             </div>
-          );
-        })}
+          ))}
+        </div>
+
+        {/* Time Grid with Date Cells */}
+        <div className="flex overflow-auto max-h-[500px]">
+          {/* Time Sidebar */}
+          <div className="w-16 shrink-0 border-r bg-muted/10">
+            {HOURS.map((hour) => (
+              <div
+                key={hour}
+                className="h-[42px] border-b text-xs text-muted-foreground flex items-start justify-end pr-2 pt-1"
+              >
+                {String(hour).padStart(2, "0")}:00
+              </div>
+            ))}
+          </div>
+
+          {/* Week Rows with Day Columns */}
+          <div className="flex-1 grid grid-cols-7">
+            {calendarDays.map((day, index) => {
+              const dayTasks = getTasksForDay(day);
+              const timedTasks = dayTasks.filter((t) => t.scheduled_start_time);
+              const isCurrentMonth = isSameMonth(day, currentDate);
+              const isCurrentDay = isToday(day);
+
+              return (
+                <div
+                  key={index}
+                  className={`border-r last:border-r-0 relative ${!isCurrentMonth ? "bg-muted/30" : ""} ${isCurrentDay ? "bg-primary/5" : ""}`}
+                  style={{ height: `${24 * 42}px` }}
+                >
+                  {/* Date Header */}
+                  <button
+                    onClick={() => handleDateClick(day)}
+                    className={`absolute top-1 left-1 z-20 text-xs hover:text-primary ${
+                      isCurrentDay
+                        ? "bg-primary text-primary-foreground w-5 h-5 rounded-full flex items-center justify-center font-medium"
+                        : isCurrentMonth
+                          ? "text-foreground font-medium"
+                          : "text-muted-foreground"
+                    }`}
+                  >
+                    {format(day, "d")}
+                  </button>
+
+                  {/* Hour Grid Lines */}
+                  {HOURS.map((hour) => (
+                    <div
+                      key={hour}
+                      className="absolute w-full border-b border-dashed border-muted/30"
+                      style={{ top: `${(hour / 24) * 100}%` }}
+                    />
+                  ))}
+
+                  {/* Positioned Tasks */}
+                  {timedTasks.map((task) => {
+                    const pos = getTaskPosition(task.scheduled_start_time!, task.scheduled_end_time);
+                    return (
+                      <button
+                        key={task.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onTaskClick(task);
+                        }}
+                        className={`absolute left-0.5 right-0.5 px-1 py-0.5 rounded border text-left overflow-hidden ${getTaskColor(task)} hover:opacity-80 transition-opacity z-10`}
+                        style={{ top: pos.top, height: pos.height, minHeight: "18px" }}
+                      >
+                        <div className="flex items-center gap-0.5 text-[9px]">
+                          {getStatusIcon(task)}
+                          <span className="font-medium truncate">{task.store?.name || task.title}</span>
+                        </div>
+                        <p className="text-[8px] opacity-75 truncate">
+                          {task.scheduled_start_time?.substring(0, 5)}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
-    </>
-  );
+    );
+  };
 
   return (
     <div className="space-y-4">
