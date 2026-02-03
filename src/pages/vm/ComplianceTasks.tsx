@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Search, ClipboardCheck, Loader2, Clock, CheckCircle, AlertCircle, Store, MoreHorizontal, Pencil, Trash, Calendar, List, Camera, Upload, MapPin, Filter, Image, Eye, XCircle, AlertTriangle } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -62,6 +62,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ComplianceCalendarView } from "@/components/vm/ComplianceCalendarView";
 import { ImageComparisonSlider } from "@/components/vm/ImageComparisonSlider";
+import { VMCaptureDialog } from "@/components/vm/VMCaptureDialog";
 
 const taskSchema = z.object({
   planogramId: z.string().min(1, "Planogram is required"),
@@ -192,7 +193,7 @@ export default function ComplianceTasks() {
   const [gettingLocation, setGettingLocation] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [submissionNotes, setSubmissionNotes] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
   
   // Review state
   const [reviewStatus, setReviewStatus] = useState<string>("");
@@ -340,9 +341,9 @@ export default function ComplianceTasks() {
     setLocation(null);
     setViewTaskOpen(true);
     
-    // Trigger camera after dialog opens
+    // Trigger camera dialog after task dialog opens
     setTimeout(() => {
-      fileInputRef.current?.click();
+      setCameraDialogOpen(true);
       getLocation();
     }, 100);
   };
@@ -370,17 +371,10 @@ export default function ComplianceTasks() {
     }
   };
 
-  const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setCapturedFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setCapturedImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-      getLocation();
-    }
+  const handleCameraCapture = (imageData: string, file: File) => {
+    setCapturedImage(imageData);
+    setCapturedFile(file);
+    getLocation();
   };
 
   const handlePhotoSave = async () => {
@@ -550,14 +544,11 @@ export default function ComplianceTasks() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Hidden file input for camera */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={handleCapture}
-        className="hidden"
+      {/* Camera Capture Dialog */}
+      <VMCaptureDialog
+        open={cameraDialogOpen}
+        onOpenChange={setCameraDialogOpen}
+        onCapture={handleCameraCapture}
       />
 
       <div className="flex items-center justify-between">
@@ -951,7 +942,7 @@ export default function ComplianceTasks() {
                       variant="outline" 
                       size="sm" 
                       onClick={() => {
-                        fileInputRef.current?.click();
+                        setCameraDialogOpen(true);
                         if (!location) getLocation();
                       }}
                     >
@@ -968,7 +959,7 @@ export default function ComplianceTasks() {
                     <div 
                       className="rounded-lg border-2 border-dashed h-64 flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors"
                       onClick={() => {
-                        fileInputRef.current?.click();
+                        setCameraDialogOpen(true);
                         if (!location) getLocation();
                       }}
                     >
