@@ -88,6 +88,7 @@ type AssetMasterOption = {
 type Store = {
   id: string;
   name: string;
+  address: string | null;
 };
 
 
@@ -171,7 +172,7 @@ export default function AssetInventory() {
         .select("id, name, category_id, categories(name)")
         .eq("status", "active")
         .order("name"),
-      supabase.from("stores").select("id, name").eq("status", "active").order("name"),
+      supabase.from("stores").select("id, name, address").eq("status", "active").order("name"),
     ]);
 
     if (assetsRes.error) {
@@ -409,7 +410,12 @@ export default function AssetInventory() {
                             label: store.name,
                           }))}
                           value={field.value}
-                          onValueChange={field.onChange}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            // Auto-populate address from selected store
+                            const selectedStore = stores.find((s) => s.id === value);
+                            form.setValue("location", selectedStore?.address || "");
+                          }}
                           placeholder="Select store"
                           searchPlaceholder="Search stores..."
                           emptyMessage="No stores found."
@@ -418,19 +424,18 @@ export default function AssetInventory() {
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="location"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Location</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter location (e.g. Back Office, Sales Floor)" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <FormItem>
+                    <FormLabel>Address</FormLabel>
+                    <FormControl>
+                      <Input
+                        value={stores.find((s) => s.id === form.watch("storeId"))?.address || ""}
+                        readOnly
+                        disabled
+                        placeholder="Select a store to auto-fill address"
+                        className="bg-muted"
+                      />
+                    </FormControl>
+                  </FormItem>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
