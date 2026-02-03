@@ -243,13 +243,24 @@ export default function ServiceContracts() {
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredContracts.map((contract) => (
-            <ContractSummaryCard
-              key={contract.id}
-              contract={contract}
-              onClick={() => navigate(`/services/contracts/${contract.id}`)}
-            />
-          ))}
+          {filteredContracts.map((contract) => {
+            const handleOpenContract = () => {
+              console.log("[ServiceContracts] Opening contract:", contract.id);
+              try {
+                navigate(`/services/contracts/${contract.id}`);
+              } catch (err) {
+                console.error("[ServiceContracts] Navigation error:", err);
+                toast({ title: "Error", description: "Failed to open contract details", variant: "destructive" });
+              }
+            };
+            return (
+              <ContractSummaryCard
+                key={contract.id}
+                contract={contract}
+                onClick={handleOpenContract}
+              />
+            );
+          })}
         </div>
       )}
 
