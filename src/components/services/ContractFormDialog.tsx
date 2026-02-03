@@ -38,19 +38,19 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
-const PM_CHECKLIST_OPTIONS = [
-  { value: "filter_cleaning", label: "Filter Cleaning/Replacement" },
-  { value: "coil_cleaning", label: "Coil/Condenser Cleaning" },
-  { value: "lubrication", label: "Lubrication of Moving Parts" },
-  { value: "electrical_check", label: "Electrical Connection Check" },
-  { value: "refrigerant_check", label: "Refrigerant Level Check" },
-  { value: "performance_test", label: "Performance/Load Testing" },
-  { value: "calibration", label: "Calibration & Adjustment" },
-  { value: "safety_check", label: "Safety Device Inspection" },
-  { value: "belt_inspection", label: "Belt/Drive Inspection" },
-  { value: "drain_cleaning", label: "Drain Line Cleaning" },
-  { value: "thermostat_check", label: "Thermostat Check" },
-  { value: "visual_inspection", label: "Visual Inspection & Report" },
+const PM_TASK_TYPES = [
+  { value: "preventive-maintenance", label: "Preventive Maintenance" },
+  { value: "routine-inspection", label: "Routine Inspection" },
+  { value: "deep-cleaning", label: "Deep Cleaning" },
+  { value: "calibration", label: "Calibration" },
+];
+
+const PM_FREQUENCIES = [
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Quarterly" },
+  { value: "biannual", label: "Bi-Annual" },
+  { value: "annual", label: "Annual" },
 ];
 
 const contractSchema = z.object({
@@ -108,9 +108,8 @@ const contractSchema = z.object({
   sla_penalties: z.boolean().default(false),
   sla_penalty_details: z.string().optional(),
   
-  // PM
-  pm_frequency: z.string().optional(),
-  pm_checklist_items: z.array(z.string()).default([]),
+  // PM - now uses external state for pm_schedules
+  pm_frequency: z.string().optional(), // Keep for backwards compatibility
   pm_task_type: z.string().default("preventive-maintenance"),
   auto_create_pm: z.boolean().default(true),
   
@@ -170,6 +169,13 @@ const SERVICE_TYPES = [
   { value: "decommissioning", label: "Decommissioning" },
 ];
 
+// PM Schedule item type
+interface PMScheduleItem {
+  id: string;
+  frequency: string;
+  taskType: string;
+}
+
 export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }: ContractFormDialogProps) {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -180,6 +186,8 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
   const [uploading, setUploading] = useState(false);
   const [assetSearch, setAssetSearch] = useState("");
   const [locationSearch, setLocationSearch] = useState("");
+  const [pmSchedules, setPmSchedules] = useState<PMScheduleItem[]>([]);
+  const [escalationLevels, setEscalationLevels] = useState<number[]>([1]); // Start with level 1
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     parties: true,
     scope: true,
@@ -208,13 +216,43 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
       contract_value: 0,
       invoice_frequency: "monthly",
       auto_renewal: false,
-      pm_checklist_items: [],
       pm_task_type: "preventive-maintenance",
       auto_create_pm: true,
     },
   });
 
   const isEditMode = !!contractId;
+
+  // Helper functions for PM schedules
+  const addPmSchedule = () => {
+    setPmSchedules(prev => [...prev, { 
+      id: crypto.randomUUID(), 
+      frequency: "monthly", 
+      taskType: "preventive-maintenance" 
+    }]);
+  };
+
+  const removePmSchedule = (id: string) => {
+    setPmSchedules(prev => prev.filter(s => s.id !== id));
+  };
+
+  const updatePmSchedule = (id: string, field: keyof PMScheduleItem, value: string) => {
+    setPmSchedules(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
+  };
+
+  // Helper functions for escalation levels
+  const addEscalationLevel = () => {
+    const nextLevel = Math.max(...escalationLevels) + 1;
+    if (nextLevel <= 3) {
+      setEscalationLevels(prev => [...prev, nextLevel]);
+    }
+  };
+
+  const removeEscalationLevel = (level: number) => {
+    if (escalationLevels.length > 1) {
+      setEscalationLevels(prev => prev.filter(l => l !== level));
+    }
+  };
 
   useEffect(() => {
     if (open) {
@@ -227,6 +265,8 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
         setSelectedAssets([]);
         setSelectedLocations([]);
         setAttachments([]);
+        setPmSchedules([]);
+        setEscalationLevels([1]);
       }
     }
   }, [open, contractId]);
@@ -294,7 +334,6 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
         sla_penalties: c.sla_penalties ?? false,
         sla_penalty_details: c.sla_penalty_details || "",
         pm_frequency: c.pm_frequency || "",
-        pm_checklist_items: (c.pm_checklist_items as string[]) || [],
         pm_task_type: c.pm_task_type || "preventive-maintenance",
         auto_create_pm: true,
         target_uptime_percent: c.target_uptime_percent || undefined,
@@ -382,9 +421,8 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
         p4_resolution_hrs: data.p4_resolution_hrs || null,
         sla_penalties: data.sla_penalties,
         sla_penalty_details: data.sla_penalty_details || null,
-        pm_frequency: data.pm_frequency || null,
-        pm_checklist_items: data.pm_checklist_items || [],
-        pm_task_type: data.pm_task_type || "preventive-maintenance",
+        pm_frequency: pmSchedules.length > 0 ? pmSchedules[0].frequency : (data.pm_frequency || null),
+        pm_task_type: pmSchedules.length > 0 ? pmSchedules[0].taskType : (data.pm_task_type || "preventive-maintenance"),
         target_uptime_percent: data.target_uptime_percent || null,
         pricing_model: data.pricing_model,
         contract_value: data.contract_value,
@@ -482,48 +520,55 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
       }
 
       // Auto-create PM schedules if enabled (only for new contracts)
-      if (!isEditMode && data.auto_create_pm && data.pm_frequency && selectedAssets.length > 0) {
+      if (!isEditMode && data.auto_create_pm && pmSchedules.length > 0 && selectedAssets.length > 0) {
         const vendorName = vendors.find(v => v.id === data.service_provider_id)?.name || "Vendor";
-        const pmChecklistDesc = data.pm_checklist_items.length > 0 
-          ? PM_CHECKLIST_OPTIONS.filter(opt => data.pm_checklist_items.includes(opt.value))
-              .map(opt => opt.label).join(", ")
-          : "Preventive Maintenance";
-        
-        // Calculate next due date based on frequency
         const startDate = new Date(data.start_date);
-        let nextDue = new Date(startDate);
-        switch (data.pm_frequency) {
-          case "monthly":
-            nextDue.setMonth(nextDue.getMonth() + 1);
-            break;
-          case "quarterly":
-            nextDue.setMonth(nextDue.getMonth() + 3);
-            break;
-          case "biannual":
-            nextDue.setMonth(nextDue.getMonth() + 6);
-            break;
-          case "annual":
-            nextDue.setFullYear(nextDue.getFullYear() + 1);
-            break;
-          default:
-            nextDue.setMonth(nextDue.getMonth() + 1);
-        }
-
-        // Create PM tasks for each selected asset
-        for (const assetId of selectedAssets) {
-          const asset = assets.find(a => a.id === assetId);
-          if (asset) {
-            await supabase.from("maintenance_tasks").insert({
-              asset: asset.name,
-              asset_id: assetId,
-              task_type: pmChecklistDesc.length > 50 ? pmChecklistDesc.substring(0, 47) + "..." : pmChecklistDesc,
-              frequency: data.pm_frequency === "biannual" ? "quarterly" : data.pm_frequency,
-              last_done: "-",
-              next_due: nextDue.toISOString().split("T")[0],
-              assigned_to: vendorName,
-              status: "scheduled",
-              service_contract_id: savedContractId,
-            });
+        const endDate = new Date(data.end_date);
+        
+        // Create PM tasks for each schedule and each selected asset
+        for (const schedule of pmSchedules) {
+          const taskTypeLabel = PM_TASK_TYPES.find(t => t.value === schedule.taskType)?.label || "Preventive Maintenance";
+          
+          // Calculate all due dates from start to end based on frequency
+          let currentDue = new Date(startDate);
+          while (currentDue <= endDate) {
+            for (const assetId of selectedAssets) {
+              const asset = assets.find(a => a.id === assetId);
+              if (asset) {
+                await supabase.from("maintenance_tasks").insert({
+                  asset: asset.name,
+                  asset_id: assetId,
+                  task_type: taskTypeLabel,
+                  frequency: schedule.frequency,
+                  last_done: "-",
+                  next_due: currentDue.toISOString().split("T")[0],
+                  assigned_to: vendorName,
+                  status: "scheduled",
+                  service_contract_id: savedContractId,
+                });
+              }
+            }
+            
+            // Move to next due date based on frequency
+            switch (schedule.frequency) {
+              case "weekly":
+                currentDue.setDate(currentDue.getDate() + 7);
+                break;
+              case "monthly":
+                currentDue.setMonth(currentDue.getMonth() + 1);
+                break;
+              case "quarterly":
+                currentDue.setMonth(currentDue.getMonth() + 3);
+                break;
+              case "biannual":
+                currentDue.setMonth(currentDue.getMonth() + 6);
+                break;
+              case "annual":
+                currentDue.setFullYear(currentDue.getFullYear() + 1);
+                break;
+              default:
+                currentDue.setMonth(currentDue.getMonth() + 1);
+            }
           }
         }
       }
@@ -701,8 +746,7 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                           <SelectContent>
                             <SelectItem value="amc">AMC (Annual Maintenance Contract)</SelectItem>
                             <SelectItem value="warranty">Warranty</SelectItem>
-                            <SelectItem value="sla">SLA</SelectItem>
-                            <SelectItem value="hybrid">Hybrid</SelectItem>
+                            <SelectItem value="on-call">On Call</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -1299,90 +1343,70 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
               <Collapsible open={expandedSections.pm}>
                 <SectionHeader id="pm" title="6. Preventive Maintenance Program" />
                 <CollapsibleContent className="pt-4 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="pm_frequency"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>PM Frequency</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select frequency" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="monthly">Monthly</SelectItem>
-                              <SelectItem value="quarterly">Quarterly</SelectItem>
-                              <SelectItem value="biannual">Bi-Annual</SelectItem>
-                              <SelectItem value="annual">Annual</SelectItem>
-                              <SelectItem value="meter-based">Meter-Based</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="pm_task_type"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>PM Task Type</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select type" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="preventive-maintenance">Preventive Maintenance</SelectItem>
-                              <SelectItem value="routine-inspection">Routine Inspection</SelectItem>
-                              <SelectItem value="deep-cleaning">Deep Cleaning</SelectItem>
-                              <SelectItem value="calibration">Calibration</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <FormLabel>PM Checklist - What's Covered</FormLabel>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Select the maintenance activities included in this contract
-                    </p>
-                    <div className="grid grid-cols-2 gap-2 border rounded-lg p-4 bg-muted/30">
-                      {PM_CHECKLIST_OPTIONS.map((option) => (
-                        <FormField
-                          key={option.value}
-                          control={form.control}
-                          name="pm_checklist_items"
-                          render={({ field }) => (
-                            <FormItem className="flex items-center gap-2 space-y-0">
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value?.includes(option.value)}
-                                  onCheckedChange={(checked) => {
-                                    const current = field.value || [];
-                                    if (checked) {
-                                      field.onChange([...current, option.value]);
-                                    } else {
-                                      field.onChange(current.filter((v: string) => v !== option.value));
-                                    }
-                                  }}
-                                />
-                              </FormControl>
-                              <FormLabel className="!mt-0 text-sm font-normal cursor-pointer">
-                                {option.label}
-                              </FormLabel>
-                            </FormItem>
-                          )}
-                        />
-                      ))}
+                  {/* PM Schedules List */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <FormLabel>Preventive Maintenance Tasks</FormLabel>
+                      <Button type="button" variant="outline" size="sm" onClick={addPmSchedule}>
+                        <Plus className="h-4 w-4 mr-1" /> Add PM Task
+                      </Button>
                     </div>
+                    
+                    {pmSchedules.length === 0 ? (
+                      <div className="text-center py-6 border rounded-lg bg-muted/30">
+                        <p className="text-sm text-muted-foreground">No PM tasks added yet.</p>
+                        <p className="text-xs text-muted-foreground mt-1">Click "Add PM Task" to schedule preventive maintenance.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {pmSchedules.map((schedule, index) => (
+                          <div key={schedule.id} className="grid grid-cols-[1fr_1fr_auto] gap-3 p-3 border rounded-lg bg-muted/30">
+                            <div className="space-y-1">
+                              <FormLabel className="text-xs">Frequency</FormLabel>
+                              <Select 
+                                value={schedule.frequency} 
+                                onValueChange={(v) => updatePmSchedule(schedule.id, 'frequency', v)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select frequency" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {PM_FREQUENCIES.map(f => (
+                                    <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-1">
+                              <FormLabel className="text-xs">Task Type</FormLabel>
+                              <Select 
+                                value={schedule.taskType} 
+                                onValueChange={(v) => updatePmSchedule(schedule.id, 'taskType', v)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {PM_TASK_TYPES.map(t => (
+                                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="flex items-end">
+                              <Button 
+                                type="button" 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => removePmSchedule(schedule.id)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <FormField
@@ -1396,7 +1420,7 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                         <div>
                           <FormLabel className="!mt-0 font-medium">Auto-create PM Schedules</FormLabel>
                           <p className="text-xs text-muted-foreground">
-                            Automatically schedule preventive maintenance tasks for covered assets based on frequency
+                            Automatically schedule preventive maintenance tasks for covered assets from start to end date
                           </p>
                         </div>
                       </FormItem>
@@ -1535,46 +1559,72 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
               <Collapsible open={expandedSections.escalation}>
                 <SectionHeader id="escalation" title="8. Escalation Matrix" />
                 <CollapsibleContent className="pt-4 space-y-4">
-                  {[1, 2, 3].map(level => (
-                    <div key={level} className="grid grid-cols-3 gap-4">
-                      <FormField
-                        control={form.control}
-                        name={`escalation_l${level}_name` as keyof ContractFormData}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Level {level} Name</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Contact name" {...field} value={field.value as string || ""} />
-                            </FormControl>
-                          </FormItem>
+                  {escalationLevels.map(level => (
+                    <div key={level} className="p-3 border rounded-lg space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Level {level}</span>
+                        {escalationLevels.length > 1 && (
+                          <Button 
+                            type="button" 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => removeEscalationLevel(level)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
                         )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name={`escalation_l${level}_phone` as keyof ContractFormData}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Phone</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Phone" {...field} value={field.value as string || ""} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name={`escalation_l${level}_email` as keyof ContractFormData}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Email</FormLabel>
-                            <FormControl>
-                              <Input type="email" placeholder="Email" {...field} value={field.value as string || ""} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
+                        <FormField
+                          control={form.control}
+                          name={`escalation_l${level}_name` as keyof ContractFormData}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Name</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Contact name" {...field} value={field.value as string || ""} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`escalation_l${level}_phone` as keyof ContractFormData}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Phone</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Phone" {...field} value={field.value as string || ""} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`escalation_l${level}_email` as keyof ContractFormData}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Email</FormLabel>
+                              <FormControl>
+                                <Input type="email" placeholder="Email" {...field} value={field.value as string || ""} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
                     </div>
                   ))}
+                  
+                  {escalationLevels.length < 3 && (
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm"
+                      onClick={addEscalationLevel}
+                    >
+                      <Plus className="h-4 w-4 mr-1" /> Add Level {Math.max(...escalationLevels) + 1}
+                    </Button>
+                  )}
                 </CollapsibleContent>
               </Collapsible>
 
