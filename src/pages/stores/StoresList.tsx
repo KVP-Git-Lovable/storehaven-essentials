@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Search, MapPin, MoreVertical, Loader2 } from "lucide-react";
+import { Plus, Search, MapPin, MoreVertical, Loader2, Trash2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -46,6 +47,7 @@ import { useToast } from "@/hooks/use-toast";
 import { storeSchema, type StoreFormData } from "@/lib/schemas";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
+import { StoreDeleteConfirmDialog } from "@/components/stores/StoreDeleteConfirmDialog";
 
 type Store = {
   id: string;
@@ -79,10 +81,13 @@ export default function StoresList() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [storeToDelete, setStoreToDelete] = useState<{ id: string; name: string } | null>(null);
   const { toast } = useToast();
   const { hasPermission } = usePermissions();
 
   const canCreate = hasPermission("stores", "create");
+  const canDelete = hasPermission("stores", "delete");
 
   const form = useForm<StoreFormData>({
     resolver: zodResolver(storeSchema),
@@ -391,6 +396,21 @@ export default function StoresList() {
                       <DropdownMenuItem asChild>
                         <Link to={`/stores/${store.id}?tab=assets`}>View Assets</Link>
                       </DropdownMenuItem>
+                      {canDelete && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => {
+                              setStoreToDelete({ id: store.id, name: store.name });
+                              setDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Store
+                          </DropdownMenuItem>
+                        </>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
@@ -399,6 +419,19 @@ export default function StoresList() {
           </TableBody>
         </Table>
       </div>
+
+      {storeToDelete && (
+        <StoreDeleteConfirmDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          storeId={storeToDelete.id}
+          storeName={storeToDelete.name}
+          onDeleted={() => {
+            setStoreToDelete(null);
+            fetchStores();
+          }}
+        />
+      )}
     </div>
   );
 }
