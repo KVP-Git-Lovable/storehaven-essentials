@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Search, Package, CheckCircle, AlertTriangle, XCircle, Loader2, Eye } from "lucide-react";
 import { useStoreAccess } from "@/hooks/useStoreAccess";
@@ -113,13 +113,6 @@ const assetStatusOptions = [
   { value: "working", label: "Working" },
   { value: "withdrawn", label: "Withdrawn" },
   { value: "drop", label: "Drop" },
-];
-
-const stats = [
-  { title: "Total Assets", value: "1,247", icon: Package, iconColor: "bg-primary/10 text-primary" },
-  { title: "Under Warranty", value: "856", icon: CheckCircle, iconColor: "bg-success/10 text-success" },
-  { title: "Under AMC", value: "374", icon: AlertTriangle, iconColor: "bg-warning/10 text-warning" },
-  { title: "Non-Operational", value: "17", icon: XCircle, iconColor: "bg-destructive/10 text-destructive" },
 ];
 
 export default function AssetInventory() {
@@ -247,6 +240,23 @@ export default function AssetInventory() {
       (asset.asset_number && asset.asset_number.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (asset.stores?.name && asset.stores.name.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  // Compute stats from actual asset data
+  const stats = useMemo(() => {
+    const totalAssets = assets.length;
+    const underWarranty = assets.filter((a) => a.condition === "under-warranty").length;
+    const underAMC = assets.filter((a) => a.condition === "under-amc").length;
+    const nonOperational = assets.filter(
+      (a) => a.asset_status === "withdrawn" || a.asset_status === "drop"
+    ).length;
+
+    return [
+      { title: "Total Assets", value: totalAssets.toLocaleString(), icon: Package, iconColor: "bg-primary/10 text-primary" },
+      { title: "Under Warranty", value: underWarranty.toLocaleString(), icon: CheckCircle, iconColor: "bg-success/10 text-success" },
+      { title: "Under AMC", value: underAMC.toLocaleString(), icon: AlertTriangle, iconColor: "bg-warning/10 text-warning" },
+      { title: "Non-Operational", value: nonOperational.toLocaleString(), icon: XCircle, iconColor: "bg-destructive/10 text-destructive" },
+    ];
+  }, [assets]);
 
   const getVendorName = (vendorId: string | null) => {
     if (!vendorId) return "-";
