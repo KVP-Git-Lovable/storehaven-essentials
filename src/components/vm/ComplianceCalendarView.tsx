@@ -227,12 +227,14 @@ export function ComplianceCalendarView({
   // Day View Component with Time Sidebar
   const DayView = () => {
     const dayTasks = getTasksForDay(currentDate);
-    const timedTasks = dayTasks.filter((t) => t.scheduled_start_time);
-    const anytimeTasks = dayTasks.filter((t) => !t.scheduled_start_time);
+    // All tasks render in time grid - tasks without time default to 09:00
+    const allTasks = dayTasks.map((t) => ({
+      ...t,
+      scheduled_start_time: t.scheduled_start_time || "09:00:00",
+    }));
 
     return (
       <div className="flex flex-col">
-
         {/* Time Grid */}
         <div className="flex overflow-auto" style={{ height: "600px" }}>
           {/* Time Sidebar */}
@@ -255,7 +257,7 @@ export function ComplianceCalendarView({
             ))}
 
             {/* Positioned Tasks */}
-            {timedTasks.map((task) => {
+            {allTasks.map((task) => {
               const pos = getTaskPosition(task.scheduled_start_time!, task.scheduled_end_time);
               return (
                 <button
@@ -288,10 +290,6 @@ export function ComplianceCalendarView({
 
   // Week View Component with Time Sidebar
   const WeekView = () => {
-    const allAnytimeTasks = calendarDays.flatMap((day) =>
-      getTasksForDay(day).filter((t) => !t.scheduled_start_time).map((t) => ({ ...t, day }))
-    );
-
     return (
       <>
         {/* Day Headers */}
@@ -317,33 +315,6 @@ export function ComplianceCalendarView({
           ))}
         </div>
 
-        {/* Anytime Tasks Row */}
-        {allAnytimeTasks.length > 0 && (
-          <div className="grid grid-cols-[64px_repeat(7,1fr)] border-b bg-muted/10">
-            <div className="p-1 border-r text-xs text-muted-foreground flex items-center justify-end pr-2">
-              Anytime
-            </div>
-            {calendarDays.map((day, idx) => {
-              const dayAnytime = getTasksForDay(day).filter((t) => !t.scheduled_start_time);
-              return (
-                <div key={idx} className="border-r last:border-r-0 p-1 min-h-[40px]">
-                  <div className="flex flex-wrap gap-1">
-                    {dayAnytime.map((task) => (
-                      <button
-                        key={task.id}
-                        onClick={() => onTaskClick(task)}
-                        className={`text-[10px] px-1 py-0.5 rounded border ${getTaskColor(task)} hover:opacity-80 transition-opacity truncate max-w-full`}
-                      >
-                        {task.store?.name || task.title}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
         {/* Time Grid */}
         <div className="grid grid-cols-[64px_repeat(7,1fr)] overflow-auto" style={{ height: "500px" }}>
           {/* Time Sidebar */}
@@ -360,7 +331,12 @@ export function ComplianceCalendarView({
 
           {/* Day Columns */}
           {calendarDays.map((day, idx) => {
-            const timedTasks = getTasksForDay(day).filter((t) => t.scheduled_start_time);
+            // All tasks render in grid - tasks without time default to 09:00
+            const dayTasks = getTasksForDay(day);
+            const allTasks = dayTasks.map((t) => ({
+              ...t,
+              scheduled_start_time: t.scheduled_start_time || "09:00:00",
+            }));
             return (
               <div key={idx} className="border-r last:border-r-0 relative">
                 {/* Hour Grid Lines */}
@@ -369,7 +345,7 @@ export function ComplianceCalendarView({
                 ))}
 
                 {/* Positioned Tasks */}
-                {timedTasks.map((task) => {
+                {allTasks.map((task) => {
                   const pos = getTaskPosition(task.scheduled_start_time!, task.scheduled_end_time);
                   return (
                     <button
@@ -393,46 +369,12 @@ export function ComplianceCalendarView({
     );
   };
 
-  // Month View Component with Time Sidebar
+  // Month View Component - Simplified grid with tasks inside cells
   const MonthView = () => {
-    // Collect all tasks with times across all days for positioning
-    const allAnytimeTasks = calendarDays.flatMap((day) =>
-      getTasksForDay(day).filter((t) => !t.scheduled_start_time)
-    );
-
     return (
       <div className="flex flex-col">
-        {/* Unscheduled Tasks Row */}
-        {allAnytimeTasks.length > 0 && (
-          <div className="grid grid-cols-[64px_repeat(7,1fr)] border-b bg-muted/10">
-            <div className="p-1 border-r text-xs text-muted-foreground flex items-center justify-end pr-2" />
-            {calendarDays.slice(0, 7).map((_, idx) => {
-              // Get matching day from each week row
-              const dayAnytime = calendarDays
-                .filter((_, dayIdx) => dayIdx % 7 === idx)
-                .flatMap((day) => getTasksForDay(day).filter((t) => !t.scheduled_start_time));
-              return (
-                <div key={idx} className="border-r last:border-r-0 p-1 min-h-[32px]">
-                  <div className="flex flex-wrap gap-1">
-                    {dayAnytime.slice(0, 2).map((task) => (
-                      <button
-                        key={task.id}
-                        onClick={() => onTaskClick(task)}
-                        className={`text-[9px] px-1 py-0.5 rounded border ${getTaskColor(task)} hover:opacity-80 transition-opacity truncate max-w-full`}
-                      >
-                        {task.store?.name || task.title}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
         {/* Day Headers */}
-        <div className="grid grid-cols-[64px_repeat(7,1fr)] border-b bg-muted/20">
-          <div className="p-2 border-r" /> {/* Empty corner */}
+        <div className="grid grid-cols-7 border-b bg-muted/20">
           {WEEKDAYS.map((day) => (
             <div key={day} className="p-2 text-center text-sm font-medium text-muted-foreground border-r last:border-r-0">
               {day}
@@ -440,84 +382,62 @@ export function ComplianceCalendarView({
           ))}
         </div>
 
-        {/* Time Grid with Date Cells */}
-        <div className="flex overflow-auto max-h-[500px]">
-          {/* Time Sidebar */}
-          <div className="w-16 shrink-0 border-r bg-muted/10">
-            {HOURS.map((hour) => (
+        {/* Date Cells Grid */}
+        <div className="grid grid-cols-7">
+          {calendarDays.map((day, index) => {
+            const dayTasks = getTasksForDay(day);
+            const isCurrentMonth = isSameMonth(day, currentDate);
+            const isCurrentDay = isToday(day);
+
+            return (
               <div
-                key={hour}
-                className="h-[42px] border-b text-xs text-muted-foreground flex items-start justify-end pr-2 pt-1"
+                key={index}
+                className={`min-h-[100px] border-r border-b last:border-r-0 p-1 ${!isCurrentMonth ? "bg-muted/30" : ""} ${isCurrentDay ? "bg-primary/5" : ""}`}
               >
-                {String(hour).padStart(2, "0")}:00
-              </div>
-            ))}
-          </div>
-
-          {/* Week Rows with Day Columns */}
-          <div className="flex-1 grid grid-cols-7">
-            {calendarDays.map((day, index) => {
-              const dayTasks = getTasksForDay(day);
-              const timedTasks = dayTasks.filter((t) => t.scheduled_start_time);
-              const isCurrentMonth = isSameMonth(day, currentDate);
-              const isCurrentDay = isToday(day);
-
-              return (
-                <div
-                  key={index}
-                  className={`border-r last:border-r-0 relative ${!isCurrentMonth ? "bg-muted/30" : ""} ${isCurrentDay ? "bg-primary/5" : ""}`}
-                  style={{ height: `${24 * 42}px` }}
+                {/* Date Header */}
+                <button
+                  onClick={() => handleDateClick(day)}
+                  className={`mb-1 text-xs hover:text-primary ${
+                    isCurrentDay
+                      ? "bg-primary text-primary-foreground w-5 h-5 rounded-full flex items-center justify-center font-medium"
+                      : isCurrentMonth
+                        ? "text-foreground font-medium"
+                        : "text-muted-foreground"
+                  }`}
                 >
-                  {/* Date Header */}
-                  <button
-                    onClick={() => handleDateClick(day)}
-                    className={`absolute top-1 left-1 z-20 text-xs hover:text-primary ${
-                      isCurrentDay
-                        ? "bg-primary text-primary-foreground w-5 h-5 rounded-full flex items-center justify-center font-medium"
-                        : isCurrentMonth
-                          ? "text-foreground font-medium"
-                          : "text-muted-foreground"
-                    }`}
-                  >
-                    {format(day, "d")}
-                  </button>
+                  {format(day, "d")}
+                </button>
 
-                  {/* Hour Grid Lines */}
-                  {HOURS.map((hour) => (
-                    <div
-                      key={hour}
-                      className="absolute w-full border-b border-dashed border-muted/30"
-                      style={{ top: `${(hour / 24) * 100}%` }}
-                    />
+                {/* Tasks inside the cell */}
+                <div className="space-y-1">
+                  {dayTasks.slice(0, 3).map((task) => (
+                    <button
+                      key={task.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onTaskClick(task);
+                      }}
+                      title={`${task.store?.name || task.title} • ${formatScheduledTime(task.scheduled_start_time, task.scheduled_end_time)}`}
+                      className={`w-full text-left text-[9px] px-1 py-0.5 rounded border ${getTaskColor(task)} hover:opacity-80 transition-opacity truncate`}
+                    >
+                      <div className="flex items-center gap-0.5">
+                        {getStatusIcon(task)}
+                        <span className="truncate">{task.store?.name || task.title}</span>
+                      </div>
+                    </button>
                   ))}
-
-                  {/* Positioned Tasks */}
-                  {timedTasks.map((task) => {
-                    const pos = getTaskPosition(task.scheduled_start_time!, task.scheduled_end_time);
-                    return (
-                      <button
-                        key={task.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onTaskClick(task);
-                        }}
-                        className={`absolute left-0.5 right-0.5 px-1 py-0.5 rounded border text-left overflow-hidden ${getTaskColor(task)} hover:opacity-80 transition-opacity z-10`}
-                        style={{ top: pos.top, height: pos.height, minHeight: "18px" }}
-                      >
-                        <div className="flex items-center gap-0.5 text-[9px]">
-                          {getStatusIcon(task)}
-                          <span className="font-medium truncate">{task.store?.name || task.title}</span>
-                        </div>
-                        <p className="text-[8px] opacity-75 truncate">
-                          {task.scheduled_start_time?.substring(0, 5)}
-                        </p>
-                      </button>
-                    );
-                  })}
+                  {dayTasks.length > 3 && (
+                    <button
+                      onClick={() => handleDateClick(day)}
+                      className="text-[9px] text-muted-foreground hover:text-primary"
+                    >
+                      +{dayTasks.length - 3} more
+                    </button>
+                  )}
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
