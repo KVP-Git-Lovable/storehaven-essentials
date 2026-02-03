@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./components/auth/AuthProvider";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { AppLayout } from "./components/layout/AppLayout";
+import LandingPage from "./pages/landing/LandingPage";
 import Login from "./pages/auth/Login";
 import Dashboard from "./pages/Dashboard";
 import StoresList from "./pages/stores/StoresList";
@@ -50,7 +51,6 @@ import StoreBudgetDetails from "./pages/stores/StoreBudgetDetails";
 import StoreBudgetDashboard from "./pages/stores/StoreBudgetDashboard";
 import Planograms from "./pages/vm/Planograms";
 import ComplianceTasks from "./pages/vm/ComplianceTasks";
-import PhotoSubmission from "./pages/vm/PhotoSubmission";
 import ReviewSubmissions from "./pages/vm/ReviewSubmissions";
 import InventoryItems from "./pages/inventory/InventoryItems";
 import Requisitions from "./pages/inventory/Requisitions";
@@ -100,7 +100,8 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            {/* Public route */}
+            {/* Public routes */}
+            <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<Login />} />
             
             {/* Protected routes */}
@@ -111,7 +112,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             >
-              <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/dashboards/assets" element={<AssetManagementDashboard />} />
               <Route path="/dashboards/inventory" element={<InventoryDashboard />} />
               <Route path="/dashboards/employees" element={<EmployeesDashboard />} />
@@ -170,7 +171,6 @@ const App = () => (
               <Route path="/master/store-budget" element={<StoreBudgetMaster />} />
               <Route path="/vm/planograms" element={<Planograms />} />
               <Route path="/vm/tasks" element={<ComplianceTasks />} />
-              <Route path="/vm/submit" element={<PhotoSubmission />} />
               <Route path="/vm/review" element={<ReviewSubmissions />} />
               <Route path="/inventory/items" element={<InventoryItems />} />
               <Route path="/inventory/requisitions" element={<Requisitions />} />
