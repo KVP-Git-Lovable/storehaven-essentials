@@ -1,113 +1,145 @@
 
-
-# Add Searchable Dropdowns to Asset Register Form
+# Add Edit Button to Asset Register Actions Column
 
 ## Overview
 
-This plan adds search functionality to the dropdown fields in the "Add New Asset" dialog. Currently, the form uses standard Radix Select components which require scrolling through all options. With searchable dropdowns, users can quickly type to filter and find the desired option.
+This plan adds an Edit button alongside the existing View (Eye) button in the Asset Register's Actions column. Clicking the Edit button will open a dialog to modify the asset's details using the same form fields as the "Add Asset" dialog.
 
 ## What Changes
 
-The following dropdown fields will become searchable:
-- **Asset Name (Master)** - Can have many entries, search is essential
-- **Store** - Multiple stores to choose from
-- **Location** - Multiple locations to filter
-- **Vendor Procured From** - List of vendors
-- **OEM Name** - List of OEM vendors
+The Asset Register table currently has only a View button in the Actions column. After this change:
+- An **Edit button** (Pencil icon) will appear next to the View button
+- Clicking Edit opens a dialog pre-populated with the asset's current values
+- Users can modify any field and save changes
+- The existing View functionality remains unchanged
 
-The following fields will remain as standard dropdowns (small, fixed option lists):
-- **Service Engagement** - Only 4 options
-- **Asset Status** - Only 10 options
+## Implementation Approach
 
-## Implementation Steps
+### 1. Add State for Edit Mode
 
-### Step 1: Create a Reusable SearchableSelect Component
+Add new state variables to track:
+- `editOpen` - controls the edit dialog visibility
+- `editingAsset` - stores the asset being edited
 
-Create a new component `src/components/ui/searchable-select.tsx` that:
-- Uses the existing `Command` components from cmdk
-- Wraps in a `Popover` for dropdown behavior
-- Supports single selection (unlike MultiSelectCombobox)
-- Works seamlessly with react-hook-form's FormField pattern
-- Displays selected value label in the trigger button
-- Provides search input with real-time filtering
-- Supports optional empty/placeholder states
-- Handles the "none" value pattern for optional fields
+### 2. Create Edit Handler Function
 
-### Step 2: Update AssetInventory.tsx Form
+Add a `handleEdit` function that:
+- Sets the asset being edited
+- Pre-populates the form with the asset's current values using `form.reset()`
+- Opens the edit dialog
 
-Replace the standard Select components for these fields:
-1. **assetMasterId** - Asset Name (Master)
-2. **storeId** - Store
-3. **location** - Location
-4. **vendorId** - Vendor Procured From
-5. **oemId** - OEM Name
+### 3. Modify Form Submission
 
-Each field will use the new SearchableSelect component with appropriate:
-- Placeholder text
-- Search placeholder text
-- Empty state message
-- Option list transformation
+Update the `onSubmit` function to:
+- Check if editing or adding (based on `editingAsset` state)
+- Use `update` instead of `insert` for edits
+- Record status history if status changed during edit
+- Reset form and close dialog after success
+
+### 4. Add Edit Dialog
+
+Either repurpose the existing dialog with conditional title/button text, or create a separate edit dialog. The recommended approach is to reuse the existing dialog with:
+- Dynamic title: "Add New Asset" vs "Edit Asset"
+- Dynamic submit button: "Add Asset" vs "Save Changes"
+
+### 5. Add Edit Button in Table
+
+Add a Pencil icon button next to the Eye button in the Actions column:
+- Uses same styling as View button (ghost variant, size icon)
+- Stops click propagation to prevent row navigation
+- Calls `handleEdit(asset)` on click
 
 ---
 
 ## Technical Details
 
-### SearchableSelect Component Props
+### New State Variables
 
 ```text
-type SearchableSelectProps = {
-  options: { value: string; label: string; subtitle?: string }[]
-  value: string
-  onValueChange: (value: string) => void
-  placeholder?: string
-  searchPlaceholder?: string
-  emptyMessage?: string
-  disabled?: boolean
-  className?: string
+const [editOpen, setEditOpen] = useState(false);
+const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+```
+
+### handleEdit Function
+
+```text
+const handleEdit = (asset: Asset) => {
+  setEditingAsset(asset);
+  form.reset({
+    assetMasterId: asset.asset_master_id || "",
+    assetNumber: asset.asset_number || "",
+    storeId: asset.store_id || "",
+    location: asset.location || "",
+    condition: asset.condition || "under-warranty",
+    assetStatus: asset.asset_status || "requisition-raised",
+    purchaseDate: asset.purchase_date || "",
+    value: asset.value || 0,
+    vendorId: asset.vendor_id || "",
+    oemId: asset.oem_id || "",
+    warrantyStartDate: asset.warranty_start_date || "",
+    warrantyEndDate: asset.warranty_end_date || "",
+  });
+  setEditOpen(true);
+};
+```
+
+### Updated onSubmit Logic
+
+```text
+if (editingAsset) {
+  // Update existing asset
+  const { error } = await supabase
+    .from("assets")
+    .update({...fields...})
+    .eq("id", editingAsset.id);
+    
+  // Track status change if applicable
+  if (data.assetStatus !== editingAsset.asset_status) {
+    await supabase.from("asset_status_history").insert({...});
+  }
+} else {
+  // Insert new asset (existing logic)
 }
 ```
 
-### Component Structure
+### Actions Column Update
 
 ```text
-Popover
-  PopoverTrigger (Button showing selected label)
-  PopoverContent
-    Command
-      CommandInput (search box)
-      CommandList
-        CommandEmpty (no results message)
-        CommandGroup
-          CommandItem (for each filtered option)
+<TableCell>
+  <div className="flex items-center gap-1">
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-8 w-8"
+      onClick={(e) => {
+        e.stopPropagation();
+        handleEdit(asset);
+      }}
+    >
+      <Pencil className="h-4 w-4" />
+    </Button>
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-8 w-8"
+      onClick={(e) => {
+        e.stopPropagation();
+        navigate(`/assets/inventory/${asset.id}`);
+      }}
+    >
+      <Eye className="h-4 w-4" />
+    </Button>
+  </div>
+</TableCell>
 ```
 
-### Form Integration Example
-
-```text
-<FormField
-  control={form.control}
-  name="storeId"
-  render={({ field }) => (
-    <FormItem>
-      <FormLabel>Store</FormLabel>
-      <SearchableSelect
-        options={stores.map(s => ({ value: s.id, label: s.name }))}
-        value={field.value}
-        onValueChange={field.onChange}
-        placeholder="Select store"
-        searchPlaceholder="Search stores..."
-        emptyMessage="No stores found."
-      />
-      <FormMessage />
-    </FormItem>
-  )}
-/>
-```
-
-### Files to Create/Modify
+### Files to Modify
 
 | File | Action |
 |------|--------|
-| `src/components/ui/searchable-select.tsx` | Create |
-| `src/pages/assets/AssetInventory.tsx` | Modify |
+| `src/pages/assets/AssetInventory.tsx` | Modify - Add edit functionality |
+
+### Import Changes
+
+Add `Pencil` to the lucide-react imports.
 
