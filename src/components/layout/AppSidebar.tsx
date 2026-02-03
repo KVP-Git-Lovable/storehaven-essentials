@@ -119,7 +119,7 @@ const navigation: NavItem[] = [
   },
   { title: "Vendors", href: "/vendors", icon: Building2, moduleKey: "vendors" },
   {
-    title: "Attendance Management",
+    title: "Attendance",
     icon: CalendarCheck,
     moduleKey: "staff",
     children: [
