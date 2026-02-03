@@ -110,11 +110,13 @@ const assetStatusOptions = [
   { value: "working", label: "Working" },
   { value: "withdrawn", label: "Withdrawn" },
   { value: "drop", label: "Drop" },
+  { value: "orphaned", label: "Orphaned (No Master)" },
 ];
 
 export default function AssetInventory() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
+  const [showOrphaned, setShowOrphaned] = useState(false);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [assetMasters, setAssetMasters] = useState<AssetMasterOption[]>([]);
@@ -301,13 +303,26 @@ export default function AssetInventory() {
     }
   };
 
-  const filteredAssets = assets.filter(
-    (asset) =>
-      asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      asset.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (asset.asset_number && asset.asset_number.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (asset.stores?.name && asset.stores.name.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredAssets = useMemo(() => {
+    return assets.filter((asset) => {
+      // Filter by orphaned status
+      if (!showOrphaned && asset.asset_status === "orphaned") {
+        return false;
+      }
+      if (showOrphaned && asset.asset_status !== "orphaned") {
+        return false;
+      }
+      
+      // Search filter
+      const matchesSearch = 
+        asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        asset.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (asset.asset_number && asset.asset_number.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (asset.stores?.name && asset.stores.name.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      return matchesSearch;
+    });
+  }, [assets, searchQuery, showOrphaned]);
 
   // Compute stats from actual asset data
   const stats = useMemo(() => {
@@ -619,6 +634,14 @@ export default function AssetInventory() {
             className="pl-10"
           />
         </div>
+        <Button
+          variant={showOrphaned ? "default" : "outline"}
+          onClick={() => setShowOrphaned(!showOrphaned)}
+          className="gap-2"
+        >
+          <AlertTriangle className="h-4 w-4" />
+          {showOrphaned ? "Show Active Assets" : "Show Orphaned Assets"}
+        </Button>
       </div>
 
       <div className="rounded-xl border bg-card overflow-x-auto">
