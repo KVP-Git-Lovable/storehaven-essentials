@@ -276,13 +276,13 @@ export function PMCalendarView({ schedules, onTaskClick }: PMCalendarViewProps) 
   const WeekView = () => {
     return (
       <div className="flex flex-col">
-        {/* Day Headers */}
-        <div className="flex border-b bg-muted/20">
-          <div className="w-16 flex-shrink-0 border-r" />
+        {/* Fixed Header Row */}
+        <div className="grid grid-cols-[64px_repeat(7,1fr)] border-b bg-muted/20">
+          <div className="border-r" />
           {calendarDays.map((day, idx) => (
             <div
               key={idx}
-              className={`flex-1 p-2 text-center border-r last:border-r-0 ${isToday(day) ? "bg-primary/5" : ""}`}
+              className={`p-2 text-center border-r last:border-r-0 ${isToday(day) ? "bg-primary/5" : ""}`}
             >
               <p className="text-xs text-muted-foreground">{WEEKDAYS[idx]}</p>
               <button
@@ -299,65 +299,66 @@ export function PMCalendarView({ schedules, onTaskClick }: PMCalendarViewProps) 
           ))}
         </div>
 
-        {/* Time Grid */}
-        <div className="flex overflow-auto max-h-[500px]">
-          {/* Time Sidebar */}
-          <div className="w-16 flex-shrink-0 border-r bg-muted/10">
-            {HOURS.map((hour) => (
-              <div
-                key={hour}
-                className="h-[50px] border-b flex items-start justify-end pr-2 pt-1"
-              >
-                <span className="text-xs text-muted-foreground">
-                  {hour.toString().padStart(2, "0")}:00
-                </span>
-              </div>
-            ))}
+        {/* Scrollable Time Grid */}
+        <div className="overflow-auto max-h-[500px]">
+          <div className="grid grid-cols-[64px_repeat(7,1fr)]" style={{ height: `${24 * 50}px` }}>
+            {/* Time Sidebar */}
+            <div className="border-r bg-muted/10">
+              {HOURS.map((hour) => (
+                <div
+                  key={hour}
+                  className="h-[50px] border-b flex items-start justify-end pr-2 pt-1"
+                >
+                  <span className="text-xs text-muted-foreground">
+                    {hour.toString().padStart(2, "0")}:00
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Day Columns */}
+            {calendarDays.map((day, idx) => {
+              const dayTasks = getTasksForDay(day);
+              return (
+                <div
+                  key={idx}
+                  className={`relative border-r last:border-r-0 ${isToday(day) ? "bg-primary/5" : ""}`}
+                >
+                  {/* Hour lines */}
+                  {HOURS.map((hour) => (
+                    <div
+                      key={hour}
+                      className="absolute w-full border-b border-dashed border-muted"
+                      style={{ top: `${(hour / 24) * 100}%` }}
+                    />
+                  ))}
+
+                  {/* Tasks */}
+                  {dayTasks.map((task) => {
+                    const position = task.scheduled_start_time
+                      ? getTaskPosition(task.scheduled_start_time, task.scheduled_end_time)
+                      : { top: "2%", height: "4%" };
+                    return (
+                      <button
+                        key={task.id}
+                        onClick={() => onTaskClick(task)}
+                        className={`absolute left-0.5 right-0.5 rounded border px-1 py-0.5 text-left overflow-hidden ${getTaskColor(task)} hover:opacity-80 transition-opacity`}
+                        style={{ top: position.top, height: position.height, minHeight: "20px" }}
+                      >
+                        <div className="flex items-center gap-1">
+                          {getStatusIcon(task)}
+                          <span className="text-[10px] font-medium truncate">{task.asset}</span>
+                        </div>
+                        <div className="text-[9px] opacity-75 truncate">
+                          {task.scheduled_start_time?.slice(0, 5)}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
           </div>
-
-          {/* Day Columns */}
-          {calendarDays.map((day, idx) => {
-            const dayTasks = getTasksForDay(day);
-            return (
-              <div
-                key={idx}
-                className={`flex-1 relative border-r last:border-r-0 ${isToday(day) ? "bg-primary/5" : ""}`}
-                style={{ height: `${24 * 50}px` }}
-              >
-                {/* Hour lines */}
-                {HOURS.map((hour) => (
-                  <div
-                    key={hour}
-                    className="absolute w-full border-b border-dashed border-muted"
-                    style={{ top: `${(hour / 24) * 100}%` }}
-                  />
-                ))}
-
-                {/* Tasks */}
-                {dayTasks.map((task) => {
-                  const position = task.scheduled_start_time
-                    ? getTaskPosition(task.scheduled_start_time, task.scheduled_end_time)
-                    : { top: "2%", height: "4%" };
-                  return (
-                    <button
-                      key={task.id}
-                      onClick={() => onTaskClick(task)}
-                      className={`absolute left-0.5 right-0.5 rounded border px-1 py-0.5 text-left overflow-hidden ${getTaskColor(task)} hover:opacity-80 transition-opacity`}
-                      style={{ top: position.top, height: position.height, minHeight: "20px" }}
-                    >
-                      <div className="flex items-center gap-1">
-                        {getStatusIcon(task)}
-                        <span className="text-[10px] font-medium truncate">{task.asset}</span>
-                      </div>
-                      <div className="text-[9px] opacity-75 truncate">
-                        {task.scheduled_start_time?.slice(0, 5)}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })}
         </div>
       </div>
     );
