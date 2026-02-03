@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
+import { ProfilePhotoUpload } from "@/components/profile/ProfilePhotoUpload";
 
 const passwordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
@@ -44,6 +45,23 @@ export default function Profile() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+
+  // Fetch profile photo on mount
+  useEffect(() => {
+    const fetchProfilePhoto = async () => {
+      if (!profile?.id) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("profile_photo_url")
+        .eq("id", profile.id)
+        .single();
+      if (data?.profile_photo_url) {
+        setProfilePhotoUrl(data.profile_photo_url);
+      }
+    };
+    fetchProfilePhoto();
+  }, [profile?.id]);
 
   const passwordForm = useForm<PasswordFormData>({
     resolver: zodResolver(passwordSchema),
@@ -162,15 +180,35 @@ export default function Profile() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground text-2xl font-semibold">
-                    {profile?.username?.charAt(0)?.toUpperCase() || "U"}
-                  </div>
+                  {profilePhotoUrl ? (
+                    <img
+                      src={profilePhotoUrl}
+                      alt="Profile"
+                      className="h-16 w-16 rounded-full object-cover border-2 border-border"
+                    />
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground text-2xl font-semibold">
+                      {profile?.username?.charAt(0)?.toUpperCase() || "U"}
+                    </div>
+                  )}
                   <div>
                     <p className="font-medium text-lg">{profile?.username || "—"}</p>
                     <p className="text-sm text-muted-foreground">{profile?.email || user?.email || "—"}</p>
                   </div>
                 </div>
                 <Separator />
+                
+                {/* Profile Photo Upload */}
+                {profile?.id && (
+                  <ProfilePhotoUpload
+                    userId={profile.id}
+                    currentPhotoUrl={profilePhotoUrl}
+                    username={profile.username || "User"}
+                    onPhotoUpdate={setProfilePhotoUrl}
+                  />
+                )}
+                <Separator />
+                
                 <div className="grid gap-4">
                   <div className="flex items-center gap-3">
                     <Shield className="h-4 w-4 text-muted-foreground" />

@@ -352,6 +352,7 @@ export type Database = {
           created_at: string
           employee_id: string
           face_match_score: number | null
+          face_verification_status: string | null
           id: string
           notes: string | null
           status: string | null
@@ -374,6 +375,7 @@ export type Database = {
           created_at?: string
           employee_id: string
           face_match_score?: number | null
+          face_verification_status?: string | null
           id?: string
           notes?: string | null
           status?: string | null
@@ -396,6 +398,7 @@ export type Database = {
           created_at?: string
           employee_id?: string
           face_match_score?: number | null
+          face_verification_status?: string | null
           id?: string
           notes?: string | null
           status?: string | null
@@ -3997,6 +4000,7 @@ export type Database = {
           email: string
           id: string
           must_reset_password: boolean | null
+          profile_photo_url: string | null
           reports_to: string | null
           role_id: string | null
           status: string
@@ -4008,6 +4012,7 @@ export type Database = {
           email: string
           id: string
           must_reset_password?: boolean | null
+          profile_photo_url?: string | null
           reports_to?: string | null
           role_id?: string | null
           status?: string
@@ -4019,6 +4024,7 @@ export type Database = {
           email?: string
           id?: string
           must_reset_password?: boolean | null
+          profile_photo_url?: string | null
           reports_to?: string | null
           role_id?: string | null
           status?: string
