@@ -98,7 +98,7 @@ const navigation: NavItem[] = [
     children: [
       { title: "Planograms", href: "/vm/planograms", moduleKey: "vm.planograms" },
       { title: "Compliance Tasks", href: "/vm/tasks", moduleKey: "vm.tasks" },
-      { title: "Review Submissions", href: "/vm/review", moduleKey: "vm.review" },
+      { title: "Compliance Audit", href: "/vm/review", moduleKey: "vm.review" },
     ],
   },
   {
