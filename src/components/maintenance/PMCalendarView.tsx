@@ -38,6 +38,26 @@ type MaintenanceTask = {
   status: string;
   store?: { name: string } | null;
   pm_checklist_master_id?: string | null;
+  scheduled_start_time?: string | null;
+  scheduled_end_time?: string | null;
+};
+
+// Hours for time sidebar (00:00 - 23:00)
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+
+// Convert time string (HH:MM:SS) to minutes from midnight
+const timeToMinutes = (timeStr: string): number => {
+  const [hours, minutes] = timeStr.split(":").map(Number);
+  return hours * 60 + (minutes || 0);
+};
+
+// Calculate task position and height based on time
+const getTaskPosition = (startTime: string, endTime?: string | null) => {
+  const startMinutes = timeToMinutes(startTime);
+  const endMinutes = endTime ? timeToMinutes(endTime) : startMinutes + 60;
+  const top = (startMinutes / (24 * 60)) * 100;
+  const height = Math.max(((endMinutes - startMinutes) / (24 * 60)) * 100, 2);
+  return { top: `${top}%`, height: `${height}%` };
 };
 
 type CalendarMode = "day" | "week" | "month";
@@ -182,97 +202,223 @@ export function PMCalendarView({ schedules, onTaskClick }: PMCalendarViewProps) 
     return format(currentDate, "MMMM yyyy");
   };
 
-  // Day View Component
+  // Day View Component with 24-hour time sidebar
   const DayView = () => {
     const dayTasks = getTasksForDay(currentDate);
+    const timedTasks = dayTasks.filter((t) => t.scheduled_start_time);
+    const anytimeTasks = dayTasks.filter((t) => !t.scheduled_start_time);
+
     return (
-      <div className="p-4 space-y-3 min-h-[400px]">
-        {dayTasks.length === 0 ? (
-          <div className="flex items-center justify-center h-64 text-muted-foreground">
-            No maintenance tasks scheduled for this day
+      <div className="flex flex-col">
+        {/* Anytime Section */}
+        {anytimeTasks.length > 0 && (
+          <div className="border-b p-3 bg-muted/20">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Anytime</p>
+            <div className="flex flex-wrap gap-2">
+              {anytimeTasks.map((task) => (
+                <button
+                  key={task.id}
+                  onClick={() => onTaskClick(task)}
+                  className={`text-left text-xs px-2 py-1.5 rounded border flex items-center gap-1.5 ${getTaskColor(task)} hover:opacity-80 transition-opacity`}
+                >
+                  {getStatusIcon(task)}
+                  <span className="font-medium">{task.asset}</span>
+                  {task.store && <span className="opacity-75">• {task.store.name}</span>}
+                </button>
+              ))}
+            </div>
           </div>
-        ) : (
-          dayTasks.map((task) => (
-            <button
-              key={task.id}
-              onClick={() => onTaskClick(task)}
-              className="w-full text-left p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className={`${getTaskColor(task)} shrink-0`}>
-                      {getStatusIcon(task)}
-                      <span className="ml-1 capitalize">{getTaskStatus(task).replace("-", " ")}</span>
-                    </Badge>
-                    <span className="text-xs text-muted-foreground capitalize">{task.frequency}</span>
-                  </div>
-                  <p className="font-medium truncate">{task.asset}</p>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    {task.store && (
-                      <span className="flex items-center gap-1">
-                        <Store className="h-3 w-3" />
-                        {task.store.name}
-                      </span>
-                    )}
-                    <span>Type: {task.task_type}</span>
-                    <span>Assigned: {task.assigned_to}</span>
-                  </div>
-                </div>
-              </div>
-            </button>
-          ))
         )}
+
+        {/* Time Grid */}
+        <div className="flex overflow-auto max-h-[600px]">
+          {/* Time Sidebar */}
+          <div className="w-16 flex-shrink-0 border-r bg-muted/10">
+            {HOURS.map((hour) => (
+              <div
+                key={hour}
+                className="h-[50px] border-b flex items-start justify-end pr-2 pt-1"
+              >
+                <span className="text-xs text-muted-foreground">
+                  {hour.toString().padStart(2, "0")}:00
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Day Column */}
+          <div className="flex-1 relative" style={{ height: `${24 * 50}px` }}>
+            {/* Hour lines */}
+            {HOURS.map((hour) => (
+              <div
+                key={hour}
+                className="absolute w-full border-b border-dashed border-muted"
+                style={{ top: `${(hour / 24) * 100}%` }}
+              />
+            ))}
+
+            {/* Timed Tasks */}
+            {timedTasks.map((task) => {
+              const position = getTaskPosition(task.scheduled_start_time!, task.scheduled_end_time);
+              return (
+                <button
+                  key={task.id}
+                  onClick={() => onTaskClick(task)}
+                  className={`absolute left-1 right-1 rounded border px-2 py-1 text-left overflow-hidden ${getTaskColor(task)} hover:opacity-80 transition-opacity`}
+                  style={{ top: position.top, height: position.height, minHeight: "24px" }}
+                >
+                  <div className="flex items-center gap-1.5">
+                    {getStatusIcon(task)}
+                    <span className="text-xs font-medium truncate">{task.asset}</span>
+                  </div>
+                  <div className="text-[10px] opacity-75 truncate">
+                    {task.scheduled_start_time?.slice(0, 5)}
+                    {task.scheduled_end_time && ` - ${task.scheduled_end_time.slice(0, 5)}`}
+                    {task.store && ` • ${task.store.name}`}
+                  </div>
+                </button>
+              );
+            })}
+
+            {/* Empty state for timed section */}
+            {timedTasks.length === 0 && anytimeTasks.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                No maintenance tasks scheduled for this day
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     );
   };
 
-  // Week View Component
-  const WeekView = () => (
-    <>
-      <div className="grid grid-cols-7 border-b bg-muted/20">
-        {calendarDays.map((day, idx) => (
-          <div
-            key={idx}
-            className={`p-2 text-center border-r last:border-r-0 ${isToday(day) ? "bg-primary/5" : ""}`}
-          >
-            <p className="text-xs text-muted-foreground">{WEEKDAYS[idx]}</p>
-            <button
-              onClick={() => handleDateClick(day)}
-              className={`text-sm font-medium hover:text-primary ${
-                isToday(day)
-                  ? "bg-primary text-primary-foreground w-7 h-7 rounded-full flex items-center justify-center mx-auto"
-                  : ""
-              }`}
+  // Week View Component with 24-hour time sidebar
+  const WeekView = () => {
+    // Get anytime tasks for each day
+    const getAnytimeTasksForDay = (day: Date) => {
+      return getTasksForDay(day).filter((t) => !t.scheduled_start_time);
+    };
+
+    // Get timed tasks for each day
+    const getTimedTasksForDay = (day: Date) => {
+      return getTasksForDay(day).filter((t) => t.scheduled_start_time);
+    };
+
+    return (
+      <div className="flex flex-col">
+        {/* Day Headers */}
+        <div className="flex border-b bg-muted/20">
+          <div className="w-16 flex-shrink-0 border-r" />
+          {calendarDays.map((day, idx) => (
+            <div
+              key={idx}
+              className={`flex-1 p-2 text-center border-r last:border-r-0 ${isToday(day) ? "bg-primary/5" : ""}`}
             >
-              {format(day, "d")}
-            </button>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 min-h-[300px]">
-        {calendarDays.map((day, idx) => {
-          const dayTasks = getTasksForDay(day);
-          return (
-            <div key={idx} className="border-r last:border-r-0 border-b p-1 min-h-[120px]">
-              <div className="space-y-1 overflow-auto max-h-[200px]">
-                {dayTasks.map((task) => (
-                  <button
-                    key={task.id}
-                    onClick={() => onTaskClick(task)}
-                    className={`w-full text-left text-xs px-1.5 py-1 rounded border truncate flex flex-col gap-0.5 ${getTaskColor(task)} hover:opacity-80 transition-opacity`}
-                  >
-                    <span className="font-medium truncate">{task.asset}</span>
-                    <span className="text-[10px] opacity-75 truncate">{task.store?.name}</span>
-                  </button>
-                ))}
-              </div>
+              <p className="text-xs text-muted-foreground">{WEEKDAYS[idx]}</p>
+              <button
+                onClick={() => handleDateClick(day)}
+                className={`text-sm font-medium hover:text-primary ${
+                  isToday(day)
+                    ? "bg-primary text-primary-foreground w-7 h-7 rounded-full flex items-center justify-center mx-auto"
+                    : ""
+                }`}
+              >
+                {format(day, "d")}
+              </button>
             </div>
-          );
-        })}
+          ))}
+        </div>
+
+        {/* Anytime Row */}
+        <div className="flex border-b">
+          <div className="w-16 flex-shrink-0 border-r bg-muted/10 flex items-center justify-end pr-2">
+            <span className="text-xs text-muted-foreground">Anytime</span>
+          </div>
+          {calendarDays.map((day, idx) => {
+            const anytimeTasks = getAnytimeTasksForDay(day);
+            return (
+              <div
+                key={idx}
+                className={`flex-1 border-r last:border-r-0 p-1 min-h-[60px] ${isToday(day) ? "bg-primary/5" : ""}`}
+              >
+                <div className="space-y-1 overflow-auto max-h-[80px]">
+                  {anytimeTasks.map((task) => (
+                    <button
+                      key={task.id}
+                      onClick={() => onTaskClick(task)}
+                      className={`w-full text-left text-xs px-1 py-0.5 rounded border truncate flex items-center gap-1 ${getTaskColor(task)} hover:opacity-80 transition-opacity`}
+                    >
+                      {getStatusIcon(task)}
+                      <span className="truncate">{task.asset}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Time Grid */}
+        <div className="flex overflow-auto max-h-[500px]">
+          {/* Time Sidebar */}
+          <div className="w-16 flex-shrink-0 border-r bg-muted/10">
+            {HOURS.map((hour) => (
+              <div
+                key={hour}
+                className="h-[50px] border-b flex items-start justify-end pr-2 pt-1"
+              >
+                <span className="text-xs text-muted-foreground">
+                  {hour.toString().padStart(2, "0")}:00
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Day Columns */}
+          {calendarDays.map((day, idx) => {
+            const timedTasks = getTimedTasksForDay(day);
+            return (
+              <div
+                key={idx}
+                className={`flex-1 relative border-r last:border-r-0 ${isToday(day) ? "bg-primary/5" : ""}`}
+                style={{ height: `${24 * 50}px` }}
+              >
+                {/* Hour lines */}
+                {HOURS.map((hour) => (
+                  <div
+                    key={hour}
+                    className="absolute w-full border-b border-dashed border-muted"
+                    style={{ top: `${(hour / 24) * 100}%` }}
+                  />
+                ))}
+
+                {/* Timed Tasks */}
+                {timedTasks.map((task) => {
+                  const position = getTaskPosition(task.scheduled_start_time!, task.scheduled_end_time);
+                  return (
+                    <button
+                      key={task.id}
+                      onClick={() => onTaskClick(task)}
+                      className={`absolute left-0.5 right-0.5 rounded border px-1 py-0.5 text-left overflow-hidden ${getTaskColor(task)} hover:opacity-80 transition-opacity`}
+                      style={{ top: position.top, height: position.height, minHeight: "20px" }}
+                    >
+                      <div className="flex items-center gap-1">
+                        {getStatusIcon(task)}
+                        <span className="text-[10px] font-medium truncate">{task.asset}</span>
+                      </div>
+                      <div className="text-[9px] opacity-75 truncate">
+                        {task.scheduled_start_time?.slice(0, 5)}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </>
-  );
+    );
+  };
 
   // Month View Component
   const MonthView = () => (
