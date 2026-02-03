@@ -70,7 +70,7 @@ export const modules: ModuleDefinition[] = [
   { key: "master.department", name: "Department Master", parent: "master" },
   { key: "master.position", name: "Position Master", parent: "master" },
   { key: "master.category", name: "Category Master", parent: "master" },
-  { key: "master.location", name: "Location Master", parent: "master" },
+  
   { key: "master.nso", name: "NSO Checklist Master", parent: "master" },
   { key: "master.pm", name: "PM Checklist Master", parent: "master" },
   { key: "usermanagement", name: "User Management" },
@@ -138,7 +138,7 @@ export const routeToModuleKey: Record<string, string> = {
   "/master/department": "master.department",
   "/master/position": "master.position",
   "/master/category": "master.category",
-  "/master/location": "master.location",
+  
   "/master/nso-checklist": "master.nso",
   "/master/pm-checklist": "master.pm",
   "/admin/users": "usermanagement.users",

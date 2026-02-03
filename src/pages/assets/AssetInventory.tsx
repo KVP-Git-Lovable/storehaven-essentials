@@ -90,10 +90,6 @@ type Store = {
   name: string;
 };
 
-type Location = {
-  id: string;
-  name: string;
-};
 
 const conditionOptions = [
   { value: "under-warranty", label: "Under Warranty" },
@@ -122,7 +118,7 @@ export default function AssetInventory() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [assetMasters, setAssetMasters] = useState<AssetMasterOption[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
@@ -167,7 +163,7 @@ export default function AssetInventory() {
       assetsQuery = assetsQuery.in("store_id", storeIds);
     }
     
-    const [assetsRes, vendorsRes, assetMastersRes, storesRes, locationsRes] = await Promise.all([
+    const [assetsRes, vendorsRes, assetMastersRes, storesRes] = await Promise.all([
       assetsQuery,
       supabase.from("vendors").select("id, name, vendor_type").order("name"),
       supabase
@@ -176,7 +172,6 @@ export default function AssetInventory() {
         .eq("status", "active")
         .order("name"),
       supabase.from("stores").select("id, name").eq("status", "active").order("name"),
-      supabase.from("locations").select("id, name").eq("status", "active").order("name"),
     ]);
 
     if (assetsRes.error) {
@@ -190,7 +185,7 @@ export default function AssetInventory() {
     // Filter stores for non-admins
     const allStores = storesRes.data || [];
     setStores(isAdmin ? allStores : allStores.filter(s => accessibleStoreIds.has(s.id)));
-    setLocations(locationsRes.data || []);
+    
     setLoading(false);
   };
 
@@ -429,17 +424,9 @@ export default function AssetInventory() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Location</FormLabel>
-                        <SearchableSelect
-                          options={locations.map((loc) => ({
-                            value: loc.name,
-                            label: loc.name,
-                          }))}
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          placeholder="Select location"
-                          searchPlaceholder="Search locations..."
-                          emptyMessage="No locations found."
-                        />
+                        <FormControl>
+                          <Input placeholder="Enter location (e.g. Back Office, Sales Floor)" {...field} />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}

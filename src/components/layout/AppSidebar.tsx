@@ -169,7 +169,7 @@ const navigation: NavItem[] = [
           { title: "Department Master", href: "/master/department", moduleKey: "master.department" },
           { title: "Position Master", href: "/master/position", moduleKey: "master.position" },
           { title: "Category Master", href: "/master/category", moduleKey: "master.category" },
-          { title: "Location Master", href: "/master/location", moduleKey: "master.location" },
+          
           { title: "NSO Checklist Master", href: "/master/nso-checklist", moduleKey: "master.nso" },
           { title: "PM Checklist Master", href: "/master/pm-checklist", moduleKey: "master.pm" },
           { title: "Store Budget Master", href: "/master/store-budget", moduleKey: "master.budget" },
