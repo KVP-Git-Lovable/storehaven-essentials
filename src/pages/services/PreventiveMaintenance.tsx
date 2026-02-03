@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Plus, Calendar, CheckCircle, Clock, AlertTriangle, Loader2, CalendarDays } from "lucide-react";
+import { Plus, Calendar, CheckCircle, Clock, AlertTriangle, Loader2, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Table,
   TableBody,
@@ -15,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { MaintenanceFormDialog } from "@/components/maintenance/MaintenanceFormDialog";
 import { MaintenanceDetailsDialog } from "@/components/maintenance/MaintenanceDetailsDialog";
-import { MaintenanceCalendarView } from "@/components/maintenance/MaintenanceCalendarView";
+import { PMCalendarView } from "@/components/maintenance/PMCalendarView";
 import { useStoreAccess } from "@/hooks/useStoreAccess";
 
 type MaintenanceTask = {
@@ -40,7 +41,7 @@ export default function PreventiveMaintenance() {
   const [formMode, setFormMode] = useState<"add" | "edit" | "clone">("add");
   const [selectedTask, setSelectedTask] = useState<MaintenanceTask | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   const { toast } = useToast();
   const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
@@ -117,7 +118,6 @@ export default function PreventiveMaintenance() {
 
   const handleCalendarTaskClick = (task: MaintenanceTask) => {
     setSelectedTask(task);
-    setCalendarOpen(false);
     setDetailsOpen(true);
   };
 
@@ -163,11 +163,22 @@ export default function PreventiveMaintenance() {
           <h1 className="text-2xl font-semibold">Preventive Maintenance</h1>
           <p className="text-muted-foreground">Schedule and track routine maintenance</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={() => setCalendarOpen(true)}>
-            <CalendarDays className="h-4 w-4" />
-            Calendar
-          </Button>
+        <div className="flex items-center gap-3">
+          <ToggleGroup
+            type="single"
+            value={viewMode}
+            onValueChange={(value) => value && setViewMode(value as "list" | "calendar")}
+            className="bg-muted rounded-lg p-1"
+          >
+            <ToggleGroupItem value="list" className="px-3 py-1.5 text-sm gap-1.5">
+              <List className="h-4 w-4" />
+              List
+            </ToggleGroupItem>
+            <ToggleGroupItem value="calendar" className="px-3 py-1.5 text-sm gap-1.5">
+              <Calendar className="h-4 w-4" />
+              Calendar
+            </ToggleGroupItem>
+          </ToggleGroup>
           <Button className="gap-2" onClick={handleAddClick}>
             <Plus className="h-4 w-4" />
             Add Schedule
@@ -175,65 +186,76 @@ export default function PreventiveMaintenance() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <StatCard key={stat.title} {...stat} />
-        ))}
-      </div>
-
-      <div className="rounded-xl border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Asset</TableHead>
-              <TableHead>Store</TableHead>
-              <TableHead>Task Type</TableHead>
-              <TableHead>Frequency</TableHead>
-              <TableHead>Last Done</TableHead>
-              <TableHead>Next Due</TableHead>
-              <TableHead>Assigned To</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {schedules.map((schedule) => (
-              <TableRow 
-                key={schedule.id} 
-                className="cursor-pointer hover:bg-muted/50"
-                onClick={() => handleRowClick(schedule)}
-              >
-                <TableCell className="font-medium">{schedule.asset}</TableCell>
-                <TableCell>{schedule.store?.name || "-"}</TableCell>
-                <TableCell>{schedule.task_type}</TableCell>
-                <TableCell className="capitalize">{schedule.frequency}</TableCell>
-                <TableCell>
-                  {schedule.last_done === "-" ? "-" : new Date(schedule.last_done).toLocaleDateString()}
-                </TableCell>
-                <TableCell>{new Date(schedule.next_due).toLocaleDateString()}</TableCell>
-                <TableCell>{schedule.assigned_to}</TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      schedule.status === "scheduled" ? "default" :
-                      schedule.status === "due-soon" ? "secondary" :
-                      schedule.status === "overdue" ? "destructive" : "outline"
-                    }
-                  >
-                    {schedule.status}
-                  </Badge>
-                </TableCell>
-              </TableRow>
+      {viewMode === "list" && (
+        <>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {stats.map((stat) => (
+              <StatCard key={stat.title} {...stat} />
             ))}
-            {schedules.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                  No maintenance schedules found. Click "Add Schedule" to create one.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+          </div>
+
+          <div className="rounded-xl border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Asset</TableHead>
+                  <TableHead>Store</TableHead>
+                  <TableHead>Task Type</TableHead>
+                  <TableHead>Frequency</TableHead>
+                  <TableHead>Last Done</TableHead>
+                  <TableHead>Next Due</TableHead>
+                  <TableHead>Assigned To</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {schedules.map((schedule) => (
+                  <TableRow 
+                    key={schedule.id} 
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => handleRowClick(schedule)}
+                  >
+                    <TableCell className="font-medium">{schedule.asset}</TableCell>
+                    <TableCell>{schedule.store?.name || "-"}</TableCell>
+                    <TableCell>{schedule.task_type}</TableCell>
+                    <TableCell className="capitalize">{schedule.frequency}</TableCell>
+                    <TableCell>
+                      {schedule.last_done === "-" ? "-" : new Date(schedule.last_done).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>{new Date(schedule.next_due).toLocaleDateString()}</TableCell>
+                    <TableCell>{schedule.assigned_to}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          schedule.status === "scheduled" ? "default" :
+                          schedule.status === "due-soon" ? "secondary" :
+                          schedule.status === "overdue" ? "destructive" : "outline"
+                        }
+                      >
+                        {schedule.status}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {schedules.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                      No maintenance schedules found. Click "Add Schedule" to create one.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </>
+      )}
+
+      {viewMode === "calendar" && (
+        <PMCalendarView
+          schedules={schedules}
+          onTaskClick={handleCalendarTaskClick}
+        />
+      )}
 
       <MaintenanceFormDialog
         open={formOpen}
@@ -250,13 +272,6 @@ export default function PreventiveMaintenance() {
         onEdit={handleEdit}
         onClone={handleClone}
         onDeleted={fetchSchedules}
-      />
-
-      <MaintenanceCalendarView
-        open={calendarOpen}
-        onOpenChange={setCalendarOpen}
-        schedules={schedules}
-        onTaskClick={handleCalendarTaskClick}
       />
     </div>
   );
