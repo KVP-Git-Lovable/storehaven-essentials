@@ -45,7 +45,7 @@ interface NavItem {
 }
 
 const navigation: NavItem[] = [
-  { title: "Home", href: "/", icon: LayoutDashboard, moduleKey: "dashboard" },
+  { title: "Home", href: "/dashboard", icon: LayoutDashboard, moduleKey: "dashboard" },
   { title: "AI Insights", href: "/ai-insights", icon: Brain, moduleKey: "dashboard" },
   {
     title: "Dashboards",
@@ -98,7 +98,6 @@ const navigation: NavItem[] = [
     children: [
       { title: "Planograms", href: "/vm/planograms", moduleKey: "vm.planograms" },
       { title: "Compliance Tasks", href: "/vm/tasks", moduleKey: "vm.tasks" },
-      { title: "Submit Photo", href: "/vm/submit", moduleKey: "vm.submit" },
       { title: "Review Submissions", href: "/vm/review", moduleKey: "vm.review" },
     ],
   },
