@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Plus, FileText, CheckCircle, Clock, AlertTriangle, Loader2, Search } from "lucide-react";
 import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ export default function ServiceContracts() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const { toast } = useToast();
+  const navigate = useNavigate();
   const { hasPermission } = usePermissions();
   const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
@@ -245,10 +247,7 @@ export default function ServiceContracts() {
             <ContractSummaryCard
               key={contract.id}
               contract={contract}
-              onClick={() => {
-                // TODO: Open contract details
-                toast({ title: "Coming soon", description: "Contract details view will be available soon" });
-              }}
+              onClick={() => navigate(`/services/contracts/${contract.id}`)}
             />
           ))}
         </div>
