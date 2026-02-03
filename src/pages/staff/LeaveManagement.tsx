@@ -40,7 +40,7 @@ interface LeaveBalance {
 
 interface LeaveRequest {
   id: string;
-  employee_id: string;
+  user_id: string;
   leave_type_id: string;
   from_date: string;
   to_date: string;
@@ -57,7 +57,7 @@ interface LeaveRequest {
 }
 
 interface LeaveForm {
-  employee_id: string;
+  user_id: string;
   leave_type_id: string;
   from_date: string;
   to_date: string;
@@ -66,7 +66,7 @@ interface LeaveForm {
 }
 
 const defaultForm: LeaveForm = {
-  employee_id: "",
+  user_id: "",
   leave_type_id: "",
   from_date: "",
   to_date: "",
@@ -79,42 +79,29 @@ export default function LeaveManagement() {
   const { isManager, isEmployee } = useAttendanceRole();
   const [isApplyOpen, setIsApplyOpen] = useState(false);
   const [form, setForm] = useState<LeaveForm>(defaultForm);
-  const [selectedEmployee, setSelectedEmployee] = useState<string>("");
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
   const queryClient = useQueryClient();
 
-  // Get current user's employee record
-  const { data: currentEmployee } = useQuery({
-    queryKey: ["current-employee", user?.email],
-    queryFn: async () => {
-      if (!user?.email) return null;
-      const { data, error } = await supabase
-        .from("employees")
-        .select("id, name, department")
-        .eq("email", user.email)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user?.email,
-  });
+  // Current user is directly available from auth
+  const currentUserId = user?.id || null;
 
-  // Pre-populate employee_id for regular employees
+  // Pre-populate user_id for regular employees
   useEffect(() => {
-    if (isEmployee && currentEmployee && !form.employee_id) {
-      setForm((prev) => ({ ...prev, employee_id: currentEmployee.id }));
-      setSelectedEmployee(currentEmployee.id);
+    if (isEmployee && currentUserId && !form.user_id) {
+      setForm((prev) => ({ ...prev, user_id: currentUserId }));
+      setSelectedUserId(currentUserId);
     }
-  }, [isEmployee, currentEmployee, form.employee_id]);
+  }, [isEmployee, currentUserId, form.user_id]);
 
-  // Fetch employees (only for managers)
-  const { data: employees } = useQuery({
-    queryKey: ["employees-active"],
+  // Fetch users from profiles table (only for managers)
+  const { data: users } = useQuery({
+    queryKey: ["profiles-active"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("employees")
-        .select("id, name, department")
+        .from("profiles")
+        .select("id, username, email")
         .eq("status", "active")
-        .order("name");
+        .order("username");
       if (error) throw error;
       return data;
     },
@@ -135,41 +122,41 @@ export default function LeaveManagement() {
     },
   });
 
-  // Fetch leave balances for selected employee
+  // Fetch leave balances for selected user
   const { data: balances } = useQuery({
-    queryKey: ["leave-balances", selectedEmployee],
+    queryKey: ["leave-balances", selectedUserId],
     queryFn: async () => {
-      if (!selectedEmployee) return [];
+      if (!selectedUserId) return [];
       const { data, error } = await supabase
         .from("leave_balances")
         .select("*, leave_types(*)")
-        .eq("employee_id", selectedEmployee)
+        .eq("user_id", selectedUserId)
         .eq("year", new Date().getFullYear());
       if (error) throw error;
       return data as LeaveBalance[];
     },
-    enabled: !!selectedEmployee,
+    enabled: !!selectedUserId,
   });
 
   // Fetch leave requests - filtered by role
   const { data: requests, isLoading } = useQuery({
-    queryKey: ["leave-requests", isManager, currentEmployee?.id],
+    queryKey: ["leave-requests", isManager, currentUserId],
     queryFn: async () => {
       let query = supabase
         .from("leave_requests")
-        .select("*, employees(name, department), leave_types(name)")
+        .select("*, profiles(username, email), leave_types(name)")
         .order("created_at", { ascending: false });
 
       // Employees only see their own requests
-      if (isEmployee && currentEmployee?.id) {
-        query = query.eq("employee_id", currentEmployee.id);
+      if (isEmployee && currentUserId) {
+        query = query.eq("user_id", currentUserId);
       }
 
       const { data, error } = await query;
       if (error) throw error;
       return data as LeaveRequest[];
     },
-    enabled: isManager || !!currentEmployee?.id,
+    enabled: isManager || !!currentUserId,
   });
 
   const pendingRequests = requests?.filter((r) => r.status === "pending") || [];
@@ -189,7 +176,7 @@ export default function LeaveManagement() {
   const applyMutation = useMutation({
     mutationFn: async (data: LeaveForm) => {
       const { error } = await supabase.from("leave_requests").insert({
-        employee_id: data.employee_id,
+        user_id: data.user_id,
         leave_type_id: data.leave_type_id,
         from_date: data.from_date,
         to_date: data.to_date,
@@ -204,7 +191,7 @@ export default function LeaveManagement() {
         const { data: existingBalance } = await supabase
           .from("leave_balances")
           .select("pending")
-          .eq("employee_id", data.employee_id)
+          .eq("user_id", data.user_id)
           .eq("leave_type_id", data.leave_type_id)
           .eq("year", new Date().getFullYear())
           .single();
@@ -213,7 +200,7 @@ export default function LeaveManagement() {
           await supabase
             .from("leave_balances")
             .update({ pending: (existingBalance.pending || 0) + calculatedDays })
-            .eq("employee_id", data.employee_id)
+            .eq("user_id", data.user_id)
             .eq("leave_type_id", data.leave_type_id)
             .eq("year", new Date().getFullYear());
         }
@@ -227,9 +214,9 @@ export default function LeaveManagement() {
       toast.success("Leave request submitted");
       setIsApplyOpen(false);
       setForm(defaultForm);
-      // Reset employee_id for employees
-      if (isEmployee && currentEmployee) {
-        setForm((prev) => ({ ...prev, employee_id: currentEmployee.id }));
+      // Reset user_id for employees
+      if (isEmployee && currentUserId) {
+        setForm((prev) => ({ ...prev, user_id: currentUserId }));
       }
     },
     onError: (error: any) => toast.error(error.message),
@@ -255,7 +242,7 @@ export default function LeaveManagement() {
         const { data: balance } = await supabase
           .from("leave_balances")
           .select("used, pending")
-          .eq("employee_id", request.employee_id)
+          .eq("user_id", request.user_id)
           .eq("leave_type_id", request.leave_type_id)
           .eq("year", new Date().getFullYear())
           .single();
@@ -267,7 +254,7 @@ export default function LeaveManagement() {
               used: (balance.used || 0) + request.days_count,
               pending: Math.max(0, (balance.pending || 0) - request.days_count),
             })
-            .eq("employee_id", request.employee_id)
+            .eq("user_id", request.user_id)
             .eq("leave_type_id", request.leave_type_id)
             .eq("year", new Date().getFullYear());
         }
@@ -282,7 +269,7 @@ export default function LeaveManagement() {
   });
 
   const handleApply = () => {
-    if (!form.employee_id || !form.leave_type_id || !form.from_date || !form.to_date) {
+    if (!form.user_id || !form.leave_type_id || !form.from_date || !form.to_date) {
       toast.error("Please fill all required fields");
       return;
     }
@@ -318,24 +305,24 @@ export default function LeaveManagement() {
               <DialogTitle>Apply for Leave</DialogTitle>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              {/* Employee selector - only for managers */}
+              {/* User selector - only for managers */}
               {isManager ? (
                 <div className="space-y-2">
-                  <Label>Employee *</Label>
+                  <Label>User *</Label>
                   <Select
-                    value={form.employee_id}
+                    value={form.user_id}
                     onValueChange={(v) => {
-                      setForm({ ...form, employee_id: v });
-                      setSelectedEmployee(v);
+                      setForm({ ...form, user_id: v });
+                      setSelectedUserId(v);
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select employee" />
+                      <SelectValue placeholder="Select user" />
                     </SelectTrigger>
                     <SelectContent>
-                      {employees?.map((emp) => (
-                        <SelectItem key={emp.id} value={emp.id}>
-                          {emp.name} - {emp.department}
+                      {users?.map((usr) => (
+                        <SelectItem key={usr.id} value={usr.id}>
+                          {usr.username || usr.email}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -344,11 +331,11 @@ export default function LeaveManagement() {
               ) : (
                 <div className="p-3 rounded-lg bg-muted">
                   <div className="text-sm text-muted-foreground">Applying as</div>
-                  <div className="font-medium">{currentEmployee?.name || user?.email}</div>
+                  <div className="font-medium">{profile?.username || user?.email}</div>
                 </div>
               )}
 
-              {selectedEmployee && balances && balances.length > 0 && (
+              {selectedUserId && balances && balances.length > 0 && (
                 <div className="grid grid-cols-3 gap-2">
                   {balances.map((bal) => (
                     <div key={bal.id} className="p-2 rounded-lg bg-muted text-center">
@@ -604,26 +591,26 @@ export default function LeaveManagement() {
           <TabsContent value="balances" className="mt-4">
             <Card>
               <CardHeader>
-                <CardTitle>Employee Leave Balances</CardTitle>
-                <CardDescription>Select an employee to view their leave balance</CardDescription>
+                <CardTitle>User Leave Balances</CardTitle>
+                <CardDescription>Select a user to view their leave balance</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="max-w-sm mb-6">
-                  <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                  <Select value={selectedUserId} onValueChange={setSelectedUserId}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select employee" />
+                      <SelectValue placeholder="Select user" />
                     </SelectTrigger>
                     <SelectContent>
-                      {employees?.map((emp) => (
-                        <SelectItem key={emp.id} value={emp.id}>
-                          {emp.name}
+                      {users?.map((usr) => (
+                        <SelectItem key={usr.id} value={usr.id}>
+                          {usr.username || usr.email}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                {selectedEmployee && balances && (
+                {selectedUserId && balances && (
                   <div className="grid gap-4 md:grid-cols-3">
                     {balances.map((bal) => (
                       <Card key={bal.id}>
@@ -659,10 +646,10 @@ export default function LeaveManagement() {
                   </div>
                 )}
 
-                {selectedEmployee && (!balances || balances.length === 0) && (
+                {selectedUserId && (!balances || balances.length === 0) && (
                   <div className="text-center py-8 text-muted-foreground">
                     <AlertCircle className="h-8 w-8 mx-auto mb-2" />
-                    No leave balances found. Initialize balances for this employee.
+                    No leave balances found. Initialize balances for this user.
                   </div>
                 )}
               </CardContent>
