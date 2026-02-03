@@ -11,7 +11,7 @@ interface ProfilePhotoUploadProps {
   userId: string;
   currentPhotoUrl: string | null;
   username: string;
-  onPhotoUpdate: (url: string) => void;
+  onPhotoUpdate: (url: string) => Promise<void>;
 }
 
 export function ProfilePhotoUpload({
@@ -79,7 +79,7 @@ export function ProfilePhotoUpload({
 
       if (updateError) throw updateError;
 
-      onPhotoUpdate(urlData.publicUrl);
+      await onPhotoUpdate(urlData.publicUrl);
       setPreviewUrl(null);
       setPendingFile(null);
       toast.success("Profile photo updated successfully");

@@ -11,6 +11,7 @@ export interface UserProfile {
   status: string;
   role_name?: string;
   must_reset_password?: boolean;
+  profile_photo_url?: string | null;
 }
 
 export interface Permission {
@@ -31,6 +32,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, username: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -58,6 +60,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         reports_to,
         status,
         must_reset_password,
+        profile_photo_url,
         user_roles_master (name)
       `)
       .eq("id", userId)
@@ -74,8 +77,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
         status: profileData.status,
         role_name: roleName,
         must_reset_password: profileData.must_reset_password || false,
+        profile_photo_url: profileData.profile_photo_url,
       });
       setIsAdmin(roleName?.toLowerCase() === "admin" || roleName?.toLowerCase() === "super admin");
+    }
+  };
+
+  const refreshProfile = async () => {
+    if (user?.id) {
+      await fetchUserProfile(user.id);
     }
   };
 
@@ -207,6 +217,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         signIn,
         signUp,
         signOut,
+        refreshProfile,
       }}
     >
       {children}
