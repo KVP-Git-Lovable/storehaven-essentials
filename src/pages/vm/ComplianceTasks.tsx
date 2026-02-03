@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, Search, ClipboardCheck, Loader2, Clock, CheckCircle, AlertCircle, Store, MoreHorizontal, Pencil, Trash, Calendar, List, Camera, Upload, MapPin, Filter } from "lucide-react";
+import { Plus, Search, ClipboardCheck, Loader2, Clock, CheckCircle, AlertCircle, Store, MoreHorizontal, Pencil, Trash, Calendar, List, Camera, Upload, MapPin, Filter, Image, Eye, XCircle, AlertTriangle } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -57,9 +57,11 @@ import {
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ComplianceCalendarView } from "@/components/vm/ComplianceCalendarView";
+import { ImageComparisonSlider } from "@/components/vm/ImageComparisonSlider";
 
 const taskSchema = z.object({
   planogramId: z.string().min(1, "Planogram is required"),
@@ -80,6 +82,9 @@ type ComplianceTask = {
   frequency: string;
   due_date: string;
   status: string;
+  compliance_status: string;
+  review_status: string | null;
+  match_percentage: number | null;
   assigned_to: string | null;
   assigned_to_user_id: string | null;
   is_recurring: boolean | null;
@@ -131,6 +136,34 @@ const statusColors: Record<string, string> = {
   expired: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300",
 };
 
+const complianceStatusColors: Record<string, string> = {
+  open: "bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-300",
+  delayed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
+  completed_on_time: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+  completed_but_delayed: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300",
+};
+
+const complianceStatusLabels: Record<string, string> = {
+  open: "Open",
+  delayed: "Delayed",
+  completed_on_time: "Completed On Time",
+  completed_but_delayed: "Completed But Delayed",
+};
+
+const reviewStatusOptions = [
+  { value: "match", label: "Match" },
+  { value: "average_match", label: "Average Match" },
+  { value: "low_match", label: "Low Match" },
+  { value: "no_match", label: "No Match" },
+];
+
+const reviewStatusColors: Record<string, string> = {
+  match: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+  average_match: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+  low_match: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
+  no_match: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
+};
+
 export default function ComplianceTasks() {
   const [searchQuery, setSearchQuery] = useState("");
   const [storeFilter, setStoreFilter] = useState<string>("all");
@@ -145,16 +178,24 @@ export default function ComplianceTasks() {
   const [taskToDelete, setTaskToDelete] = useState<ComplianceTask | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   
-  // Photo submission state
-  const [submitPhotoOpen, setSubmitPhotoOpen] = useState(false);
-  const [selectedTaskForPhoto, setSelectedTaskForPhoto] = useState<ComplianceTask | null>(null);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  // Task detail/view state
+  const [viewTaskOpen, setViewTaskOpen] = useState(false);
+  const [selectedViewTask, setSelectedViewTask] = useState<ComplianceTask | null>(null);
+  const [compareMode, setCompareMode] = useState<"slider" | "side-by-side">("slider");
+  
+  // Photo capture state (direct camera)
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
-  const [submissionNotes, setSubmissionNotes] = useState("");
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [location, setLocation] = useState<{ lat: number; lng: number; address: string } | null>(null);
   const [gettingLocation, setGettingLocation] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [submissionNotes, setSubmissionNotes] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Review state
+  const [reviewStatus, setReviewStatus] = useState<string>("");
+  const [matchPercentage, setMatchPercentage] = useState<number>(0);
+  const [savingReview, setSavingReview] = useState(false);
   
   const { toast } = useToast();
   const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
@@ -230,7 +271,8 @@ export default function ComplianceTasks() {
     setOpen(true);
   };
 
-  const handleEdit = (task: ComplianceTask) => {
+  const handleEdit = (task: ComplianceTask, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setEditingTask(task);
     form.reset({
       planogramId: task.planogram_id || "",
@@ -245,7 +287,19 @@ export default function ComplianceTasks() {
   };
 
   const handleRowClick = (task: ComplianceTask) => {
-    handleEdit(task);
+    // Open view dialog with task details
+    setSelectedViewTask(task);
+    setCapturedImage(task.submitted_photo_url || null);
+    setCapturedFile(null);
+    setSubmissionNotes(task.submission_notes || "");
+    setReviewStatus(task.review_status || "");
+    setMatchPercentage(task.match_percentage || 0);
+    setLocation(task.submitted_latitude && task.submitted_longitude ? {
+      lat: task.submitted_latitude,
+      lng: task.submitted_longitude,
+      address: task.submitted_location_address || `${task.submitted_latitude.toFixed(6)}, ${task.submitted_longitude.toFixed(6)}`,
+    } : null);
+    setViewTaskOpen(true);
   };
 
   const handleDeleteClick = (task: ComplianceTask, e: React.MouseEvent) => {
@@ -272,16 +326,23 @@ export default function ComplianceTasks() {
     setTaskToDelete(null);
   };
 
-  // Photo submission functions
-  const handleOpenPhotoSubmit = (task: ComplianceTask, e: React.MouseEvent) => {
+  // Direct camera capture functions
+  const handleCameraClick = (task: ComplianceTask, e: React.MouseEvent) => {
     e.stopPropagation();
-    setSelectedTaskForPhoto(task);
-    setCapturedImage(null);
+    setSelectedViewTask(task);
+    setCapturedImage(task.submitted_photo_url || null);
     setCapturedFile(null);
-    setSubmissionNotes("");
+    setSubmissionNotes(task.submission_notes || "");
+    setReviewStatus(task.review_status || "");
+    setMatchPercentage(task.match_percentage || 0);
     setLocation(null);
-    setSubmitPhotoOpen(true);
-    getLocation();
+    setViewTaskOpen(true);
+    
+    // Trigger camera after dialog opens
+    setTimeout(() => {
+      fileInputRef.current?.click();
+      getLocation();
+    }, 100);
   };
 
   const getLocation = () => {
@@ -316,12 +377,21 @@ export default function ComplianceTasks() {
         setCapturedImage(reader.result as string);
       };
       reader.readAsDataURL(file);
+      getLocation();
     }
   };
 
-  const handlePhotoSubmit = async () => {
-    if (!selectedTaskForPhoto || !capturedFile) {
-      toast({ title: "Error", description: "Please capture a photo", variant: "destructive" });
+  const handlePhotoSave = async () => {
+    if (!selectedViewTask) return;
+
+    // If no new file but has existing photo, just close
+    if (!capturedFile && selectedViewTask.submitted_photo_url) {
+      setViewTaskOpen(false);
+      return;
+    }
+
+    if (!capturedFile) {
+      toast({ title: "Error", description: "Please capture a photo first", variant: "destructive" });
       return;
     }
 
@@ -329,7 +399,7 @@ export default function ComplianceTasks() {
 
     // Upload image to storage
     const fileExt = capturedFile.name.split(".").pop();
-    const fileName = `submissions/${selectedTaskForPhoto.id}/${Date.now()}.${fileExt}`;
+    const fileName = `submissions/${selectedViewTask.id}/${Date.now()}.${fileExt}`;
 
     const { error: uploadError } = await supabase.storage
       .from("vm-images")
@@ -343,34 +413,63 @@ export default function ComplianceTasks() {
 
     const { data: urlData } = supabase.storage.from("vm-images").getPublicUrl(fileName);
 
+    // Determine compliance status based on submission time vs due date
+    const now = new Date();
+    const dueDate = new Date(selectedViewTask.due_date);
+    const complianceStatus = now <= dueDate ? "completed_on_time" : "completed_but_delayed";
+
     // Update task with submission data
     const { error: updateError } = await supabase
       .from("vm_compliance_tasks")
       .update({
         submitted_photo_url: urlData.publicUrl,
-        submitted_at: new Date().toISOString(),
+        submitted_at: now.toISOString(),
         submitted_latitude: location?.lat || null,
         submitted_longitude: location?.lng || null,
         submitted_location_address: location?.address || null,
         submission_notes: submissionNotes || null,
         status: "submitted",
+        compliance_status: complianceStatus,
       })
-      .eq("id", selectedTaskForPhoto.id);
+      .eq("id", selectedViewTask.id);
 
     if (updateError) {
-      toast({ title: "Error", description: "Failed to submit photo", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to save photo", variant: "destructive" });
       setUploading(false);
       return;
     }
 
-    toast({ title: "Success", description: "Photo submitted for review" });
-    setSubmitPhotoOpen(false);
-    setSelectedTaskForPhoto(null);
-    setCapturedImage(null);
+    toast({ 
+      title: "Photo Saved", 
+      description: `Status: ${complianceStatusLabels[complianceStatus]}` 
+    });
+    setViewTaskOpen(false);
     setCapturedFile(null);
-    setSubmissionNotes("");
+    setCapturedImage(null);
     fetchData();
     setUploading(false);
+  };
+
+  const handleSaveReview = async () => {
+    if (!selectedViewTask) return;
+
+    setSavingReview(true);
+
+    const { error } = await supabase
+      .from("vm_compliance_tasks")
+      .update({
+        review_status: reviewStatus || null,
+        match_percentage: matchPercentage || null,
+      })
+      .eq("id", selectedViewTask.id);
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to save review", variant: "destructive" });
+    } else {
+      toast({ title: "Success", description: "Review saved" });
+      fetchData();
+    }
+    setSavingReview(false);
   };
 
   if (loading || accessLoading) {
@@ -421,6 +520,7 @@ export default function ComplianceTasks() {
         due_date: new Date(data.dueDate).toISOString(),
         assigned_to_user_id: assignedUserId,
         is_recurring: data.frequency !== "one-time",
+        compliance_status: "open",
       });
 
       if (error) {
@@ -448,6 +548,16 @@ export default function ComplianceTasks() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Hidden file input for camera */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleCapture}
+        className="hidden"
+      />
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Compliance Tasks</h1>
@@ -668,8 +778,8 @@ export default function ComplianceTasks() {
                 <TableHead>Store</TableHead>
                 <TableHead>Planogram</TableHead>
                 <TableHead>Due Date</TableHead>
-                <TableHead>Frequency</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Review</TableHead>
                 <TableHead className="w-[120px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -689,36 +799,64 @@ export default function ComplianceTasks() {
                     onClick={() => handleRowClick(task)}
                   >
                     <TableCell>
-                      <div>
-                        <p className="font-medium">{task.title}</p>
-                        {task.assigned_user && (
-                          <p className="text-sm text-muted-foreground">
-                            Assigned to: {task.assigned_user.username}
-                          </p>
-                        )}
+                      <div className="flex items-center gap-3">
+                        {/* Photo thumbnail */}
+                        <div className="relative h-10 w-10 rounded overflow-hidden border bg-muted flex-shrink-0">
+                          {task.submitted_photo_url ? (
+                            <img 
+                              src={task.submitted_photo_url} 
+                              alt="Submitted" 
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="h-full w-full flex items-center justify-center">
+                              <Image className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium">{task.title}</p>
+                          {task.assigned_user && (
+                            <p className="text-sm text-muted-foreground">
+                              Assigned to: {task.assigned_user.username}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell>{task.store?.name || "-"}</TableCell>
                     <TableCell>{task.planogram?.title || "-"}</TableCell>
                     <TableCell>{new Date(task.due_date).toLocaleDateString()}</TableCell>
-                    <TableCell className="capitalize">{task.frequency}</TableCell>
                     <TableCell>
-                      <Badge className={statusColors[task.status] || ""}>
-                        {task.status.replace("_", " ")}
+                      <Badge className={complianceStatusColors[task.compliance_status] || ""}>
+                        {complianceStatusLabels[task.compliance_status] || task.compliance_status}
                       </Badge>
                     </TableCell>
                     <TableCell>
+                      {task.review_status ? (
+                        <div className="flex flex-col gap-1">
+                          <Badge className={reviewStatusColors[task.review_status] || ""}>
+                            {reviewStatusOptions.find(r => r.value === task.review_status)?.label}
+                          </Badge>
+                          {task.match_percentage !== null && (
+                            <span className="text-xs text-muted-foreground">{task.match_percentage}% match</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <div className="flex items-center gap-1">
-                        {(task.status === "pending" || task.status === "correction_required") && (
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={(e) => handleOpenPhotoSubmit(task, e)}
-                            title="Submit Photo"
-                          >
-                            <Camera className="h-4 w-4" />
-                          </Button>
-                        )}
+                        {/* Camera button - opens camera directly */}
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={(e) => handleCameraClick(task, e)}
+                          title="Capture Photo"
+                        >
+                          <Camera className="h-4 w-4" />
+                        </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                             <Button variant="ghost" size="icon">
@@ -726,7 +864,7 @@ export default function ComplianceTasks() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEdit(task); }}>
+                            <DropdownMenuItem onClick={(e) => handleEdit(task, e)}>
                               <Pencil className="h-4 w-4 mr-2" />
                               Edit
                             </DropdownMenuItem>
@@ -750,7 +888,7 @@ export default function ComplianceTasks() {
       ) : (
         <ComplianceCalendarView 
           tasks={filteredTasks} 
-          onTaskClick={handleEdit}
+          onTaskClick={handleRowClick}
         />
       )}
 
@@ -775,125 +913,232 @@ export default function ComplianceTasks() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Photo Submission Dialog */}
-      <Dialog open={submitPhotoOpen} onOpenChange={setSubmitPhotoOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-hidden flex flex-col">
+      {/* Task View/Photo Dialog */}
+      <Dialog open={viewTaskOpen} onOpenChange={setViewTaskOpen}>
+        <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader className="flex-shrink-0">
-            <DialogTitle>Submit Compliance Photo</DialogTitle>
+            <DialogTitle>{selectedViewTask?.title}</DialogTitle>
             <DialogDescription>
-              Capture and upload a photo for: {selectedTaskForPhoto?.title}
+              {selectedViewTask?.store?.name} • Due: {selectedViewTask?.due_date ? new Date(selectedViewTask.due_date).toLocaleString() : "-"}
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto pr-2">
-            <div className="space-y-4 pb-4">
-              {/* Task Info */}
-              {selectedTaskForPhoto && (
-                <div className="p-3 rounded-lg bg-muted">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium">{selectedTaskForPhoto.title}</span>
-                    <Badge>{selectedTaskForPhoto.store?.name}</Badge>
+            {selectedViewTask && (
+              <div className="space-y-6 pb-4">
+                {/* Status Badges */}
+                <div className="flex flex-wrap gap-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Compliance Status</Label>
+                    <Badge className={`block mt-1 ${complianceStatusColors[selectedViewTask.compliance_status] || ""}`}>
+                      {complianceStatusLabels[selectedViewTask.compliance_status] || selectedViewTask.compliance_status}
+                    </Badge>
                   </div>
-                  {selectedTaskForPhoto.description && (
-                    <p className="text-sm text-muted-foreground">{selectedTaskForPhoto.description}</p>
+                  {selectedViewTask.submitted_at && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Submitted At</Label>
+                      <p className="text-sm font-medium mt-1">{new Date(selectedViewTask.submitted_at).toLocaleString()}</p>
+                    </div>
                   )}
                 </div>
-              )}
 
-              {/* Reference Planogram */}
-              {selectedTaskForPhoto?.planogram && (
-                <div>
-                  <Label className="mb-2 block">Reference Planogram</Label>
-                  <div className="rounded-lg overflow-hidden border">
-                    <img
-                      src={selectedTaskForPhoto.planogram.image_url}
-                      alt="Planogram"
-                      className="w-full h-48 object-cover"
-                    />
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1">{selectedTaskForPhoto.planogram.title}</p>
-                </div>
-              )}
-
-              {/* Photo Capture */}
-              <div>
-                <Label className="mb-2 block">Capture Photo</Label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handleCapture}
-                  className="hidden"
-                />
-
-                {capturedImage ? (
-                  <div className="space-y-2">
-                    <div className="rounded-lg overflow-hidden border">
-                      <img src={capturedImage} alt="Captured" className="w-full h-48 object-cover" />
-                    </div>
-                    <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="w-full">
+                {/* Photo Section */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Actual Photo</Label>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => {
+                        fileInputRef.current?.click();
+                        if (!location) getLocation();
+                      }}
+                    >
                       <Camera className="h-4 w-4 mr-2" />
-                      Retake Photo
+                      {capturedImage ? "Retake Photo" : "Capture Photo"}
                     </Button>
                   </div>
-                ) : (
-                  <Button onClick={() => fileInputRef.current?.click()} className="w-full h-32" variant="outline">
-                    <div className="flex flex-col items-center gap-2">
-                      <Camera className="h-8 w-8" />
-                      <span>Capture Photo</span>
+                  
+                  {capturedImage ? (
+                    <div className="rounded-lg overflow-hidden border">
+                      <img src={capturedImage} alt="Captured" className="w-full h-64 object-cover" />
                     </div>
-                  </Button>
+                  ) : (
+                    <div 
+                      className="rounded-lg border-2 border-dashed h-64 flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => {
+                        fileInputRef.current?.click();
+                        if (!location) getLocation();
+                      }}
+                    >
+                      <div className="text-center text-muted-foreground">
+                        <Camera className="h-12 w-12 mx-auto mb-2" />
+                        <p>Click to capture photo</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Location Info */}
+                  <div className="p-3 rounded-lg bg-muted flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      {gettingLocation ? (
+                        <span className="text-muted-foreground">Getting location...</span>
+                      ) : location ? (
+                        <span>{location.address}</span>
+                      ) : (
+                        <span className="text-muted-foreground">Location not available</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span>{new Date().toLocaleString()}</span>
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <Label>Notes (Optional)</Label>
+                    <Textarea
+                      placeholder="Add notes about the display..."
+                      value={submissionNotes}
+                      onChange={(e) => setSubmissionNotes(e.target.value)}
+                      className="mt-2"
+                      rows={2}
+                    />
+                  </div>
+
+                  {/* Save Photo Button */}
+                  {(capturedFile || !selectedViewTask.submitted_photo_url) && (
+                    <Button 
+                      onClick={handlePhotoSave} 
+                      disabled={!capturedFile || uploading}
+                      className="w-full"
+                    >
+                      {uploading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4 mr-2" />
+                          Save Photo
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+
+                {/* Image Comparison Section - Only show if both images exist */}
+                {selectedViewTask.planogram?.image_url && capturedImage && (
+                  <div className="space-y-3 border-t pt-6">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-lg font-semibold">Compare with Planogram</Label>
+                      <Tabs value={compareMode} onValueChange={(v) => setCompareMode(v as "slider" | "side-by-side")}>
+                        <TabsList className="h-8">
+                          <TabsTrigger value="slider" className="text-xs px-2">Slider</TabsTrigger>
+                          <TabsTrigger value="side-by-side" className="text-xs px-2">Side by Side</TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    </div>
+
+                    {compareMode === "slider" ? (
+                      <ImageComparisonSlider
+                        baseImage={selectedViewTask.planogram.image_url}
+                        actualImage={capturedImage}
+                        baseLabel="Planogram"
+                        actualLabel="Actual"
+                      />
+                    ) : (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="mb-2 block text-sm">Planogram (Base)</Label>
+                          <div className="rounded-lg overflow-hidden border">
+                            <img
+                              src={selectedViewTask.planogram.image_url}
+                              alt="Planogram"
+                              className="w-full h-48 object-cover"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="mb-2 block text-sm">Actual Photo</Label>
+                          <div className="rounded-lg overflow-hidden border">
+                            <img
+                              src={capturedImage}
+                              alt="Actual"
+                              className="w-full h-48 object-cover"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Review Section */}
+                    <div className="p-4 rounded-lg border bg-muted/30 space-y-4">
+                      <Label className="font-semibold">Review Status</Label>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm text-muted-foreground">Match Level</Label>
+                          <Select value={reviewStatus} onValueChange={setReviewStatus}>
+                            <SelectTrigger className="mt-1">
+                              <SelectValue placeholder="Select match level" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {reviewStatusOptions.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-sm text-muted-foreground">Match Percentage: {matchPercentage}%</Label>
+                          <Slider
+                            value={[matchPercentage]}
+                            onValueChange={(val) => setMatchPercentage(val[0])}
+                            max={100}
+                            step={1}
+                            className="mt-3"
+                          />
+                        </div>
+                      </div>
+
+                      <Button 
+                        onClick={handleSaveReview} 
+                        disabled={savingReview}
+                        variant="secondary"
+                        className="w-full"
+                      >
+                        {savingReview ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          "Save Review"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Show planogram reference if no actual photo yet */}
+                {selectedViewTask.planogram?.image_url && !capturedImage && (
+                  <div className="space-y-2">
+                    <Label>Reference Planogram</Label>
+                    <div className="rounded-lg overflow-hidden border">
+                      <img 
+                        src={selectedViewTask.planogram.image_url} 
+                        alt="Planogram reference" 
+                        className="w-full h-48 object-cover"
+                      />
+                    </div>
+                    <p className="text-sm text-muted-foreground">{selectedViewTask.planogram.title}</p>
+                  </div>
                 )}
               </div>
-
-              {/* Location Info */}
-              <div className="p-3 rounded-lg bg-muted">
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  {gettingLocation ? (
-                    <span className="text-sm text-muted-foreground">Getting location...</span>
-                  ) : location ? (
-                    <span className="text-sm">{location.address}</span>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">Location not available</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 mt-1">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">{new Date().toLocaleString()}</span>
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div>
-                <Label>Notes (Optional)</Label>
-                <Textarea
-                  placeholder="Add any notes about the display..."
-                  value={submissionNotes}
-                  onChange={(e) => setSubmissionNotes(e.target.value)}
-                  className="mt-2"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4 sticky bottom-0 bg-background pb-2">
-                <Button type="button" variant="outline" onClick={() => setSubmitPhotoOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handlePhotoSubmit} disabled={!capturedFile || uploading}>
-                  {uploading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-4 w-4 mr-2" />
-                      Submit for Review
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
