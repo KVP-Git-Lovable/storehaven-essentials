@@ -12,6 +12,7 @@ const defaultAuthContext = {
   signIn: async () => ({ error: new Error("Auth not initialized") }),
   signUp: async () => ({ error: new Error("Auth not initialized") }),
   signOut: async () => {},
+  refreshProfile: async () => {},
 };
 
 export function useAuth() {

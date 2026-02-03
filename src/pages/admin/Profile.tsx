@@ -38,30 +38,17 @@ type PasswordFormData = z.infer<typeof passwordSchema>;
 type ProfileFormData = z.infer<typeof profileSchema>;
 
 export default function Profile() {
-  const { profile, user } = useAuth();
+  const { profile, user, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
 
-  // Fetch profile photo on mount
-  useEffect(() => {
-    const fetchProfilePhoto = async () => {
-      if (!profile?.id) return;
-      const { data } = await supabase
-        .from("profiles")
-        .select("profile_photo_url")
-        .eq("id", profile.id)
-        .single();
-      if (data?.profile_photo_url) {
-        setProfilePhotoUrl(data.profile_photo_url);
-      }
-    };
-    fetchProfilePhoto();
-  }, [profile?.id]);
+  const handlePhotoUpdate = async (url: string) => {
+    await refreshProfile();
+  };
 
   const passwordForm = useForm<PasswordFormData>({
     resolver: zodResolver(passwordSchema),
@@ -180,9 +167,9 @@ export default function Profile() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-4">
-                  {profilePhotoUrl ? (
+                  {profile?.profile_photo_url ? (
                     <img
-                      src={profilePhotoUrl}
+                      src={profile.profile_photo_url}
                       alt="Profile"
                       className="h-16 w-16 rounded-full object-cover border-2 border-border"
                     />
@@ -202,9 +189,9 @@ export default function Profile() {
                 {profile?.id && (
                   <ProfilePhotoUpload
                     userId={profile.id}
-                    currentPhotoUrl={profilePhotoUrl}
+                    currentPhotoUrl={profile.profile_photo_url || null}
                     username={profile.username || "User"}
-                    onPhotoUpdate={setProfilePhotoUrl}
+                    onPhotoUpdate={handlePhotoUpdate}
                   />
                 )}
                 <Separator />
