@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO } from "date-fns";
-import { Camera, MapPin, Clock, UserCheck, UserX, Calendar, Loader2, CheckCircle } from "lucide-react";
+import { Camera, MapPin, Clock, UserCheck, UserX, Calendar, Loader2, CheckCircle, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { FaceCaptureDialog } from "@/components/staff/FaceCaptureDialog";
 import { FaceVerificationBadge } from "@/components/attendance/FaceVerificationBadge";
+import { useAuth } from "@/hooks/useAuth";
 
 interface AttendanceRecord {
   id: string;
@@ -37,12 +38,13 @@ interface Employee {
   id: string;
   name: string;
   department: string;
+  email: string;
   face_baseline_url: string | null;
 }
 
 export default function Attendance() {
+  const { user } = useAuth();
   const [isMarkOpen, setIsMarkOpen] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
@@ -86,18 +88,35 @@ export default function Attendance() {
     }
   };
 
-  // Fetch employees
+  // Fetch all employees for stats and table
   const { data: employees } = useQuery({
     queryKey: ["employees-active"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("employees")
-        .select("id, name, department, face_baseline_url")
+        .select("id, name, department, email, face_baseline_url")
         .eq("status", "active")
         .order("name");
       if (error) throw error;
       return data as Employee[];
     },
+  });
+
+  // Fetch current user's employee record
+  const { data: currentEmployee, isLoading: loadingEmployee } = useQuery({
+    queryKey: ["current-employee", user?.email],
+    queryFn: async () => {
+      if (!user?.email) return null;
+      const { data, error } = await supabase
+        .from("employees")
+        .select("id, name, department, email, face_baseline_url")
+        .eq("email", user.email)
+        .eq("status", "active")
+        .maybeSingle();
+      if (error) throw error;
+      return data as Employee | null;
+    },
+    enabled: !!user?.email,
   });
 
   // Fetch stores
@@ -134,22 +153,19 @@ export default function Attendance() {
     setVerificationResult(null);
   };
 
-  // Check if employee has baseline photo
-  const hasBaselinePhoto = (employeeId: string) => {
-    const employee = employees?.find(e => e.id === employeeId);
-    return !!employee?.face_baseline_url;
-  };
+  // Check if current employee has baseline photo
+  const hasBaselinePhoto = useMemo(() => {
+    return !!currentEmployee?.face_baseline_url;
+  }, [currentEmployee]);
 
   // Verify face against employee profile photo
   const verifyFace = async (attendancePhotoUrl: string, employeeId: string, recordId?: string) => {
-    const employee = employees?.find(e => e.id === employeeId);
-    
     // Call the edge function - it will handle validation
     setVerifyingFace(true);
     try {
       const { data, error } = await supabase.functions.invoke("verify-face", {
         body: {
-          profilePhotoUrl: employee?.face_baseline_url || null,
+          profilePhotoUrl: currentEmployee?.face_baseline_url || null,
           attendancePhotoUrl,
           attendanceRecordId: recordId,
         },
@@ -168,14 +184,14 @@ export default function Attendance() {
   // Mark attendance mutation
   const markAttendanceMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedEmployee) throw new Error("Please select an employee");
+      if (!currentEmployee) throw new Error("No employee record found for your account");
       if (!capturedFile) throw new Error("Please capture a photo");
 
       setUploading(true);
 
       // Upload photo
       const fileExt = capturedFile.name.split(".").pop();
-      const fileName = `attendance/${selectedEmployee}/${Date.now()}.${fileExt}`;
+      const fileName = `attendance/${currentEmployee.id}/${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from("employee-documents")
@@ -187,7 +203,7 @@ export default function Attendance() {
 
       // Verify face before proceeding
       setVerifyingFace(true);
-      const verifyResult = await verifyFace(urlData.publicUrl, selectedEmployee);
+      const verifyResult = await verifyFace(urlData.publicUrl, currentEmployee.id);
       setVerificationResult(verifyResult);
       setVerifyingFace(false);
 
@@ -200,7 +216,7 @@ export default function Attendance() {
       const { data: existing } = await supabase
         .from("attendance_records")
         .select("id, check_in_time")
-        .eq("employee_id", selectedEmployee)
+        .eq("employee_id", currentEmployee.id)
         .eq("attendance_date", format(new Date(), "yyyy-MM-dd"))
         .single();
 
@@ -211,8 +227,8 @@ export default function Attendance() {
         const checkInHour = now.getHours();
         const status = checkInHour <= 9 ? "present" : checkInHour <= 10 ? "late" : "late";
 
-        const { data: newRecord } = await supabase.from("attendance_records").insert({
-          employee_id: selectedEmployee,
+        await supabase.from("attendance_records").insert({
+          employee_id: currentEmployee.id,
           attendance_date: format(now, "yyyy-MM-dd"),
           check_in_time: now.toISOString(),
           check_in_photo_url: urlData.publicUrl,
@@ -222,7 +238,7 @@ export default function Attendance() {
           status,
           face_verification_status: verifyResult.status,
           face_match_score: verifyResult.score,
-        }).select().single();
+        });
       } else {
         if (!existing) throw new Error("No check-in record found for today");
 
@@ -251,7 +267,6 @@ export default function Attendance() {
       setIsMarkOpen(false);
       setCapturedImage(null);
       setCapturedFile(null);
-      setSelectedEmployee("");
       setUploading(false);
       setVerificationResult(null);
     },
@@ -272,8 +287,6 @@ export default function Attendance() {
     { title: "Absent", value: absentCount.toString(), icon: UserX, iconColor: "bg-destructive/10 text-destructive" },
     { title: "Total Staff", value: (employees?.length || 0).toString(), icon: Calendar, iconColor: "bg-primary/10 text-primary" },
   ];
-
-  const selectedEmployeeData = employees?.find((e) => e.id === selectedEmployee);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -317,55 +330,72 @@ export default function Attendance() {
                   </Button>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Select Employee</Label>
-                  <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select employee" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {employees?.map((emp) => (
-                        <SelectItem key={emp.id} value={emp.id}>
-                          {emp.name} - {emp.department}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Baseline photo warning or display */}
-                {selectedEmployee && !selectedEmployeeData?.face_baseline_url && (
-                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
-                    <p className="text-sm text-amber-800 font-medium">
-                      ⚠️ Baseline profile photo missing
+                {/* Current User Info */}
+                {loadingEmployee ? (
+                  <div className="p-4 rounded-lg bg-muted flex items-center justify-center">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-sm text-muted-foreground">Loading your profile...</span>
+                  </div>
+                ) : !currentEmployee ? (
+                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                    <p className="text-sm text-destructive font-medium">
+                      ⚠️ No employee record found
                     </p>
-                    <p className="text-xs text-amber-700 mt-1">
-                      This employee must upload a profile photo before attendance can be marked.
+                    <p className="text-xs text-destructive/80 mt-1">
+                      Your account is not linked to an employee profile. Contact admin.
                     </p>
                   </div>
-                )}
-
-                {selectedEmployeeData?.face_baseline_url && (
-                  <div className="flex gap-4">
-                    <div className="flex-1">
-                      <Label className="text-xs text-muted-foreground">Baseline Photo</Label>
-                      <img
-                        src={selectedEmployeeData.face_baseline_url}
-                        alt="Baseline"
-                        className="w-full h-32 object-cover rounded-lg border"
-                      />
+                ) : (
+                  <>
+                    {/* Current user display */}
+                    <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <User className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{currentEmployee.name}</p>
+                          <p className="text-xs text-muted-foreground">{currentEmployee.department}</p>
+                        </div>
+                      </div>
                     </div>
-                    {capturedImage && (
-                      <div className="flex-1">
-                        <Label className="text-xs text-muted-foreground">Captured Photo</Label>
-                        <img
-                          src={capturedImage}
-                          alt="Captured"
-                          className="w-full h-32 object-cover rounded-lg border"
-                        />
+
+                    {/* Baseline photo warning */}
+                    {!currentEmployee.face_baseline_url && (
+                      <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                        <p className="text-sm text-amber-800 font-medium">
+                          ⚠️ Baseline profile photo missing
+                        </p>
+                        <p className="text-xs text-amber-700 mt-1">
+                          You must upload a profile photo before marking attendance.
+                        </p>
                       </div>
                     )}
-                  </div>
+
+                    {/* Baseline and Captured photos */}
+                    {currentEmployee.face_baseline_url && (
+                      <div className="flex gap-4">
+                        <div className="flex-1">
+                          <Label className="text-xs text-muted-foreground">Baseline Photo</Label>
+                          <img
+                            src={currentEmployee.face_baseline_url}
+                            alt="Baseline"
+                            className="w-full h-32 object-cover rounded-lg border"
+                          />
+                        </div>
+                        {capturedImage && (
+                          <div className="flex-1">
+                            <Label className="text-xs text-muted-foreground">Captured Photo</Label>
+                            <img
+                              src={capturedImage}
+                              alt="Captured"
+                              className="w-full h-32 object-cover rounded-lg border"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {!capturedImage ? (
@@ -373,6 +403,7 @@ export default function Attendance() {
                     variant="outline"
                     className="w-full h-24"
                     onClick={() => setIsCameraOpen(true)}
+                    disabled={!currentEmployee}
                   >
                     <div className="flex flex-col items-center gap-2">
                       <Camera className="h-8 w-8" />
@@ -451,11 +482,11 @@ export default function Attendance() {
                   className="w-full"
                   onClick={() => markAttendanceMutation.mutate()}
                   disabled={
-                    !selectedEmployee || 
+                    !currentEmployee || 
                     !capturedFile || 
                     uploading || 
                     verifyingFace ||
-                    !hasBaselinePhoto(selectedEmployee)
+                    !hasBaselinePhoto
                   }
                 >
                   {uploading || verifyingFace ? (
@@ -463,7 +494,7 @@ export default function Attendance() {
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       {verifyingFace ? "Verifying Face..." : "Processing..."}
                     </>
-                  ) : !hasBaselinePhoto(selectedEmployee) && selectedEmployee ? (
+                  ) : !hasBaselinePhoto && currentEmployee ? (
                     <>Baseline Photo Required</>
                   ) : (
                     <>
