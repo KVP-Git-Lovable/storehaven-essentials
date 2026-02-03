@@ -208,7 +208,13 @@ export default function ServiceTickets() {
     const [ticketsRes, storesRes, assetsRes, contractsRes] = await Promise.all([
       ticketsQuery,
       storesQuery,
-      supabase.from("assets").select("id, name, store_id, asset_master_id, service_contract_assets(service_contract_id)").order("name"),
+      // Only fetch assets with valid asset_master_id (not orphaned)
+      supabase
+        .from("assets")
+        .select("id, name, store_id, asset_master_id, asset_status, service_contract_assets(service_contract_id)")
+        .not("asset_status", "eq", "orphaned")
+        .not("asset_master_id", "is", null)
+        .order("name"),
       supabase.from("service_contracts")
         .select("id, contract_number, service_provider:service_provider_id(name)")
         .eq("status", "active")
