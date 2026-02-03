@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Package, CheckCircle, AlertTriangle, XCircle, Loader2, Eye } from "lucide-react";
+import { Plus, Search, Package, CheckCircle, AlertTriangle, XCircle, Loader2, Eye, Pencil } from "lucide-react";
 import { useStoreAccess } from "@/hooks/useStoreAccess";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -125,6 +125,7 @@ export default function AssetInventory() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const { toast } = useToast();
   const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
@@ -195,41 +196,112 @@ export default function AssetInventory() {
 
   const oemVendors = vendors.filter((v) => v.vendor_type === "oem");
 
+  const handleEdit = (asset: Asset) => {
+    setEditingAsset(asset);
+    form.reset({
+      assetMasterId: asset.asset_master_id || "",
+      assetNumber: asset.asset_number || "",
+      storeId: asset.store_id || "",
+      location: asset.location || "",
+      condition: asset.condition || "under-warranty",
+      assetStatus: asset.asset_status || "requisition-raised",
+      purchaseDate: asset.purchase_date || "",
+      value: asset.value || 0,
+      vendorId: asset.vendor_id || "",
+      oemId: asset.oem_id || "",
+      warrantyStartDate: asset.warranty_start_date || "",
+      warrantyEndDate: asset.warranty_end_date || "",
+    });
+    setOpen(true);
+  };
+
+  const handleDialogClose = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (!isOpen) {
+      setEditingAsset(null);
+      form.reset();
+    }
+  };
+
   const onSubmit = async (data: AssetFormData) => {
     const selectedAssetMaster = assetMasters.find((am) => am.id === data.assetMasterId);
 
-    const { data: insertedAsset, error } = await supabase.from("assets").insert({
-      name: selectedAssetMaster?.name || "",
-      asset_number: data.assetNumber,
-      category: selectedAssetMaster?.categories?.name || "",
-      category_id: selectedAssetMaster?.category_id || null,
-      asset_master_id: data.assetMasterId,
-      store_id: data.storeId,
-      location: data.location,
-      condition: data.condition,
-      asset_status: data.assetStatus,
-      purchase_date: data.purchaseDate,
-      value: data.value,
-      vendor_id: data.vendorId,
-      oem_id: data.oemId || null,
-      warranty_start_date: data.warrantyStartDate || null,
-      warranty_end_date: data.warrantyEndDate || null,
-    }).select().single();
+    if (editingAsset) {
+      // Update existing asset
+      const { error } = await supabase
+        .from("assets")
+        .update({
+          name: selectedAssetMaster?.name || editingAsset.name,
+          asset_number: data.assetNumber,
+          category: selectedAssetMaster?.categories?.name || editingAsset.category,
+          category_id: selectedAssetMaster?.category_id || null,
+          asset_master_id: data.assetMasterId,
+          store_id: data.storeId,
+          location: data.location,
+          condition: data.condition,
+          asset_status: data.assetStatus,
+          purchase_date: data.purchaseDate,
+          value: data.value,
+          vendor_id: data.vendorId,
+          oem_id: data.oemId || null,
+          warranty_start_date: data.warrantyStartDate || null,
+          warranty_end_date: data.warrantyEndDate || null,
+        })
+        .eq("id", editingAsset.id);
 
-    if (error) {
-      toast({ title: "Error", description: "Failed to add asset", variant: "destructive" });
+      if (error) {
+        toast({ title: "Error", description: "Failed to update asset", variant: "destructive" });
+      } else {
+        // Track status change if applicable
+        if (data.assetStatus !== editingAsset.asset_status) {
+          await supabase.from("asset_status_history").insert({
+            asset_id: editingAsset.id,
+            status: data.assetStatus,
+            changed_by: "System",
+          });
+        }
+        
+        toast({ title: "Asset updated", description: "Asset has been updated successfully." });
+        form.reset();
+        setEditingAsset(null);
+        setOpen(false);
+        fetchData();
+      }
     } else {
-      // Insert initial status history record
-      await supabase.from("asset_status_history").insert({
-        asset_id: insertedAsset.id,
-        status: data.assetStatus,
-        changed_by: "System",
-      });
-      
-      toast({ title: "Asset added", description: `Asset has been registered.` });
-      form.reset();
-      setOpen(false);
-      fetchData();
+      // Insert new asset
+      const { data: insertedAsset, error } = await supabase.from("assets").insert({
+        name: selectedAssetMaster?.name || "",
+        asset_number: data.assetNumber,
+        category: selectedAssetMaster?.categories?.name || "",
+        category_id: selectedAssetMaster?.category_id || null,
+        asset_master_id: data.assetMasterId,
+        store_id: data.storeId,
+        location: data.location,
+        condition: data.condition,
+        asset_status: data.assetStatus,
+        purchase_date: data.purchaseDate,
+        value: data.value,
+        vendor_id: data.vendorId,
+        oem_id: data.oemId || null,
+        warranty_start_date: data.warrantyStartDate || null,
+        warranty_end_date: data.warrantyEndDate || null,
+      }).select().single();
+
+      if (error) {
+        toast({ title: "Error", description: "Failed to add asset", variant: "destructive" });
+      } else {
+        // Insert initial status history record
+        await supabase.from("asset_status_history").insert({
+          asset_id: insertedAsset.id,
+          status: data.assetStatus,
+          changed_by: "System",
+        });
+        
+        toast({ title: "Asset added", description: `Asset has been registered.` });
+        form.reset();
+        setOpen(false);
+        fetchData();
+      }
     }
   };
 
@@ -279,7 +351,7 @@ export default function AssetInventory() {
           <h1 className="text-2xl font-semibold">Asset Register</h1>
           <p className="text-muted-foreground">Track all assets across stores</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={handleDialogClose}>
           <DialogTrigger asChild>
             <Button className="gap-2">
               <Plus className="h-4 w-4" />
@@ -288,7 +360,7 @@ export default function AssetInventory() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Add New Asset</DialogTitle>
+              <DialogTitle>{editingAsset ? "Edit Asset" : "Add New Asset"}</DialogTitle>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -528,10 +600,10 @@ export default function AssetInventory() {
                   />
                 </div>
                 <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                  <Button type="button" variant="outline" onClick={() => handleDialogClose(false)}>
                     Cancel
                   </Button>
-                  <Button type="submit">Add Asset</Button>
+                  <Button type="submit">{editingAsset ? "Save Changes" : "Add Asset"}</Button>
                 </div>
               </form>
             </Form>
@@ -613,17 +685,30 @@ export default function AssetInventory() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/assets/inventory/${asset.id}`);
-                      }}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(asset);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/assets/inventory/${asset.id}`);
+                        }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
