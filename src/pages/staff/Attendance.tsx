@@ -338,38 +338,15 @@ export default function Attendance() {
                       </div>
                     </div>
 
-                    {/* Baseline and Captured photos */}
-                    {baselinePhotoUrl && (
-                      <div className="flex gap-4">
-                        <div className="flex-1">
-                          <Label className="text-xs text-muted-foreground">Baseline Photo</Label>
-                          <img
-                            src={baselinePhotoUrl}
-                            alt="Baseline"
-                            className="w-full h-32 object-cover rounded-lg border"
-                          />
-                        </div>
-                        {capturedImage && (
-                          <div className="flex-1">
-                            <Label className="text-xs text-muted-foreground">Captured Photo</Label>
-                            <img
-                              src={capturedImage}
-                              alt="Captured"
-                              className="w-full h-32 object-cover rounded-lg border"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {!baselinePhotoUrl && (
-                      <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
-                        <p className="text-sm text-amber-800 font-medium">
-                          ℹ️ No baseline photo found
-                        </p>
-                        <p className="text-xs text-amber-700 mt-1">
-                          Face verification will be skipped. Upload a profile photo for enhanced security.
-                        </p>
+                    {/* Captured photo preview */}
+                    {capturedImage && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Captured Photo</Label>
+                        <img
+                          src={capturedImage}
+                          alt="Captured"
+                          className="w-full h-32 object-cover rounded-lg border"
+                        />
                       </div>
                     )}
                   </>
@@ -511,12 +488,12 @@ export default function Attendance() {
               <TableHeader>
                 <TableRow>
                   <TableHead>User</TableHead>
-                  <TableHead>Store</TableHead>
+                  <TableHead>Date</TableHead>
                   <TableHead>Check In</TableHead>
                   <TableHead>Check Out</TableHead>
-                  <TableHead>Hours</TableHead>
+                  <TableHead>Photo</TableHead>
                   <TableHead>Location</TableHead>
-                  <TableHead>Face Verify</TableHead>
+                  <TableHead>Verification</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -526,14 +503,26 @@ export default function Attendance() {
                     <TableCell className="font-medium">
                       {record.profiles?.username || record.profiles?.email || "Unknown"}
                     </TableCell>
-                    <TableCell>{record.stores?.name || "-"}</TableCell>
+                    <TableCell>
+                      {format(parseISO(record.attendance_date), "dd MMM")}
+                    </TableCell>
                     <TableCell>
                       {record.check_in_time ? format(parseISO(record.check_in_time), "HH:mm") : "-"}
                     </TableCell>
                     <TableCell>
                       {record.check_out_time ? format(parseISO(record.check_out_time), "HH:mm") : "-"}
                     </TableCell>
-                    <TableCell>{record.total_hours ? `${record.total_hours}h` : "-"}</TableCell>
+                    <TableCell>
+                      {record.check_in_photo_url ? (
+                        <img 
+                          src={record.check_in_photo_url} 
+                          alt="Check-in" 
+                          className="h-10 w-10 rounded object-cover"
+                        />
+                      ) : (
+                        "-"
+                      )}
+                    </TableCell>
                     <TableCell>
                       {record.check_in_address ? (
                         <div className="flex items-center gap-1 text-xs text-green-600">
