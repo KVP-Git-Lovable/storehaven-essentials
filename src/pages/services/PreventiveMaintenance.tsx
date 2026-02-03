@@ -53,9 +53,15 @@ export default function PreventiveMaintenance() {
   const fetchSchedules = async () => {
     const storeIds = Array.from(accessibleStoreIds);
     
+    // Fetch maintenance tasks with their linked asset data
     let query = supabase
       .from("maintenance_tasks")
-      .select("*, store:store_id(name), pm_checklist_master_id")
+      .select(`
+        *, 
+        store:store_id(name), 
+        pm_checklist_master_id,
+        asset_record:asset_id(id, asset_status, asset_master_id)
+      `)
       .order("created_at", { ascending: false });
     
     if (!isAdmin && storeIds.length > 0) {
@@ -67,7 +73,21 @@ export default function PreventiveMaintenance() {
     if (error) {
       toast({ title: "Error", description: "Failed to load schedules", variant: "destructive" });
     } else {
-      setSchedules(data || []);
+      // Filter out tasks linked to orphaned assets or assets without valid asset_master
+      const validSchedules = (data || []).filter(task => {
+        // If no asset linked, exclude the task (orphan PM task)
+        if (!task.asset_id) return false;
+        
+        // If linked asset is orphaned or has no master, exclude
+        const assetRecord = task.asset_record as { id: string; asset_status: string; asset_master_id: string | null } | null;
+        if (!assetRecord) return false;
+        if (assetRecord.asset_status === "orphaned") return false;
+        if (!assetRecord.asset_master_id) return false;
+        
+        return true;
+      });
+      
+      setSchedules(validSchedules);
     }
     setLoading(false);
   };

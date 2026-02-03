@@ -26,12 +26,16 @@ export default function AssetManagementDashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      // Fetch total assets and stats
-      const { data: assets } = await supabase.from("assets").select("*");
+      // Fetch only active assets with valid asset_master_id (exclude orphaned/deleted)
+      const { data: assets } = await supabase
+        .from("assets")
+        .select("*")
+        .not("asset_status", "eq", "orphaned")
+        .not("asset_master_id", "is", null);
       
       if (assets) {
         const now = new Date();
-        const active = assets.filter(a => a.asset_status === "active").length;
+        const active = assets.filter(a => a.asset_status === "active" || a.asset_status === "working" || a.asset_status === "installed").length;
         const underWarranty = assets.filter(a => a.warranty_end_date && new Date(a.warranty_end_date) > now).length;
         const expired = assets.filter(a => a.warranty_end_date && new Date(a.warranty_end_date) <= now).length;
         const totalValue = assets.reduce((sum, a) => sum + (a.value || 0), 0);
@@ -51,29 +55,30 @@ export default function AssetManagementDashboard() {
         });
         setCategoryData(Object.entries(categoryCount).map(([name, value]) => ({ name, value })));
 
-        // Condition distribution
+        // Condition distribution (service engagement)
         const conditionCount: Record<string, number> = {};
         assets.forEach(a => {
-          conditionCount[a.condition] = (conditionCount[a.condition] || 0) + 1;
+          const condition = a.condition || "Unknown";
+          conditionCount[condition] = (conditionCount[condition] || 0) + 1;
         });
         setConditionData(Object.entries(conditionCount).map(([name, value]) => ({ name, value })));
 
-        // Status distribution
+        // Status distribution (exclude orphaned from display)
         const statusCount: Record<string, number> = {};
         assets.forEach(a => {
           statusCount[a.asset_status] = (statusCount[a.asset_status] || 0) + 1;
         });
         setStatusData(Object.entries(statusCount).map(([name, count]) => ({ name, count })));
-      }
 
-      // Fetch value by store
-      const { data: stores } = await supabase.from("stores").select("id, name");
-      if (stores && assets) {
-        const storeValues = stores.slice(0, 10).map(store => ({
-          name: store.name.replace("Polar Bear - ", ""),
-          value: assets.filter(a => a.store_id === store.id).reduce((sum, a) => sum + (a.value || 0), 0),
-        })).filter(s => s.value > 0);
-        setValueByStore(storeValues);
+        // Fetch value by store
+        const { data: stores } = await supabase.from("stores").select("id, name");
+        if (stores) {
+          const storeValues = stores.slice(0, 10).map(store => ({
+            name: store.name.replace("Polar Bear - ", ""),
+            value: assets.filter(a => a.store_id === store.id).reduce((sum, a) => sum + (a.value || 0), 0),
+          })).filter(s => s.value > 0);
+          setValueByStore(storeValues);
+        }
       }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);

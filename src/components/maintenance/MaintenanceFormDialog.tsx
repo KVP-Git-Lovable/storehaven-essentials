@@ -213,9 +213,12 @@ export function MaintenanceFormDialog({
   const fetchData = async () => {
     const [storesRes, assetsRes, vendorsRes, pmChecklistRes] = await Promise.all([
       supabase.from("stores").select("id, name").order("name"),
+      // Only fetch assets with valid asset_master_id (not orphaned or deleted)
       supabase
         .from("assets")
         .select("id, name, asset_number, store_id, asset_master_id")
+        .not("asset_status", "eq", "orphaned")
+        .not("asset_master_id", "is", null)
         .order("name"),
       supabase.from("vendors").select("id, name").order("name"),
       supabase

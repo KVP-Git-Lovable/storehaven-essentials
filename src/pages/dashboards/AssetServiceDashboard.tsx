@@ -27,30 +27,42 @@ export default function AssetServiceDashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      // Fetch maintenance tasks
-      const { data: pmTasks } = await supabase.from("maintenance_tasks").select("*");
+      // Fetch maintenance tasks with their linked asset data to filter orphans
+      const { data: pmTasks } = await supabase
+        .from("maintenance_tasks")
+        .select(`*, asset_record:asset_id(id, asset_status, asset_master_id)`);
       
       if (pmTasks) {
-        const completed = pmTasks.filter(t => t.status === "completed");
-        const overdue = pmTasks.filter(t => t.status === "overdue");
+        // Filter out tasks linked to orphaned assets or assets without valid asset_master
+        const validTasks = pmTasks.filter(task => {
+          if (!task.asset_id) return false;
+          const assetRecord = task.asset_record as { id: string; asset_status: string; asset_master_id: string | null } | null;
+          if (!assetRecord) return false;
+          if (assetRecord.asset_status === "orphaned") return false;
+          if (!assetRecord.asset_master_id) return false;
+          return true;
+        });
+
+        const completed = validTasks.filter(t => t.status === "completed");
+        const overdue = validTasks.filter(t => t.status === "overdue");
 
         setStats(prev => ({
           ...prev,
-          totalPM: pmTasks.length,
+          totalPM: validTasks.length,
           completedPM: completed.length,
           overduePM: overdue.length,
         }));
 
         // PM Status distribution
         const statusCount: Record<string, number> = {};
-        pmTasks.forEach(t => {
+        validTasks.forEach(t => {
           statusCount[t.status] = (statusCount[t.status] || 0) + 1;
         });
         setPMStatusData(Object.entries(statusCount).map(([name, value]) => ({ name, value })));
 
         // PM Frequency distribution
         const freqCount: Record<string, number> = {};
-        pmTasks.forEach(t => {
+        validTasks.forEach(t => {
           freqCount[t.frequency] = (freqCount[t.frequency] || 0) + 1;
         });
         setPMFrequencyData(Object.entries(freqCount).map(([name, count]) => ({ name, count })));
