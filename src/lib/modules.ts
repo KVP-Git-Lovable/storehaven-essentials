@@ -30,7 +30,7 @@ export const modules: ModuleDefinition[] = [
   { key: "operations.heatmap", name: "Store Heatmap", parent: "stores" },
   { key: "vm.planograms", name: "Planograms", parent: "stores" },
   { key: "vm.tasks", name: "Compliance Tasks", parent: "stores" },
-  { key: "vm.review", name: "Review Submissions", parent: "stores" },
+  { key: "vm.review", name: "Compliance Audit", parent: "stores" },
   { key: "footfall", name: "Footfall", parent: "stores" },
   { key: "pettycash", name: "Petty Cash", parent: "stores" },
   { key: "stores.nso", name: "New Store Opening", parent: "stores" },

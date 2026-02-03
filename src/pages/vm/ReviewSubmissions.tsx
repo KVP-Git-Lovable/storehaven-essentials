@@ -158,7 +158,7 @@ export default function ReviewSubmissions() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-semibold">Review Submissions</h1>
+        <h1 className="text-2xl font-semibold">Compliance Audit</h1>
         <p className="text-muted-foreground">Compare and approve store display compliance photos</p>
       </div>
 
