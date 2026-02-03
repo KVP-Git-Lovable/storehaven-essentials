@@ -6,8 +6,10 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./components/auth/AuthProvider";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { AppLayout } from "./components/layout/AppLayout";
+import { PWAInstallPrompt } from "./components/pwa/PWAInstallPrompt";
 import LandingPage from "./pages/landing/LandingPage";
 import Login from "./pages/auth/Login";
+import Install from "./pages/Install";
 import Dashboard from "./pages/Dashboard";
 import StoresList from "./pages/stores/StoresList";
 import StoreDetails from "./pages/stores/StoreDetails";
@@ -106,10 +108,12 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <PWAInstallPrompt />
           <Routes>
             {/* Public routes */}
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/install" element={<Install />} />
             
             {/* Protected routes */}
             <Route

@@ -3,12 +3,16 @@ import { Outlet } from "react-router-dom";
 import { AppSidebar } from "./AppSidebar";
 import { AppHeader } from "./AppHeader";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useServiceWorker } from "@/hooks/useServiceWorker";
 import { cn } from "@/lib/utils";
 
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isMobile = useIsMobile();
+  
+  // Initialize service worker and offline/online handlers
+  useServiceWorker();
 
   return (
     <div className="min-h-screen bg-background">
