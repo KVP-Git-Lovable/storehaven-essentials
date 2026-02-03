@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Dialog,
   DialogContent,
@@ -301,20 +302,18 @@ export default function AssetInventory() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Asset Name (Master)</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select asset master" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {assetMasters.map((am) => (
-                              <SelectItem key={am.id} value={am.id}>
-                                {am.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <SearchableSelect
+                          options={assetMasters.map((am) => ({
+                            value: am.id,
+                            label: am.name,
+                            subtitle: am.categories?.name,
+                          }))}
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          placeholder="Select asset master"
+                          searchPlaceholder="Search asset masters..."
+                          emptyMessage="No asset masters found."
+                        />
                         <FormMessage />
                       </FormItem>
                     )}
@@ -327,20 +326,17 @@ export default function AssetInventory() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Store</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select store" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {stores.map((store) => (
-                              <SelectItem key={store.id} value={store.id}>
-                                {store.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <SearchableSelect
+                          options={stores.map((store) => ({
+                            value: store.id,
+                            label: store.name,
+                          }))}
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          placeholder="Select store"
+                          searchPlaceholder="Search stores..."
+                          emptyMessage="No stores found."
+                        />
                         <FormMessage />
                       </FormItem>
                     )}
@@ -351,20 +347,17 @@ export default function AssetInventory() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Location</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select location" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {locations.map((loc) => (
-                              <SelectItem key={loc.id} value={loc.name}>
-                                {loc.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <SearchableSelect
+                          options={locations.map((loc) => ({
+                            value: loc.name,
+                            label: loc.name,
+                          }))}
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          placeholder="Select location"
+                          searchPlaceholder="Search locations..."
+                          emptyMessage="No locations found."
+                        />
                         <FormMessage />
                       </FormItem>
                     )}
@@ -377,20 +370,18 @@ export default function AssetInventory() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Vendor Procured From</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select vendor" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {vendors.map((vendor) => (
-                              <SelectItem key={vendor.id} value={vendor.id}>
-                                {vendor.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <SearchableSelect
+                          options={vendors.map((vendor) => ({
+                            value: vendor.id,
+                            label: vendor.name,
+                            subtitle: vendor.vendor_type,
+                          }))}
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          placeholder="Select vendor"
+                          searchPlaceholder="Search vendors..."
+                          emptyMessage="No vendors found."
+                        />
                         <FormMessage />
                       </FormItem>
                     )}
@@ -401,25 +392,20 @@ export default function AssetInventory() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>OEM Name</FormLabel>
-                        <Select
-                          onValueChange={(value) => field.onChange(value === "none" ? "" : value)}
+                        <SearchableSelect
+                          options={oemVendors.map((vendor) => ({
+                            value: vendor.id,
+                            label: vendor.name,
+                          }))}
                           value={field.value || "none"}
+                          onValueChange={(value) => field.onChange(value === "none" ? "" : value)}
+                          placeholder={oemVendors.length === 0 ? "No OEM vendors" : "Select OEM"}
+                          searchPlaceholder="Search OEM vendors..."
+                          emptyMessage="No OEM vendors found."
                           disabled={oemVendors.length === 0}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder={oemVendors.length === 0 ? "No OEM vendors" : "Select OEM"} />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="none">None</SelectItem>
-                            {oemVendors.map((vendor) => (
-                              <SelectItem key={vendor.id} value={vendor.id}>
-                                {vendor.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          allowNone
+                          noneLabel="None"
+                        />
                         <FormMessage />
                       </FormItem>
                     )}
