@@ -2011,6 +2011,7 @@ export type Database = {
           pending: number | null
           updated_at: string
           used: number | null
+          user_id: string | null
           year: number
         }
         Insert: {
@@ -2025,6 +2026,7 @@ export type Database = {
           pending?: number | null
           updated_at?: string
           used?: number | null
+          user_id?: string | null
           year?: number
         }
         Update: {
@@ -2039,6 +2041,7 @@ export type Database = {
           pending?: number | null
           updated_at?: string
           used?: number | null
+          user_id?: string | null
           year?: number
         }
         Relationships: [

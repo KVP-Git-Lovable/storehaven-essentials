@@ -24,58 +24,42 @@ interface LeaveBalance {
 export default function LeaveBalances() {
   const { user } = useAuth();
   const { isManager, isEmployee } = useAttendanceRole();
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
 
-  // Get current user's employee record (for employees)
-  const { data: currentEmployee } = useQuery({
-    queryKey: ["current-employee", user?.email],
-    queryFn: async () => {
-      if (!user?.email) return null;
-      const { data, error } = await supabase
-        .from("employees")
-        .select("id, name")
-        .eq("email", user.email)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user?.email && isEmployee,
-  });
-
-  // Fetch all employees (for managers)
-  const { data: employees } = useQuery({
-    queryKey: ["employees-active"],
+  // Fetch all active users (for managers) from profiles table
+  const { data: users } = useQuery({
+    queryKey: ["profiles-active"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("employees")
-        .select("id, name, department")
+        .from("profiles")
+        .select("id, username, email")
         .eq("status", "active")
-        .order("name");
+        .order("username");
       if (error) throw error;
       return data;
     },
     enabled: isManager,
   });
 
-  // Determine which employee ID to use for fetching balances
-  const effectiveEmployeeId = isEmployee ? currentEmployee?.id : selectedEmployeeId;
+  // Determine which user ID to use for fetching balances
+  const effectiveUserId = isEmployee ? user?.id : selectedUserId;
 
-  // Fetch leave balances
+  // Fetch leave balances using user_id
   const { data: balances, isLoading } = useQuery({
-    queryKey: ["leave-balances", effectiveEmployeeId],
+    queryKey: ["leave-balances", effectiveUserId],
     queryFn: async () => {
-      if (!effectiveEmployeeId) return [];
+      if (!effectiveUserId) return [];
       
       const { data, error } = await supabase
         .from("leave_balances")
         .select("*, leave_types(name, code)")
-        .eq("employee_id", effectiveEmployeeId)
+        .eq("user_id", effectiveUserId)
         .eq("year", new Date().getFullYear());
       
       if (error) throw error;
       return (data || []) as unknown as LeaveBalance[];
     },
-    enabled: !!effectiveEmployeeId,
+    enabled: !!effectiveUserId,
   });
 
   const getBalancePercentage = (balance: LeaveBalance) => {
@@ -86,30 +70,33 @@ export default function LeaveBalances() {
 
   const getTotal = (balance: LeaveBalance) => balance.granted || 0;
 
+  // Get current user's display name
+  const currentUserName = users?.find(u => u.id === user?.id)?.username || user?.email;
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-semibold">
-          {isManager ? "Employee Leave Balances" : "My Leave Balances"}
+          {isManager ? "User Leave Balances" : "My Leave Balances"}
         </h1>
         <p className="text-muted-foreground">
           {isManager
-            ? "View leave balances for all employees"
+            ? "View leave balances for all users"
             : "View your leave balances for the current year"}
         </p>
       </div>
 
-      {/* Manager: Employee Selector */}
+      {/* Manager: User Selector */}
       {isManager && (
         <div className="max-w-sm">
-          <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
+          <Select value={selectedUserId} onValueChange={setSelectedUserId}>
             <SelectTrigger>
-              <SelectValue placeholder="Select an employee" />
+              <SelectValue placeholder="Select a user" />
             </SelectTrigger>
             <SelectContent>
-              {employees?.map((emp) => (
-                <SelectItem key={emp.id} value={emp.id}>
-                  {emp.name} - {emp.department}
+              {users?.map((usr) => (
+                <SelectItem key={usr.id} value={usr.id}>
+                  {usr.username || usr.email}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -117,22 +104,31 @@ export default function LeaveBalances() {
         </div>
       )}
 
+      {/* Employee: Show read-only current user */}
+      {isEmployee && (
+        <div className="max-w-sm">
+          <div className="p-3 bg-muted rounded-md border">
+            <span className="font-medium">{currentUserName || "Loading..."}</span>
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : !effectiveEmployeeId ? (
+      ) : !effectiveUserId ? (
         <Card>
           <CardContent className="py-12">
             <div className="text-center text-muted-foreground">
               <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="text-lg font-medium">
-                {isManager ? "Select an employee to view balances" : "No employee record found"}
+                {isManager ? "Select a user to view balances" : "No user record found"}
               </p>
               <p className="text-sm">
                 {isManager
-                  ? "Choose an employee from the dropdown above"
-                  : "Your account is not linked to an employee record."}
+                  ? "Choose a user from the dropdown above"
+                  : "Your account is not properly configured."}
               </p>
             </div>
           </CardContent>
