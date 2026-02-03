@@ -98,6 +98,8 @@ type ComplianceTask = {
   submitted_longitude: number | null;
   submitted_location_address: string | null;
   submission_notes: string | null;
+  scheduled_start_time: string | null;
+  scheduled_end_time: string | null;
   planogram: { id: string; title: string; zone: string; image_url: string } | null;
   store: { id: string; name: string } | null;
   assigned_user: { id: string; username: string } | null;
