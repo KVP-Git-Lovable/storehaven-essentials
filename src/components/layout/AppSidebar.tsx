@@ -18,11 +18,13 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeft,
+  CalendarCheck,
 } from "lucide-react";
 import quickappLogo from "@/assets/quickapp-logo.png";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/hooks/useAuth";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -117,12 +119,17 @@ const navigation: NavItem[] = [
   },
   { title: "Vendors", href: "/vendors", icon: Building2, moduleKey: "vendors" },
   {
-    title: "Staff Management",
-    icon: Users,
+    title: "Attendance Management",
+    icon: CalendarCheck,
     moduleKey: "staff",
     children: [
-      { title: "Employees", href: "/staff/employees", moduleKey: "staff.employees" },
-      { title: "Attendance & Leave", href: "/staff/attendance", moduleKey: "staff.attendance" },
+      { title: "Live Attendance", href: "/staff/attendance", moduleKey: "staff.attendance" },
+      { title: "Leave Management", href: "/staff/leave", moduleKey: "staff.leave" },
+      { title: "Regularization", href: "/staff/regularization", moduleKey: "staff.regularization" },
+      { title: "Leave Balances", href: "/staff/leave-balances", moduleKey: "staff.leave-balances" },
+      { title: "Holidays", href: "/staff/holidays", moduleKey: "staff.holidays" },
+      { title: "Working Days", href: "/staff/working-days", moduleKey: "staff.working-days" },
+      { title: "Attendance Policy", href: "/staff/policy", moduleKey: "staff.policy" },
     ],
   },
   {
@@ -209,7 +216,15 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
   const location = useLocation();
   const isMobile = useIsMobile();
   const { hasPermission, isAdmin, loading } = usePermissions();
+  const { profile } = useAuth();
   const [openMenus, setOpenMenus] = useState<string[]>(["Store Management", "Assets & Vendors"]);
+
+  // Check if user has attendance management access (Admin or Store Manager)
+  const hasAttendanceManagementAccess = useMemo(() => {
+    if (isAdmin) return true;
+    const roleName = profile?.role_name?.toLowerCase();
+    return roleName === "store manager";
+  }, [isAdmin, profile?.role_name]);
 
   // Filter navigation based on permissions
   const filteredNavigation = useMemo(() => {
@@ -217,6 +232,14 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
     
     return navigation
       .map((item) => {
+        // Special handling for Attendance Management - only show for Admin or Store Manager
+        if (item.title === "Attendance Management") {
+          if (!hasAttendanceManagementAccess) {
+            return null;
+          }
+          return item;
+        }
+
         // Check if user has access to this module
         if (item.moduleKey && !isAdmin && !hasPermission(item.moduleKey, "view")) {
           // Check if any children are accessible
@@ -242,7 +265,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
         return item;
       })
       .filter(Boolean) as NavItem[];
-  }, [loading, isAdmin, hasPermission]);
+  }, [loading, isAdmin, hasPermission, hasAttendanceManagementAccess]);
 
   const toggleMenu = (title: string) => {
     setOpenMenus((prev) =>
