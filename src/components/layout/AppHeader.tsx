@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, Menu, Search, User, LogOut, Settings } from "lucide-react";
+import { Bell, Menu, Search, LogOut, Settings, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 import { format } from "date-fns";
 
 interface AppHeaderProps {
@@ -216,14 +216,12 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 md:h-10 md:w-10">
-              <Avatar className="h-7 w-7 md:h-8 md:w-8">
-                {profile?.profile_photo_url ? (
-                  <AvatarImage src={profile.profile_photo_url} alt="Profile" className="object-cover" />
-                ) : null}
-                <AvatarFallback className="bg-primary text-primary-foreground">
-                  <User className="h-3.5 w-3.5 md:h-4 md:w-4" />
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                photoUrl={profile?.profile_photo_url}
+                username={profile?.username}
+                className="h-7 w-7 md:h-8 md:w-8"
+                iconClassName="h-3.5 w-3.5 md:h-4 md:w-4"
+              />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">

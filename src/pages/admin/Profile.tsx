@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2, User, Lock, Eye, EyeOff, Mail, Phone, Building2, MapPin, Calendar, Shield } from "lucide-react";
+import { Loader2, Lock, Eye, EyeOff, Mail, Phone, Building2, MapPin, Calendar, Shield, User } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ProfilePhotoUpload } from "@/components/profile/ProfilePhotoUpload";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 
 const passwordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
@@ -167,17 +168,11 @@ export default function Profile() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-4">
-                  {profile?.profile_photo_url ? (
-                    <img
-                      src={profile.profile_photo_url}
-                      alt="Profile"
-                      className="h-16 w-16 rounded-full object-cover border-2 border-border"
-                    />
-                  ) : (
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground text-2xl font-semibold">
-                      {profile?.username?.charAt(0)?.toUpperCase() || "U"}
-                    </div>
-                  )}
+                  <UserAvatar
+                    photoUrl={profile?.profile_photo_url}
+                    username={profile?.username}
+                    className="h-16 w-16"
+                  />
                   <div>
                     <p className="font-medium text-lg">{profile?.username || "—"}</p>
                     <p className="text-sm text-muted-foreground">{profile?.email || user?.email || "—"}</p>
