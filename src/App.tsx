@@ -22,6 +22,7 @@ import AssetInventory from "./pages/assets/AssetInventory";
 import AssetDetails from "./pages/assets/AssetDetails";
 
 import ServiceContracts from "./pages/services/ServiceContracts";
+import ServiceContractDetails from "./pages/services/ServiceContractDetails";
 import PreventiveMaintenance from "./pages/services/PreventiveMaintenance";
 import ServiceTickets from "./pages/services/ServiceTickets";
 import KnowledgeBase from "./pages/services/KnowledgeBase";
@@ -145,6 +146,7 @@ const App = () => (
               <Route path="/assets/inventory/:id" element={<AssetDetails />} />
               
               <Route path="/services/contracts" element={<ServiceContracts />} />
+              <Route path="/services/contracts/:id" element={<ServiceContractDetails />} />
               <Route path="/services/maintenance" element={<PreventiveMaintenance />} />
               <Route path="/services/tickets" element={<ServiceTickets />} />
               <Route path="/services/knowledge-base" element={<KnowledgeBase />} />
