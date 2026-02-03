@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { FaceCaptureDialog } from "@/components/staff/FaceCaptureDialog";
+import { FaceVerificationBadge } from "@/components/attendance/FaceVerificationBadge";
 
 interface AttendanceRecord {
   id: string;
@@ -26,6 +27,8 @@ interface AttendanceRecord {
   check_in_address: string | null;
   status: string;
   total_hours: number | null;
+  face_verification_status: string | null;
+  face_match_score: number | null;
   employees: { name: string; department: string; face_baseline_url: string | null };
   stores: { name: string } | null;
 }
@@ -48,6 +51,8 @@ export default function Attendance() {
   const [uploading, setUploading] = useState(false);
   const [checkType, setCheckType] = useState<"in" | "out">("in");
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [verifyingFace, setVerifyingFace] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<{ status: string; score: number; reason?: string } | null>(null);
   const queryClient = useQueryClient();
 
   // Get location on dialog open
@@ -118,7 +123,7 @@ export default function Attendance() {
         .eq("attendance_date", selectedDate)
         .order("check_in_time", { ascending: false });
       if (error) throw error;
-      return data as AttendanceRecord[];
+      return data as unknown as AttendanceRecord[];
     },
   });
 
@@ -126,6 +131,34 @@ export default function Attendance() {
   const handleFaceCapture = (imageData: string, file: File) => {
     setCapturedImage(imageData);
     setCapturedFile(file);
+    setVerificationResult(null);
+  };
+
+  // Verify face against employee profile photo
+  const verifyFace = async (attendancePhotoUrl: string, employeeId: string, recordId?: string) => {
+    const employee = employees?.find(e => e.id === employeeId);
+    if (!employee?.face_baseline_url) {
+      return { status: "matched", score: 100, reason: "No baseline photo - auto approved" };
+    }
+
+    setVerifyingFace(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("verify-face", {
+        body: {
+          profilePhotoUrl: employee.face_baseline_url,
+          attendancePhotoUrl,
+          attendanceRecordId: recordId,
+        },
+      });
+
+      if (error) throw error;
+      return data;
+    } catch (error: any) {
+      console.error("Face verification error:", error);
+      return { status: "mismatch", score: 0, reason: error.message };
+    } finally {
+      setVerifyingFace(false);
+    }
   };
 
   // Mark attendance mutation
@@ -148,6 +181,12 @@ export default function Attendance() {
 
       const { data: urlData } = supabase.storage.from("employee-documents").getPublicUrl(fileName);
 
+      // Verify face before proceeding
+      setVerifyingFace(true);
+      const verifyResult = await verifyFace(urlData.publicUrl, selectedEmployee);
+      setVerificationResult(verifyResult);
+      setVerifyingFace(false);
+
       // Check for existing record
       const { data: existing } = await supabase
         .from("attendance_records")
@@ -163,7 +202,7 @@ export default function Attendance() {
         const checkInHour = now.getHours();
         const status = checkInHour <= 9 ? "present" : checkInHour <= 10 ? "late" : "late";
 
-        await supabase.from("attendance_records").insert({
+        const { data: newRecord } = await supabase.from("attendance_records").insert({
           employee_id: selectedEmployee,
           attendance_date: format(now, "yyyy-MM-dd"),
           check_in_time: now.toISOString(),
@@ -172,7 +211,9 @@ export default function Attendance() {
           check_in_longitude: location?.lng,
           check_in_address: location?.address,
           status,
-        });
+          face_verification_status: verifyResult.status,
+          face_match_score: verifyResult.score,
+        }).select().single();
       } else {
         if (!existing) throw new Error("No check-in record found for today");
 
@@ -189,6 +230,8 @@ export default function Attendance() {
             check_out_longitude: location?.lng,
             check_out_address: location?.address,
             total_hours: parseFloat(totalHours.toFixed(2)),
+            face_verification_status: verifyResult.status,
+            face_match_score: verifyResult.score,
           })
           .eq("id", existing.id);
       }
@@ -201,6 +244,7 @@ export default function Attendance() {
       setCapturedFile(null);
       setSelectedEmployee("");
       setUploading(false);
+      setVerificationResult(null);
     },
     onError: (error: any) => {
       toast.error(error.message);
@@ -346,15 +390,41 @@ export default function Attendance() {
                   </div>
                 </div>
 
+                {/* Verification Status Display */}
+                {verifyingFace && (
+                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                    <span className="text-sm text-blue-700">Verifying face match...</span>
+                  </div>
+                )}
+
+                {verificationResult && !verifyingFace && (
+                  <div className={`p-3 rounded-lg border flex items-center justify-between ${
+                    verificationResult.status === "matched" 
+                      ? "bg-green-50 border-green-200" 
+                      : "bg-red-50 border-red-200"
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <FaceVerificationBadge 
+                        status={verificationResult.status as "matched" | "mismatch"}
+                        score={verificationResult.score}
+                      />
+                      {verificationResult.reason && (
+                        <span className="text-xs text-muted-foreground">{verificationResult.reason}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <Button
                   className="w-full"
                   onClick={() => markAttendanceMutation.mutate()}
-                  disabled={!selectedEmployee || !capturedFile || uploading}
+                  disabled={!selectedEmployee || !capturedFile || uploading || verifyingFace}
                 >
-                  {uploading ? (
+                  {uploading || verifyingFace ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Processing...
+                      {verifyingFace ? "Verifying Face..." : "Processing..."}
                     </>
                   ) : (
                     <>
@@ -397,6 +467,7 @@ export default function Attendance() {
                   <TableHead>Check Out</TableHead>
                   <TableHead>Hours</TableHead>
                   <TableHead>Location</TableHead>
+                  <TableHead>Face Verify</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -421,6 +492,12 @@ export default function Attendance() {
                       ) : (
                         "-"
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <FaceVerificationBadge
+                        status={(record.face_verification_status as "pending" | "verifying" | "matched" | "mismatch") || "pending"}
+                        score={record.face_match_score}
+                      />
                     </TableCell>
                     <TableCell>
                       <Badge
