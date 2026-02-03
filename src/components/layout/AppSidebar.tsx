@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
+import { useAttendanceRole } from "@/hooks/useAttendanceRole";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -217,14 +218,8 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
   const isMobile = useIsMobile();
   const { hasPermission, isAdmin, loading } = usePermissions();
   const { profile } = useAuth();
+  const { visibleAttendanceMenus } = useAttendanceRole();
   const [openMenus, setOpenMenus] = useState<string[]>(["Store Management", "Assets & Vendors"]);
-
-  // Check if user has attendance management access (Admin or Store Manager)
-  const hasAttendanceManagementAccess = useMemo(() => {
-    if (isAdmin) return true;
-    const roleName = profile?.role_name?.toLowerCase();
-    return roleName === "store manager";
-  }, [isAdmin, profile?.role_name]);
 
   // Filter navigation based on permissions
   const filteredNavigation = useMemo(() => {
@@ -232,12 +227,13 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
     
     return navigation
       .map((item) => {
-        // Special handling for Attendance Management - only show for Admin or Store Manager
-        if (item.title === "Attendance Management") {
-          if (!hasAttendanceManagementAccess) {
-            return null;
-          }
-          return item;
+        // Special handling for Attendance module - filter children based on role
+        if (item.title === "Attendance" && item.children) {
+          const filteredChildren = item.children.filter(
+            (child) => child.moduleKey && visibleAttendanceMenus.includes(child.moduleKey)
+          );
+          if (filteredChildren.length === 0) return null;
+          return { ...item, children: filteredChildren };
         }
 
         // Check if user has access to this module
@@ -265,7 +261,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
         return item;
       })
       .filter(Boolean) as NavItem[];
-  }, [loading, isAdmin, hasPermission, hasAttendanceManagementAccess]);
+  }, [loading, isAdmin, hasPermission, visibleAttendanceMenus]);
 
   const toggleMenu = (title: string) => {
     setOpenMenus((prev) =>
