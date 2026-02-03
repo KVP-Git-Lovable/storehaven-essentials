@@ -45,8 +45,8 @@ export function ContractSummaryCard({ contract, onClick, onEdit, canEdit }: Cont
     const labels: Record<string, string> = {
       amc: "AMC",
       warranty: "Warranty",
-      sla: "SLA",
-      hybrid: "Hybrid",
+      sla: "On Call", // Legacy support for old 'sla' values
+      "on-call": "On Call",
     };
     return labels[type] || type;
   };

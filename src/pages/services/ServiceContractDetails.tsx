@@ -129,8 +129,8 @@ type Attachment = {
 const contractTypeLabels: Record<string, string> = {
   amc: "AMC",
   warranty: "Warranty",
-  sla: "SLA",
-  hybrid: "Hybrid",
+  sla: "On Call", // Legacy support
+  "on-call": "On Call",
 };
 
 const statusColors: Record<string, string> = {
