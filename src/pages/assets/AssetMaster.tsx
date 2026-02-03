@@ -114,12 +114,49 @@ export default function AssetMaster() {
   const handleDelete = async () => {
     if (!deleteAssetId) return;
 
+    // First, get the count of affected assets for the confirmation message
+    const { data: affectedAssets } = await supabase
+      .from("assets")
+      .select("id")
+      .eq("asset_master_id", deleteAssetId);
+
+    // Mark associated assets as orphaned before deleting
+    if (affectedAssets && affectedAssets.length > 0) {
+      const { error: updateError } = await supabase
+        .from("assets")
+        .update({ asset_status: "orphaned" })
+        .eq("asset_master_id", deleteAssetId);
+
+      if (updateError) {
+        toast({ 
+          title: "Error", 
+          description: "Failed to handle associated assets", 
+          variant: "destructive" 
+        });
+        return;
+      }
+
+      // Record status change history for affected assets
+      await supabase.from("asset_status_history").insert(
+        affectedAssets.map(a => ({
+          asset_id: a.id,
+          status: "orphaned",
+          changed_by: "System (Asset Master Deleted)"
+        }))
+      );
+    }
+
+    // Then delete the asset master
     const { error } = await supabase.from("asset_masters").delete().eq("id", deleteAssetId);
 
     if (error) {
       toast({ title: "Error", description: "Failed to delete asset master", variant: "destructive" });
     } else {
-      toast({ title: "Success", description: "Asset master deleted" });
+      const affectedCount = affectedAssets?.length || 0;
+      const message = affectedCount > 0 
+        ? `Asset master deleted. ${affectedCount} associated asset(s) marked as orphaned.`
+        : "Asset master deleted";
+      toast({ title: "Success", description: message });
       fetchData();
     }
     setDeleteAssetId(null);
