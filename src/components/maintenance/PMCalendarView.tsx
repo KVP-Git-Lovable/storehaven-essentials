@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Clock, AlertCircle, CheckCircle, Wrench, Store } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, AlertCircle, CheckCircle, Wrench, Store, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   format,
@@ -156,6 +156,21 @@ export function PMCalendarView({ schedules, onTaskClick }: PMCalendarViewProps) 
       dueToday: monthTasks.filter((t) => t.status !== "completed" && isSameDay(new Date(t.next_due), today)).length,
     };
   }, [schedules, currentDate]);
+
+  // Upcoming tasks (next 7 days)
+  const upcomingTasks = useMemo(() => {
+    const today = startOfDay(new Date());
+    const nextWeek = new Date(today);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+
+    return schedules
+      .filter((task) => {
+        const dueDate = new Date(task.next_due);
+        return task.status !== "completed" && dueDate >= today && dueDate <= nextWeek;
+      })
+      .sort((a, b) => new Date(a.next_due).getTime() - new Date(b.next_due).getTime())
+      .slice(0, 5);
+  }, [schedules]);
 
   const getHeaderTitle = () => {
     if (calendarMode === "day") return format(currentDate, "EEEE, MMMM d, yyyy");
@@ -353,60 +368,101 @@ export function PMCalendarView({ schedules, onTaskClick }: PMCalendarViewProps) 
         </Card>
       </div>
 
-      {/* Calendar */}
-      <div className="rounded-xl border bg-card overflow-hidden">
-        {/* Header with Mode Toggle */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-b bg-muted/30">
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={navigatePrev}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <h3 className="font-semibold text-lg min-w-[200px] text-center">{getHeaderTitle()}</h3>
-            <Button variant="outline" size="icon" onClick={navigateNext}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+      <div className="grid lg:grid-cols-4 gap-4">
+        {/* Calendar */}
+        <div className="lg:col-span-3 rounded-xl border bg-card overflow-hidden">
+          {/* Header with Mode Toggle */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-b bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={navigatePrev}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <h3 className="font-semibold text-lg min-w-[200px] text-center">{getHeaderTitle()}</h3>
+              <Button variant="outline" size="icon" onClick={navigateNext}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            <ToggleGroup
+              type="single"
+              value={calendarMode}
+              onValueChange={(value) => value && setCalendarMode(value as CalendarMode)}
+              className="bg-muted rounded-lg p-1"
+            >
+              <ToggleGroupItem value="day" className="px-3 py-1 text-sm">
+                Day
+              </ToggleGroupItem>
+              <ToggleGroupItem value="week" className="px-3 py-1 text-sm">
+                Week
+              </ToggleGroupItem>
+              <ToggleGroupItem value="month" className="px-3 py-1 text-sm">
+                Month
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
-          <ToggleGroup
-            type="single"
-            value={calendarMode}
-            onValueChange={(value) => value && setCalendarMode(value as CalendarMode)}
-            className="bg-muted rounded-lg p-1"
-          >
-            <ToggleGroupItem value="day" className="px-3 py-1 text-sm">
-              Day
-            </ToggleGroupItem>
-            <ToggleGroupItem value="week" className="px-3 py-1 text-sm">
-              Week
-            </ToggleGroupItem>
-            <ToggleGroupItem value="month" className="px-3 py-1 text-sm">
-              Month
-            </ToggleGroupItem>
-          </ToggleGroup>
+
+          {/* Calendar Content */}
+          {calendarMode === "day" && <DayView />}
+          {calendarMode === "week" && <WeekView />}
+          {calendarMode === "month" && <MonthView />}
+
+          {/* Legend */}
+          <div className="flex items-center gap-4 p-3 border-t bg-muted/20">
+            <span className="text-xs text-muted-foreground">Legend:</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="bg-primary/20 text-primary border-primary/30 text-xs">
+                <Wrench className="h-3 w-3 mr-1" /> Scheduled
+              </Badge>
+              <Badge variant="outline" className="bg-warning/20 text-warning-foreground border-warning/30 text-xs">
+                <Clock className="h-3 w-3 mr-1" /> Due Today
+              </Badge>
+              <Badge variant="outline" className="bg-green-500/20 text-green-700 border-green-500/30 text-xs">
+                <CheckCircle className="h-3 w-3 mr-1" /> Completed
+              </Badge>
+              <Badge variant="outline" className="bg-destructive/20 text-destructive border-destructive/30 text-xs">
+                <AlertCircle className="h-3 w-3 mr-1" /> Overdue
+              </Badge>
+            </div>
+          </div>
         </div>
 
-        {/* Calendar Content */}
-        {calendarMode === "day" && <DayView />}
-        {calendarMode === "week" && <WeekView />}
-        {calendarMode === "month" && <MonthView />}
-
-        {/* Legend */}
-        <div className="flex items-center gap-4 p-3 border-t bg-muted/20">
-          <span className="text-xs text-muted-foreground">Legend:</span>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="bg-primary/20 text-primary border-primary/30 text-xs">
-              <Wrench className="h-3 w-3 mr-1" /> Scheduled
-            </Badge>
-            <Badge variant="outline" className="bg-warning/20 text-warning-foreground border-warning/30 text-xs">
-              <Clock className="h-3 w-3 mr-1" /> Due Today
-            </Badge>
-            <Badge variant="outline" className="bg-green-500/20 text-green-700 border-green-500/30 text-xs">
-              <CheckCircle className="h-3 w-3 mr-1" /> Completed
-            </Badge>
-            <Badge variant="outline" className="bg-destructive/20 text-destructive border-destructive/30 text-xs">
-              <AlertCircle className="h-3 w-3 mr-1" /> Overdue
-            </Badge>
-          </div>
-        </div>
+        {/* Upcoming Tasks Sidebar */}
+        <Card className="lg:col-span-1 h-fit">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Upcoming Tasks
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">Next 7 days</p>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 space-y-2">
+            {upcomingTasks.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No upcoming tasks
+              </p>
+            ) : (
+              upcomingTasks.map((task) => (
+                <button
+                  key={task.id}
+                  onClick={() => onTaskClick(task)}
+                  className="w-full text-left p-2 rounded-lg border hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-start gap-2">
+                    <div className={`p-1 rounded ${getTaskColor(task)}`}>
+                      {getStatusIcon(task)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{task.asset}</p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{format(new Date(task.next_due), "MMM d")}</span>
+                        {task.store && <span>• {task.store.name}</span>}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
