@@ -42,7 +42,7 @@ import MeterMaster from "./pages/master/MeterMaster";
 import DepartmentMaster from "./pages/master/DepartmentMaster";
 import PositionMaster from "./pages/master/PositionMaster";
 import CategoryMaster from "./pages/master/CategoryMaster";
-import LocationMaster from "./pages/master/LocationMaster";
+
 import NSOChecklistMaster from "./pages/master/NSOChecklistMaster";
 import PMChecklistMaster from "./pages/master/PMChecklistMaster";
 import StoreBudgetMaster from "./pages/master/StoreBudgetMaster";
@@ -165,7 +165,7 @@ const App = () => (
               <Route path="/master/department" element={<DepartmentMaster />} />
               <Route path="/master/position" element={<PositionMaster />} />
               <Route path="/master/category" element={<CategoryMaster />} />
-              <Route path="/master/location" element={<LocationMaster />} />
+              
               <Route path="/master/nso-checklist" element={<NSOChecklistMaster />} />
               <Route path="/master/pm-checklist" element={<PMChecklistMaster />} />
               <Route path="/master/store-budget" element={<StoreBudgetMaster />} />

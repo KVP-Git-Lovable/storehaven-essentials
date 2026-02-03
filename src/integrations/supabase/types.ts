@@ -2163,39 +2163,6 @@ export type Database = {
         }
         Relationships: []
       }
-      locations: {
-        Row: {
-          address: string | null
-          city: string | null
-          created_at: string
-          id: string
-          name: string
-          state: string | null
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          address?: string | null
-          city?: string | null
-          created_at?: string
-          id?: string
-          name: string
-          state?: string | null
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          address?: string | null
-          city?: string | null
-          created_at?: string
-          id?: string
-          name?: string
-          state?: string | null
-          status?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       loyalty_config: {
         Row: {
           birthday_bonus_points: number | null
