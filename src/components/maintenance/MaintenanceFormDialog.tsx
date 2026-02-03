@@ -132,7 +132,7 @@ export function MaintenanceFormDialog({
       frequency: "monthly",
       assignedTo: "",
       nextDue: "",
-      pmChecklistMasterId: "",
+      pmChecklistMasterId: "none",
     },
   });
 
@@ -155,7 +155,7 @@ export function MaintenanceFormDialog({
         frequency: initialData.frequency as MaintenanceFormData["frequency"],
         assignedTo: initialData.assigned_to,
         nextDue: initialData.next_due,
-        pmChecklistMasterId: initialData.pm_checklist_master_id || "",
+        pmChecklistMasterId: initialData.pm_checklist_master_id || "none",
       });
     } else if (mode === "add") {
       form.reset({
@@ -165,7 +165,7 @@ export function MaintenanceFormDialog({
         frequency: "monthly",
         assignedTo: "",
         nextDue: "",
-        pmChecklistMasterId: "",
+        pmChecklistMasterId: "none",
       });
     }
   }, [initialData, mode, form]);
@@ -205,7 +205,7 @@ export function MaintenanceFormDialog({
     setFilteredChecklists(filtered);
 
     // Auto-select if only one matching checklist
-    if (filtered.length === 1 && !form.getValues("pmChecklistMasterId")) {
+    if (filtered.length === 1 && (!form.getValues("pmChecklistMasterId") || form.getValues("pmChecklistMasterId") === "none")) {
       form.setValue("pmChecklistMasterId", filtered[0].id);
     }
   }, [selectedAssetId, selectedTaskType, assets, pmChecklistMasters, form]);
@@ -256,7 +256,7 @@ export function MaintenanceFormDialog({
       next_due: data.nextDue,
       assigned_to: data.assignedTo,
       status: "scheduled",
-      pm_checklist_master_id: data.pmChecklistMasterId || null,
+      pm_checklist_master_id: data.pmChecklistMasterId === "none" ? null : (data.pmChecklistMasterId || null),
     };
 
     let error;
@@ -465,7 +465,7 @@ export function MaintenanceFormDialog({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
                       {filteredChecklists.map((checklist) => (
                         <SelectItem key={checklist.id} value={checklist.id}>
                           {checklist.name}
