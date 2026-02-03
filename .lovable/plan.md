@@ -1,116 +1,86 @@
 
-## Goal
-1) Remove “Baseline Photo” from Mark Attendance modal and ensure baseline/reference photo is never shown in the UI (still used internally for face verification).
-2) Ensure every Check In / Check Out instantly appears in **Live Attendance → Attendance Records** with the columns: user, date, in/out time, photo, location, verification status.
-3) Fix the “Coming soon – Contract details view will be available soon” toast when clicking a Service Contract card, so it opens the Service Contract Details page.
+# Add Edit Button for Each Service Contract
 
----
+## Overview
+Add an edit button to each contract card in the Service Contracts list, allowing users to modify existing contracts directly from the listing page.
 
-## What I’m seeing (from your screenshot) and likely cause
-Your screenshot shows a **toast** saying:
-- Title: “Coming soon”
-- Description: “Contract details view will be available soon”
+## Current State
+- `ContractSummaryCard.tsx` displays contract info with just a click-to-view action
+- `ContractFormDialog.tsx` already accepts a `contractId` prop (line 161) but only supports creation mode currently
+- `ServiceContracts.tsx` uses permission checks for create (`canCreate`)
 
-That message does **not** exist in the current Service Contracts code we inspected. This strongly indicates one of these is happening:
-1) You are testing the **Published** site which still has the older build (not updated with the new details page navigation), or
-2) The browser is serving an older cached bundle.
+## Implementation Plan
 
-So the “fix” is a combination of:
-- making the navigation more robust (code-side), and
-- ensuring the environment you are testing is actually running the updated build (process-side).
+### 1. Update ContractSummaryCard Component
+**File: `src/components/services/ContractSummaryCard.tsx`**
 
----
+Add an edit button (Pencil icon) to each card:
+- Add new prop: `onEdit?: () => void`
+- Add new prop: `canEdit?: boolean` to control visibility based on permissions
+- Add a small edit button in the top-right area of the card (near the badges)
+- Stop event propagation on edit button click so it doesn't trigger the card's onClick (navigate to details)
 
-## Implementation plan
+```text
++------------------------------------------+
+|  [FileText] SC-260203-WAO6    [Edit] [draft]
+|  -                                  [AMC]
+|  Provider: Exide Industries
+|  ...
++------------------------------------------+
+```
 
-### A) Service Contracts: ensure click always navigates (and never shows “Coming soon”)
-1) **Centralize click handler** in `src/pages/services/ServiceContracts.tsx`:
-   - Create `handleOpenContract(contractId)` and call `navigate(/services/contracts/:id)` inside `try/catch`.
-   - If something fails, show a clear error toast (“Failed to open contract”) instead of “Coming soon”.
-   - Add a small `console.log` marker (temporary) so we can confirm the correct bundle is running when you click.
+### 2. Update ServiceContracts Page
+**File: `src/pages/services/ServiceContracts.tsx`**
 
-2) **Optional but recommended safety net**:
-   - Add a global `window.unhandledrejection` listener in `src/App.tsx` that shows a friendly toast if any async error slips through. This prevents “white screen” situations and gives us actionable logs. (This does not change your backend logic.)
+- Add permission check: `const canEdit = hasPermission("services.contracts", "edit")`
+- Add state for editing: `const [editingContractId, setEditingContractId] = useState<string | null>(null)`
+- Pass `onEdit` and `canEdit` props to `ContractSummaryCard`
+- Handle edit by setting `editingContractId` and opening the dialog
+- Pass `contractId` to `ContractFormDialog` when editing
 
-3) **User-side validation step (very important)**:
-   - Verify whether you are testing **Preview URL** or **Published URL**.
-   - If you are on the **Published URL**, you must publish the latest changes for the details page click to work there.
-   - If on Preview and still seeing old behavior: do a hard refresh (Ctrl+Shift+R) and/or open in an incognito window.
+### 3. Update ContractFormDialog for Edit Mode
+**File: `src/components/services/ContractFormDialog.tsx`**
 
-Expected result: Clicking a contract card opens `/services/contracts/:id` and loads the new details page.
+The dialog already accepts `contractId` but doesn't use it. Add:
+- Fetch existing contract data when `contractId` is provided
+- Pre-populate form with existing values
+- Fetch and pre-select linked assets and locations
+- Change submit button text to "Update Contract" in edit mode
+- Update the `onSubmit` logic to use `update` instead of `insert` when editing
 
----
+## Technical Details
 
-### B) Attendance: keep baseline hidden everywhere, but still used internally
-You already have baseline usage internally (for face verification), and we will ensure:
-1) **No baseline/reference photo is rendered** in:
-   - Mark Attendance modal
-   - Any verification UI
-   - Attendance Records list
+### ContractSummaryCard Changes
+| Change | Details |
+|--------|---------|
+| New imports | `Pencil` from lucide-react, `Button` from ui/button |
+| New props | `onEdit?: () => void`, `canEdit?: boolean` |
+| Edit button | Icon button with `stopPropagation()` to prevent card click |
 
-2) Ensure only “Captured Photo” preview shows in the modal.
+### ServiceContracts Page Changes
+| Change | Details |
+|--------|---------|
+| New state | `editingContractId: string \| null` |
+| Permission | `canEdit = hasPermission("services.contracts", "edit")` |
+| Dialog props | Pass `contractId={editingContractId}` to form dialog |
+| Card props | Pass `onEdit` and `canEdit` to each card |
 
-Expected result: baseline photo is never displayed to users, but face verification continues to use it behind the scenes.
+### ContractFormDialog Changes
+| Change | Details |
+|--------|---------|
+| New effect | Fetch contract data when `contractId` changes |
+| Form reset | Clear form when closing or switching between create/edit |
+| Submit logic | Branch between insert (create) and update (edit) |
+| Button text | Dynamic: "Create Contract" vs "Update Contract" |
+| Dialog title | Dynamic: "New Service Contract" vs "Edit Service Contract" |
 
----
+## Files to Modify
+1. `src/components/services/ContractSummaryCard.tsx` - Add edit button UI
+2. `src/pages/services/ServiceContracts.tsx` - Add edit state and permission
+3. `src/components/services/ContractFormDialog.tsx` - Add edit/update logic
 
-### C) Attendance Records “sync instantly” (UI-only)
-Right now, the table is query-driven and refreshed via React Query invalidation. We will make it feel instantaneous and match your exact display requirements:
-
-1) **Instant update after Check In / Check Out**
-   - On success, do both:
-     - `queryClient.invalidateQueries(...)` (server truth)
-     - AND an **optimistic update** via `queryClient.setQueryData(...)` so the record appears immediately without waiting for refetch latency.
-   - This is UI-only; it does not change how records are stored or verified.
-
-2) **Table columns and data mapping**
-   Update “Live Attendance → Attendance Records” to show exactly:
-   - **User**
-   - **Date**
-   - **Check In time**
-   - **Check Out time**
-   - **Photo** (to meet the requirement cleanly, we will show both):
-     - Check-in photo thumbnail
-     - Check-out photo thumbnail (if present)
-   - **Location**
-     - Show check-in location text if available; show check-out location text if check-out selected and present; otherwise “-”
-     - Keep it readable (truncate + hover tooltip if long)
-   - **Verification status**
-     - Continue using `FaceVerificationBadge` with status + score
-
-3) **No verification logic changes**
-   - We will not modify the `verifyFace` invocation, thresholds, or “block” behavior.
-   - Only UI presentation and React Query cache updates.
-
-Expected result: as soon as you check in/out, the row updates in the records table immediately and shows the required fields.
-
----
-
-## Files that will be changed
-1) `src/pages/services/ServiceContracts.tsx`
-   - Add robust click handler + remove any possibility of a “Coming soon” fallback
-2) `src/App.tsx`
-   - (Optional) add global unhandled rejection toast safety net
-3) `src/pages/staff/Attendance.tsx`
-   - Optimistic UI update on check-in/out
-   - Ensure records table includes both in/out photos + locations
-   - Ensure baseline photo is never rendered in the UI
-
-No backend logic changes, no verification logic changes, no database changes.
-
----
-
-## Testing checklist (what you should verify)
-1) Service Contracts
-   - Click a contract card → it opens the details page (no “Coming soon” toast)
-   - Refresh the details page directly via URL → it loads
-2) Attendance
-   - Open Mark Attendance modal → baseline photo never appears
-   - Check In → record appears instantly in Attendance Records with photo/location/verification
-   - Check Out → check-out time/photo/location appear instantly on the same record
-3) Verify on both Desktop and Mobile layout (table responsiveness)
-
----
-
-## If you’re seeing the issue only on the Published site
-After I implement the fixes, you’ll need to publish to push them to the live URL. Otherwise, the published site will keep showing the old “Coming soon” behavior even though preview is fixed.
+## Expected Result
+- Each contract card shows a small edit (pencil) button (if user has edit permission)
+- Clicking edit opens the contract form pre-filled with existing data
+- Users can modify and save changes
+- Card click still navigates to details page
