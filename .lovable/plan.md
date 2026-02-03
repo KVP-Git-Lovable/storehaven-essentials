@@ -1,270 +1,113 @@
 
 
-# Compliance Tasks Enhancement Plan
+# Add Searchable Dropdowns to Asset Register Form
 
 ## Overview
 
-This plan enhances the Visual Merchandising Compliance Tasks module with the following improvements:
-1. Add "Daily" frequency option
-2. Enable multi-store assignment (create tasks for multiple stores at once)
-3. Auto-generate recurring tasks when a task is completed or past due
-4. Add user lookup for "Assigned To" field (instead of free text)
-5. Implement click-to-view/edit/delete functionality on table rows
+This plan adds search functionality to the dropdown fields in the "Add New Asset" dialog. Currently, the form uses standard Radix Select components which require scrolling through all options. With searchable dropdowns, users can quickly type to filter and find the desired option.
+
+## What Changes
+
+The following dropdown fields will become searchable:
+- **Asset Name (Master)** - Can have many entries, search is essential
+- **Store** - Multiple stores to choose from
+- **Location** - Multiple locations to filter
+- **Vendor Procured From** - List of vendors
+- **OEM Name** - List of OEM vendors
+
+The following fields will remain as standard dropdowns (small, fixed option lists):
+- **Service Engagement** - Only 4 options
+- **Asset Status** - Only 10 options
+
+## Implementation Steps
+
+### Step 1: Create a Reusable SearchableSelect Component
+
+Create a new component `src/components/ui/searchable-select.tsx` that:
+- Uses the existing `Command` components from cmdk
+- Wraps in a `Popover` for dropdown behavior
+- Supports single selection (unlike MultiSelectCombobox)
+- Works seamlessly with react-hook-form's FormField pattern
+- Displays selected value label in the trigger button
+- Provides search input with real-time filtering
+- Supports optional empty/placeholder states
+- Handles the "none" value pattern for optional fields
+
+### Step 2: Update AssetInventory.tsx Form
+
+Replace the standard Select components for these fields:
+1. **assetMasterId** - Asset Name (Master)
+2. **storeId** - Store
+3. **location** - Location
+4. **vendorId** - Vendor Procured From
+5. **oemId** - OEM Name
+
+Each field will use the new SearchableSelect component with appropriate:
+- Placeholder text
+- Search placeholder text
+- Empty state message
+- Option list transformation
 
 ---
 
-## Current State
+## Technical Details
 
-**Database Schema (`vm_compliance_tasks`):**
-- `id`, `planogram_id`, `store_id`, `title`, `description`
-- `frequency` (text, default: 'one-time')
-- `due_date`, `status`, `assigned_to` (free text), `created_at`, `updated_at`
-
-**Current Limitations:**
-- `assigned_to` is a free text field, not linked to users
-- `store_id` is a single UUID, no multi-store support
-- No "Daily" frequency option
-- No auto-recurrence logic
-- Table rows are read-only (no click-to-edit)
-
----
-
-## Implementation Details
-
-### 1. Database Changes
-
-**Migration 1: Add columns and update schema**
+### SearchableSelect Component Props
 
 ```text
--- Add assigned_to_user_id (UUID) to link to profiles table
-ALTER TABLE vm_compliance_tasks 
-  ADD COLUMN assigned_to_user_id UUID REFERENCES profiles(id);
-
--- Add parent_task_id for recurring task chain tracking
-ALTER TABLE vm_compliance_tasks 
-  ADD COLUMN parent_task_id UUID REFERENCES vm_compliance_tasks(id);
-
--- Add is_recurring flag for easy filtering
-ALTER TABLE vm_compliance_tasks 
-  ADD COLUMN is_recurring BOOLEAN DEFAULT false;
+type SearchableSelectProps = {
+  options: { value: string; label: string; subtitle?: string }[]
+  value: string
+  onValueChange: (value: string) => void
+  placeholder?: string
+  searchPlaceholder?: string
+  emptyMessage?: string
+  disabled?: boolean
+  className?: string
+}
 ```
 
-**RLS Policy:** Existing policies will apply; no changes needed since we're adding nullable columns.
+### Component Structure
 
----
-
-### 2. Add "Daily" Frequency Option
-
-**File:** `src/pages/vm/ComplianceTasks.tsx`
-
-Update the frequency options array:
-```typescript
-const frequencyOptions = [
-  { value: "daily", label: "Daily" },      // NEW
-  { value: "one-time", label: "One-time" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
-];
+```text
+Popover
+  PopoverTrigger (Button showing selected label)
+  PopoverContent
+    Command
+      CommandInput (search box)
+      CommandList
+        CommandEmpty (no results message)
+        CommandGroup
+          CommandItem (for each filtered option)
 ```
 
----
+### Form Integration Example
 
-### 3. Multi-Store Assignment
-
-**Approach:** When creating a task, allow selecting multiple stores. On form submission, create one task per store (bulk insert).
-
-**UI Changes:**
-- Replace single `Select` component for store with `MultiSelectCombobox`
-- Update form schema: `storeIds: z.array(z.string()).min(1, "At least one store is required")`
-
-**Submission Logic:**
-```typescript
-const tasksToInsert = data.storeIds.map(storeId => ({
-  planogram_id: data.planogramId,
-  store_id: storeId,
-  title: data.title,
-  description: data.description || null,
-  frequency: data.frequency,
-  due_date: new Date(data.dueDate).toISOString(),
-  assigned_to_user_id: data.assignedToUserId || null,
-  is_recurring: data.frequency !== "one-time",
-}));
-
-await supabase.from("vm_compliance_tasks").insert(tasksToInsert);
-```
-
----
-
-### 4. User Lookup for "Assigned To"
-
-**Approach:** Replace free-text input with a searchable dropdown of active users from `profiles` table.
-
-**Data Fetching:**
-```typescript
-const [users, setUsers] = useState<{ id: string; username: string }[]>([]);
-
-const fetchUsers = async () => {
-  const { data } = await supabase
-    .from("profiles")
-    .select("id, username")
-    .eq("status", "active")
-    .order("username");
-  if (data) setUsers(data);
-};
-```
-
-**Form Field:** Replace text input with Select component:
-```typescript
+```text
 <FormField
-  name="assignedToUserId"
+  control={form.control}
+  name="storeId"
   render={({ field }) => (
-    <Select onValueChange={field.onChange} value={field.value}>
-      <SelectTrigger>
-        <SelectValue placeholder="Select user" />
-      </SelectTrigger>
-      <SelectContent>
-        {users.map((u) => (
-          <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <FormItem>
+      <FormLabel>Store</FormLabel>
+      <SearchableSelect
+        options={stores.map(s => ({ value: s.id, label: s.name }))}
+        value={field.value}
+        onValueChange={field.onChange}
+        placeholder="Select store"
+        searchPlaceholder="Search stores..."
+        emptyMessage="No stores found."
+      />
+      <FormMessage />
+    </FormItem>
   )}
 />
 ```
 
-**Display in Table:** Join `profiles` in the query and display username instead of raw ID.
+### Files to Create/Modify
 
----
-
-### 5. Auto-Generate Recurring Tasks
-
-**Trigger Logic:** Create a database function + trigger that fires when a task status changes to `approved`, `rejected`, or when `due_date` passes (via scheduled job or application-level check).
-
-**Option A: Application-Level (Recommended for MVP)**
-
-When reviewing a submission (in `ReviewSubmissions.tsx` or when status updates):
-```typescript
-// After updating task status
-if (task.frequency !== "one-time" && status === "approved") {
-  const nextDueDate = calculateNextDueDate(task.due_date, task.frequency);
-  await supabase.from("vm_compliance_tasks").insert({
-    planogram_id: task.planogram_id,
-    store_id: task.store_id,
-    title: task.title,
-    description: task.description,
-    frequency: task.frequency,
-    due_date: nextDueDate.toISOString(),
-    assigned_to_user_id: task.assigned_to_user_id,
-    parent_task_id: task.id,
-    is_recurring: true,
-    status: "pending",
-  });
-}
-```
-
-**Next Due Date Calculation:**
-```typescript
-function calculateNextDueDate(currentDue: string, frequency: string): Date {
-  const date = new Date(currentDue);
-  switch (frequency) {
-    case "daily": date.setDate(date.getDate() + 1); break;
-    case "weekly": date.setDate(date.getDate() + 7); break;
-    case "monthly": date.setMonth(date.getMonth() + 1); break;
-  }
-  return date;
-}
-```
-
-**Option B: Database Trigger (Future Enhancement)**
-
-A Postgres trigger function could automate this entirely when `status` is updated.
-
----
-
-### 6. Click-to-Edit/Delete on Table Rows
-
-**UI Changes:**
-
-1. **Add state for selected task and edit/view dialogs:**
-```typescript
-const [selectedTask, setSelectedTask] = useState<ComplianceTask | null>(null);
-const [editDialogOpen, setEditDialogOpen] = useState(false);
-const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-```
-
-2. **Make table rows clickable:**
-```typescript
-<TableRow 
-  key={task.id} 
-  className="cursor-pointer hover:bg-muted/50"
-  onClick={() => handleRowClick(task)}
->
-```
-
-3. **Add context menu or action buttons:**
-```typescript
-<DropdownMenu>
-  <DropdownMenuTrigger asChild>
-    <Button variant="ghost" size="icon">
-      <MoreHorizontal className="h-4 w-4" />
-    </Button>
-  </DropdownMenuTrigger>
-  <DropdownMenuContent>
-    <DropdownMenuItem onClick={() => handleEdit(task)}>
-      <Pencil className="h-4 w-4 mr-2" /> Edit
-    </DropdownMenuItem>
-    <DropdownMenuItem onClick={() => handleDelete(task)} className="text-red-600">
-      <Trash className="h-4 w-4 mr-2" /> Delete
-    </DropdownMenuItem>
-  </DropdownMenuContent>
-</DropdownMenu>
-```
-
-4. **Unified Create/Edit Form Dialog:**
-   - Pre-populate form when editing
-   - Use `upsert` or conditional `insert`/`update`
-
-5. **Delete Confirmation:**
-```typescript
-const handleDeleteConfirm = async () => {
-  await supabase.from("vm_compliance_tasks").delete().eq("id", selectedTask.id);
-  toast({ title: "Task deleted" });
-  fetchData();
-};
-```
-
----
-
-## Files to Create/Modify
-
-| File | Action | Description |
-|------|--------|-------------|
-| `src/pages/vm/ComplianceTasks.tsx` | Modify | Add multi-store, user lookup, edit/delete, daily frequency |
-| `src/pages/vm/ReviewSubmissions.tsx` | Modify | Add recurring task generation after approval |
-| Database Migration | Create | Add `assigned_to_user_id`, `parent_task_id`, `is_recurring` columns |
-
----
-
-## Technical Summary
-
-1. **Database Migration:**
-   - Add 3 new columns to `vm_compliance_tasks`
-   - `assigned_to_user_id` (UUID, FK to profiles)
-   - `parent_task_id` (UUID, self-referential FK)
-   - `is_recurring` (BOOLEAN)
-
-2. **ComplianceTasks.tsx Updates:**
-   - Add "Daily" to frequency options
-   - Replace store single-select with `MultiSelectCombobox`
-   - Replace "Assigned To" text input with user dropdown
-   - Add row click handlers and action menu
-   - Implement unified create/edit form dialog
-   - Add delete confirmation dialog
-
-3. **ReviewSubmissions.tsx Updates:**
-   - After approving a recurring task, auto-create the next occurrence
-
-4. **Query Updates:**
-   - Join `profiles` table to display assigned user's name
-   - Update insert logic for multi-store bulk creation
+| File | Action |
+|------|--------|
+| `src/components/ui/searchable-select.tsx` | Create |
+| `src/pages/assets/AssetInventory.tsx` | Modify |
 
