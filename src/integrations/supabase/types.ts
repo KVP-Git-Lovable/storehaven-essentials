@@ -7482,6 +7482,8 @@ export type Database = {
           parent_task_id: string | null
           planogram_id: string
           review_status: string | null
+          scheduled_end_time: string | null
+          scheduled_start_time: string | null
           status: string
           store_id: string
           submission_notes: string | null
@@ -7507,6 +7509,8 @@ export type Database = {
           parent_task_id?: string | null
           planogram_id: string
           review_status?: string | null
+          scheduled_end_time?: string | null
+          scheduled_start_time?: string | null
           status?: string
           store_id: string
           submission_notes?: string | null
@@ -7532,6 +7536,8 @@ export type Database = {
           parent_task_id?: string | null
           planogram_id?: string
           review_status?: string | null
+          scheduled_end_time?: string | null
+          scheduled_start_time?: string | null
           status?: string
           store_id?: string
           submission_notes?: string | null
