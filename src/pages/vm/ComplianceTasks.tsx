@@ -57,7 +57,6 @@ import {
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ComplianceCalendarView } from "@/components/vm/ComplianceCalendarView";
@@ -195,10 +194,11 @@ export default function ComplianceTasks() {
   const [submissionNotes, setSubmissionNotes] = useState("");
   const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
   
-  // Review state
+  // Review state (auto-calculated)
   const [reviewStatus, setReviewStatus] = useState<string>("");
   const [matchPercentage, setMatchPercentage] = useState<number>(0);
-  const [savingReview, setSavingReview] = useState(false);
+  const [matchReasoning, setMatchReasoning] = useState<string>("");
+  const [analyzingMatch, setAnalyzingMatch] = useState(false);
   
   const { toast } = useToast();
   const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
@@ -297,6 +297,7 @@ export default function ComplianceTasks() {
     setSubmissionNotes(task.submission_notes || "");
     setReviewStatus(task.review_status || "");
     setMatchPercentage(task.match_percentage || 0);
+    setMatchReasoning(""); // Reset reasoning - it's only available during live analysis
     setLocation(task.submitted_latitude && task.submitted_longitude ? {
       lat: task.submitted_latitude,
       lng: task.submitted_longitude,
@@ -408,17 +409,46 @@ export default function ComplianceTasks() {
     }
 
     const { data: urlData } = supabase.storage.from("vm-images").getPublicUrl(fileName);
+    const submittedPhotoUrl = urlData.publicUrl;
 
     // Determine compliance status based on submission time vs due date
     const now = new Date();
     const dueDate = new Date(selectedViewTask.due_date);
     const complianceStatus = now <= dueDate ? "completed_on_time" : "completed_but_delayed";
 
-    // Update task with submission data
+    // Auto-analyze image match if planogram exists
+    let analysisResult: { matchPercentage: number; reviewStatus: string; reasoning: string } | null = null;
+    
+    if (selectedViewTask.planogram?.image_url) {
+      setAnalyzingMatch(true);
+      try {
+        const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze-vm-compliance', {
+          body: {
+            planogramImageUrl: selectedViewTask.planogram.image_url,
+            submittedImageUrl: submittedPhotoUrl
+          }
+        });
+
+        if (analysisError) {
+          console.error("Analysis error:", analysisError);
+          toast({ title: "Warning", description: "Photo saved but match analysis failed", variant: "destructive" });
+        } else if (analysisData) {
+          analysisResult = analysisData;
+          setMatchPercentage(analysisData.matchPercentage);
+          setReviewStatus(analysisData.reviewStatus);
+          setMatchReasoning(analysisData.reasoning);
+        }
+      } catch (err) {
+        console.error("Failed to analyze compliance:", err);
+      }
+      setAnalyzingMatch(false);
+    }
+
+    // Update task with submission data and analysis results
     const { error: updateError } = await supabase
       .from("vm_compliance_tasks")
       .update({
-        submitted_photo_url: urlData.publicUrl,
+        submitted_photo_url: submittedPhotoUrl,
         submitted_at: now.toISOString(),
         submitted_latitude: location?.lat || null,
         submitted_longitude: location?.lng || null,
@@ -426,6 +456,8 @@ export default function ComplianceTasks() {
         submission_notes: submissionNotes || null,
         status: "submitted",
         compliance_status: complianceStatus,
+        review_status: analysisResult?.reviewStatus || null,
+        match_percentage: analysisResult?.matchPercentage || null,
       })
       .eq("id", selectedViewTask.id);
 
@@ -435,37 +467,19 @@ export default function ComplianceTasks() {
       return;
     }
 
+    const statusLabel = analysisResult 
+      ? `Match: ${analysisResult.matchPercentage}% (${reviewStatusOptions.find(r => r.value === analysisResult?.reviewStatus)?.label})`
+      : complianceStatusLabels[complianceStatus];
+    
     toast({ 
-      title: "Photo Saved", 
-      description: `Status: ${complianceStatusLabels[complianceStatus]}` 
+      title: "Photo Saved & Analyzed", 
+      description: statusLabel
     });
     setViewTaskOpen(false);
     setCapturedFile(null);
     setCapturedImage(null);
     fetchData();
     setUploading(false);
-  };
-
-  const handleSaveReview = async () => {
-    if (!selectedViewTask) return;
-
-    setSavingReview(true);
-
-    const { error } = await supabase
-      .from("vm_compliance_tasks")
-      .update({
-        review_status: reviewStatus || null,
-        match_percentage: matchPercentage || null,
-      })
-      .eq("id", selectedViewTask.id);
-
-    if (error) {
-      toast({ title: "Error", description: "Failed to save review", variant: "destructive" });
-    } else {
-      toast({ title: "Success", description: "Review saved" });
-      fetchData();
-    }
-    setSavingReview(false);
   };
 
   if (loading || accessLoading) {
@@ -1067,51 +1081,58 @@ export default function ComplianceTasks() {
                       </div>
                     )}
 
-                    {/* Review Section */}
+                    {/* Auto-calculated Review Results */}
                     <div className="p-4 rounded-lg border bg-muted/30 space-y-4">
-                      <Label className="font-semibold">Review Status</Label>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label className="text-sm text-muted-foreground">Match Level</Label>
-                          <Select value={reviewStatus} onValueChange={setReviewStatus}>
-                            <SelectTrigger className="mt-1">
-                              <SelectValue placeholder="Select match level" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {reviewStatusOptions.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label className="text-sm text-muted-foreground">Match Percentage: {matchPercentage}%</Label>
-                          <Slider
-                            value={[matchPercentage]}
-                            onValueChange={(val) => setMatchPercentage(val[0])}
-                            max={100}
-                            step={1}
-                            className="mt-3"
-                          />
-                        </div>
-                      </div>
-
-                      <Button 
-                        onClick={handleSaveReview} 
-                        disabled={savingReview}
-                        variant="secondary"
-                        className="w-full"
-                      >
-                        {savingReview ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Saving...
-                          </>
-                        ) : (
-                          "Save Review"
+                      <div className="flex items-center justify-between">
+                        <Label className="font-semibold">AI Match Analysis</Label>
+                        {analyzingMatch && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Analyzing...
+                          </div>
                         )}
-                      </Button>
+                      </div>
+                      
+                      {(reviewStatus || selectedViewTask.review_status) ? (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label className="text-sm text-muted-foreground">Match Status</Label>
+                              <Badge className={`mt-2 ${reviewStatusColors[reviewStatus || selectedViewTask.review_status || ""] || ""}`}>
+                                {reviewStatusOptions.find(r => r.value === (reviewStatus || selectedViewTask.review_status))?.label}
+                              </Badge>
+                            </div>
+                            <div>
+                              <Label className="text-sm text-muted-foreground">Match Percentage</Label>
+                              <div className="mt-2 flex items-center gap-2">
+                                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full transition-all ${
+                                      (matchPercentage || selectedViewTask.match_percentage || 0) >= 90 ? 'bg-green-500' :
+                                      (matchPercentage || selectedViewTask.match_percentage || 0) >= 60 ? 'bg-blue-500' :
+                                      (matchPercentage || selectedViewTask.match_percentage || 0) >= 20 ? 'bg-orange-500' :
+                                      'bg-red-500'
+                                    }`}
+                                    style={{ width: `${matchPercentage || selectedViewTask.match_percentage || 0}%` }}
+                                  />
+                                </div>
+                                <span className="font-semibold text-lg">{matchPercentage || selectedViewTask.match_percentage || 0}%</span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {matchReasoning && (
+                            <div className="p-3 rounded bg-muted">
+                              <Label className="text-xs text-muted-foreground">AI Analysis</Label>
+                              <p className="text-sm mt-1">{matchReasoning}</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Match analysis will be automatically calculated when you save the photo.
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
