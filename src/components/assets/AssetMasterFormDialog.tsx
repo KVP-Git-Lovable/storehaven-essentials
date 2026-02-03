@@ -190,6 +190,51 @@ const refrigerantOptions = [
   { value: "other", label: "Other" },
 ];
 
+const unitOfMeasureOptions = [
+  // Count/Quantity Units
+  { value: "unit", label: "Unit (Ea)" },
+  { value: "piece", label: "Piece (Pc)" },
+  { value: "set", label: "Set" },
+  { value: "pair", label: "Pair" },
+  { value: "dozen", label: "Dozen (Dz)" },
+  { value: "pack", label: "Pack" },
+  { value: "box", label: "Box" },
+  { value: "carton", label: "Carton" },
+  // Length Units
+  { value: "meter", label: "Meter (m)" },
+  { value: "centimeter", label: "Centimeter (cm)" },
+  { value: "millimeter", label: "Millimeter (mm)" },
+  { value: "feet", label: "Feet (ft)" },
+  { value: "inch", label: "Inch (in)" },
+  // Weight Units
+  { value: "kilogram", label: "Kilogram (kg)" },
+  { value: "gram", label: "Gram (g)" },
+  { value: "pound", label: "Pound (lb)" },
+  { value: "ton", label: "Ton" },
+  // Volume/Capacity Units
+  { value: "liter", label: "Liter (L)" },
+  { value: "milliliter", label: "Milliliter (mL)" },
+  { value: "cubic-meter", label: "Cubic Meter (m³)" },
+  { value: "gallon", label: "Gallon" },
+  // Area Units
+  { value: "square-meter", label: "Square Meter (m²)" },
+  { value: "square-feet", label: "Square Feet (sq ft)" },
+  // Electrical Units
+  { value: "watt", label: "Watt (W)" },
+  { value: "kilowatt", label: "Kilowatt (kW)" },
+  { value: "ampere", label: "Ampere (A)" },
+  { value: "volt", label: "Volt (V)" },
+  // Time Units
+  { value: "hour", label: "Hour (hr)" },
+  { value: "day", label: "Day" },
+  { value: "month", label: "Month" },
+  // Other
+  { value: "roll", label: "Roll" },
+  { value: "sheet", label: "Sheet" },
+  { value: "bundle", label: "Bundle" },
+  { value: "lot", label: "Lot" },
+];
+
 export function AssetMasterFormDialog({
   open,
   onOpenChange,
@@ -595,9 +640,20 @@ export function AssetMasterFormDialog({
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Unit of Measure</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g. unit, set, pair" {...field} />
-                          </FormControl>
+                          <Select onValueChange={field.onChange} value={field.value || "unit"}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select unit" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {unitOfMeasureOptions.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
