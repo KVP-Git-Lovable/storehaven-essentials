@@ -205,31 +205,9 @@ export function PMCalendarView({ schedules, onTaskClick }: PMCalendarViewProps) 
   // Day View Component with 24-hour time sidebar
   const DayView = () => {
     const dayTasks = getTasksForDay(currentDate);
-    const timedTasks = dayTasks.filter((t) => t.scheduled_start_time);
-    const anytimeTasks = dayTasks.filter((t) => !t.scheduled_start_time);
 
     return (
       <div className="flex flex-col">
-        {/* Anytime Section */}
-        {anytimeTasks.length > 0 && (
-          <div className="border-b p-3 bg-muted/20">
-            <p className="text-xs font-medium text-muted-foreground mb-2">Anytime</p>
-            <div className="flex flex-wrap gap-2">
-              {anytimeTasks.map((task) => (
-                <button
-                  key={task.id}
-                  onClick={() => onTaskClick(task)}
-                  className={`text-left text-xs px-2 py-1.5 rounded border flex items-center gap-1.5 ${getTaskColor(task)} hover:opacity-80 transition-opacity`}
-                >
-                  {getStatusIcon(task)}
-                  <span className="font-medium">{task.asset}</span>
-                  {task.store && <span className="opacity-75">• {task.store.name}</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Time Grid */}
         <div className="flex overflow-auto max-h-[600px]">
           {/* Time Sidebar */}
@@ -257,9 +235,11 @@ export function PMCalendarView({ schedules, onTaskClick }: PMCalendarViewProps) 
               />
             ))}
 
-            {/* Timed Tasks */}
-            {timedTasks.map((task) => {
-              const position = getTaskPosition(task.scheduled_start_time!, task.scheduled_end_time);
+            {/* Tasks */}
+            {dayTasks.map((task) => {
+              const position = task.scheduled_start_time 
+                ? getTaskPosition(task.scheduled_start_time, task.scheduled_end_time)
+                : { top: "2%", height: "4%" };
               return (
                 <button
                   key={task.id}
@@ -280,8 +260,8 @@ export function PMCalendarView({ schedules, onTaskClick }: PMCalendarViewProps) 
               );
             })}
 
-            {/* Empty state for timed section */}
-            {timedTasks.length === 0 && anytimeTasks.length === 0 && (
+            {/* Empty state */}
+            {dayTasks.length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
                 No maintenance tasks scheduled for this day
               </div>
@@ -294,16 +274,6 @@ export function PMCalendarView({ schedules, onTaskClick }: PMCalendarViewProps) 
 
   // Week View Component with 24-hour time sidebar
   const WeekView = () => {
-    // Get anytime tasks for each day
-    const getAnytimeTasksForDay = (day: Date) => {
-      return getTasksForDay(day).filter((t) => !t.scheduled_start_time);
-    };
-
-    // Get timed tasks for each day
-    const getTimedTasksForDay = (day: Date) => {
-      return getTasksForDay(day).filter((t) => t.scheduled_start_time);
-    };
-
     return (
       <div className="flex flex-col">
         {/* Day Headers */}
@@ -329,35 +299,6 @@ export function PMCalendarView({ schedules, onTaskClick }: PMCalendarViewProps) 
           ))}
         </div>
 
-        {/* Anytime Row */}
-        <div className="flex border-b">
-          <div className="w-16 flex-shrink-0 border-r bg-muted/10 flex items-center justify-end pr-2">
-            <span className="text-xs text-muted-foreground">Anytime</span>
-          </div>
-          {calendarDays.map((day, idx) => {
-            const anytimeTasks = getAnytimeTasksForDay(day);
-            return (
-              <div
-                key={idx}
-                className={`flex-1 border-r last:border-r-0 p-1 min-h-[60px] ${isToday(day) ? "bg-primary/5" : ""}`}
-              >
-                <div className="space-y-1 overflow-auto max-h-[80px]">
-                  {anytimeTasks.map((task) => (
-                    <button
-                      key={task.id}
-                      onClick={() => onTaskClick(task)}
-                      className={`w-full text-left text-xs px-1 py-0.5 rounded border truncate flex items-center gap-1 ${getTaskColor(task)} hover:opacity-80 transition-opacity`}
-                    >
-                      {getStatusIcon(task)}
-                      <span className="truncate">{task.asset}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
         {/* Time Grid */}
         <div className="flex overflow-auto max-h-[500px]">
           {/* Time Sidebar */}
@@ -376,7 +317,7 @@ export function PMCalendarView({ schedules, onTaskClick }: PMCalendarViewProps) 
 
           {/* Day Columns */}
           {calendarDays.map((day, idx) => {
-            const timedTasks = getTimedTasksForDay(day);
+            const dayTasks = getTasksForDay(day);
             return (
               <div
                 key={idx}
@@ -392,9 +333,11 @@ export function PMCalendarView({ schedules, onTaskClick }: PMCalendarViewProps) 
                   />
                 ))}
 
-                {/* Timed Tasks */}
-                {timedTasks.map((task) => {
-                  const position = getTaskPosition(task.scheduled_start_time!, task.scheduled_end_time);
+                {/* Tasks */}
+                {dayTasks.map((task) => {
+                  const position = task.scheduled_start_time
+                    ? getTaskPosition(task.scheduled_start_time, task.scheduled_end_time)
+                    : { top: "2%", height: "4%" };
                   return (
                     <button
                       key={task.id}
