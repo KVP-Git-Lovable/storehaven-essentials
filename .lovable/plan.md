@@ -1,229 +1,79 @@
 
-# Handle Orphaned Assets and Implement Soft-Delete Cascade
+# Fix: Preventive Maintenance "Add Schedule" Blank Page Error
 
 ## Problem Analysis
 
-The investigation found that:
-- Asset "DG 1010 / DG 1" has `asset_master_id = null` - it was created before asset master linkage was enforced (Jan 9, 2026)
-- The database has a foreign key from `assets.asset_master_id` to `asset_masters.id` with NO ACTION on delete
-- When an Asset Master is deleted, associated assets become "orphaned" but still display in the Asset Register
+When clicking "Add Schedule" in Preventive Maintenance, the page shows a blank error screen. The root cause is in the `MaintenanceFormDialog.tsx` component on **line 468**:
 
-## Solution Overview
+```tsx
+<SelectItem value="">None</SelectItem>
+```
 
-This plan implements proper handling for orphaned assets:
+Radix UI's `SelectItem` component **does not allow empty string values**. This causes the component to crash when the dialog attempts to render, resulting in a blank error screen.
 
-1. **Add a new status for orphaned assets**: Instead of a separate "Deleted Products" table, add an `orphaned` status to assets
-2. **Update Asset Master deletion**: When deleting an Asset Master, mark associated assets as orphaned
-3. **Filter Asset Register view**: Exclude orphaned assets from the main list and show them in a separate tab/filter
-4. **Fix existing orphaned data**: Clean up the DG 1 asset by marking it as orphaned
+## Solution
+
+Replace the empty string value `""` with a non-empty placeholder value like `"none"`, and update the form logic to handle this value appropriately:
+
+1. Change the `SelectItem` value from `""` to `"none"`
+2. Update the form submission logic to convert `"none"` back to `null` when saving
+3. Update the form initialization logic to convert `null` to `"none"` when loading
 
 ---
 
-## Implementation Steps
+## Implementation Details
 
-### 1. Update Asset Status Options
+### File: `src/components/maintenance/MaintenanceFormDialog.tsx`
 
-Add a new status option `orphaned` to handle assets whose Asset Master has been deleted.
-
-**File: `src/pages/assets/AssetInventory.tsx`**
-
-Add to `assetStatusOptions` array:
-```text
-{ value: "orphaned", label: "Orphaned (No Master)" }
-```
-
-### 2. Update Asset Master Delete Handler
-
-Modify the delete function in `AssetMaster.tsx` to mark associated assets as orphaned before deletion.
-
-**File: `src/pages/assets/AssetMaster.tsx`**
-
-Update `handleDelete` function:
-- Before deleting the asset master, update all assets with that `asset_master_id`
-- Set their `asset_status` to `orphaned` and `asset_master_id` to `null`
-- Record status change in `asset_status_history`
-- Then delete the Asset Master
-
-### 3. Filter Orphaned Assets from Main View
-
-Update the Asset Register to:
-- Exclude orphaned assets from the main table by default
-- Add a filter toggle or separate tab to view orphaned assets
-- Show orphaned assets with a visual indicator (warning badge)
-
-**File: `src/pages/assets/AssetInventory.tsx`**
-
-Add:
-- State for showing orphaned assets: `showOrphaned`
-- Filter logic to exclude orphaned assets unless explicitly showing them
-- A toggle button or filter option to view orphaned assets
-
-### 4. Add Visual Indicator for Orphaned Assets
-
-When viewing orphaned assets, display:
-- Warning badge/icon indicating the asset has no valid Asset Master
-- Message explaining why the asset is orphaned
-- Option to reassign to a valid Asset Master via Edit
-
-### 5. Fix Existing Orphaned Asset (DG 1)
-
-Run a database update to mark the existing orphaned asset:
-
-```sql
-UPDATE assets 
-SET asset_status = 'orphaned'
-WHERE asset_master_id IS NULL AND asset_status != 'orphaned';
-```
-
-Also record in status history for audit trail.
-
----
-
-## Technical Details
-
-### Modified handleDelete in AssetMaster.tsx
+**Change 1 - Line 468**: Update the "None" option to use a non-empty value
 
 ```text
-const handleDelete = async () => {
-  if (!deleteAssetId) return;
-
-  // First, mark associated assets as orphaned
-  const { error: updateError } = await supabase
-    .from("assets")
-    .update({ 
-      asset_status: "orphaned"
-    })
-    .eq("asset_master_id", deleteAssetId);
-
-  if (updateError) {
-    toast({ 
-      title: "Error", 
-      description: "Failed to handle associated assets", 
-      variant: "destructive" 
-    });
-    return;
-  }
-
-  // Record status change history for affected assets
-  const { data: affectedAssets } = await supabase
-    .from("assets")
-    .select("id")
-    .eq("asset_master_id", deleteAssetId);
-
-  if (affectedAssets && affectedAssets.length > 0) {
-    await supabase.from("asset_status_history").insert(
-      affectedAssets.map(a => ({
-        asset_id: a.id,
-        status: "orphaned",
-        changed_by: "System (Asset Master Deleted)"
-      }))
-    );
-  }
-
-  // Then delete the asset master
-  const { error } = await supabase
-    .from("asset_masters")
-    .delete()
-    .eq("id", deleteAssetId);
-
-  if (error) {
-    toast({ 
-      title: "Error", 
-      description: "Failed to delete asset master", 
-      variant: "destructive" 
-    });
-  } else {
-    toast({ 
-      title: "Success", 
-      description: "Asset master deleted. Associated assets marked as orphaned." 
-    });
-    fetchData();
-  }
-  setDeleteAssetId(null);
-};
+Before: <SelectItem value="">None</SelectItem>
+After:  <SelectItem value="none">None</SelectItem>
 ```
 
-### Filter Logic in AssetInventory.tsx
+**Change 2 - Lines 128-136**: Update default form value
 
 ```text
-// State for filter
-const [showOrphaned, setShowOrphaned] = useState(false);
-
-// Updated filtering
-const filteredAssets = useMemo(() => {
-  return assets.filter((asset) => {
-    // Filter by orphaned status
-    if (!showOrphaned && asset.asset_status === "orphaned") {
-      return false;
-    }
-    if (showOrphaned && asset.asset_status !== "orphaned") {
-      return false;
-    }
-    
-    // Existing search filter
-    const matchesSearch = 
-      asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      asset.asset_number?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    return matchesSearch;
-  });
-}, [assets, searchQuery, showOrphaned]);
+Before: pmChecklistMasterId: "",
+After:  pmChecklistMasterId: "none",
 ```
 
-### UI Toggle for Orphaned Assets View
+**Change 3 - Lines 158, 168**: Update form reset to use "none" instead of empty string
 
-Add a toggle button next to the search:
 ```text
-<Button
-  variant={showOrphaned ? "default" : "outline"}
-  onClick={() => setShowOrphaned(!showOrphaned)}
-  className="gap-2"
->
-  <AlertTriangle className="h-4 w-4" />
-  {showOrphaned ? "Show Active Assets" : "Show Orphaned Assets"}
-</Button>
+Before: pmChecklistMasterId: initialData.pm_checklist_master_id || "",
+After:  pmChecklistMasterId: initialData.pm_checklist_master_id || "none",
+
+Before: pmChecklistMasterId: "",
+After:  pmChecklistMasterId: "none",
+```
+
+**Change 4 - Line 259**: Update payload to convert "none" back to null
+
+```text
+Before: pm_checklist_master_id: data.pmChecklistMasterId || null,
+After:  pm_checklist_master_id: data.pmChecklistMasterId === "none" ? null : (data.pmChecklistMasterId || null),
+```
+
+**Change 5 - Line 208**: Update the auto-select logic check
+
+```text
+Before: if (filtered.length === 1 && !form.getValues("pmChecklistMasterId")) {
+After:  if (filtered.length === 1 && (!form.getValues("pmChecklistMasterId") || form.getValues("pmChecklistMasterId") === "none")) {
 ```
 
 ---
 
-## Files to Modify
+## Summary of Changes
 
-| File | Action |
-|------|--------|
-| `src/pages/assets/AssetMaster.tsx` | Modify delete handler to cascade orphan status |
-| `src/pages/assets/AssetInventory.tsx` | Add orphaned filter, status option, and toggle UI |
-| Database | Migration to add orphaned status to existing null-master assets |
+| Location | Change |
+|----------|--------|
+| Line 135 | Default value `"none"` instead of `""` |
+| Line 158 | Reset value uses `"none"` fallback |
+| Line 168 | Add mode reset uses `"none"` |
+| Line 208 | Auto-select check includes `"none"` |
+| Line 259 | Convert `"none"` to `null` on save |
+| Line 468 | SelectItem value `"none"` instead of `""` |
 
----
-
-## Database Migration
-
-Mark existing orphaned assets:
-
-```sql
--- Mark assets without asset_master_id as orphaned
-UPDATE assets 
-SET asset_status = 'orphaned'
-WHERE asset_master_id IS NULL;
-
--- Add status history for audit trail
-INSERT INTO asset_status_history (asset_id, status, changed_by)
-SELECT id, 'orphaned', 'System (Data Cleanup)'
-FROM assets
-WHERE asset_master_id IS NULL;
-```
-
----
-
-## User Experience
-
-After implementation:
-
-1. **Asset Register (default view)**: Shows only assets with valid Asset Masters
-2. **"Show Orphaned Assets" toggle**: Reveals assets that have no valid master
-3. **Orphaned assets display**: 
-   - Shows with warning indicator
-   - Can be edited to reassign to a valid Asset Master
-4. **Asset Master deletion**: 
-   - Warns user that X assets will be marked as orphaned
-   - Updates status and maintains audit trail
+This is a focused fix that only addresses the crash without modifying any other workflows or UI structures.
