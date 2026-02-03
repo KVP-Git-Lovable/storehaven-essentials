@@ -1,14 +1,19 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, parseISO, isSameMonth, startOfYear, endOfYear } from "date-fns";
-import { Calendar, Loader2, PartyPopper, Plus } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { Calendar, Loader2, PartyPopper, Plus, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { usePermissions } from "@/hooks/usePermissions";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
 
 interface Holiday {
   id: string;
@@ -21,24 +26,105 @@ interface Holiday {
 export default function Holidays() {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null);
+  const [formData, setFormData] = useState({
+    name: "",
+    date: "",
+    type: "national",
+    is_optional: false,
+  });
   const { isAdmin } = usePermissions();
+  const queryClient = useQueryClient();
 
   // Fetch holidays
   const { data: holidays, isLoading } = useQuery({
     queryKey: ["holidays", selectedYear],
     queryFn: async () => {
-      // For now return sample data - table doesn't exist yet
-      return [
-        { id: "1", name: "Republic Day", date: `${selectedYear}-01-26`, type: "national", is_optional: false },
-        { id: "2", name: "Holi", date: `${selectedYear}-03-25`, type: "festival", is_optional: false },
-        { id: "3", name: "Good Friday", date: `${selectedYear}-03-29`, type: "religious", is_optional: true },
-        { id: "4", name: "Independence Day", date: `${selectedYear}-08-15`, type: "national", is_optional: false },
-        { id: "5", name: "Gandhi Jayanti", date: `${selectedYear}-10-02`, type: "national", is_optional: false },
-        { id: "6", name: "Diwali", date: `${selectedYear}-11-01`, type: "festival", is_optional: false },
-        { id: "7", name: "Christmas", date: `${selectedYear}-12-25`, type: "religious", is_optional: false },
-      ] as Holiday[];
+      const startDate = `${selectedYear}-01-01`;
+      const endDate = `${selectedYear}-12-31`;
+      const { data, error } = await supabase
+        .from("holidays")
+        .select("*")
+        .gte("date", startDate)
+        .lte("date", endDate)
+        .order("date", { ascending: true });
+
+      if (error) throw error;
+      return data as Holiday[];
     },
   });
+
+  // Create/Update holiday mutation
+  const saveMutation = useMutation({
+    mutationFn: async (data: typeof formData & { id?: string }) => {
+      if (data.id) {
+        const { error } = await supabase
+          .from("holidays")
+          .update({ name: data.name, date: data.date, type: data.type, is_optional: data.is_optional })
+          .eq("id", data.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("holidays")
+          .insert({ name: data.name, date: data.date, type: data.type, is_optional: data.is_optional });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["holidays"] });
+      toast.success(editingHoliday ? "Holiday updated" : "Holiday added");
+      handleCloseDialog();
+    },
+    onError: (error) => {
+      toast.error("Failed to save holiday: " + error.message);
+    },
+  });
+
+  // Delete holiday mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("holidays").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["holidays"] });
+      toast.success("Holiday deleted");
+    },
+    onError: (error) => {
+      toast.error("Failed to delete holiday: " + error.message);
+    },
+  });
+
+  const handleOpenDialog = (holiday?: Holiday) => {
+    if (holiday) {
+      setEditingHoliday(holiday);
+      setFormData({
+        name: holiday.name,
+        date: holiday.date,
+        type: holiday.type,
+        is_optional: holiday.is_optional,
+      });
+    } else {
+      setEditingHoliday(null);
+      setFormData({ name: "", date: "", type: "national", is_optional: false });
+    }
+    setDialogOpen(true);
+  };
+
+  const handleCloseDialog = () => {
+    setDialogOpen(false);
+    setEditingHoliday(null);
+    setFormData({ name: "", date: "", type: "national", is_optional: false });
+  };
+
+  const handleSave = () => {
+    if (!formData.name || !formData.date) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+    saveMutation.mutate({ ...formData, id: editingHoliday?.id });
+  };
 
   const getTypeBadge = (type: string) => {
     const variants: Record<string, "default" | "secondary" | "outline"> = {
@@ -76,7 +162,7 @@ export default function Holidays() {
             </SelectContent>
           </Select>
           {isAdmin && (
-            <Button>
+            <Button onClick={() => handleOpenDialog()}>
               <Plus className="mr-2 h-4 w-4" /> Add Holiday
             </Button>
           )}
@@ -144,6 +230,7 @@ export default function Holidays() {
                   <TableHead>Holiday Name</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Optional</TableHead>
+                  {isAdmin && <TableHead className="w-[100px]">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -168,6 +255,26 @@ export default function Holidays() {
                         <Badge variant="default">Mandatory</Badge>
                       )}
                     </TableCell>
+                    {isAdmin && (
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleOpenDialog(holiday)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => deleteMutation.mutate(holiday.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
@@ -180,6 +287,68 @@ export default function Holidays() {
           )}
         </CardContent>
       </Card>
+
+      {/* Add/Edit Holiday Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingHoliday ? "Edit Holiday" : "Add Holiday"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Holiday Name *</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g. Independence Day"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="date">Date *</Label>
+              <Input
+                id="date"
+                type="date"
+                value={formData.date}
+                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="type">Type</Label>
+              <Select
+                value={formData.type}
+                onValueChange={(value) => setFormData({ ...formData, type: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="national">National</SelectItem>
+                  <SelectItem value="festival">Festival</SelectItem>
+                  <SelectItem value="religious">Religious</SelectItem>
+                  <SelectItem value="company">Company</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="is_optional">Optional Holiday</Label>
+              <Switch
+                id="is_optional"
+                checked={formData.is_optional}
+                onCheckedChange={(checked) => setFormData({ ...formData, is_optional: checked })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseDialog}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? "Saving..." : editingHoliday ? "Update" : "Add"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
