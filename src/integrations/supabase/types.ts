@@ -350,7 +350,7 @@ export type Database = {
           check_out_photo_url: string | null
           check_out_time: string | null
           created_at: string
-          employee_id: string
+          employee_id: string | null
           face_match_score: number | null
           face_verification_status: string | null
           id: string
@@ -359,6 +359,7 @@ export type Database = {
           store_id: string | null
           total_hours: number | null
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           attendance_date?: string
@@ -373,7 +374,7 @@ export type Database = {
           check_out_photo_url?: string | null
           check_out_time?: string | null
           created_at?: string
-          employee_id: string
+          employee_id?: string | null
           face_match_score?: number | null
           face_verification_status?: string | null
           id?: string
@@ -382,6 +383,7 @@ export type Database = {
           store_id?: string | null
           total_hours?: number | null
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           attendance_date?: string
@@ -396,7 +398,7 @@ export type Database = {
           check_out_photo_url?: string | null
           check_out_time?: string | null
           created_at?: string
-          employee_id?: string
+          employee_id?: string | null
           face_match_score?: number | null
           face_verification_status?: string | null
           id?: string
@@ -405,6 +407,7 @@ export type Database = {
           store_id?: string | null
           total_hours?: number | null
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -3965,6 +3968,7 @@ export type Database = {
         Row: {
           created_at: string
           email: string
+          face_baseline_url: string | null
           id: string
           must_reset_password: boolean | null
           profile_photo_url: string | null
@@ -3977,6 +3981,7 @@ export type Database = {
         Insert: {
           created_at?: string
           email: string
+          face_baseline_url?: string | null
           id: string
           must_reset_password?: boolean | null
           profile_photo_url?: string | null
@@ -3989,6 +3994,7 @@ export type Database = {
         Update: {
           created_at?: string
           email?: string
+          face_baseline_url?: string | null
           id?: string
           must_reset_password?: boolean | null
           profile_photo_url?: string | null

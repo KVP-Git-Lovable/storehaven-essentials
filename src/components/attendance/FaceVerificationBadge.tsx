@@ -1,8 +1,8 @@
-import { Loader2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, AlertCircle, MinusCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-type VerificationStatus = "pending" | "verifying" | "matched" | "mismatch";
+type VerificationStatus = "pending" | "verifying" | "matched" | "mismatch" | "skipped";
 
 interface FaceVerificationBadgeProps {
   status: VerificationStatus;
@@ -35,6 +35,12 @@ export function FaceVerificationBadge({ status, score, className }: FaceVerifica
       label: score ? `Mismatch (${score}%)` : "Mismatch",
       variant: "destructive" as const,
       className: "bg-red-500/10 text-red-600 border-red-500/30 hover:bg-red-500/20",
+    },
+    skipped: {
+      icon: MinusCircle,
+      label: "Skipped",
+      variant: "outline" as const,
+      className: "text-blue-500 border-blue-500/30",
     },
   };
 

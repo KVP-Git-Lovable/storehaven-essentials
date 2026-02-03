@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Label } from "@/components/ui/label";
@@ -19,7 +18,8 @@ import { useAuth } from "@/hooks/useAuth";
 
 interface AttendanceRecord {
   id: string;
-  employee_id: string;
+  user_id: string | null;
+  employee_id: string | null;
   store_id: string | null;
   attendance_date: string;
   check_in_time: string | null;
@@ -30,20 +30,20 @@ interface AttendanceRecord {
   total_hours: number | null;
   face_verification_status: string | null;
   face_match_score: number | null;
-  employees: { name: string; department: string; face_baseline_url: string | null };
+  profiles: { username: string; email: string; profile_photo_url: string | null; face_baseline_url: string | null } | null;
   stores: { name: string } | null;
 }
 
-interface Employee {
+interface UserProfile {
   id: string;
-  name: string;
-  department: string;
+  username: string;
   email: string;
+  profile_photo_url: string | null;
   face_baseline_url: string | null;
 }
 
 export default function Attendance() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [isMarkOpen, setIsMarkOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -88,48 +88,20 @@ export default function Attendance() {
     }
   };
 
-  // Fetch all employees for stats and table
-  const { data: employees } = useQuery({
-    queryKey: ["employees-active"],
+  // Fetch current user's profile for baseline photo
+  const { data: currentProfile, isLoading: loadingProfile } = useQuery({
+    queryKey: ["current-profile-attendance", user?.id],
     queryFn: async () => {
+      if (!user?.id) return null;
       const { data, error } = await supabase
-        .from("employees")
-        .select("id, name, department, email, face_baseline_url")
-        .eq("status", "active")
-        .order("name");
-      if (error) throw error;
-      return data as Employee[];
-    },
-  });
-
-  // Fetch current user's employee record
-  const { data: currentEmployee, isLoading: loadingEmployee } = useQuery({
-    queryKey: ["current-employee", user?.email],
-    queryFn: async () => {
-      if (!user?.email) return null;
-      const { data, error } = await supabase
-        .from("employees")
-        .select("id, name, department, email, face_baseline_url")
-        .eq("email", user.email)
-        .eq("status", "active")
+        .from("profiles")
+        .select("id, username, email, profile_photo_url, face_baseline_url")
+        .eq("id", user.id)
         .maybeSingle();
       if (error) throw error;
-      return data as Employee | null;
+      return data as UserProfile | null;
     },
-    enabled: !!user?.email,
-  });
-
-  // Fetch stores
-  const { data: stores } = useQuery({
-    queryKey: ["stores-active"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("stores")
-        .select("id, name")
-        .eq("status", "active");
-      if (error) throw error;
-      return data;
-    },
+    enabled: !!user?.id,
   });
 
   // Fetch today's attendance
@@ -138,7 +110,7 @@ export default function Attendance() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("attendance_records")
-        .select("*, employees(name, department, face_baseline_url), stores(name)")
+        .select("*, profiles(username, email, profile_photo_url, face_baseline_url), stores(name)")
         .eq("attendance_date", selectedDate)
         .order("check_in_time", { ascending: false });
       if (error) throw error;
@@ -153,19 +125,18 @@ export default function Attendance() {
     setVerificationResult(null);
   };
 
-  // Check if current employee has baseline photo
-  const hasBaselinePhoto = useMemo(() => {
-    return !!currentEmployee?.face_baseline_url;
-  }, [currentEmployee]);
+  // Get baseline photo URL (prefer face_baseline_url, fallback to profile_photo_url)
+  const baselinePhotoUrl = useMemo(() => {
+    return currentProfile?.face_baseline_url || currentProfile?.profile_photo_url || null;
+  }, [currentProfile]);
 
-  // Verify face against employee profile photo
-  const verifyFace = async (attendancePhotoUrl: string, employeeId: string, recordId?: string) => {
-    // Call the edge function - it will handle validation
+  // Verify face against profile photo
+  const verifyFace = async (attendancePhotoUrl: string, recordId?: string) => {
     setVerifyingFace(true);
     try {
       const { data, error } = await supabase.functions.invoke("verify-face", {
         body: {
-          profilePhotoUrl: currentEmployee?.face_baseline_url || null,
+          profilePhotoUrl: baselinePhotoUrl,
           attendancePhotoUrl,
           attendanceRecordId: recordId,
         },
@@ -184,14 +155,14 @@ export default function Attendance() {
   // Mark attendance mutation
   const markAttendanceMutation = useMutation({
     mutationFn: async () => {
-      if (!currentEmployee) throw new Error("No employee record found for your account");
+      if (!user?.id) throw new Error("You must be logged in to mark attendance");
       if (!capturedFile) throw new Error("Please capture a photo");
 
       setUploading(true);
 
       // Upload photo
       const fileExt = capturedFile.name.split(".").pop();
-      const fileName = `attendance/${currentEmployee.id}/${Date.now()}.${fileExt}`;
+      const fileName = `attendance/${user.id}/${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from("employee-documents")
@@ -201,22 +172,29 @@ export default function Attendance() {
 
       const { data: urlData } = supabase.storage.from("employee-documents").getPublicUrl(fileName);
 
-      // Verify face before proceeding
-      setVerifyingFace(true);
-      const verifyResult = await verifyFace(urlData.publicUrl, currentEmployee.id);
-      setVerificationResult(verifyResult);
-      setVerifyingFace(false);
+      // Verify face if baseline exists
+      let verifyResult: { status: string; score: number; reason?: string; error?: string } = { 
+        status: "skipped", 
+        score: 0, 
+        reason: "No baseline photo" 
+      };
+      if (baselinePhotoUrl) {
+        setVerifyingFace(true);
+        verifyResult = await verifyFace(urlData.publicUrl);
+        setVerificationResult(verifyResult);
+        setVerifyingFace(false);
 
-      // Block check-in if face verification failed
-      if (verifyResult.error || verifyResult.status === "blocked") {
-        throw new Error(verifyResult.reason || "Face verification failed");
+        // Block check-in if face verification failed
+        if (verifyResult.error || verifyResult.status === "blocked") {
+          throw new Error(verifyResult.reason || "Face verification failed");
+        }
       }
 
-      // Check for existing record
+      // Check for existing record using user_id
       const { data: existing } = await supabase
         .from("attendance_records")
         .select("id, check_in_time")
-        .eq("employee_id", currentEmployee.id)
+        .eq("user_id", user.id)
         .eq("attendance_date", format(new Date(), "yyyy-MM-dd"))
         .single();
 
@@ -225,10 +203,10 @@ export default function Attendance() {
 
         const now = new Date();
         const checkInHour = now.getHours();
-        const status = checkInHour <= 9 ? "present" : checkInHour <= 10 ? "late" : "late";
+        const status = checkInHour <= 9 ? "present" : "late";
 
         await supabase.from("attendance_records").insert({
-          employee_id: currentEmployee.id,
+          user_id: user.id,
           attendance_date: format(now, "yyyy-MM-dd"),
           check_in_time: now.toISOString(),
           check_in_photo_url: urlData.publicUrl,
@@ -279,21 +257,22 @@ export default function Attendance() {
   // Stats
   const presentCount = todayAttendance?.filter((a) => a.status === "present").length || 0;
   const lateCount = todayAttendance?.filter((a) => a.status === "late").length || 0;
-  const absentCount = (employees?.length || 0) - (todayAttendance?.length || 0);
+  const totalRecords = todayAttendance?.length || 0;
 
   const stats = [
     { title: "Present Today", value: presentCount.toString(), icon: UserCheck, iconColor: "bg-success/10 text-success" },
     { title: "Late Arrivals", value: lateCount.toString(), icon: Clock, iconColor: "bg-warning/10 text-warning" },
-    { title: "Absent", value: absentCount.toString(), icon: UserX, iconColor: "bg-destructive/10 text-destructive" },
-    { title: "Total Staff", value: (employees?.length || 0).toString(), icon: Calendar, iconColor: "bg-primary/10 text-primary" },
+    { title: "Total Records", value: totalRecords.toString(), icon: Calendar, iconColor: "bg-primary/10 text-primary" },
   ];
+
+  const displayName = currentProfile?.username || profile?.username || user?.email?.split("@")[0] || "User";
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Attendance & Leave</h1>
-          <p className="text-muted-foreground">Track employee attendance with face verification and geo-stamp</p>
+          <p className="text-muted-foreground">Track attendance with face verification and geo-stamp</p>
         </div>
         <div className="flex gap-2">
           <Input
@@ -330,55 +309,42 @@ export default function Attendance() {
                   </Button>
                 </div>
 
-                {/* Current User Info */}
-                {loadingEmployee ? (
+                {/* Current User Display */}
+                {loadingProfile ? (
                   <div className="p-4 rounded-lg bg-muted flex items-center justify-center">
                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                     <span className="ml-2 text-sm text-muted-foreground">Loading your profile...</span>
-                  </div>
-                ) : !currentEmployee ? (
-                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                    <p className="text-sm text-destructive font-medium">
-                      ⚠️ No employee record found
-                    </p>
-                    <p className="text-xs text-destructive/80 mt-1">
-                      Your account is not linked to an employee profile. Contact admin.
-                    </p>
                   </div>
                 ) : (
                   <>
                     {/* Current user display */}
                     <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <User className="h-5 w-5 text-primary" />
-                        </div>
+                        {currentProfile?.profile_photo_url ? (
+                          <img
+                            src={currentProfile.profile_photo_url}
+                            alt="Profile"
+                            className="h-10 w-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <User className="h-5 w-5 text-primary" />
+                          </div>
+                        )}
                         <div>
-                          <p className="font-medium text-sm">{currentEmployee.name}</p>
-                          <p className="text-xs text-muted-foreground">{currentEmployee.department}</p>
+                          <p className="font-medium text-sm">{displayName}</p>
+                          <p className="text-xs text-muted-foreground">{currentProfile?.email || user?.email}</p>
                         </div>
                       </div>
                     </div>
 
-                    {/* Baseline photo warning */}
-                    {!currentEmployee.face_baseline_url && (
-                      <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
-                        <p className="text-sm text-amber-800 font-medium">
-                          ⚠️ Baseline profile photo missing
-                        </p>
-                        <p className="text-xs text-amber-700 mt-1">
-                          You must upload a profile photo before marking attendance.
-                        </p>
-                      </div>
-                    )}
-
                     {/* Baseline and Captured photos */}
-                    {currentEmployee.face_baseline_url && (
+                    {baselinePhotoUrl && (
                       <div className="flex gap-4">
                         <div className="flex-1">
                           <Label className="text-xs text-muted-foreground">Baseline Photo</Label>
                           <img
-                            src={currentEmployee.face_baseline_url}
+                            src={baselinePhotoUrl}
                             alt="Baseline"
                             className="w-full h-32 object-cover rounded-lg border"
                           />
@@ -395,6 +361,17 @@ export default function Attendance() {
                         )}
                       </div>
                     )}
+
+                    {!baselinePhotoUrl && (
+                      <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                        <p className="text-sm text-amber-800 font-medium">
+                          ℹ️ No baseline photo found
+                        </p>
+                        <p className="text-xs text-amber-700 mt-1">
+                          Face verification will be skipped. Upload a profile photo for enhanced security.
+                        </p>
+                      </div>
+                    )}
                   </>
                 )}
 
@@ -403,7 +380,7 @@ export default function Attendance() {
                     variant="outline"
                     className="w-full h-24"
                     onClick={() => setIsCameraOpen(true)}
-                    disabled={!currentEmployee}
+                    disabled={!user}
                   >
                     <div className="flex flex-col items-center gap-2">
                       <Camera className="h-8 w-8" />
@@ -456,12 +433,18 @@ export default function Attendance() {
                       ? "bg-green-50 border-green-200" 
                       : verificationResult.status === "blocked"
                       ? "bg-amber-50 border-amber-200"
+                      : verificationResult.status === "skipped"
+                      ? "bg-blue-50 border-blue-200"
                       : "bg-red-50 border-red-200"
                   }`}>
                     <div className="flex items-center gap-2">
                       {verificationResult.status === "blocked" ? (
                         <span className="text-sm text-amber-800 font-medium">
                           ⚠️ {verificationResult.reason}
+                        </span>
+                      ) : verificationResult.status === "skipped" ? (
+                        <span className="text-sm text-blue-800 font-medium">
+                          ℹ️ Face verification skipped
                         </span>
                       ) : (
                         <>
@@ -482,11 +465,10 @@ export default function Attendance() {
                   className="w-full"
                   onClick={() => markAttendanceMutation.mutate()}
                   disabled={
-                    !currentEmployee || 
+                    !user || 
                     !capturedFile || 
                     uploading || 
-                    verifyingFace ||
-                    !hasBaselinePhoto
+                    verifyingFace
                   }
                 >
                   {uploading || verifyingFace ? (
@@ -494,8 +476,6 @@ export default function Attendance() {
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       {verifyingFace ? "Verifying Face..." : "Processing..."}
                     </>
-                  ) : !hasBaselinePhoto && currentEmployee ? (
-                    <>Baseline Photo Required</>
                   ) : (
                     <>
                       <UserCheck className="h-4 w-4 mr-2" />
@@ -510,7 +490,7 @@ export default function Attendance() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         {stats.map((stat) => (
           <StatCard key={stat.title} {...stat} />
         ))}
@@ -530,8 +510,7 @@ export default function Attendance() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Department</TableHead>
+                  <TableHead>User</TableHead>
                   <TableHead>Store</TableHead>
                   <TableHead>Check In</TableHead>
                   <TableHead>Check Out</TableHead>
@@ -544,8 +523,9 @@ export default function Attendance() {
               <TableBody>
                 {todayAttendance.map((record) => (
                   <TableRow key={record.id}>
-                    <TableCell className="font-medium">{record.employees?.name}</TableCell>
-                    <TableCell>{record.employees?.department}</TableCell>
+                    <TableCell className="font-medium">
+                      {record.profiles?.username || record.profiles?.email || "Unknown"}
+                    </TableCell>
                     <TableCell>{record.stores?.name || "-"}</TableCell>
                     <TableCell>
                       {record.check_in_time ? format(parseISO(record.check_in_time), "HH:mm") : "-"}
@@ -565,7 +545,7 @@ export default function Attendance() {
                     </TableCell>
                     <TableCell>
                       <FaceVerificationBadge
-                        status={(record.face_verification_status as "pending" | "verifying" | "matched" | "mismatch") || "pending"}
+                        status={(record.face_verification_status as "pending" | "verifying" | "matched" | "mismatch" | "skipped") || "pending"}
                         score={record.face_match_score}
                       />
                     </TableCell>
