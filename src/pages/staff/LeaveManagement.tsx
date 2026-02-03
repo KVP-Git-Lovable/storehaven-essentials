@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, differenceInDays, parseISO, addDays } from "date-fns";
+import { format, differenceInDays, parseISO } from "date-fns";
 import { Calendar, Plus, Check, X, Clock, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { useAttendanceRole } from "@/hooks/useAttendanceRole";
 
 interface LeaveType {
   id: string;
@@ -73,12 +75,38 @@ const defaultForm: LeaveForm = {
 };
 
 export default function LeaveManagement() {
+  const { user, profile } = useAuth();
+  const { isManager, isEmployee } = useAttendanceRole();
   const [isApplyOpen, setIsApplyOpen] = useState(false);
   const [form, setForm] = useState<LeaveForm>(defaultForm);
   const [selectedEmployee, setSelectedEmployee] = useState<string>("");
   const queryClient = useQueryClient();
 
-  // Fetch employees
+  // Get current user's employee record
+  const { data: currentEmployee } = useQuery({
+    queryKey: ["current-employee", user?.email],
+    queryFn: async () => {
+      if (!user?.email) return null;
+      const { data, error } = await supabase
+        .from("employees")
+        .select("id, name, department")
+        .eq("email", user.email)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.email,
+  });
+
+  // Pre-populate employee_id for regular employees
+  useEffect(() => {
+    if (isEmployee && currentEmployee && !form.employee_id) {
+      setForm((prev) => ({ ...prev, employee_id: currentEmployee.id }));
+      setSelectedEmployee(currentEmployee.id);
+    }
+  }, [isEmployee, currentEmployee, form.employee_id]);
+
+  // Fetch employees (only for managers)
   const { data: employees } = useQuery({
     queryKey: ["employees-active"],
     queryFn: async () => {
@@ -90,6 +118,7 @@ export default function LeaveManagement() {
       if (error) throw error;
       return data;
     },
+    enabled: isManager,
   });
 
   // Fetch leave types
@@ -122,17 +151,25 @@ export default function LeaveManagement() {
     enabled: !!selectedEmployee,
   });
 
-  // Fetch leave requests
+  // Fetch leave requests - filtered by role
   const { data: requests, isLoading } = useQuery({
-    queryKey: ["leave-requests"],
+    queryKey: ["leave-requests", isManager, currentEmployee?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("leave_requests")
         .select("*, employees(name, department), leave_types(name)")
         .order("created_at", { ascending: false });
+
+      // Employees only see their own requests
+      if (isEmployee && currentEmployee?.id) {
+        query = query.eq("employee_id", currentEmployee.id);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data as LeaveRequest[];
     },
+    enabled: isManager || !!currentEmployee?.id,
   });
 
   const pendingRequests = requests?.filter((r) => r.status === "pending") || [];
@@ -190,11 +227,15 @@ export default function LeaveManagement() {
       toast.success("Leave request submitted");
       setIsApplyOpen(false);
       setForm(defaultForm);
+      // Reset employee_id for employees
+      if (isEmployee && currentEmployee) {
+        setForm((prev) => ({ ...prev, employee_id: currentEmployee.id }));
+      }
     },
     onError: (error: any) => toast.error(error.message),
   });
 
-  // Approve/Reject mutation
+  // Approve/Reject mutation (only for managers)
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status, reason }: { id: string; status: string; reason?: string }) => {
       const request = requests?.find((r) => r.id === id);
@@ -202,7 +243,7 @@ export default function LeaveManagement() {
         .from("leave_requests")
         .update({
           status,
-          approved_by: "Manager",
+          approved_by: profile?.username || "Manager",
           approved_at: new Date().toISOString(),
           rejection_reason: reason || null,
         })
@@ -260,7 +301,11 @@ export default function LeaveManagement() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Leave Management</h1>
-          <p className="text-muted-foreground">Apply for leave, track balances, and manage approvals</p>
+          <p className="text-muted-foreground">
+            {isManager
+              ? "Apply for leave, track balances, and manage approvals"
+              : "Apply for leave and track your requests"}
+          </p>
         </div>
         <Dialog open={isApplyOpen} onOpenChange={setIsApplyOpen}>
           <DialogTrigger asChild>
@@ -273,27 +318,35 @@ export default function LeaveManagement() {
               <DialogTitle>Apply for Leave</DialogTitle>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              <div className="space-y-2">
-                <Label>Employee *</Label>
-                <Select
-                  value={form.employee_id}
-                  onValueChange={(v) => {
-                    setForm({ ...form, employee_id: v });
-                    setSelectedEmployee(v);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select employee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees?.map((emp) => (
-                      <SelectItem key={emp.id} value={emp.id}>
-                        {emp.name} - {emp.department}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Employee selector - only for managers */}
+              {isManager ? (
+                <div className="space-y-2">
+                  <Label>Employee *</Label>
+                  <Select
+                    value={form.employee_id}
+                    onValueChange={(v) => {
+                      setForm({ ...form, employee_id: v });
+                      setSelectedEmployee(v);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employees?.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.name} - {emp.department}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="p-3 rounded-lg bg-muted">
+                  <div className="text-sm text-muted-foreground">Applying as</div>
+                  <div className="font-medium">{currentEmployee?.name || user?.email}</div>
+                </div>
+              )}
 
               {selectedEmployee && balances && balances.length > 0 && (
                 <div className="grid grid-cols-3 gap-2">
@@ -373,16 +426,16 @@ export default function LeaveManagement() {
                 />
               </div>
 
-              <Button onClick={handleApply} className="w-full">
-                Submit Request
+              <Button onClick={handleApply} disabled={applyMutation.isPending} className="w-full">
+                {applyMutation.isPending ? "Submitting..." : "Submit Request"}
               </Button>
             </div>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      {/* Stats - different for employees vs managers */}
+      <div className={`grid gap-4 ${isManager ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -391,7 +444,9 @@ export default function LeaveManagement() {
               </div>
               <div>
                 <div className="text-2xl font-bold">{pendingRequests.length}</div>
-                <div className="text-sm text-muted-foreground">Pending Approval</div>
+                <div className="text-sm text-muted-foreground">
+                  {isManager ? "Pending Approval" : "My Pending"}
+                </div>
               </div>
             </div>
           </CardContent>
@@ -426,190 +481,252 @@ export default function LeaveManagement() {
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-500/10">
-                <Calendar className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold">
-                  {requests?.reduce((sum, r) => sum + (r.status === "approved" ? r.days_count : 0), 0) || 0}
-                </div>
-                <div className="text-sm text-muted-foreground">Days Approved</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Tabs defaultValue="pending">
-        <TabsList>
-          <TabsTrigger value="pending">Pending Approval ({pendingRequests.length})</TabsTrigger>
-          <TabsTrigger value="all">All Requests</TabsTrigger>
-          <TabsTrigger value="balances">Leave Balances</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="pending" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Pending Leave Requests</CardTitle>
-              <CardDescription>Review and approve/reject leave applications</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {pendingRequests.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">No pending requests</div>
-              ) : (
-                <div className="space-y-4">
-                  {pendingRequests.map((req) => (
-                    <div key={req.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex-1">
-                        <div className="font-medium">{req.employees?.name}</div>
-                        <div className="text-sm text-muted-foreground">{req.employees?.department}</div>
-                        <div className="flex items-center gap-4 mt-2 text-sm">
-                          <Badge variant="outline">{req.leave_types?.name}</Badge>
-                          <span>
-                            {format(parseISO(req.from_date), "MMM dd")} - {format(parseISO(req.to_date), "MMM dd, yyyy")}
-                          </span>
-                          <span className="font-medium">{req.days_count} days</span>
-                        </div>
-                        {req.reason && <p className="text-sm mt-2 text-muted-foreground">{req.reason}</p>}
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-red-600"
-                          onClick={() => updateStatusMutation.mutate({ id: req.id, status: "rejected" })}
-                        >
-                          <X className="h-4 w-4 mr-1" /> Reject
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => updateStatusMutation.mutate({ id: req.id, status: "approved" })}
-                        >
-                          <Check className="h-4 w-4 mr-1" /> Approve
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="all" className="mt-4">
+        {isManager && (
           <Card>
             <CardContent className="pt-6">
-              {isLoading ? (
-                <div className="text-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-500/10">
+                  <Calendar className="h-5 w-5 text-blue-600" />
                 </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Employee</TableHead>
-                      <TableHead>Leave Type</TableHead>
-                      <TableHead>Period</TableHead>
-                      <TableHead>Days</TableHead>
-                      <TableHead>Reason</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Approved By</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {allRequests.map((req) => (
-                      <TableRow key={req.id}>
-                        <TableCell className="font-medium">{req.employees?.name}</TableCell>
-                        <TableCell>{req.leave_types?.name}</TableCell>
-                        <TableCell>
-                          {format(parseISO(req.from_date), "MMM dd")} - {format(parseISO(req.to_date), "MMM dd")}
-                        </TableCell>
-                        <TableCell>{req.days_count}</TableCell>
-                        <TableCell className="max-w-[200px] truncate">{req.reason || "-"}</TableCell>
-                        <TableCell>
-                          <Badge className={statusColors[req.status]}>{req.status}</Badge>
-                        </TableCell>
-                        <TableCell>{req.approved_by || "-"}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="balances" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Employee Leave Balances</CardTitle>
-              <CardDescription>Select an employee to view their leave balance</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="max-w-sm mb-6">
-                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select employee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees?.map((emp) => (
-                      <SelectItem key={emp.id} value={emp.id}>
-                        {emp.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div>
+                  <div className="text-2xl font-bold">
+                    {requests?.reduce((sum, r) => sum + (r.status === "approved" ? r.days_count : 0), 0) || 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Days Approved</div>
+                </div>
               </div>
-
-              {selectedEmployee && balances && (
-                <div className="grid gap-4 md:grid-cols-3">
-                  {balances.map((bal) => (
-                    <Card key={bal.id}>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-base">{bal.leave_types.name}</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div>
-                            <span className="text-muted-foreground">Opening:</span>
-                            <span className="ml-2 font-medium">{bal.opening_balance}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Granted:</span>
-                            <span className="ml-2 font-medium">{bal.granted}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Used:</span>
-                            <span className="ml-2 font-medium">{bal.used}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Pending:</span>
-                            <span className="ml-2 font-medium">{bal.pending}</span>
-                          </div>
-                        </div>
-                        <div className="mt-4 p-3 rounded-lg bg-primary/10 text-center">
-                          <span className="text-2xl font-bold text-primary">{bal.available}</span>
-                          <div className="text-xs text-muted-foreground">Available</div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-
-              {selectedEmployee && (!balances || balances.length === 0) && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <AlertCircle className="h-8 w-8 mx-auto mb-2" />
-                  No leave balances found. Initialize balances for this employee.
-                </div>
-              )}
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
+
+      {/* Tabs - different for employees vs managers */}
+      {isManager ? (
+        <Tabs defaultValue="pending">
+          <TabsList>
+            <TabsTrigger value="pending">Pending Approval ({pendingRequests.length})</TabsTrigger>
+            <TabsTrigger value="all">All Requests</TabsTrigger>
+            <TabsTrigger value="balances">Leave Balances</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="pending" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Pending Leave Requests</CardTitle>
+                <CardDescription>Review and approve/reject leave applications</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {pendingRequests.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">No pending requests</div>
+                ) : (
+                  <div className="space-y-4">
+                    {pendingRequests.map((req) => (
+                      <div key={req.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex-1">
+                          <div className="font-medium">{req.employees?.name}</div>
+                          <div className="text-sm text-muted-foreground">{req.employees?.department}</div>
+                          <div className="flex items-center gap-4 mt-2 text-sm">
+                            <Badge variant="outline">{req.leave_types?.name}</Badge>
+                            <span>
+                              {format(parseISO(req.from_date), "MMM dd")} - {format(parseISO(req.to_date), "MMM dd, yyyy")}
+                            </span>
+                            <span className="font-medium">{req.days_count} days</span>
+                          </div>
+                          {req.reason && <p className="text-sm mt-2 text-muted-foreground">{req.reason}</p>}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-red-600"
+                            onClick={() => updateStatusMutation.mutate({ id: req.id, status: "rejected" })}
+                          >
+                            <X className="h-4 w-4 mr-1" /> Reject
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => updateStatusMutation.mutate({ id: req.id, status: "approved" })}
+                          >
+                            <Check className="h-4 w-4 mr-1" /> Approve
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="all" className="mt-4">
+            <Card>
+              <CardContent className="pt-6">
+                {isLoading ? (
+                  <div className="text-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Employee</TableHead>
+                        <TableHead>Leave Type</TableHead>
+                        <TableHead>Period</TableHead>
+                        <TableHead>Days</TableHead>
+                        <TableHead>Reason</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Approved By</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {allRequests.map((req) => (
+                        <TableRow key={req.id}>
+                          <TableCell className="font-medium">{req.employees?.name}</TableCell>
+                          <TableCell>{req.leave_types?.name}</TableCell>
+                          <TableCell>
+                            {format(parseISO(req.from_date), "MMM dd")} - {format(parseISO(req.to_date), "MMM dd")}
+                          </TableCell>
+                          <TableCell>{req.days_count}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{req.reason || "-"}</TableCell>
+                          <TableCell>
+                            <Badge className={statusColors[req.status]}>{req.status}</Badge>
+                          </TableCell>
+                          <TableCell>{req.approved_by || "-"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="balances" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Employee Leave Balances</CardTitle>
+                <CardDescription>Select an employee to view their leave balance</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="max-w-sm mb-6">
+                  <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employees?.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {selectedEmployee && balances && (
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {balances.map((bal) => (
+                      <Card key={bal.id}>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base">{bal.leave_types.name}</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Opening:</span>
+                              <span className="ml-2 font-medium">{bal.opening_balance}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Granted:</span>
+                              <span className="ml-2 font-medium">{bal.granted}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Used:</span>
+                              <span className="ml-2 font-medium">{bal.used}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Pending:</span>
+                              <span className="ml-2 font-medium">{bal.pending}</span>
+                            </div>
+                          </div>
+                          <div className="mt-4 p-3 rounded-lg bg-primary/10 text-center">
+                            <span className="text-2xl font-bold text-primary">{bal.available}</span>
+                            <div className="text-xs text-muted-foreground">Available</div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+
+                {selectedEmployee && (!balances || balances.length === 0) && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+                    No leave balances found. Initialize balances for this employee.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      ) : (
+        /* Employee View - Only My Requests */
+        <Tabs defaultValue="requests">
+          <TabsList>
+            <TabsTrigger value="requests">My Requests</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="requests" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>My Leave Requests</CardTitle>
+                <CardDescription>Track the status of your leave applications</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <div className="text-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                  </div>
+                ) : allRequests.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No leave requests found</p>
+                    <p className="text-sm">Click "Apply Leave" to submit a new request</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {allRequests.map((req) => (
+                      <div key={req.id} className="p-4 border rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <Badge variant="outline">{req.leave_types?.name}</Badge>
+                          <Badge className={statusColors[req.status]}>{req.status}</Badge>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm">
+                          <span>
+                            {format(parseISO(req.from_date), "MMM dd, yyyy")} - {format(parseISO(req.to_date), "MMM dd, yyyy")}
+                          </span>
+                          <span className="font-medium">{req.days_count} day(s)</span>
+                        </div>
+                        {req.reason && (
+                          <p className="text-sm text-muted-foreground mt-2">{req.reason}</p>
+                        )}
+                        {req.status !== "pending" && req.approved_by && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            {req.status === "approved" ? "Approved" : "Rejected"} by {req.approved_by}
+                          </p>
+                        )}
+                        {req.rejection_reason && (
+                          <p className="text-sm text-red-600 mt-1">Reason: {req.rejection_reason}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      )}
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Calendar, TrendingUp, TrendingDown } from "lucide-react";
+import { Loader2, Calendar, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
+import { useAttendanceRole } from "@/hooks/useAttendanceRole";
+import { useState } from "react";
 
 interface LeaveBalance {
   id: string;
@@ -20,33 +22,60 @@ interface LeaveBalance {
 }
 
 export default function LeaveBalances() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
+  const { isManager, isEmployee } = useAttendanceRole();
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
 
-  // Fetch leave balances for current user's employee record
-  const { data: balances, isLoading } = useQuery({
-    queryKey: ["my-leave-balances", user?.id],
+  // Get current user's employee record (for employees)
+  const { data: currentEmployee } = useQuery({
+    queryKey: ["current-employee", user?.email],
     queryFn: async () => {
-      if (!user?.id) return [];
-      
-      // First find employee by email
-      const { data: employee } = await supabase
+      if (!user?.email) return null;
+      const { data, error } = await supabase
         .from("employees")
-        .select("id")
+        .select("id, name")
         .eq("email", user.email)
         .maybeSingle();
-      
-      if (!employee) return [];
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.email && isEmployee,
+  });
+
+  // Fetch all employees (for managers)
+  const { data: employees } = useQuery({
+    queryKey: ["employees-active"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("employees")
+        .select("id, name, department")
+        .eq("status", "active")
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: isManager,
+  });
+
+  // Determine which employee ID to use for fetching balances
+  const effectiveEmployeeId = isEmployee ? currentEmployee?.id : selectedEmployeeId;
+
+  // Fetch leave balances
+  const { data: balances, isLoading } = useQuery({
+    queryKey: ["leave-balances", effectiveEmployeeId],
+    queryFn: async () => {
+      if (!effectiveEmployeeId) return [];
       
       const { data, error } = await supabase
         .from("leave_balances")
         .select("*, leave_types(name, code)")
-        .eq("employee_id", employee.id)
+        .eq("employee_id", effectiveEmployeeId)
         .eq("year", new Date().getFullYear());
       
       if (error) throw error;
       return (data || []) as unknown as LeaveBalance[];
     },
-    enabled: !!user?.id,
+    enabled: !!effectiveEmployeeId,
   });
 
   const getBalancePercentage = (balance: LeaveBalance) => {
@@ -60,14 +89,54 @@ export default function LeaveBalances() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-semibold">My Leave Balances</h1>
-        <p className="text-muted-foreground">View your leave balances for the current year</p>
+        <h1 className="text-2xl font-semibold">
+          {isManager ? "Employee Leave Balances" : "My Leave Balances"}
+        </h1>
+        <p className="text-muted-foreground">
+          {isManager
+            ? "View leave balances for all employees"
+            : "View your leave balances for the current year"}
+        </p>
       </div>
+
+      {/* Manager: Employee Selector */}
+      {isManager && (
+        <div className="max-w-sm">
+          <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select an employee" />
+            </SelectTrigger>
+            <SelectContent>
+              {employees?.map((emp) => (
+                <SelectItem key={emp.id} value={emp.id}>
+                  {emp.name} - {emp.department}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
+      ) : !effectiveEmployeeId ? (
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center text-muted-foreground">
+              <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg font-medium">
+                {isManager ? "Select an employee to view balances" : "No employee record found"}
+              </p>
+              <p className="text-sm">
+                {isManager
+                  ? "Choose an employee from the dropdown above"
+                  : "Your account is not linked to an employee record."}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       ) : balances && balances.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {balances.map((balance) => {
@@ -98,11 +167,11 @@ export default function LeaveBalances() {
                       <p className="font-medium">{total}</p>
                       <p className="text-xs text-muted-foreground">Total</p>
                     </div>
-                    <div className="text-center p-2 rounded-lg bg-green-50">
+                    <div className="text-center p-2 rounded-lg bg-green-50 dark:bg-green-950">
                       <p className="font-medium text-green-600">{balance.used}</p>
                       <p className="text-xs text-muted-foreground">Used</p>
                     </div>
-                    <div className="text-center p-2 rounded-lg bg-amber-50">
+                    <div className="text-center p-2 rounded-lg bg-amber-50 dark:bg-amber-950">
                       <p className="font-medium text-amber-600">{balance.pending}</p>
                       <p className="text-xs text-muted-foreground">Pending</p>
                     </div>
@@ -118,7 +187,7 @@ export default function LeaveBalances() {
             <div className="text-center text-muted-foreground">
               <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="text-lg font-medium">No leave balances found</p>
-              <p className="text-sm">Leave balances haven't been initialized for your account yet.</p>
+              <p className="text-sm">Leave balances haven't been initialized for this account yet.</p>
             </div>
           </CardContent>
         </Card>
