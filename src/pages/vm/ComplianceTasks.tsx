@@ -199,6 +199,8 @@ export default function ComplianceTasks() {
   const [matchPercentage, setMatchPercentage] = useState<number>(0);
   const [matchReasoning, setMatchReasoning] = useState<string>("");
   const [analyzingMatch, setAnalyzingMatch] = useState(false);
+  const [analysisComplete, setAnalysisComplete] = useState(false);
+  const [pendingPhotoUrl, setPendingPhotoUrl] = useState<string | null>(null);
   
   const { toast } = useToast();
   const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
@@ -298,6 +300,8 @@ export default function ComplianceTasks() {
     setReviewStatus(task.review_status || "");
     setMatchPercentage(task.match_percentage || 0);
     setMatchReasoning(""); // Reset reasoning - it's only available during live analysis
+    setAnalysisComplete(!!task.review_status); // Already analyzed if has review_status
+    setPendingPhotoUrl(null);
     setLocation(task.submitted_latitude && task.submitted_longitude ? {
       lat: task.submitted_latitude,
       lng: task.submitted_longitude,
@@ -339,6 +343,8 @@ export default function ComplianceTasks() {
     setSubmissionNotes(task.submission_notes || "");
     setReviewStatus(task.review_status || "");
     setMatchPercentage(task.match_percentage || 0);
+    setAnalysisComplete(!!task.review_status);
+    setPendingPhotoUrl(null);
     setLocation(null);
     setViewTaskOpen(true);
     
@@ -372,10 +378,79 @@ export default function ComplianceTasks() {
     }
   };
 
-  const handleCameraCapture = (imageData: string, file: File) => {
+  const handleCameraCapture = async (imageData: string, file: File) => {
     setCapturedImage(imageData);
     setCapturedFile(file);
+    setAnalysisComplete(false);
+    setPendingPhotoUrl(null);
+    setReviewStatus("");
+    setMatchPercentage(0);
+    setMatchReasoning("");
     getLocation();
+
+    // Upload image to storage first (but don't save to task yet)
+    if (!selectedViewTask) return;
+    
+    setUploading(true);
+    const fileExt = file.name.split(".").pop();
+    const fileName = `submissions/${selectedViewTask.id}/${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("vm-images")
+      .upload(fileName, file);
+
+    if (uploadError) {
+      toast({ title: "Error", description: "Failed to upload photo", variant: "destructive" });
+      setUploading(false);
+      return;
+    }
+
+    const { data: urlData } = supabase.storage.from("vm-images").getPublicUrl(fileName);
+    const uploadedPhotoUrl = urlData.publicUrl;
+    setPendingPhotoUrl(uploadedPhotoUrl);
+    setUploading(false);
+
+    // Run analysis if planogram exists
+    if (selectedViewTask.planogram?.image_url) {
+      setAnalyzingMatch(true);
+      try {
+        const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze-vm-compliance', {
+          body: {
+            planogramImageUrl: selectedViewTask.planogram.image_url,
+            submittedImageUrl: uploadedPhotoUrl
+          }
+        });
+
+        if (analysisError) {
+          console.error("Analysis error:", analysisError);
+          toast({ title: "Warning", description: "Photo uploaded but match analysis failed. You can still save.", variant: "destructive" });
+          setAnalysisComplete(true); // Allow saving even if analysis fails
+        } else if (analysisData) {
+          // Check if it's a placeholder image error
+          if (analysisData.error === "placeholder_image") {
+            toast({ 
+              title: "Analysis Skipped", 
+              description: "Planogram is a placeholder image. Photo uploaded but no auto-analysis available.",
+              variant: "default" 
+            });
+            setAnalysisComplete(true); // Allow saving without analysis
+          } else {
+            setMatchPercentage(analysisData.matchPercentage);
+            setReviewStatus(analysisData.reviewStatus);
+            setMatchReasoning(analysisData.reasoning);
+            setAnalysisComplete(true);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to analyze compliance:", err);
+        toast({ title: "Warning", description: "Analysis failed. You can still save the photo.", variant: "destructive" });
+        setAnalysisComplete(true);
+      }
+      setAnalyzingMatch(false);
+    } else {
+      // No planogram - allow saving without analysis
+      setAnalysisComplete(true);
+    }
   };
 
   const handlePhotoSave = async () => {
@@ -387,78 +462,28 @@ export default function ComplianceTasks() {
       return;
     }
 
-    if (!capturedFile) {
+    if (!pendingPhotoUrl) {
       toast({ title: "Error", description: "Please capture a photo first", variant: "destructive" });
       return;
     }
 
-    setUploading(true);
-
-    // Upload image to storage
-    const fileExt = capturedFile.name.split(".").pop();
-    const fileName = `submissions/${selectedViewTask.id}/${Date.now()}.${fileExt}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("vm-images")
-      .upload(fileName, capturedFile);
-
-    if (uploadError) {
-      toast({ title: "Error", description: "Failed to upload photo", variant: "destructive" });
-      setUploading(false);
+    if (!analysisComplete && selectedViewTask.planogram?.image_url) {
+      toast({ title: "Please wait", description: "Analysis is still in progress", variant: "destructive" });
       return;
     }
 
-    const { data: urlData } = supabase.storage.from("vm-images").getPublicUrl(fileName);
-    const submittedPhotoUrl = urlData.publicUrl;
+    setUploading(true);
 
     // Determine compliance status based on submission time vs due date
     const now = new Date();
     const dueDate = new Date(selectedViewTask.due_date);
     const complianceStatus = now <= dueDate ? "completed_on_time" : "completed_but_delayed";
 
-    // Auto-analyze image match if planogram exists
-    let analysisResult: { matchPercentage: number; reviewStatus: string; reasoning: string } | null = null;
-    
-    if (selectedViewTask.planogram?.image_url) {
-      setAnalyzingMatch(true);
-      try {
-        const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze-vm-compliance', {
-          body: {
-            planogramImageUrl: selectedViewTask.planogram.image_url,
-            submittedImageUrl: submittedPhotoUrl
-          }
-        });
-
-        if (analysisError) {
-          console.error("Analysis error:", analysisError);
-          toast({ title: "Warning", description: "Photo saved but match analysis failed", variant: "destructive" });
-        } else if (analysisData) {
-          // Check if it's a placeholder image error
-          if (analysisData.error === "placeholder_image") {
-            toast({ 
-              title: "Analysis Skipped", 
-              description: "Planogram is a placeholder image. Upload a real planogram for auto-analysis.",
-              variant: "default" 
-            });
-            // Don't set analysis result - leave for manual review
-          } else {
-            analysisResult = analysisData;
-            setMatchPercentage(analysisData.matchPercentage);
-            setReviewStatus(analysisData.reviewStatus);
-            setMatchReasoning(analysisData.reasoning);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to analyze compliance:", err);
-      }
-      setAnalyzingMatch(false);
-    }
-
-    // Update task with submission data and analysis results
+    // Update task with submission data and analysis results in a single transaction
     const { error: updateError } = await supabase
       .from("vm_compliance_tasks")
       .update({
-        submitted_photo_url: submittedPhotoUrl,
+        submitted_photo_url: pendingPhotoUrl,
         submitted_at: now.toISOString(),
         submitted_latitude: location?.lat || null,
         submitted_longitude: location?.lng || null,
@@ -466,28 +491,30 @@ export default function ComplianceTasks() {
         submission_notes: submissionNotes || null,
         status: "submitted",
         compliance_status: complianceStatus,
-        review_status: analysisResult?.reviewStatus || null,
-        match_percentage: analysisResult?.matchPercentage || null,
+        review_status: reviewStatus || null,
+        match_percentage: matchPercentage || null,
       })
       .eq("id", selectedViewTask.id);
 
     if (updateError) {
-      toast({ title: "Error", description: "Failed to save photo", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to save submission", variant: "destructive" });
       setUploading(false);
       return;
     }
 
-    const statusLabel = analysisResult 
-      ? `Match: ${analysisResult.matchPercentage}% (${reviewStatusOptions.find(r => r.value === analysisResult?.reviewStatus)?.label})`
+    const statusLabel = reviewStatus 
+      ? `Match: ${matchPercentage}% (${reviewStatusOptions.find(r => r.value === reviewStatus)?.label})`
       : complianceStatusLabels[complianceStatus];
     
     toast({ 
-      title: "Photo Saved & Analyzed", 
+      title: "Review Saved", 
       description: statusLabel
     });
     setViewTaskOpen(false);
     setCapturedFile(null);
     setCapturedImage(null);
+    setPendingPhotoUrl(null);
+    setAnalysisComplete(false);
     fetchData();
     setUploading(false);
   };
@@ -1024,25 +1051,12 @@ export default function ComplianceTasks() {
                     />
                   </div>
 
-                  {/* Save Photo Button */}
-                  {(capturedFile || !selectedViewTask.submitted_photo_url) && (
-                    <Button 
-                      onClick={handlePhotoSave} 
-                      disabled={!capturedFile || uploading}
-                      className="w-full"
-                    >
-                      {uploading ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="h-4 w-4 mr-2" />
-                          Save Photo
-                        </>
-                      )}
-                    </Button>
+                  {/* Upload indicator during analysis */}
+                  {uploading && !analyzingMatch && (
+                    <div className="flex items-center justify-center gap-2 p-3 bg-muted rounded-lg text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Uploading photo...
+                    </div>
                   )}
                 </div>
 
@@ -1138,12 +1152,43 @@ export default function ComplianceTasks() {
                             </div>
                           )}
                         </div>
+                      ) : analyzingMatch ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Analyzing image match...
+                        </div>
                       ) : (
                         <p className="text-sm text-muted-foreground">
-                          Match analysis will be automatically calculated when you save the photo.
+                          Capture a photo to run automatic comparison.
                         </p>
                       )}
                     </div>
+                    
+                    {/* Save Review Button - Only enabled after analysis completes */}
+                    {capturedFile && (
+                      <Button 
+                        onClick={handlePhotoSave} 
+                        disabled={!analysisComplete || uploading || analyzingMatch}
+                        className="w-full"
+                      >
+                        {uploading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Saving Review...
+                          </>
+                        ) : analyzingMatch ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Analyzing...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Save Review
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </div>
                 )}
 
