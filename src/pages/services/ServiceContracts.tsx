@@ -41,6 +41,7 @@ export default function ServiceContracts() {
   const [contracts, setContracts] = useState<ContractWithCounts[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [editingContractId, setEditingContractId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -50,6 +51,7 @@ export default function ServiceContracts() {
   const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
   const canCreate = hasPermission("services.contracts", "create");
+  const canEdit = hasPermission("services.contracts", "edit");
 
   useEffect(() => {
     if (!accessLoading) {
@@ -253,11 +255,17 @@ export default function ServiceContracts() {
                 toast({ title: "Error", description: "Failed to open contract details", variant: "destructive" });
               }
             };
+            const handleEditContract = () => {
+              setEditingContractId(contract.id);
+              setOpen(true);
+            };
             return (
               <ContractSummaryCard
                 key={contract.id}
                 contract={contract}
                 onClick={handleOpenContract}
+                onEdit={handleEditContract}
+                canEdit={canEdit}
               />
             );
           })}
@@ -266,8 +274,12 @@ export default function ServiceContracts() {
 
       <ContractFormDialog
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={(isOpen) => {
+          setOpen(isOpen);
+          if (!isOpen) setEditingContractId(null);
+        }}
         onSuccess={fetchContracts}
+        contractId={editingContractId ?? undefined}
       />
     </div>
   );
