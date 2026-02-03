@@ -43,15 +43,15 @@ export default function Holidays() {
     queryFn: async () => {
       const startDate = `${selectedYear}-01-01`;
       const endDate = `${selectedYear}-12-31`;
-      const { data, error } = await supabase
-        .from("holidays")
+      const { data, error } = await (supabase
+        .from("holidays" as any)
         .select("*")
         .gte("date", startDate)
         .lte("date", endDate)
-        .order("date", { ascending: true });
+        .order("date", { ascending: true }) as any);
 
       if (error) throw error;
-      return data as Holiday[];
+      return (data || []) as Holiday[];
     },
   });
 
@@ -59,15 +59,15 @@ export default function Holidays() {
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData & { id?: string }) => {
       if (data.id) {
-        const { error } = await supabase
-          .from("holidays")
+        const { error } = await (supabase
+          .from("holidays" as any)
           .update({ name: data.name, date: data.date, type: data.type, is_optional: data.is_optional })
-          .eq("id", data.id);
+          .eq("id", data.id) as any);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from("holidays")
-          .insert({ name: data.name, date: data.date, type: data.type, is_optional: data.is_optional });
+        const { error } = await (supabase
+          .from("holidays" as any)
+          .insert({ name: data.name, date: data.date, type: data.type, is_optional: data.is_optional }) as any);
         if (error) throw error;
       }
     },
@@ -84,7 +84,7 @@ export default function Holidays() {
   // Delete holiday mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("holidays").delete().eq("id", id);
+      const { error } = await (supabase.from("holidays" as any).delete().eq("id", id) as any);
       if (error) throw error;
     },
     onSuccess: () => {
