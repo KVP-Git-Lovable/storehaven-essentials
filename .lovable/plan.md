@@ -1,127 +1,116 @@
 
-# Service Contract Details View Implementation
+## Goal
+1) Remove “Baseline Photo” from Mark Attendance modal and ensure baseline/reference photo is never shown in the UI (still used internally for face verification).
+2) Ensure every Check In / Check Out instantly appears in **Live Attendance → Attendance Records** with the columns: user, date, in/out time, photo, location, verification status.
+3) Fix the “Coming soon – Contract details view will be available soon” toast when clicking a Service Contract card, so it opens the Service Contract Details page.
 
-## Problem Statement
-Currently, clicking on a service contract card shows a "Coming soon" toast message instead of navigating to a detailed view of the contract. Users cannot view, edit, or manage individual service contracts.
+---
 
-## Solution Overview
-Create a comprehensive Service Contract Details page that displays all contract information organized into logical sections, following the established pattern used in AssetDetails.tsx.
+## What I’m seeing (from your screenshot) and likely cause
+Your screenshot shows a **toast** saying:
+- Title: “Coming soon”
+- Description: “Contract details view will be available soon”
 
-## Implementation Steps
+That message does **not** exist in the current Service Contracts code we inspected. This strongly indicates one of these is happening:
+1) You are testing the **Published** site which still has the older build (not updated with the new details page navigation), or
+2) The browser is serving an older cached bundle.
 
-### 1. Create Service Contract Details Page
-**File:** `src/pages/services/ServiceContractDetails.tsx`
+So the “fix” is a combination of:
+- making the navigation more robust (code-side), and
+- ensuring the environment you are testing is actually running the updated build (process-side).
 
-This new page will display the full contract information organized into sections:
+---
 
-**Header Section:**
-- Contract number and status badge
-- Service provider name
-- Contract type badge (AMC/Warranty/SLA/Hybrid)
-- Edit and Delete action buttons
+## Implementation plan
 
-**Card Sections:**
-1. **Contract Overview**
-   - Effective date, start date, end date
-   - Auto-renewal status
-   - Contract value and pricing model
-   - Invoice frequency and payment terms
+### A) Service Contracts: ensure click always navigates (and never shows “Coming soon”)
+1) **Centralize click handler** in `src/pages/services/ServiceContracts.tsx`:
+   - Create `handleOpenContract(contractId)` and call `navigate(/services/contracts/:id)` inside `try/catch`.
+   - If something fails, show a clear error toast (“Failed to open contract”) instead of “Coming soon”.
+   - Add a small `console.log` marker (temporary) so we can confirm the correct bundle is running when you click.
 
-2. **Scope & Coverage**
-   - Service types included
-   - Labour coverage (included/rate/hours)
-   - Travel coverage (included/radius/rate)
-   - Spares coverage (percentage/max value/exclusions)
-   - Consumables coverage
+2) **Optional but recommended safety net**:
+   - Add a global `window.unhandledrejection` listener in `src/App.tsx` that shows a friendly toast if any async error slips through. This prevents “white screen” situations and gives us actionable logs. (This does not change your backend logic.)
 
-3. **SLA Matrix**
-   - P1-P4 response and resolution times
-   - Support hours
-   - SLA penalties if applicable
+3) **User-side validation step (very important)**:
+   - Verify whether you are testing **Preview URL** or **Published URL**.
+   - If you are on the **Published URL**, you must publish the latest changes for the details page click to work there.
+   - If on Preview and still seeing old behavior: do a hard refresh (Ctrl+Shift+R) and/or open in an incognito window.
 
-4. **PM Schedule**
-   - PM frequency
-   - Checklist items
-   - Task type
-   - Auto-create setting
+Expected result: Clicking a contract card opens `/services/contracts/:id` and loads the new details page.
 
-5. **Penalty Clauses** (if applicable)
-   - Penalty type and rate
-   - Grace period
-   - Calculation basis
+---
 
-6. **Escalation Contacts**
-   - L1, L2, L3 contact details
+### B) Attendance: keep baseline hidden everywhere, but still used internally
+You already have baseline usage internally (for face verification), and we will ensure:
+1) **No baseline/reference photo is rendered** in:
+   - Mark Attendance modal
+   - Any verification UI
+   - Attendance Records list
 
-7. **Linked Assets** (table)
-   - Asset name, number, store, condition
+2) Ensure only “Captured Photo” preview shows in the modal.
 
-8. **Covered Locations** (table)
-   - Store name and address
+Expected result: baseline photo is never displayed to users, but face verification continues to use it behind the scenes.
 
-9. **Attachments**
-   - List of uploaded contract documents with download links
+---
 
-10. **Notes & Exclusions**
+### C) Attendance Records “sync instantly” (UI-only)
+Right now, the table is query-driven and refreshed via React Query invalidation. We will make it feel instantaneous and match your exact display requirements:
 
-### 2. Add Route Configuration
-**File:** `src/App.tsx`
+1) **Instant update after Check In / Check Out**
+   - On success, do both:
+     - `queryClient.invalidateQueries(...)` (server truth)
+     - AND an **optimistic update** via `queryClient.setQueryData(...)` so the record appears immediately without waiting for refetch latency.
+   - This is UI-only; it does not change how records are stored or verified.
 
-Add a new route for the contract details page:
-```
-/services/contracts/:id -> ServiceContractDetails
-```
+2) **Table columns and data mapping**
+   Update “Live Attendance → Attendance Records” to show exactly:
+   - **User**
+   - **Date**
+   - **Check In time**
+   - **Check Out time**
+   - **Photo** (to meet the requirement cleanly, we will show both):
+     - Check-in photo thumbnail
+     - Check-out photo thumbnail (if present)
+   - **Location**
+     - Show check-in location text if available; show check-out location text if check-out selected and present; otherwise “-”
+     - Keep it readable (truncate + hover tooltip if long)
+   - **Verification status**
+     - Continue using `FaceVerificationBadge` with status + score
 
-### 3. Update Service Contracts List
-**File:** `src/pages/services/ServiceContracts.tsx`
+3) **No verification logic changes**
+   - We will not modify the `verifyFace` invocation, thresholds, or “block” behavior.
+   - Only UI presentation and React Query cache updates.
 
-Update the onClick handler in ContractSummaryCard to navigate to the details page:
-```typescript
-onClick={() => navigate(`/services/contracts/${contract.id}`)}
-```
+Expected result: as soon as you check in/out, the row updates in the records table immediately and shows the required fields.
 
-### 4. Update Contract Summary Card
-**File:** `src/components/services/ContractSummaryCard.tsx`
+---
 
-Ensure the card properly supports click-through navigation.
+## Files that will be changed
+1) `src/pages/services/ServiceContracts.tsx`
+   - Add robust click handler + remove any possibility of a “Coming soon” fallback
+2) `src/App.tsx`
+   - (Optional) add global unhandled rejection toast safety net
+3) `src/pages/staff/Attendance.tsx`
+   - Optimistic UI update on check-in/out
+   - Ensure records table includes both in/out photos + locations
+   - Ensure baseline photo is never rendered in the UI
 
-## Technical Details
+No backend logic changes, no verification logic changes, no database changes.
 
-### Data Fetching Strategy
-Fetch all related data in parallel for performance:
-- Contract details from `service_contracts`
-- Linked assets from `service_contract_assets` with asset details
-- Covered locations from `service_contract_locations` with store details
-- Attachments from `service_contract_attachments`
-- Maintenance tasks linked to this contract
+---
 
-### UI Components Used
-- Card, CardHeader, CardContent for sections
-- Badge for status and type indicators
-- Table for assets and locations lists
-- Separator for visual organization
-- Collapsible sections for lengthy content (SLA, PM, etc.)
-- Button for edit/delete actions
+## Testing checklist (what you should verify)
+1) Service Contracts
+   - Click a contract card → it opens the details page (no “Coming soon” toast)
+   - Refresh the details page directly via URL → it loads
+2) Attendance
+   - Open Mark Attendance modal → baseline photo never appears
+   - Check In → record appears instantly in Attendance Records with photo/location/verification
+   - Check Out → check-out time/photo/location appear instantly on the same record
+3) Verify on both Desktop and Mobile layout (table responsiveness)
 
-### Navigation
-- Back button returns to `/services/contracts`
-- Edit button opens the ContractFormDialog in edit mode (future enhancement)
-- Asset rows link to `/assets/inventory/:id`
-- Location rows link to `/stores/:id`
+---
 
-## Files to be Created/Modified
-
-| File | Action | Description |
-|------|--------|-------------|
-| `src/pages/services/ServiceContractDetails.tsx` | Create | New contract details page component |
-| `src/App.tsx` | Modify | Add route for contract details |
-| `src/pages/services/ServiceContracts.tsx` | Modify | Update onClick to navigate |
-
-## User Experience
-After implementation:
-1. User clicks on a contract card
-2. User is navigated to `/services/contracts/{contract-id}`
-3. User sees full contract details organized in cards
-4. User can view linked assets and locations
-5. User can download attachments
-6. User can navigate back to the contracts list
+## If you’re seeing the issue only on the Published site
+After I implement the fixes, you’ll need to publish to push them to the live URL. Otherwise, the published site will keep showing the old “Coming soon” behavior even though preview is fixed.
