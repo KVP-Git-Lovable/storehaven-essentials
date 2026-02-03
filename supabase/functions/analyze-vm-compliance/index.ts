@@ -25,6 +25,24 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
+    // Check if planogram URL is a placeholder - these cannot be analyzed
+    const isPlaceholder = planogramImageUrl.includes("placehold.co") || 
+                          planogramImageUrl.includes("placeholder") ||
+                          planogramImageUrl.includes("via.placeholder");
+    
+    if (isPlaceholder) {
+      console.log("Planogram is a placeholder image - cannot analyze");
+      return new Response(
+        JSON.stringify({
+          matchPercentage: null,
+          reviewStatus: "pending",
+          reasoning: "Cannot analyze: Planogram image is a placeholder. Please upload a real planogram reference image.",
+          error: "placeholder_image"
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     console.log("Analyzing VM compliance images...");
     console.log("Planogram URL:", planogramImageUrl);
     console.log("Submitted URL:", submittedImageUrl);

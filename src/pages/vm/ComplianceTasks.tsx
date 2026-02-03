@@ -433,10 +433,20 @@ export default function ComplianceTasks() {
           console.error("Analysis error:", analysisError);
           toast({ title: "Warning", description: "Photo saved but match analysis failed", variant: "destructive" });
         } else if (analysisData) {
-          analysisResult = analysisData;
-          setMatchPercentage(analysisData.matchPercentage);
-          setReviewStatus(analysisData.reviewStatus);
-          setMatchReasoning(analysisData.reasoning);
+          // Check if it's a placeholder image error
+          if (analysisData.error === "placeholder_image") {
+            toast({ 
+              title: "Analysis Skipped", 
+              description: "Planogram is a placeholder image. Upload a real planogram for auto-analysis.",
+              variant: "default" 
+            });
+            // Don't set analysis result - leave for manual review
+          } else {
+            analysisResult = analysisData;
+            setMatchPercentage(analysisData.matchPercentage);
+            setReviewStatus(analysisData.reviewStatus);
+            setMatchReasoning(analysisData.reasoning);
+          }
         }
       } catch (err) {
         console.error("Failed to analyze compliance:", err);
