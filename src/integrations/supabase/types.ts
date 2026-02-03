@@ -2107,6 +2107,7 @@ export type Database = {
           status: string | null
           to_date: string
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           approved_at?: string | null
@@ -2123,6 +2124,7 @@ export type Database = {
           status?: string | null
           to_date: string
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           approved_at?: string | null
@@ -2139,6 +2141,7 @@ export type Database = {
           status?: string | null
           to_date?: string
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: [
           {
