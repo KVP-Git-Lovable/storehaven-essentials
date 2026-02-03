@@ -134,18 +134,22 @@ export default function Attendance() {
     setVerificationResult(null);
   };
 
+  // Check if employee has baseline photo
+  const hasBaselinePhoto = (employeeId: string) => {
+    const employee = employees?.find(e => e.id === employeeId);
+    return !!employee?.face_baseline_url;
+  };
+
   // Verify face against employee profile photo
   const verifyFace = async (attendancePhotoUrl: string, employeeId: string, recordId?: string) => {
     const employee = employees?.find(e => e.id === employeeId);
-    if (!employee?.face_baseline_url) {
-      return { status: "matched", score: 100, reason: "No baseline photo - auto approved" };
-    }
-
+    
+    // Call the edge function - it will handle validation
     setVerifyingFace(true);
     try {
       const { data, error } = await supabase.functions.invoke("verify-face", {
         body: {
-          profilePhotoUrl: employee.face_baseline_url,
+          profilePhotoUrl: employee?.face_baseline_url || null,
           attendancePhotoUrl,
           attendanceRecordId: recordId,
         },
@@ -155,7 +159,7 @@ export default function Attendance() {
       return data;
     } catch (error: any) {
       console.error("Face verification error:", error);
-      return { status: "mismatch", score: 0, reason: error.message };
+      return { status: "blocked", score: 0, reason: error.message, error: "verification_failed" };
     } finally {
       setVerifyingFace(false);
     }
@@ -186,6 +190,11 @@ export default function Attendance() {
       const verifyResult = await verifyFace(urlData.publicUrl, selectedEmployee);
       setVerificationResult(verifyResult);
       setVerifyingFace(false);
+
+      // Block check-in if face verification failed
+      if (verifyResult.error || verifyResult.status === "blocked") {
+        throw new Error(verifyResult.reason || "Face verification failed");
+      }
 
       // Check for existing record
       const { data: existing } = await supabase
@@ -324,6 +333,18 @@ export default function Attendance() {
                   </Select>
                 </div>
 
+                {/* Baseline photo warning or display */}
+                {selectedEmployee && !selectedEmployeeData?.face_baseline_url && (
+                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                    <p className="text-sm text-amber-800 font-medium">
+                      ⚠️ Baseline profile photo missing
+                    </p>
+                    <p className="text-xs text-amber-700 mt-1">
+                      This employee must upload a profile photo before attendance can be marked.
+                    </p>
+                  </div>
+                )}
+
                 {selectedEmployeeData?.face_baseline_url && (
                   <div className="flex gap-4">
                     <div className="flex-1">
@@ -399,18 +420,28 @@ export default function Attendance() {
                 )}
 
                 {verificationResult && !verifyingFace && (
-                  <div className={`p-3 rounded-lg border flex items-center justify-between ${
+                  <div className={`p-3 rounded-lg border ${
                     verificationResult.status === "matched" 
                       ? "bg-green-50 border-green-200" 
+                      : verificationResult.status === "blocked"
+                      ? "bg-amber-50 border-amber-200"
                       : "bg-red-50 border-red-200"
                   }`}>
                     <div className="flex items-center gap-2">
-                      <FaceVerificationBadge 
-                        status={verificationResult.status as "matched" | "mismatch"}
-                        score={verificationResult.score}
-                      />
-                      {verificationResult.reason && (
-                        <span className="text-xs text-muted-foreground">{verificationResult.reason}</span>
+                      {verificationResult.status === "blocked" ? (
+                        <span className="text-sm text-amber-800 font-medium">
+                          ⚠️ {verificationResult.reason}
+                        </span>
+                      ) : (
+                        <>
+                          <FaceVerificationBadge 
+                            status={verificationResult.status as "matched" | "mismatch"}
+                            score={verificationResult.score}
+                          />
+                          {verificationResult.reason && (
+                            <span className="text-xs text-muted-foreground">{verificationResult.reason}</span>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -419,13 +450,21 @@ export default function Attendance() {
                 <Button
                   className="w-full"
                   onClick={() => markAttendanceMutation.mutate()}
-                  disabled={!selectedEmployee || !capturedFile || uploading || verifyingFace}
+                  disabled={
+                    !selectedEmployee || 
+                    !capturedFile || 
+                    uploading || 
+                    verifyingFace ||
+                    !hasBaselinePhoto(selectedEmployee)
+                  }
                 >
                   {uploading || verifyingFace ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       {verifyingFace ? "Verifying Face..." : "Processing..."}
                     </>
+                  ) : !hasBaselinePhoto(selectedEmployee) && selectedEmployee ? (
+                    <>Baseline Photo Required</>
                   ) : (
                     <>
                       <UserCheck className="h-4 w-4 mr-2" />

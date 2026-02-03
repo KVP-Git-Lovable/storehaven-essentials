@@ -13,10 +13,28 @@ serve(async (req) => {
   try {
     const { profilePhotoUrl, attendancePhotoUrl, attendanceRecordId } = await req.json();
     
-    if (!profilePhotoUrl || !attendancePhotoUrl) {
+    // Validate that both photos are provided
+    if (!profilePhotoUrl) {
       return new Response(
-        JSON.stringify({ error: "Both profile photo and attendance photo URLs are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ 
+          error: "baseline_missing",
+          status: "blocked",
+          score: 0,
+          reason: "Baseline profile photo missing – verification required"
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    if (!attendancePhotoUrl) {
+      return new Response(
+        JSON.stringify({ 
+          error: "photo_missing",
+          status: "blocked",
+          score: 0,
+          reason: "Attendance photo is required"
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -37,30 +55,34 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `You are a facial verification assistant. Compare the two face images and determine if they are the same person.
-            
-Analyze:
-1. Facial structure and features
-2. Eye shape and positioning
-3. Nose and mouth characteristics
-4. Overall face shape
+            content: `You are a facial verification assistant. Your job is to:
+1. First, detect if there is a clear human face in EACH image
+2. If both images contain clear faces, compare them to determine if they are the same person
+
+IMPORTANT RULES:
+- If the first image (profile photo) does NOT contain a clear human face, respond with face_detection_failed for "profile"
+- If the second image (attendance photo) does NOT contain a clear human face, respond with face_detection_failed for "attendance"
+- A "clear face" means: visible eyes, nose, and mouth; not blurry; not too dark; not obscured by objects
+- Only calculate match confidence if BOTH images contain valid faces
 
 Respond with ONLY a JSON object (no markdown, no code blocks):
 {
-  "match": true/false,
-  "confidence": 0-100,
+  "profile_face_detected": true/false,
+  "attendance_face_detected": true/false,
+  "face_detection_error": null or "profile" or "attendance" or "both",
+  "match": true/false (only valid if both faces detected),
+  "confidence": 0-100 (only valid if both faces detected),
   "reason": "brief explanation"
 }
 
-If confidence >= 70, set match to true. Otherwise false.
-If either image doesn't clearly show a face, set confidence to 0 and match to false.`
+If confidence >= 70 and both faces detected, set match to true. Otherwise false.`
           },
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text: "Compare these two face photos and determine if they are the same person. First image is the profile/reference photo, second is the attendance photo."
+                text: "Analyze these two images. First image is the profile/baseline photo, second is the attendance photo. First check if each contains a clear human face, then compare if both do."
               },
               {
                 type: "image_url",
@@ -73,7 +95,7 @@ If either image doesn't clearly show a face, set confidence to 0 and match to fa
             ]
           }
         ],
-        max_tokens: 200,
+        max_tokens: 300,
       }),
     });
 
@@ -104,9 +126,42 @@ If either image doesn't clearly show a face, set confidence to 0 and match to fa
       result = JSON.parse(cleanedContent);
     } catch (e) {
       console.error("Failed to parse AI response:", content);
-      result = { match: false, confidence: 0, reason: "Unable to analyze faces" };
+      result = { 
+        profile_face_detected: false,
+        attendance_face_detected: false,
+        face_detection_error: "both",
+        match: false, 
+        confidence: 0, 
+        reason: "Unable to analyze faces - please retake photo" 
+      };
     }
 
+    // Handle face detection failures
+    if (!result.profile_face_detected) {
+      return new Response(
+        JSON.stringify({
+          error: "no_face_profile",
+          status: "blocked",
+          score: 0,
+          reason: "No face detected in baseline profile photo – please update profile photo"
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!result.attendance_face_detected) {
+      return new Response(
+        JSON.stringify({
+          error: "no_face_attendance",
+          status: "blocked",
+          score: 0,
+          reason: "No face detected in captured photo – please retake photo"
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Both faces detected - proceed with match result
     const verificationStatus = result.match ? "matched" : "mismatch";
     const matchScore = result.confidence || 0;
 
