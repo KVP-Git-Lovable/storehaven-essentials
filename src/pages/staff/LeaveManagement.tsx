@@ -142,10 +142,10 @@ export default function LeaveManagement() {
   const { data: requests, isLoading } = useQuery({
     queryKey: ["leave-requests", isManager, currentUserId],
     queryFn: async () => {
-      let query = supabase
-        .from("leave_requests")
+      let query = (supabase
+        .from("leave_requests" as any)
         .select("*, profiles(username, email), leave_types(name)")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })) as any;
 
       // Employees only see their own requests
       if (isEmployee && currentUserId) {
@@ -154,7 +154,7 @@ export default function LeaveManagement() {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as LeaveRequest[];
+      return (data || []) as unknown as LeaveRequest[];
     },
     enabled: isManager || !!currentUserId,
   });
@@ -175,7 +175,7 @@ export default function LeaveManagement() {
   // Apply leave mutation
   const applyMutation = useMutation({
     mutationFn: async (data: LeaveForm) => {
-      const { error } = await supabase.from("leave_requests").insert({
+      const { error } = await (supabase.from("leave_requests" as any).insert({
         user_id: data.user_id,
         leave_type_id: data.leave_type_id,
         from_date: data.from_date,
@@ -183,7 +183,7 @@ export default function LeaveManagement() {
         days_count: calculatedDays,
         half_day_type: data.half_day_type === "full" ? null : data.half_day_type,
         reason: data.reason || null,
-      });
+      }) as any);
       if (error) throw error;
 
       // Update pending balance
