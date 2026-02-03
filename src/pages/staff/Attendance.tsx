@@ -105,15 +105,21 @@ export default function Attendance() {
   });
 
   // Fetch today's attendance
-  const { data: todayAttendance, isLoading } = useQuery({
+  const { data: todayAttendance, isLoading, error: attendanceError } = useQuery({
     queryKey: ["attendance-today", selectedDate],
     queryFn: async () => {
+      console.log("[Attendance] Fetching records for date:", selectedDate);
       const { data, error } = await supabase
         .from("attendance_records")
         .select("*, profiles(username, email, profile_photo_url, face_baseline_url), stores(name)")
         .eq("attendance_date", selectedDate)
         .order("check_in_time", { ascending: false });
-      if (error) throw error;
+      
+      if (error) {
+        console.error("[Attendance] Query error:", error);
+        throw error;
+      }
+      console.log("[Attendance] Records found:", data?.length, data);
       return data as unknown as AttendanceRecord[];
     },
   });
