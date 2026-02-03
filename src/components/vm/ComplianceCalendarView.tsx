@@ -232,25 +232,6 @@ export function ComplianceCalendarView({
 
     return (
       <div className="flex flex-col">
-        {/* Unscheduled Tasks Section (no label) */}
-        {anytimeTasks.length > 0 && (
-          <div className="border-b p-2 bg-muted/20">
-            <div className="flex flex-wrap gap-2 px-2">
-              {anytimeTasks.map((task) => (
-                <button
-                  key={task.id}
-                  onClick={() => onTaskClick(task)}
-                  className={`text-left text-xs px-2 py-1 rounded border ${getTaskColor(task)} hover:opacity-80 transition-opacity max-w-[200px]`}
-                >
-                  <div className="flex items-center gap-1">
-                    {getStatusIcon(task)}
-                    <span className="truncate font-medium">{task.store?.name || task.title}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Time Grid */}
         <div className="flex overflow-auto" style={{ height: "600px" }}>
