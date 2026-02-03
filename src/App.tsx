@@ -31,6 +31,12 @@ import PettyCash from "./pages/PettyCash";
 import Utilities from "./pages/Utilities";
 import Employees from "./pages/staff/Employees";
 import Attendance from "./pages/staff/Attendance";
+import LeaveManagement from "./pages/staff/LeaveManagement";
+import Regularization from "./pages/staff/Regularization";
+import LeaveBalances from "./pages/staff/LeaveBalances";
+import Holidays from "./pages/staff/Holidays";
+import WorkingDays from "./pages/staff/WorkingDays";
+import AttendancePolicy from "./pages/staff/AttendancePolicy";
 import SecurityDashboard from "./pages/security/SecurityDashboard";
 import SecurityGuards from "./pages/security/SecurityGuards";
 import SecurityRoster from "./pages/security/SecurityRoster";
@@ -155,6 +161,12 @@ const App = () => (
               <Route path="/utilities" element={<Utilities />} />
               <Route path="/staff/employees" element={<Employees />} />
               <Route path="/staff/attendance" element={<Attendance />} />
+              <Route path="/staff/leave" element={<LeaveManagement />} />
+              <Route path="/staff/regularization" element={<Regularization />} />
+              <Route path="/staff/leave-balances" element={<LeaveBalances />} />
+              <Route path="/staff/holidays" element={<Holidays />} />
+              <Route path="/staff/working-days" element={<WorkingDays />} />
+              <Route path="/staff/policy" element={<AttendancePolicy />} />
               <Route path="/security" element={<SecurityDashboard />} />
               <Route path="/security/guards" element={<SecurityGuards />} />
               <Route path="/security/roster" element={<SecurityRoster />} />
