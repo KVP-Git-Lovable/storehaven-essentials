@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Calendar, Building2, IndianRupee, Clock, AlertTriangle, FileText } from "lucide-react";
+import { Calendar, Building2, IndianRupee, Clock, AlertTriangle, FileText, Pencil } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 
 type ContractSummary = {
@@ -20,9 +21,11 @@ type ContractSummary = {
 interface ContractSummaryCardProps {
   contract: ContractSummary;
   onClick?: () => void;
+  onEdit?: () => void;
+  canEdit?: boolean;
 }
 
-export function ContractSummaryCard({ contract, onClick }: ContractSummaryCardProps) {
+export function ContractSummaryCard({ contract, onClick, onEdit, canEdit }: ContractSummaryCardProps) {
   const daysRemaining = differenceInDays(new Date(contract.end_date), new Date());
   const isExpiringSoon = daysRemaining <= 30 && daysRemaining > 0;
   const isExpired = daysRemaining <= 0;
@@ -48,6 +51,11 @@ export function ContractSummaryCard({ contract, onClick }: ContractSummaryCardPr
     return labels[type] || type;
   };
 
+  const handleEditClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onEdit?.();
+  };
+
   return (
     <Card 
       className="cursor-pointer hover:shadow-md transition-shadow"
@@ -67,13 +75,25 @@ export function ContractSummaryCard({ contract, onClick }: ContractSummaryCardPr
               </p>
             )}
           </div>
-          <div className="flex flex-col items-end gap-1">
-            <Badge variant={getStatusBadge(contract.status)}>
-              {contract.status}
-            </Badge>
-            <Badge variant="outline">
-              {getContractTypeLabel(contract.contract_type)}
-            </Badge>
+          <div className="flex items-center gap-2">
+            {canEdit && onEdit && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={handleEditClick}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            )}
+            <div className="flex flex-col items-end gap-1">
+              <Badge variant={getStatusBadge(contract.status)}>
+                {contract.status}
+              </Badge>
+              <Badge variant="outline">
+                {getContractTypeLabel(contract.contract_type)}
+              </Badge>
+            </div>
           </div>
         </div>
 

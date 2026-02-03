@@ -214,11 +214,22 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
     },
   });
 
+  const isEditMode = !!contractId;
+
   useEffect(() => {
     if (open) {
       fetchReferenceData();
+      if (contractId) {
+        fetchContractData(contractId);
+      } else {
+        // Reset form for create mode
+        form.reset();
+        setSelectedAssets([]);
+        setSelectedLocations([]);
+        setAttachments([]);
+      }
     }
-  }, [open]);
+  }, [open, contractId]);
 
   const fetchReferenceData = async () => {
     const [vendorsRes, assetsRes, storesRes] = await Promise.all([
@@ -230,6 +241,89 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
     setVendors(vendorsRes.data || []);
     setAssets(assetsRes.data || []);
     setStores(storesRes.data || []);
+  };
+
+  const fetchContractData = async (id: string) => {
+    const [contractRes, assetsRes, locationsRes] = await Promise.all([
+      supabase.from("service_contracts").select("*").eq("id", id).single(),
+      supabase.from("service_contract_assets").select("asset_id").eq("service_contract_id", id),
+      supabase.from("service_contract_locations").select("store_id").eq("service_contract_id", id),
+    ]);
+
+    if (contractRes.data) {
+      const c = contractRes.data;
+      form.reset({
+        service_provider_id: c.service_provider_id || "",
+        effective_date: c.effective_date || "",
+        start_date: c.start_date || "",
+        end_date: c.end_date || "",
+        auto_renewal: c.auto_renewal || false,
+        renewal_notice_days: c.renewal_notice_days || undefined,
+        contract_type: c.contract_type || "amc",
+        service_types: (c.service_types as string[]) || [],
+        labour_included: c.labour_included ?? true,
+        labour_rate_per_hour: c.labour_rate_per_hour || undefined,
+        labour_hours_included: c.labour_hours_included || undefined,
+        travel_included: c.travel_included ?? true,
+        travel_radius_km: c.travel_radius_km || undefined,
+        travel_rate_per_km: c.travel_rate_per_km || undefined,
+        spares_included: c.spares_included ?? false,
+        spares_coverage_percent: c.spares_coverage_percent || undefined,
+        spares_max_value: c.spares_max_value || undefined,
+        spares_excluded_items: c.spares_excluded_items || "",
+        consumables_included: c.consumables_included ?? false,
+        consumables_limit: c.consumables_limit || undefined,
+        penalty_applicable: c.penalty_applicable ?? false,
+        penalty_type: c.penalty_type || "",
+        penalty_rate_percent: c.penalty_rate_percent || undefined,
+        penalty_max_percent: c.penalty_max_percent || undefined,
+        penalty_grace_period_days: c.penalty_grace_period_days || undefined,
+        penalty_calculation_basis: c.penalty_calculation_basis || "",
+        penalty_notes: c.penalty_notes || "",
+        exclusions: c.exclusions || "",
+        support_hours: c.support_hours || "business",
+        support_hours_custom: c.support_hours_custom || "",
+        p1_response_mins: c.p1_response_mins || undefined,
+        p1_resolution_hrs: c.p1_resolution_hrs || undefined,
+        p2_response_mins: c.p2_response_mins || undefined,
+        p2_resolution_hrs: c.p2_resolution_hrs || undefined,
+        p3_response_mins: c.p3_response_mins || undefined,
+        p3_resolution_hrs: c.p3_resolution_hrs || undefined,
+        p4_response_mins: c.p4_response_mins || undefined,
+        p4_resolution_hrs: c.p4_resolution_hrs || undefined,
+        sla_penalties: c.sla_penalties ?? false,
+        sla_penalty_details: c.sla_penalty_details || "",
+        pm_frequency: c.pm_frequency || "",
+        pm_checklist_items: (c.pm_checklist_items as string[]) || [],
+        pm_task_type: c.pm_task_type || "preventive-maintenance",
+        auto_create_pm: true,
+        target_uptime_percent: c.target_uptime_percent || undefined,
+        pricing_model: c.pricing_model || "fixed",
+        contract_value: c.contract_value || 0,
+        visit_charge: c.visit_charge || undefined,
+        after_hours_multiplier: c.after_hours_multiplier || undefined,
+        invoice_frequency: c.invoice_frequency || "monthly",
+        payment_terms_days: c.payment_terms_days || undefined,
+        annual_escalation_percent: c.annual_escalation_percent || undefined,
+        escalation_l1_name: c.escalation_l1_name || "",
+        escalation_l1_phone: c.escalation_l1_phone || "",
+        escalation_l1_email: c.escalation_l1_email || "",
+        escalation_l2_name: c.escalation_l2_name || "",
+        escalation_l2_phone: c.escalation_l2_phone || "",
+        escalation_l2_email: c.escalation_l2_email || "",
+        escalation_l3_name: c.escalation_l3_name || "",
+        escalation_l3_phone: c.escalation_l3_phone || "",
+        escalation_l3_email: c.escalation_l3_email || "",
+        notes: c.notes || "",
+      });
+    }
+
+    if (assetsRes.data) {
+      setSelectedAssets(assetsRes.data.map((a) => a.asset_id));
+    }
+    if (locationsRes.data) {
+      setSelectedLocations(locationsRes.data.map((l) => l.store_id));
+    }
   };
 
   const toggleSection = (section: string) => {
@@ -247,88 +341,109 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
     setUploading(true);
 
     try {
-      // Create contract
-      const contractNumber = generateContractNumber();
-      const { data: newContract, error } = await supabase
-        .from("service_contracts")
-        .insert({
-          contract_number: contractNumber,
-          customer_name: "-", // Placeholder - contract is linked via assets/locations
-          service_provider_id: data.service_provider_id || null,
-          effective_date: data.effective_date,
-          start_date: data.start_date,
-          end_date: data.end_date,
-          auto_renewal: data.auto_renewal,
-          renewal_notice_days: data.renewal_notice_days || null,
-          contract_type: data.contract_type,
-          service_types: data.service_types,
-          labour_included: data.labour_included,
-          labour_rate_per_hour: data.labour_rate_per_hour || null,
-          labour_hours_included: data.labour_hours_included || null,
-          travel_included: data.travel_included,
-          travel_radius_km: data.travel_radius_km || null,
-          travel_rate_per_km: data.travel_rate_per_km || null,
-          spares_included: data.spares_included,
-          spares_coverage_percent: data.spares_coverage_percent || null,
-          spares_max_value: data.spares_max_value || null,
-          spares_excluded_items: data.spares_excluded_items || null,
-          consumables_included: data.consumables_included,
-          consumables_limit: data.consumables_limit || null,
-          // Penalty clause
-          penalty_applicable: data.penalty_applicable,
-          penalty_type: data.penalty_type || null,
-          penalty_rate_percent: data.penalty_rate_percent || null,
-          penalty_max_percent: data.penalty_max_percent || null,
-          penalty_grace_period_days: data.penalty_grace_period_days || null,
-          penalty_calculation_basis: data.penalty_calculation_basis || null,
-          penalty_notes: data.penalty_notes || null,
-          exclusions: data.exclusions || null,
-          support_hours: data.support_hours,
-          support_hours_custom: data.support_hours_custom || null,
-          p1_response_mins: data.p1_response_mins || null,
-          p1_resolution_hrs: data.p1_resolution_hrs || null,
-          p2_response_mins: data.p2_response_mins || null,
-          p2_resolution_hrs: data.p2_resolution_hrs || null,
-          p3_response_mins: data.p3_response_mins || null,
-          p3_resolution_hrs: data.p3_resolution_hrs || null,
-          p4_response_mins: data.p4_response_mins || null,
-          p4_resolution_hrs: data.p4_resolution_hrs || null,
-          sla_penalties: data.sla_penalties,
-          sla_penalty_details: data.sla_penalty_details || null,
-          pm_frequency: data.pm_frequency || null,
-          pm_checklist_items: data.pm_checklist_items || [],
-          pm_task_type: data.pm_task_type || "preventive-maintenance",
-          target_uptime_percent: data.target_uptime_percent || null,
-          pricing_model: data.pricing_model,
-          contract_value: data.contract_value,
-          visit_charge: data.visit_charge || null,
-          after_hours_multiplier: data.after_hours_multiplier || null,
-          invoice_frequency: data.invoice_frequency,
-          payment_terms_days: data.payment_terms_days || null,
-          annual_escalation_percent: data.annual_escalation_percent || null,
-          escalation_l1_name: data.escalation_l1_name || null,
-          escalation_l1_phone: data.escalation_l1_phone || null,
-          escalation_l1_email: data.escalation_l1_email || null,
-          escalation_l2_name: data.escalation_l2_name || null,
-          escalation_l2_phone: data.escalation_l2_phone || null,
-          escalation_l2_email: data.escalation_l2_email || null,
-          escalation_l3_name: data.escalation_l3_name || null,
-          escalation_l3_phone: data.escalation_l3_phone || null,
-          escalation_l3_email: data.escalation_l3_email || null,
-          notes: data.notes || null,
-          status: "draft",
-        })
-        .select()
-        .single();
+      const contractPayload = {
+        service_provider_id: data.service_provider_id || null,
+        effective_date: data.effective_date,
+        start_date: data.start_date,
+        end_date: data.end_date,
+        auto_renewal: data.auto_renewal,
+        renewal_notice_days: data.renewal_notice_days || null,
+        contract_type: data.contract_type,
+        service_types: data.service_types,
+        labour_included: data.labour_included,
+        labour_rate_per_hour: data.labour_rate_per_hour || null,
+        labour_hours_included: data.labour_hours_included || null,
+        travel_included: data.travel_included,
+        travel_radius_km: data.travel_radius_km || null,
+        travel_rate_per_km: data.travel_rate_per_km || null,
+        spares_included: data.spares_included,
+        spares_coverage_percent: data.spares_coverage_percent || null,
+        spares_max_value: data.spares_max_value || null,
+        spares_excluded_items: data.spares_excluded_items || null,
+        consumables_included: data.consumables_included,
+        consumables_limit: data.consumables_limit || null,
+        penalty_applicable: data.penalty_applicable,
+        penalty_type: data.penalty_type || null,
+        penalty_rate_percent: data.penalty_rate_percent || null,
+        penalty_max_percent: data.penalty_max_percent || null,
+        penalty_grace_period_days: data.penalty_grace_period_days || null,
+        penalty_calculation_basis: data.penalty_calculation_basis || null,
+        penalty_notes: data.penalty_notes || null,
+        exclusions: data.exclusions || null,
+        support_hours: data.support_hours,
+        support_hours_custom: data.support_hours_custom || null,
+        p1_response_mins: data.p1_response_mins || null,
+        p1_resolution_hrs: data.p1_resolution_hrs || null,
+        p2_response_mins: data.p2_response_mins || null,
+        p2_resolution_hrs: data.p2_resolution_hrs || null,
+        p3_response_mins: data.p3_response_mins || null,
+        p3_resolution_hrs: data.p3_resolution_hrs || null,
+        p4_response_mins: data.p4_response_mins || null,
+        p4_resolution_hrs: data.p4_resolution_hrs || null,
+        sla_penalties: data.sla_penalties,
+        sla_penalty_details: data.sla_penalty_details || null,
+        pm_frequency: data.pm_frequency || null,
+        pm_checklist_items: data.pm_checklist_items || [],
+        pm_task_type: data.pm_task_type || "preventive-maintenance",
+        target_uptime_percent: data.target_uptime_percent || null,
+        pricing_model: data.pricing_model,
+        contract_value: data.contract_value,
+        visit_charge: data.visit_charge || null,
+        after_hours_multiplier: data.after_hours_multiplier || null,
+        invoice_frequency: data.invoice_frequency,
+        payment_terms_days: data.payment_terms_days || null,
+        annual_escalation_percent: data.annual_escalation_percent || null,
+        escalation_l1_name: data.escalation_l1_name || null,
+        escalation_l1_phone: data.escalation_l1_phone || null,
+        escalation_l1_email: data.escalation_l1_email || null,
+        escalation_l2_name: data.escalation_l2_name || null,
+        escalation_l2_phone: data.escalation_l2_phone || null,
+        escalation_l2_email: data.escalation_l2_email || null,
+        escalation_l3_name: data.escalation_l3_name || null,
+        escalation_l3_phone: data.escalation_l3_phone || null,
+        escalation_l3_email: data.escalation_l3_email || null,
+        notes: data.notes || null,
+      };
 
-      if (error || !newContract) {
-        throw error || new Error("Failed to create contract");
+      let savedContractId: string;
+
+      if (isEditMode && contractId) {
+        // Update existing contract
+        const { error } = await supabase
+          .from("service_contracts")
+          .update(contractPayload)
+          .eq("id", contractId);
+
+        if (error) throw error;
+        savedContractId = contractId;
+
+        // Update linked assets - delete old and insert new
+        await supabase.from("service_contract_assets").delete().eq("service_contract_id", contractId);
+        await supabase.from("service_contract_locations").delete().eq("service_contract_id", contractId);
+      } else {
+        // Create new contract
+        const contractNumber = generateContractNumber();
+        const { data: newContract, error } = await supabase
+          .from("service_contracts")
+          .insert({
+            ...contractPayload,
+            contract_number: contractNumber,
+            customer_name: "-",
+            status: "draft",
+          })
+          .select()
+          .single();
+
+        if (error || !newContract) {
+          throw error || new Error("Failed to create contract");
+        }
+        savedContractId = newContract.id;
       }
 
       // Link assets
       if (selectedAssets.length > 0) {
         const assetLinks = selectedAssets.map(assetId => ({
-          service_contract_id: newContract.id,
+          service_contract_id: savedContractId,
           asset_id: assetId,
         }));
         await supabase.from("service_contract_assets").insert(assetLinks);
@@ -337,15 +452,15 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
       // Link locations
       if (selectedLocations.length > 0) {
         const locationLinks = selectedLocations.map(storeId => ({
-          service_contract_id: newContract.id,
+          service_contract_id: savedContractId,
           store_id: storeId,
         }));
         await supabase.from("service_contract_locations").insert(locationLinks);
       }
 
-      // Upload attachments
+      // Upload attachments (only for new contracts or new files)
       for (const file of attachments) {
-        const filePath = `${newContract.id}/${Date.now()}-${file.name}`;
+        const filePath = `${savedContractId}/${Date.now()}-${file.name}`;
         const { error: uploadError } = await supabase.storage
           .from("service-contracts")
           .upload(filePath, file);
@@ -356,7 +471,7 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
             .getPublicUrl(filePath);
 
           await supabase.from("service_contract_attachments").insert({
-            service_contract_id: newContract.id,
+            service_contract_id: savedContractId,
             file_name: file.name,
             file_url: urlData.publicUrl,
             file_type: file.type,
@@ -366,8 +481,8 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
         }
       }
 
-      // Auto-create PM schedules if enabled
-      if (data.auto_create_pm && data.pm_frequency && selectedAssets.length > 0) {
+      // Auto-create PM schedules if enabled (only for new contracts)
+      if (!isEditMode && data.auto_create_pm && data.pm_frequency && selectedAssets.length > 0) {
         const vendorName = vendors.find(v => v.id === data.service_provider_id)?.name || "Vendor";
         const pmChecklistDesc = data.pm_checklist_items.length > 0 
           ? PM_CHECKLIST_OPTIONS.filter(opt => data.pm_checklist_items.includes(opt.value))
@@ -407,15 +522,15 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
               next_due: nextDue.toISOString().split("T")[0],
               assigned_to: vendorName,
               status: "scheduled",
-              service_contract_id: newContract.id,
+              service_contract_id: savedContractId,
             });
           }
         }
       }
 
       toast({
-        title: "Contract created",
-        description: `Contract ${contractNumber} has been created successfully.`,
+        title: isEditMode ? "Contract updated" : "Contract created",
+        description: isEditMode ? "Contract has been updated successfully." : "Contract has been created successfully.",
       });
 
       form.reset();
@@ -462,7 +577,7 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
         <DialogHeader className="px-6 pt-6 pb-0">
-          <DialogTitle>New Service Contract</DialogTitle>
+          <DialogTitle>{isEditMode ? "Edit Service Contract" : "New Service Contract"}</DialogTitle>
         </DialogHeader>
         
         <div className="flex-1 overflow-y-auto px-6 pb-6">
@@ -1532,7 +1647,7 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                   Cancel
                 </Button>
                 <Button type="submit" disabled={uploading}>
-                  {uploading ? "Creating..." : "Create Contract"}
+                  {uploading ? (isEditMode ? "Updating..." : "Creating...") : (isEditMode ? "Update Contract" : "Create Contract")}
                 </Button>
               </div>
             </form>
