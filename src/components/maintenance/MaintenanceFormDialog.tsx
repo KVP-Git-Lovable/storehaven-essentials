@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -310,20 +311,19 @@ export function MaintenanceFormDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Store</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select store" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {stores.map((store) => (
-                        <SelectItem key={store.id} value={store.id}>
-                          {store.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <SearchableSelect
+                      options={stores.map((store) => ({
+                        value: store.id,
+                        label: store.name,
+                      }))}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      placeholder="Select store"
+                      searchPlaceholder="Search stores..."
+                      emptyMessage="No stores found."
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -335,21 +335,20 @@ export function MaintenanceFormDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Asset</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select asset from register" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {filteredAssets.map((asset) => (
-                        <SelectItem key={asset.id} value={asset.id}>
-                          {asset.name}
-                          {asset.asset_number && ` (${asset.asset_number})`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <SearchableSelect
+                      options={filteredAssets.map((asset) => ({
+                        value: asset.id,
+                        label: asset.name,
+                        subtitle: asset.asset_number || undefined,
+                      }))}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      placeholder="Select asset from register"
+                      searchPlaceholder="Search assets..."
+                      emptyMessage="No assets found."
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -414,20 +413,19 @@ export function MaintenanceFormDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Assigned To</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select vendor" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {vendors.map((vendor) => (
-                          <SelectItem key={vendor.id} value={vendor.name}>
-                            {vendor.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SearchableSelect
+                        options={vendors.map((vendor) => ({
+                          value: vendor.name,
+                          label: vendor.name,
+                        }))}
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        placeholder="Select vendor"
+                        searchPlaceholder="Search vendors..."
+                        emptyMessage="No vendors found."
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
