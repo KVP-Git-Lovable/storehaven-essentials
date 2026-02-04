@@ -29,10 +29,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 import { HierarchicalCategorySelector } from "./HierarchicalCategorySelector";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+
+type Vendor = {
+  id: string;
+  name: string;
+};
 
 const assetMasterSchema = z.object({
   // Basic Information
@@ -52,10 +58,14 @@ const assetMasterSchema = z.object({
   criticality: z.enum(["high", "medium", "low"]),
   investment_size: z.enum(["high", "medium", "low"]),
   
-  // Pricing
+  // Pricing & Defaults
   standard_price: z.coerce.number().min(0, "Price must be 0 or more").optional(),
   currency: z.string().default("INR"),
   unit_of_measure: z.string().max(30, "Unit must be less than 30 characters").optional(),
+  default_vendor_id: z.string().uuid().optional().or(z.literal("")),
+  default_oem_id: z.string().uuid().optional().or(z.literal("")),
+  default_asset_status: z.string().optional(),
+  default_service_engagement: z.string().optional(),
   
   // Physical Specifications
   weight_kg: z.coerce.number().min(0, "Weight must be 0 or more").optional().nullable(),
@@ -70,7 +80,8 @@ const assetMasterSchema = z.object({
   energy_rating: z.string().max(20).optional(),
   
   // Lifecycle
-  warranty_months: z.coerce.number().min(0).optional().nullable(),
+  warranty_start_date: z.string().optional(),
+  warranty_end_date: z.string().optional(),
   expected_lifespan_years: z.coerce.number().min(0).optional().nullable(),
   maintenance_frequency: z.string().max(30).optional(),
   lead_time_days: z.coerce.number().min(0).optional().nullable(),
@@ -112,6 +123,10 @@ type AssetMaster = {
   unit_of_measure?: string | null;
   standard_price?: number | null;
   currency?: string | null;
+  default_vendor_id?: string | null;
+  default_oem_id?: string | null;
+  default_asset_status?: string | null;
+  default_service_engagement?: string | null;
   weight_kg?: number | null;
   dimensions_cm?: string | null;
   power_consumption_watts?: number | null;
@@ -120,7 +135,8 @@ type AssetMaster = {
   capacity?: string | null;
   refrigerant_type?: string | null;
   energy_rating?: string | null;
-  warranty_months?: number | null;
+  warranty_start_date?: string | null;
+  warranty_end_date?: string | null;
   expected_lifespan_years?: number | null;
   maintenance_frequency?: string | null;
   certification_required?: boolean | null;
@@ -243,6 +259,19 @@ export function AssetMasterFormDialog({
 }: AssetMasterFormDialogProps) {
   const { toast } = useToast();
   const [categoryRefreshKey, setCategoryRefreshKey] = useState(0);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+
+  useEffect(() => {
+    const fetchVendors = async () => {
+      const { data } = await supabase
+        .from("vendors")
+        .select("id, name")
+        .eq("status", "active")
+        .order("name");
+      if (data) setVendors(data);
+    };
+    fetchVendors();
+  }, []);
 
   const form = useForm<AssetMasterFormData>({
     resolver: zodResolver(assetMasterSchema),
@@ -261,6 +290,10 @@ export function AssetMasterFormDialog({
       standard_price: 0,
       currency: "INR",
       unit_of_measure: "unit",
+      default_vendor_id: "",
+      default_oem_id: "",
+      default_asset_status: "working",
+      default_service_engagement: "under_warranty",
       weight_kg: null,
       dimensions_cm: "",
       power_consumption_watts: null,
@@ -269,7 +302,8 @@ export function AssetMasterFormDialog({
       capacity: "",
       refrigerant_type: "",
       energy_rating: "",
-      warranty_months: 12,
+      warranty_start_date: "",
+      warranty_end_date: "",
       expected_lifespan_years: null,
       maintenance_frequency: "",
       certification_required: false,
@@ -307,6 +341,10 @@ export function AssetMasterFormDialog({
           standard_price: editingAsset.standard_price || 0,
           currency: editingAsset.currency || "INR",
           unit_of_measure: editingAsset.unit_of_measure || "unit",
+          default_vendor_id: editingAsset.default_vendor_id || "",
+          default_oem_id: editingAsset.default_oem_id || "",
+          default_asset_status: editingAsset.default_asset_status || "working",
+          default_service_engagement: editingAsset.default_service_engagement || "under_warranty",
           weight_kg: editingAsset.weight_kg || null,
           dimensions_cm: editingAsset.dimensions_cm || "",
           power_consumption_watts: editingAsset.power_consumption_watts || null,
@@ -315,7 +353,8 @@ export function AssetMasterFormDialog({
           capacity: editingAsset.capacity || "",
           refrigerant_type: editingAsset.refrigerant_type || "",
           energy_rating: editingAsset.energy_rating || "",
-          warranty_months: editingAsset.warranty_months || 12,
+          warranty_start_date: editingAsset.warranty_start_date || "",
+          warranty_end_date: editingAsset.warranty_end_date || "",
           expected_lifespan_years: editingAsset.expected_lifespan_years || null,
           maintenance_frequency: editingAsset.maintenance_frequency || "",
           certification_required: editingAsset.certification_required || false,
@@ -358,6 +397,10 @@ export function AssetMasterFormDialog({
       standard_price: data.standard_price || 0,
       currency: data.currency,
       unit_of_measure: data.unit_of_measure || "unit",
+      default_vendor_id: data.default_vendor_id || null,
+      default_oem_id: data.default_oem_id || null,
+      default_asset_status: data.default_asset_status || "working",
+      default_service_engagement: data.default_service_engagement || "under_warranty",
       weight_kg: data.weight_kg || null,
       dimensions_cm: data.dimensions_cm || null,
       power_consumption_watts: data.power_consumption_watts || null,
@@ -366,7 +409,8 @@ export function AssetMasterFormDialog({
       capacity: data.capacity || null,
       refrigerant_type: data.refrigerant_type || null,
       energy_rating: data.energy_rating || null,
-      warranty_months: data.warranty_months || null,
+      warranty_start_date: data.warranty_start_date || null,
+      warranty_end_date: data.warranty_end_date || null,
       expected_lifespan_years: data.expected_lifespan_years || null,
       maintenance_frequency: data.maintenance_frequency || null,
       certification_required: data.certification_required,
@@ -617,7 +661,7 @@ export function AssetMasterFormDialog({
                       name="standard_price"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Standard Price</FormLabel>
+                          <FormLabel>Asset Value</FormLabel>
                           <FormControl>
                             <Input type="number" placeholder="0" {...field} />
                           </FormControl>
@@ -673,6 +717,99 @@ export function AssetMasterFormDialog({
                     />
                   </div>
 
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="default_vendor_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Default Vendor</FormLabel>
+                          <SearchableSelect
+                            options={vendors.map((v) => ({ value: v.id, label: v.name }))}
+                            value={field.value || ""}
+                            onValueChange={field.onChange}
+                            placeholder="Select vendor..."
+                            searchPlaceholder="Search vendors..."
+                            emptyMessage="No vendors found"
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="default_oem_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Default OEM</FormLabel>
+                          <SearchableSelect
+                            options={vendors.map((v) => ({ value: v.id, label: v.name }))}
+                            value={field.value || ""}
+                            onValueChange={field.onChange}
+                            placeholder="Select OEM..."
+                            searchPlaceholder="Search OEMs..."
+                            emptyMessage="No OEMs found"
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="default_asset_status"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Default Asset Status</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || "working"}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select status" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="requisition_raised">Requisition Raised</SelectItem>
+                              <SelectItem value="purchase_order_placed">Purchase Order Placed</SelectItem>
+                              <SelectItem value="in_transit">In Transit</SelectItem>
+                              <SelectItem value="delivered">Delivered</SelectItem>
+                              <SelectItem value="installed">Installed</SelectItem>
+                              <SelectItem value="working">Working</SelectItem>
+                              <SelectItem value="under_repair">Under Repair</SelectItem>
+                              <SelectItem value="withdrawn">Withdrawn</SelectItem>
+                              <SelectItem value="drop">Drop</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="default_service_engagement"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Default Service Engagement</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || "under_warranty"}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select service type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="under_warranty">Under Warranty</SelectItem>
+                              <SelectItem value="under_amc">Under AMC</SelectItem>
+                              <SelectItem value="need_based_support">Need Based Support</SelectItem>
+                              <SelectItem value="no_service_support">No Service Support</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
                   <FormField
                     control={form.control}
                     name="description"
@@ -697,23 +834,41 @@ export function AssetMasterFormDialog({
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
-                      name="warranty_months"
+                      name="warranty_start_date"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Warranty (Months)</FormLabel>
+                          <FormLabel>Warranty Start Date</FormLabel>
                           <FormControl>
                             <Input
-                              type="number"
-                              placeholder="e.g. 24"
+                              type="date"
                               {...field}
                               value={field.value ?? ""}
-                              onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
                             />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
+                    <FormField
+                      control={form.control}
+                      name="warranty_end_date"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Warranty End Date</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="date"
+                              {...field}
+                              value={field.value ?? ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
                       name="expected_lifespan_years"

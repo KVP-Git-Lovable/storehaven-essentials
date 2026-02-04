@@ -70,6 +70,10 @@ export type Database = {
           criticality: string
           currency: string | null
           datasheet_url: string | null
+          default_asset_status: string | null
+          default_oem_id: string | null
+          default_service_engagement: string | null
+          default_vendor_id: string | null
           description: string | null
           dimensions_cm: string | null
           disposal_instructions: string | null
@@ -101,7 +105,9 @@ export type Database = {
           upc_barcode: string | null
           updated_at: string
           voltage_requirement: string | null
+          warranty_end_date: string | null
           warranty_months: number | null
+          warranty_start_date: string | null
           weight_kg: number | null
         }
         Insert: {
@@ -114,6 +120,10 @@ export type Database = {
           criticality?: string
           currency?: string | null
           datasheet_url?: string | null
+          default_asset_status?: string | null
+          default_oem_id?: string | null
+          default_service_engagement?: string | null
+          default_vendor_id?: string | null
           description?: string | null
           dimensions_cm?: string | null
           disposal_instructions?: string | null
@@ -145,7 +155,9 @@ export type Database = {
           upc_barcode?: string | null
           updated_at?: string
           voltage_requirement?: string | null
+          warranty_end_date?: string | null
           warranty_months?: number | null
+          warranty_start_date?: string | null
           weight_kg?: number | null
         }
         Update: {
@@ -158,6 +170,10 @@ export type Database = {
           criticality?: string
           currency?: string | null
           datasheet_url?: string | null
+          default_asset_status?: string | null
+          default_oem_id?: string | null
+          default_service_engagement?: string | null
+          default_vendor_id?: string | null
           description?: string | null
           dimensions_cm?: string | null
           disposal_instructions?: string | null
@@ -189,7 +205,9 @@ export type Database = {
           upc_barcode?: string | null
           updated_at?: string
           voltage_requirement?: string | null
+          warranty_end_date?: string | null
           warranty_months?: number | null
+          warranty_start_date?: string | null
           weight_kg?: number | null
         }
         Relationships: [
@@ -198,6 +216,20 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_masters_default_oem_id_fkey"
+            columns: ["default_oem_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_masters_default_vendor_id_fkey"
+            columns: ["default_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
             referencedColumns: ["id"]
           },
         ]
