@@ -28,7 +28,6 @@ export const productSchema = z.object({
 
 export const assetSchema = z.object({
   assetMasterId: z.string().min(1, "Asset master is required"),
-  assetNumber: z.string().trim().min(1, "Asset number is required").max(50, "Asset number must be less than 50 characters"),
   storeId: z.string().min(1, "Store is required"),
   location: z.string().optional(), // Auto-populated from store address
   condition: z.string().trim().min(1, "Condition is required"),

@@ -134,7 +134,6 @@ export default function AssetInventory() {
     resolver: zodResolver(assetSchema),
     defaultValues: {
       assetMasterId: "",
-      assetNumber: "",
       storeId: "",
       location: "",
       condition: "under-warranty",
@@ -200,7 +199,6 @@ export default function AssetInventory() {
     setEditingAsset(asset);
     form.reset({
       assetMasterId: asset.asset_master_id || "",
-      assetNumber: asset.asset_number || "",
       storeId: asset.store_id || "",
       location: asset.location || "",
       condition: asset.condition || "under-warranty",
@@ -232,7 +230,6 @@ export default function AssetInventory() {
         .from("assets")
         .update({
           name: selectedAssetMaster?.name || editingAsset.name,
-          asset_number: data.assetNumber,
           category: selectedAssetMaster?.categories?.name || editingAsset.category,
           category_id: selectedAssetMaster?.category_id || null,
           asset_master_id: data.assetMasterId,
@@ -271,7 +268,6 @@ export default function AssetInventory() {
       // Insert new asset
       const { data: insertedAsset, error } = await supabase.from("assets").insert({
         name: selectedAssetMaster?.name || "",
-        asset_number: data.assetNumber,
         category: selectedAssetMaster?.categories?.name || "",
         category_id: selectedAssetMaster?.category_id || null,
         asset_master_id: data.assetMasterId,
@@ -377,64 +373,49 @@ export default function AssetInventory() {
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="assetNumber"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Asset #</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g. AST-00001" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="assetMasterId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Asset Name (Master)</FormLabel>
-                        <SearchableSelect
-                          options={assetMasters.map((am) => ({
-                            value: am.id,
-                            label: am.name,
-                            subtitle: am.categories?.name,
-                          }))}
-                          value={field.value}
-                          onValueChange={(value) => {
-                            field.onChange(value);
-                            // Auto-populate fields from selected Asset Master
-                            const selectedMaster = assetMasters.find((am) => am.id === value);
-                            if (selectedMaster) {
-                              // Set default value from standard_price
-                              if (selectedMaster.standard_price !== null) {
-                                form.setValue("value", selectedMaster.standard_price);
-                              }
-                              // Calculate warranty dates from warranty_months
-                              if (selectedMaster.warranty_months) {
-                                const purchaseDate = form.getValues("purchaseDate");
-                                if (purchaseDate) {
-                                  const startDate = new Date(purchaseDate);
-                                  form.setValue("warrantyStartDate", purchaseDate);
-                                  const endDate = new Date(startDate);
-                                  endDate.setMonth(endDate.getMonth() + selectedMaster.warranty_months);
-                                  form.setValue("warrantyEndDate", endDate.toISOString().split("T")[0]);
-                                }
+                <FormField
+                  control={form.control}
+                  name="assetMasterId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Asset Name (Master)</FormLabel>
+                      <SearchableSelect
+                        options={assetMasters.map((am) => ({
+                          value: am.id,
+                          label: am.name,
+                          subtitle: am.categories?.name,
+                        }))}
+                        value={field.value}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          // Auto-populate fields from selected Asset Master
+                          const selectedMaster = assetMasters.find((am) => am.id === value);
+                          if (selectedMaster) {
+                            // Set default value from standard_price
+                            if (selectedMaster.standard_price !== null) {
+                              form.setValue("value", selectedMaster.standard_price);
+                            }
+                            // Calculate warranty dates from warranty_months
+                            if (selectedMaster.warranty_months) {
+                              const purchaseDate = form.getValues("purchaseDate");
+                              if (purchaseDate) {
+                                const startDate = new Date(purchaseDate);
+                                form.setValue("warrantyStartDate", purchaseDate);
+                                const endDate = new Date(startDate);
+                                endDate.setMonth(endDate.getMonth() + selectedMaster.warranty_months);
+                                form.setValue("warrantyEndDate", endDate.toISOString().split("T")[0]);
                               }
                             }
-                          }}
-                          placeholder="Select asset master"
-                          searchPlaceholder="Search asset masters..."
-                          emptyMessage="No asset masters found."
-                        />
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                          }
+                        }}
+                        placeholder="Select asset master"
+                        searchPlaceholder="Search asset masters..."
+                        emptyMessage="No asset masters found."
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
