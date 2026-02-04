@@ -15,6 +15,7 @@ import StoresList from "./pages/stores/StoresList";
 import StoreDetails from "./pages/stores/StoreDetails";
 import Rentals from "./pages/stores/Rentals";
 import NewStoreOpening from "./pages/stores/NewStoreOpening";
+import NSOChecklistDetails from "./pages/stores/NSOChecklistDetails";
 import StoreTargets from "./pages/stores/StoreTargets";
 import StoreTargetDetails from "./pages/stores/StoreTargetDetails";
 import StoreTargetDashboard from "./pages/stores/StoreTargetDashboard";
@@ -153,6 +154,7 @@ const App = () => (
               <Route path="/stores/budget/dashboard" element={<StoreBudgetDashboard />} />
               <Route path="/stores/budget/:id" element={<StoreBudgetDetails />} />
               <Route path="/stores/new-opening" element={<NewStoreOpening />} />
+              <Route path="/stores/new-opening/:id" element={<NSOChecklistDetails />} />
               <Route path="/assets/master" element={<AssetMaster />} />
               <Route path="/assets/master/:id" element={<AssetMasterDetails />} />
               <Route path="/assets/inventory" element={<AssetInventory />} />
