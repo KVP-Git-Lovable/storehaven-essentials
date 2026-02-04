@@ -85,6 +85,12 @@ type AssetMasterOption = {
   categories?: { name: string } | null;
   standard_price: number | null;
   warranty_months: number | null;
+  default_vendor_id: string | null;
+  default_oem_id: string | null;
+  default_asset_status: string | null;
+  default_service_engagement: string | null;
+  warranty_start_date: string | null;
+  warranty_end_date: string | null;
 };
 
 type Store = {
@@ -172,7 +178,7 @@ export default function AssetInventory() {
       supabase.from("vendors").select("id, name, vendor_type").order("name"),
       supabase
         .from("asset_masters")
-        .select("id, name, category_id, categories(name), standard_price, warranty_months")
+        .select("id, name, category_id, categories(name), standard_price, warranty_months, default_vendor_id, default_oem_id, default_asset_status, default_service_engagement, warranty_start_date, warranty_end_date")
         .eq("status", "active")
         .order("name"),
       supabase.from("stores").select("id, name, address").eq("status", "active").order("name"),
@@ -395,8 +401,31 @@ export default function AssetInventory() {
                             if (selectedMaster.standard_price !== null) {
                               form.setValue("value", selectedMaster.standard_price);
                             }
-                            // Calculate warranty dates from warranty_months
-                            if (selectedMaster.warranty_months) {
+                            // Set default vendor
+                            if (selectedMaster.default_vendor_id) {
+                              form.setValue("vendorId", selectedMaster.default_vendor_id);
+                            }
+                            // Set default OEM
+                            if (selectedMaster.default_oem_id) {
+                              form.setValue("oemId", selectedMaster.default_oem_id);
+                            }
+                            // Set default asset status
+                            if (selectedMaster.default_asset_status) {
+                              form.setValue("assetStatus", selectedMaster.default_asset_status);
+                            }
+                            // Set default service engagement (condition)
+                            if (selectedMaster.default_service_engagement) {
+                              form.setValue("condition", selectedMaster.default_service_engagement);
+                            }
+                            // Set warranty dates from master if available
+                            if (selectedMaster.warranty_start_date) {
+                              form.setValue("warrantyStartDate", selectedMaster.warranty_start_date);
+                            }
+                            if (selectedMaster.warranty_end_date) {
+                              form.setValue("warrantyEndDate", selectedMaster.warranty_end_date);
+                            }
+                            // If no warranty dates but warranty_months exists, calculate from purchase date
+                            if (!selectedMaster.warranty_start_date && !selectedMaster.warranty_end_date && selectedMaster.warranty_months) {
                               const purchaseDate = form.getValues("purchaseDate");
                               if (purchaseDate) {
                                 const startDate = new Date(purchaseDate);
