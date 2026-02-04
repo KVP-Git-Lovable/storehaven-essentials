@@ -55,6 +55,7 @@ import CategoryMaster from "./pages/master/CategoryMaster";
 import NSOChecklistMaster from "./pages/master/NSOChecklistMaster";
 import PMChecklistMaster from "./pages/master/PMChecklistMaster";
 import StoreBudgetMaster from "./pages/master/StoreBudgetMaster";
+import SqFtBudgetMaster from "./pages/master/SqFtBudgetMaster";
 import StoreBudgets from "./pages/stores/StoreBudgets";
 import StoreBudgetDetails from "./pages/stores/StoreBudgetDetails";
 import StoreBudgetDashboard from "./pages/stores/StoreBudgetDashboard";
@@ -189,6 +190,7 @@ const App = () => (
               <Route path="/master/nso-checklist" element={<NSOChecklistMaster />} />
               <Route path="/master/pm-checklist" element={<PMChecklistMaster />} />
               <Route path="/master/store-budget" element={<StoreBudgetMaster />} />
+              <Route path="/master/sqft-budget" element={<SqFtBudgetMaster />} />
               <Route path="/vm/planograms" element={<Planograms />} />
               <Route path="/vm/tasks" element={<ComplianceTasks />} />
               <Route path="/vm/review" element={<ReviewSubmissions />} />

@@ -6076,6 +6076,36 @@ export type Database = {
         }
         Relationships: []
       }
+      sqft_budget_master: {
+        Row: {
+          created_at: string
+          effective_from: string | null
+          id: string
+          name: string | null
+          price_per_sqft: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          effective_from?: string | null
+          id?: string
+          name?: string | null
+          price_per_sqft: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          effective_from?: string | null
+          id?: string
+          name?: string | null
+          price_per_sqft?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       stock_adjustments: {
         Row: {
           adjustment_number: string
