@@ -72,6 +72,7 @@ export type Database = {
           datasheet_url: string | null
           default_asset_status: string | null
           default_oem_id: string | null
+          default_purchase_date: string | null
           default_service_engagement: string | null
           default_vendor_id: string | null
           description: string | null
@@ -122,6 +123,7 @@ export type Database = {
           datasheet_url?: string | null
           default_asset_status?: string | null
           default_oem_id?: string | null
+          default_purchase_date?: string | null
           default_service_engagement?: string | null
           default_vendor_id?: string | null
           description?: string | null
@@ -172,6 +174,7 @@ export type Database = {
           datasheet_url?: string | null
           default_asset_status?: string | null
           default_oem_id?: string | null
+          default_purchase_date?: string | null
           default_service_engagement?: string | null
           default_vendor_id?: string | null
           description?: string | null
