@@ -7888,6 +7888,10 @@ export type Database = {
         Args: { _manager_id: string; _user_id: string }
         Returns: boolean
       }
+      is_valid_vendor_token: {
+        Args: { contract_id: string; vendor_token: string }
+        Returns: boolean
+      }
       mark_overdue_compliance_tasks: { Args: never; Returns: undefined }
       search_knowledge_base: {
         Args: { search_query: string }
