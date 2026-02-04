@@ -1,180 +1,166 @@
 
-# NSO Budget Flow - Implementation Plan
 
-## Summary
+# Add Required Assets Section to NSO Store Checklists
 
-After exploring the codebase, I found that **some components exist** but the **complete budget tracking flow does not**. This plan will implement the full NSO Budget feature.
+## Problem Identified
 
----
+The **Required Assets section is missing** from the New Store Opening checklist view. While assets ARE correctly copied from the master template when a checklist is assigned (the backend data exists in `nso_store_assets` table), there is NO UI to view or manage these assets in the store checklist.
 
-## What Already Exists
-
-| Component | Status |
-|-----------|--------|
-| Sq Ft Budget Master | Available at `/master/sqft-budget` |
-| Store Size (Sq Ft) field | Available in store creation/edit |
-| NSO Checklist assignment flow | Works correctly |
-| nso_store_assets table | Tracks required assets per checklist |
-| `planned_budget` & `prescribed_sqft` columns in masters | Already added |
+### Current State:
+- **NSOChecklistMaster.tsx**: Has a "Required Assets" tab where admins define template assets
+- **NewStoreOpening.tsx**: Only has "Tasks" and "Budget" tabs - NO Assets tab
+- **nso_store_assets table**: Contains the copied assets, but they're invisible to users
 
 ---
 
-## What Needs to Be Implemented
+## Solution
 
-### 1. Database Schema Updates
+Add a new **"Required Assets"** tab to the store checklist inline view in `NewStoreOpening.tsx` that:
+1. Displays all assets copied from the template
+2. Allows adding/editing/removing assets specific to this store
+3. Shows asset values and totals (ties into budget tracking)
 
-Create new tables and columns to support budget tracking:
+---
 
-**New table: `nso_store_budget_items`**
-- For additional line items (Rent, Labour charges, other expenses)
-- Columns: `id`, `checklist_id`, `description`, `category`, `amount`, `sort_order`, `created_at`
+## Implementation Plan
 
-**Add columns to `nso_store_checklists`:**
-- `prescribed_budget` (auto-calculated, read-only)
-- `budget` (editable by Admin/Store Manager)
-- `final_budget` (editable)
+### 1. Create New Component: `NSOStoreAssetsSection.tsx`
 
-### 2. Prescribed Budget Auto-Calculation Logic
+Create a dedicated component to manage store-specific assets:
 
-When a checklist template is assigned to a store:
+**Features:**
+- Display table of required assets with columns:
+  - Asset Name
+  - Category  
+  - Unit Price (from Asset Master)
+  - Quantity (editable)
+  - Total Cost (calculated)
+  - Status (pending/ordered/delivered)
+  - Actions (edit/delete)
+- Add new asset form (select from Asset Master)
+- Show total asset costs summary
+- Real-time updates when assets change
+
+**Props:**
+- `checklistId`: The store checklist ID
+- `onAssetChange`: Callback to refresh budget calculations
+
+### 2. Update NewStoreOpening.tsx
+
+Add the "Required Assets" tab alongside Tasks and Budget:
+
 ```text
-Prescribed Budget = Store's Sq Ft × Active Sq Ft Budget Rate
+Tabs:
+  - Tasks (existing)
+  - Required Assets (NEW)
+  - Budget (existing)
 ```
-- Fetch the store's `store_size_sqft` from the `stores` table
-- Fetch the active rate from `sqft_budget_master` where `status = 'active'`
-- Store the calculated value in `nso_store_checklists.prescribed_budget`
 
-### 3. Budget Section UI Component
+**Changes:**
+- Add import for Package icon and new component
+- Add TabsTrigger for "assets" 
+- Add TabsContent rendering the NSOStoreAssetsSection component
+- Add query for store assets with asset master details
 
-Create a new component `NSOStoreBudgetSection.tsx` that displays:
+### 3. Database Query for Assets
 
-**Three Budget Fields:**
-- **Prescribed Budget** - Auto-calculated, read-only, shows store sq ft × rate
-- **Budget** - Editable input for planned budget
-- **Final Budget** - Editable input for final approved budget
+Fetch assets with joined Asset Master data:
+```typescript
+const { data: storeAssets = [] } = useQuery({
+  queryKey: ["nso-store-assets", checklistId],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("nso_store_assets")
+      .select(`
+        *,
+        asset_masters(
+          name,
+          standard_price,
+          criticality,
+          categories(name)
+        )
+      `)
+      .eq("checklist_id", checklistId)
+      .order("sort_order");
+    if (error) throw error;
+    return data;
+  },
+});
+```
 
-**Budget Usage Tracking:**
-- **Asset Costs Total** - Sum of (asset value × quantity) from `nso_store_assets`
-- **Additional Line Items Total** - Sum from `nso_store_budget_items`
-- **Total Utilized** - Asset Costs + Additional Items
-- **Remaining Budget** - Budget - Total Utilized
+---
 
-**Visual Indicators:**
-- Green: Within budget (utilized < 80% of budget)
-- Amber: Nearing limit (80-100% of budget)
-- Red: Over budget (utilized > budget)
+## Files to Create
 
-### 4. Additional Line Items Management
+| File | Purpose |
+|------|---------|
+| `src/components/nso/NSOStoreAssetsSection.tsx` | Asset management component for store checklists |
 
-Within the Budget section, allow users to add line items:
-- **Description** (text input)
-- **Category** (dropdown: Rent, Labour Charges, Utilities, Marketing, Other)
-- **Amount** (numeric input)
+## Files to Modify
 
-All items reduce the remaining budget in real-time.
+| File | Changes |
+|------|---------|
+| `src/pages/stores/NewStoreOpening.tsx` | Add "Required Assets" tab with TabsTrigger, TabsContent, and component |
 
-### 5. Update Checklist Assignment Flow
+---
 
-Modify `NewStoreOpening.tsx` to:
-1. Fetch store's sq ft when assigning a checklist
-2. Fetch active Sq Ft Budget rate
-3. Calculate and store `prescribed_budget` during assignment
-4. Copy `planned_budget` from master as initial `budget` value
+## UI Preview
 
-### 6. Real-Time Budget Updates
+The inline checklist view will have three tabs:
 
-Ensure budget calculations update when:
-- Assets are added/removed/quantity changed
-- Line items are added/removed/amount changed
-- Budget or Final Budget fields are edited
+```text
++-----------------------------------------------------------+
+| [Tasks] [Required Assets] [Budget]                         |
++-----------------------------------------------------------+
+|                                                            |
+| Required Assets Tab Content:                               |
+|                                                            |
+| [+ Add Asset]                                              |
+|                                                            |
+| +--------------------------------------------------------+ |
+| | Asset Name | Category | Unit Price | Qty | Total | ... | |
+| +--------------------------------------------------------+ |
+| | AC - 1.5T  | HVAC     | ₹35,000    | 5   | ₹175,000    | |
+| | Deep Freezer| Freezer | ₹45,000    | 3   | ₹135,000    | |
+| +--------------------------------------------------------+ |
+|                                                            |
+| Total Asset Cost: ₹310,000                                 |
++-----------------------------------------------------------+
+```
 
 ---
 
 ## Technical Details
 
-### Database Migration SQL
+### NSOStoreAssetsSection Component Structure
 
-```sql
--- Add budget columns to nso_store_checklists
-ALTER TABLE nso_store_checklists
-  ADD COLUMN prescribed_budget NUMERIC DEFAULT 0,
-  ADD COLUMN budget NUMERIC DEFAULT 0,
-  ADD COLUMN final_budget NUMERIC DEFAULT 0;
+```typescript
+interface NSOStoreAssetsSectionProps {
+  checklistId: string;
+  onAssetChange?: () => void;
+}
 
--- Create budget line items table
-CREATE TABLE nso_store_budget_items (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  checklist_id UUID NOT NULL REFERENCES nso_store_checklists(id) ON DELETE CASCADE,
-  description TEXT NOT NULL,
-  category TEXT NOT NULL DEFAULT 'other',
-  amount NUMERIC NOT NULL DEFAULT 0,
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Enable RLS
-ALTER TABLE nso_store_budget_items ENABLE ROW LEVEL SECURITY;
-
--- RLS policies
-CREATE POLICY "Authenticated users can view budget items"
-  ON nso_store_budget_items FOR SELECT
-  TO authenticated USING (true);
-
-CREATE POLICY "Authenticated users can manage budget items"
-  ON nso_store_budget_items FOR ALL
-  TO authenticated USING (true) WITH CHECK (true);
+// Features:
+// - Query nso_store_assets with asset_masters join
+// - Add asset mutation (select from available Asset Masters)
+// - Update quantity mutation
+// - Update status mutation (pending/ordered/delivered)
+// - Delete asset mutation
+// - Calculate totals in real-time
 ```
 
-### Files to Create
-
-1. **`src/components/nso/NSOStoreBudgetSection.tsx`**
-   - Budget display component with three fields
-   - Asset costs breakdown
-   - Line items management
-   - Remaining budget with visual indicators
-
-### Files to Modify
-
-1. **`src/pages/stores/NewStoreOpening.tsx`**
-   - Add Budget section/tab to inline expanded checklist view
-   - Update assign mutation to calculate prescribed budget
-   - Add queries for budget items and asset values
-
-2. **`src/integrations/supabase/types.ts`**
-   - Auto-updated after migration
+### Asset Status Options
+- `pending` - Not yet ordered
+- `ordered` - Order placed with vendor
+- `delivered` - Received at store
 
 ---
 
-## User Flow After Implementation
+## Benefits
 
-```text
-1. Admin defines rate in Sq Ft Budget Master (e.g., ₹200,000 per sq ft)
-2. Admin creates store with size (e.g., 1,500 sq ft)
-3. Admin goes to NSO and assigns checklist template to the store
-4. System auto-calculates: Prescribed Budget = 1,500 × ₹200,000 = ₹300,000,000
-5. Budget section appears in the checklist with:
-   - Prescribed Budget: ₹300,000,000 (read-only)
-   - Budget: [editable field]
-   - Final Budget: [editable field]
-6. As assets are added (e.g., 5 × AC @ ₹15,000 = ₹75,000):
-   - Asset Costs: ₹75,000
-   - Remaining Budget updates automatically
-7. Admin can add line items:
-   - Rent: ₹100,000
-   - Labour: ₹50,000
-8. Total Utilized: ₹225,000
-   Remaining: Budget - ₹225,000
-```
+1. **Visibility**: Users can see what assets are required for the store opening
+2. **Tracking**: Track status of each asset (pending/ordered/delivered)
+3. **Budget Integration**: Asset changes automatically reflect in Budget tab
+4. **Customization**: Store-specific assets can be added/modified
+5. **Accountability**: Clear view of what's needed vs what's delivered
 
----
-
-## Estimated Changes
-
-| Category | Count |
-|----------|-------|
-| New tables | 1 |
-| New columns | 3 |
-| New components | 1 |
-| Modified pages | 1 |
-
-This implementation provides complete budget tracking for NSO with real-time calculations and visual status indicators.
