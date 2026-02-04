@@ -815,239 +815,240 @@ export default function NewStoreOpening() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Checklists List */}
-        <div className="lg:col-span-1 space-y-4">
-          <div className="rounded-xl border bg-card">
-            <div className="p-4 border-b">
-              <h3 className="font-semibold">Store Checklists</h3>
-            </div>
-            <div className="divide-y max-h-[600px] overflow-y-auto">
-              {checklists.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground">
-                  <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p>No checklists yet</p>
-                  <p className="text-sm">Assign a checklist to a store</p>
-                </div>
-              ) : (
-                checklists.map((checklist) => (
-                  <div
-                    key={checklist.id}
-                    className={cn(
-                      "p-4 cursor-pointer hover:bg-accent/50 transition-colors group relative",
-                      selectedChecklist?.id === checklist.id && "bg-accent"
-                    )}
-                    onClick={() => setSelectedChecklist(checklist)}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium truncate">{checklist.stores?.name || "Unknown Store"}</h4>
-                        <p className="text-sm text-muted-foreground truncate">{checklist.name}</p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <Badge
-                            variant={checklist.status === "completed" ? "default" : "outline"}
-                            className="text-xs"
-                          >
-                            {checklist.status}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            Start: {format(new Date(checklist.start_date), "MMM d, yyyy")}
-                          </span>
+      <div className="space-y-4">
+        {/* Store Checklists Header */}
+        <div className="rounded-xl border bg-card">
+          <div className="p-4 border-b">
+            <h3 className="font-semibold">Store Checklists</h3>
+          </div>
+          <div className="divide-y">
+            {checklists.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">
+                <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p>No checklists yet</p>
+                <p className="text-sm">Assign a checklist to a store</p>
+              </div>
+            ) : (
+              checklists.map((checklist) => {
+                const isExpanded = selectedChecklist?.id === checklist.id;
+                const checklistTasks = isExpanded ? tasks : [];
+                const checklistSections = isExpanded ? sections : [];
+                const completedTasks = checklistTasks.filter(t => t.status === "completed").length;
+                const progress = checklistTasks.length > 0 ? Math.round((completedTasks / checklistTasks.length) * 100) : 0;
+                
+                return (
+                  <div key={checklist.id}>
+                    {/* Checklist Card */}
+                    <div
+                      className={cn(
+                        "p-4 cursor-pointer hover:bg-accent/50 transition-colors group relative",
+                        isExpanded && "bg-accent"
+                      )}
+                      onClick={() => setSelectedChecklist(isExpanded ? null : checklist)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium">{checklist.stores?.name || "Unknown Store"}</h4>
+                          <p className="text-sm text-muted-foreground">{checklist.name}</p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <Badge
+                              variant={checklist.status === "completed" ? "default" : "outline"}
+                              className="text-xs"
+                            >
+                              {checklist.status}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              Start: {format(new Date(checklist.start_date), "MMM d, yyyy")}
+                            </span>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                          onClick={(e) => handleDeleteChecklist(checklist, e)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {/* Inline Expanded Details */}
+                    {isExpanded && (
+                      <div className="border-t bg-muted/30 p-4 space-y-4">
+                        {/* Progress Card */}
+                        <div className="rounded-lg border bg-card p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <h3 className="font-semibold">{checklist.stores?.name}</h3>
+                              <p className="text-sm text-muted-foreground">{checklist.name}</p>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-2xl font-bold text-primary">{progress}%</span>
+                              <p className="text-xs text-muted-foreground">
+                                {completedTasks} / {checklistTasks.length} tasks
+                              </p>
+                            </div>
+                          </div>
+                          <Progress value={progress} className="h-2" />
+                        </div>
+
+                        {/* View Toggle and Actions */}
+                        <div className="rounded-lg border bg-card">
+                          <div className="p-4 border-b flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <h3 className="font-semibold">Checklist Tasks</h3>
+                              <ToggleGroup
+                                type="single"
+                                value={viewMode}
+                                onValueChange={(value) => value && setViewMode(value as "list" | "gantt")}
+                                className="border rounded-lg p-1"
+                              >
+                                <ToggleGroupItem value="list" aria-label="List view" className="h-8 px-3 gap-2">
+                                  <LayoutList className="h-4 w-4" />
+                                  List
+                                </ToggleGroupItem>
+                                <ToggleGroupItem value="gantt" aria-label="Gantt view" className="h-8 px-3 gap-2">
+                                  <GanttChart className="h-4 w-4" />
+                                  Gantt
+                                </ToggleGroupItem>
+                              </ToggleGroup>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSectionForm({ name: "" });
+                                setSectionDialogOpen(true);
+                              }}
+                            >
+                              <FolderPlus className="h-4 w-4 mr-2" />
+                              Add Section
+                            </Button>
+                          </div>
+
+                          <div className="p-4">
+                            {checklistSections.length === 0 ? (
+                              <div className="text-center py-8 text-muted-foreground">
+                                <FolderPlus className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                                <p>No sections yet</p>
+                              </div>
+                            ) : viewMode === "gantt" ? (
+                              <NSOGanttChart
+                                sections={checklistSections}
+                                tasks={checklistTasks}
+                                onTaskUpdate={handleGanttTaskUpdate}
+                                onTaskClick={handleTaskClick}
+                                onAddTask={handleAddTask}
+                                onTaskReorder={handleTaskReorder}
+                              />
+                            ) : (
+                              <DndContext
+                                sensors={sensors}
+                                collisionDetection={closestCenter}
+                                onDragStart={handleDragStart}
+                                onDragEnd={handleDragEnd}
+                              >
+                                <Accordion
+                                  type="multiple"
+                                  defaultValue={checklistSections.map((s) => s.id)}
+                                  className="space-y-3"
+                                >
+                                  {checklistSections.map((section) => {
+                                    const sectionTasks = getTasksForSection(section.id);
+                                    return (
+                                      <AccordionItem
+                                        key={section.id}
+                                        value={section.id}
+                                        className="border rounded-lg"
+                                      >
+                                        <AccordionTrigger className="px-4 hover:no-underline">
+                                          <div className="flex items-center gap-3 flex-1">
+                                            <span className="font-medium">{section.name}</span>
+                                            <Badge variant="outline" className="ml-2">
+                                              {sectionTasks.filter((t) => t.status === "completed").length}/
+                                              {sectionTasks.length}
+                                            </Badge>
+                                            {section.is_custom && (
+                                              <Badge variant="secondary" className="text-xs">Custom</Badge>
+                                            )}
+                                          </div>
+                                          <div className="flex gap-1 mr-2" onClick={(e) => e.stopPropagation()}>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-7 w-7 text-destructive"
+                                              onClick={() => deleteSectionMutation.mutate(section.id)}
+                                            >
+                                              <Trash2 className="h-3 w-3" />
+                                            </Button>
+                                          </div>
+                                        </AccordionTrigger>
+                                        <AccordionContent className="px-4 pb-4">
+                                          <SortableContext
+                                            items={sectionTasks.map(t => t.id)}
+                                            strategy={verticalListSortingStrategy}
+                                          >
+                                            <Table>
+                                              <TableHeader>
+                                                <TableRow>
+                                                  <TableHead className="w-[250px]">Task</TableHead>
+                                                  <TableHead>Owner</TableHead>
+                                                  <TableHead>Start</TableHead>
+                                                  <TableHead>End</TableHead>
+                                                  <TableHead>Status</TableHead>
+                                                  <TableHead className="w-[80px]">Actions</TableHead>
+                                                </TableRow>
+                                              </TableHeader>
+                                              <TableBody>
+                                                {sectionTasks.map((task) => (
+                                                  <SortableTaskRow
+                                                    key={task.id}
+                                                    task={task}
+                                                    onTaskClick={handleTaskClick}
+                                                    onStatusChange={handleInlineStatusChange}
+                                                    onDelete={(id) => deleteTaskMutation.mutate(id)}
+                                                  />
+                                                ))}
+                                              </TableBody>
+                                            </Table>
+                                          </SortableContext>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="mt-3"
+                                            onClick={() => handleAddTask(section.id)}
+                                          >
+                                            <ListPlus className="h-4 w-4 mr-2" />
+                                            Add Task
+                                          </Button>
+                                        </AccordionContent>
+                                      </AccordionItem>
+                                    );
+                                  })}
+                                </Accordion>
+                                <DragOverlay>
+                                  {activeDragTask ? (
+                                    <div className="bg-card border rounded-lg p-2 shadow-lg flex items-center gap-2">
+                                      <GripVertical className="h-4 w-4 text-muted-foreground" />
+                                      <span className="font-medium">{activeDragTask.name}</span>
+                                    </div>
+                                  ) : null}
+                                </DragOverlay>
+                              </DndContext>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                        onClick={(e) => handleDeleteChecklist(checklist, e)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    )}
                   </div>
-                ))
-              )}
-            </div>
+                );
+              })
+            )}
           </div>
         </div>
-
-        {/* Checklist Details */}
-        <div className="lg:col-span-3">
-          {selectedChecklist ? (
-            <div className="space-y-4">
-              {/* Progress Card */}
-              <div className="rounded-xl border bg-card p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h3 className="font-semibold">{selectedChecklist.stores?.name}</h3>
-                    <p className="text-sm text-muted-foreground">{selectedChecklist.name}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-2xl font-bold text-primary">{getProgress()}%</span>
-                    <p className="text-xs text-muted-foreground">
-                      {tasks.filter((t) => t.status === "completed").length} / {tasks.length} tasks
-                    </p>
-                  </div>
-                </div>
-                <Progress value={getProgress()} className="h-2" />
-              </div>
-
-              {/* View Toggle and Actions */}
-              <div className="rounded-xl border bg-card">
-                <div className="p-4 border-b flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <h3 className="font-semibold">Checklist Tasks</h3>
-                    <ToggleGroup
-                      type="single"
-                      value={viewMode}
-                      onValueChange={(value) => value && setViewMode(value as "list" | "gantt")}
-                      className="border rounded-lg p-1"
-                    >
-                      <ToggleGroupItem value="list" aria-label="List view" className="h-8 px-3 gap-2">
-                        <LayoutList className="h-4 w-4" />
-                        List
-                      </ToggleGroupItem>
-                      <ToggleGroupItem value="gantt" aria-label="Gantt view" className="h-8 px-3 gap-2">
-                        <GanttChart className="h-4 w-4" />
-                        Gantt
-                      </ToggleGroupItem>
-                    </ToggleGroup>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSectionForm({ name: "" });
-                      setSectionDialogOpen(true);
-                    }}
-                  >
-                    <FolderPlus className="h-4 w-4 mr-2" />
-                    Add Section
-                  </Button>
-                </div>
-
-                <div className="p-4">
-                  {sections.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <FolderPlus className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p>No sections yet</p>
-                    </div>
-                  ) : viewMode === "gantt" ? (
-                    <NSOGanttChart
-                      sections={sections}
-                      tasks={tasks}
-                      onTaskUpdate={handleGanttTaskUpdate}
-                      onTaskClick={handleTaskClick}
-                      onAddTask={handleAddTask}
-                      onTaskReorder={handleTaskReorder}
-                    />
-                  ) : (
-                    <DndContext
-                      sensors={sensors}
-                      collisionDetection={closestCenter}
-                      onDragStart={handleDragStart}
-                      onDragEnd={handleDragEnd}
-                    >
-                      <Accordion
-                        type="multiple"
-                        defaultValue={sections.map((s) => s.id)}
-                        className="space-y-3"
-                      >
-                        {sections.map((section) => {
-                          const sectionTasks = getTasksForSection(section.id);
-                          return (
-                            <AccordionItem
-                              key={section.id}
-                              value={section.id}
-                              className="border rounded-lg"
-                            >
-                              <AccordionTrigger className="px-4 hover:no-underline">
-                                <div className="flex items-center gap-3 flex-1">
-                                  <span className="font-medium">{section.name}</span>
-                                  <Badge variant="outline" className="ml-2">
-                                    {sectionTasks.filter((t) => t.status === "completed").length}/
-                                    {sectionTasks.length}
-                                  </Badge>
-                                  {section.is_custom && (
-                                    <Badge variant="secondary" className="text-xs">Custom</Badge>
-                                  )}
-                                </div>
-                                <div className="flex gap-1 mr-2" onClick={(e) => e.stopPropagation()}>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 text-destructive"
-                                    onClick={() => deleteSectionMutation.mutate(section.id)}
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              </AccordionTrigger>
-                              <AccordionContent className="px-4 pb-4">
-                                <SortableContext
-                                  items={sectionTasks.map(t => t.id)}
-                                  strategy={verticalListSortingStrategy}
-                                >
-                                  <Table>
-                                    <TableHeader>
-                                      <TableRow>
-                                        <TableHead className="w-[250px]">Task</TableHead>
-                                        <TableHead>Owner</TableHead>
-                                        <TableHead>Start</TableHead>
-                                        <TableHead>End</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead className="w-[80px]">Actions</TableHead>
-                                      </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                      {sectionTasks.map((task) => (
-                                        <SortableTaskRow
-                                          key={task.id}
-                                          task={task}
-                                          onTaskClick={handleTaskClick}
-                                          onStatusChange={handleInlineStatusChange}
-                                          onDelete={(id) => deleteTaskMutation.mutate(id)}
-                                        />
-                                      ))}
-                                    </TableBody>
-                                  </Table>
-                                </SortableContext>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="mt-3"
-                                  onClick={() => handleAddTask(section.id)}
-                                >
-                                  <ListPlus className="h-4 w-4 mr-2" />
-                                  Add Task
-                                </Button>
-                              </AccordionContent>
-                            </AccordionItem>
-                          );
-                        })}
-                      </Accordion>
-                      <DragOverlay>
-                        {activeDragTask ? (
-                          <div className="bg-card border rounded-lg p-2 shadow-lg flex items-center gap-2">
-                            <GripVertical className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">{activeDragTask.name}</span>
-                          </div>
-                        ) : null}
-                      </DragOverlay>
-                    </DndContext>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-xl border bg-card p-12 text-center text-muted-foreground">
-              <FileText className="h-16 w-16 mx-auto mb-4 opacity-30" />
-              <h3 className="font-medium text-lg mb-2">Select a Checklist</h3>
-              <p className="text-sm">Choose a store checklist from the left to view and manage tasks</p>
-            </div>
-          )}
-        </div>
       </div>
+
 
       {/* Delete Checklist Confirmation Dialog */}
       <AlertDialog open={deleteChecklistDialogOpen} onOpenChange={setDeleteChecklistDialogOpen}>
