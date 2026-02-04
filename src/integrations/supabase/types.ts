@@ -2619,6 +2619,8 @@ export type Database = {
           description: string | null
           id: string
           name: string
+          planned_budget: number | null
+          prescribed_sqft: number | null
           status: string
           store_type: string | null
           updated_at: string
@@ -2628,6 +2630,8 @@ export type Database = {
           description?: string | null
           id?: string
           name: string
+          planned_budget?: number | null
+          prescribed_sqft?: number | null
           status?: string
           store_type?: string | null
           updated_at?: string
@@ -2637,6 +2641,8 @@ export type Database = {
           description?: string | null
           id?: string
           name?: string
+          planned_budget?: number | null
+          prescribed_sqft?: number | null
           status?: string
           store_type?: string | null
           updated_at?: string

@@ -46,8 +46,10 @@ import {
   GripVertical,
   Copy,
   Package,
+  Calculator,
 } from "lucide-react";
 import { format } from "date-fns";
+import { NSOBudgetSection } from "@/components/nso/NSOBudgetSection";
 
 interface ChecklistMaster {
   id: string;
@@ -56,6 +58,8 @@ interface ChecklistMaster {
   description: string | null;
   status: string;
   created_at: string;
+  planned_budget: number | null;
+  prescribed_sqft: number | null;
 }
 
 interface MasterSection {
@@ -828,6 +832,10 @@ export default function NSOChecklistMaster() {
                         </Badge>
                       )}
                     </TabsTrigger>
+                    <TabsTrigger value="budget">
+                      <Calculator className="h-4 w-4 mr-2" />
+                      Budget
+                    </TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>
@@ -1046,6 +1054,15 @@ export default function NSOChecklistMaster() {
                     </Table>
                   )}
                 </div>
+              )}
+
+              {activeTab === "budget" && selectedMaster && (
+                <NSOBudgetSection
+                  masterId={selectedMaster.id}
+                  plannedBudget={selectedMaster.planned_budget || 0}
+                  prescribedSqft={selectedMaster.prescribed_sqft || 0}
+                  requiredAssets={requiredAssets}
+                />
               )}
             </div>
           ) : (
