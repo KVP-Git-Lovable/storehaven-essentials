@@ -419,7 +419,21 @@ export function AssetMasterFormDialog({
           </DialogTitle>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 overflow-hidden">
+          <form 
+            onSubmit={form.handleSubmit(onSubmit, (errors) => {
+              console.log("Form validation errors:", errors);
+              // Show first validation error to user
+              const firstError = Object.values(errors)[0];
+              if (firstError?.message) {
+                toast({ 
+                  title: "Validation Error", 
+                  description: String(firstError.message), 
+                  variant: "destructive" 
+                });
+              }
+            })} 
+            className="flex flex-col flex-1 overflow-hidden"
+          >
             <Tabs defaultValue="basic" className="flex-1 flex flex-col overflow-hidden">
               <div className="px-6">
                 <TabsList className="grid w-full grid-cols-4">
