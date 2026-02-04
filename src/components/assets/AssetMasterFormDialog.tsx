@@ -723,7 +723,7 @@ export function AssetMasterFormDialog({
                       name="default_vendor_id"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Default Vendor</FormLabel>
+                          <FormLabel>Vendor</FormLabel>
                           <SearchableSelect
                             options={vendors.map((v) => ({ value: v.id, label: v.name }))}
                             value={field.value || ""}
@@ -741,7 +741,7 @@ export function AssetMasterFormDialog({
                       name="default_oem_id"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Default OEM</FormLabel>
+                          <FormLabel>OEM</FormLabel>
                           <SearchableSelect
                             options={vendors.map((v) => ({ value: v.id, label: v.name }))}
                             value={field.value || ""}
@@ -762,7 +762,7 @@ export function AssetMasterFormDialog({
                       name="default_asset_status"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Default Asset Status</FormLabel>
+                          <FormLabel>Asset Status</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value || "working"}>
                             <FormControl>
                               <SelectTrigger>
@@ -790,7 +790,7 @@ export function AssetMasterFormDialog({
                       name="default_service_engagement"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Default Service Engagement</FormLabel>
+                          <FormLabel>Service Engagement</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value || "under_warranty"}>
                             <FormControl>
                               <SelectTrigger>
