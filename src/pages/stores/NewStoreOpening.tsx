@@ -140,12 +140,14 @@ export default function NewStoreOpening() {
         .eq("id", data.store_id)
         .single();
       
-      // Fetch active sq ft budget rate
+      // Fetch active sq ft budget rate (must be effective now or in the past)
+      const today = format(new Date(), "yyyy-MM-dd");
       const { data: sqftRate } = await supabase
         .from("sqft_budget_master")
         .select("price_per_sqft")
         .eq("status", "active")
-        .order("effective_from", { ascending: false, nullsFirst: false })
+        .lte("effective_from", today)
+        .order("effective_from", { ascending: false })
         .limit(1)
         .single();
       
