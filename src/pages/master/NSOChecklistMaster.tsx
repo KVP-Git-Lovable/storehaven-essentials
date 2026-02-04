@@ -84,6 +84,7 @@ interface AssetMaster {
   id: string;
   name: string;
   criticality: string;
+  standard_price: number | null;
   categories?: { name: string } | null;
 }
 
@@ -193,7 +194,7 @@ export default function NSOChecklistMaster() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("asset_masters")
-        .select("id, name, criticality, categories(name)")
+        .select("id, name, criticality, standard_price, categories(name)")
         .eq("status", "active")
         .order("name");
       if (error) throw error;
@@ -208,7 +209,7 @@ export default function NSOChecklistMaster() {
       if (!selectedMaster) return [];
       const { data, error } = await supabase
         .from("nso_master_assets")
-        .select("*, asset_masters(id, name, criticality, categories(name))")
+        .select("*, asset_masters(id, name, criticality, standard_price, categories(name))")
         .eq("master_id", selectedMaster.id)
         .order("sort_order");
       if (error) throw error;
@@ -1263,17 +1264,56 @@ export default function NSOChecklistMaster() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Quantity</Label>
-              <Input
-                type="number"
-                min={1}
-                value={assetForm.quantity}
-                onChange={(e) =>
-                  setAssetForm((f) => ({ ...f, quantity: parseInt(e.target.value) || 1 }))
-                }
-              />
-            </div>
+            {/* Asset Value - auto-fetched and read-only */}
+            {(() => {
+              const selectedAsset = assetMasters.find(a => a.id === assetForm.asset_master_id);
+              const assetValue = selectedAsset?.standard_price ?? 0;
+              const totalCost = assetValue * assetForm.quantity;
+              
+              return (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Asset Value</Label>
+                      <Input
+                        type="text"
+                        value={assetValue > 0 ? `₹ ${assetValue.toLocaleString('en-IN')}` : "Not set"}
+                        readOnly
+                        className="bg-muted cursor-not-allowed"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        From Asset Master
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Quantity</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={assetForm.quantity}
+                        onChange={(e) =>
+                          setAssetForm((f) => ({ ...f, quantity: parseInt(e.target.value) || 1 }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  {assetValue > 0 && (
+                    <div className="space-y-2">
+                      <Label>Total Cost</Label>
+                      <Input
+                        type="text"
+                        value={`₹ ${totalCost.toLocaleString('en-IN')}`}
+                        readOnly
+                        className="bg-muted cursor-not-allowed font-semibold"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Asset Value × Quantity
+                      </p>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             <div className="space-y-2">
               <Label>Notes</Label>
               <Textarea
