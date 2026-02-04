@@ -68,8 +68,10 @@ import {
   GanttChart,
   GripVertical,
   Calculator,
+  Package,
 } from "lucide-react";
 import { NSOStoreBudgetSection } from "@/components/nso/NSOStoreBudgetSection";
+import { NSOStoreAssetsSection } from "@/components/nso/NSOStoreAssetsSection";
 import { format, addDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import { NSOGanttChart } from "@/components/nso/NSOGanttChart";
@@ -946,12 +948,16 @@ export default function NewStoreOpening() {
                           <Progress value={progress} className="h-2" />
                         </div>
 
-                        {/* Tabs for Tasks and Budget */}
+                        {/* Tabs for Tasks, Assets and Budget */}
                         <Tabs defaultValue="tasks" className="space-y-4">
                           <TabsList>
                             <TabsTrigger value="tasks" className="gap-2">
                               <LayoutList className="h-4 w-4" />
                               Tasks
+                            </TabsTrigger>
+                            <TabsTrigger value="assets" className="gap-2">
+                              <Package className="h-4 w-4" />
+                              Required Assets
                             </TabsTrigger>
                             <TabsTrigger value="budget" className="gap-2">
                               <Calculator className="h-4 w-4" />
@@ -1105,6 +1111,18 @@ export default function NewStoreOpening() {
                                   </DndContext>
                                 )}
                               </div>
+                            </div>
+                          </TabsContent>
+
+                          {/* Required Assets Tab */}
+                          <TabsContent value="assets" className="m-0">
+                            <div className="rounded-lg border bg-card p-4">
+                              <NSOStoreAssetsSection
+                                checklistId={checklist.id}
+                                onAssetChange={() => {
+                                  queryClient.invalidateQueries({ queryKey: ["nso-budget-items", checklist.id] });
+                                }}
+                              />
                             </div>
                           </TabsContent>
 
