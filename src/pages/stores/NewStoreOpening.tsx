@@ -48,6 +48,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "sonner";
 import {
@@ -66,7 +67,9 @@ import {
   LayoutList,
   GanttChart,
   GripVertical,
+  Calculator,
 } from "lucide-react";
+import { NSOStoreBudgetSection } from "@/components/nso/NSOStoreBudgetSection";
 import { format, addDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import { NSOGanttChart } from "@/components/nso/NSOGanttChart";
@@ -94,7 +97,10 @@ interface StoreChecklist {
   name: string;
   start_date: string;
   status: string;
-  stores?: { name: string };
+  prescribed_budget: number | null;
+  budget: number | null;
+  final_budget: number | null;
+  stores?: { name: string; store_size_sqft: number | null };
 }
 
 interface StoreSection {
@@ -317,7 +323,7 @@ export default function NewStoreOpening() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("nso_store_checklists")
-        .select("*, stores(name)")
+        .select("*, stores(name, store_size_sqft)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as StoreChecklist[];
@@ -375,15 +381,46 @@ export default function NewStoreOpening() {
   // Assign checklist mutation
   const assignChecklistMutation = useMutation({
     mutationFn: async (data: typeof assignForm) => {
-      // Create the store checklist
-      const master = masters.find((m) => m.id === data.master_id);
+      // Fetch store details for sq ft
+      const { data: storeData } = await supabase
+        .from("stores")
+        .select("store_size_sqft")
+        .eq("id", data.store_id)
+        .single();
+      
+      // Fetch active sq ft budget rate
+      const { data: sqftRate } = await supabase
+        .from("sqft_budget_master")
+        .select("price_per_sqft")
+        .eq("status", "active")
+        .order("effective_from", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .single();
+      
+      // Fetch master for planned_budget
+      const { data: masterData } = await supabase
+        .from("nso_checklist_masters")
+        .select("name, planned_budget")
+        .eq("id", data.master_id)
+        .single();
+      
+      // Calculate prescribed budget
+      const storeSqft = storeData?.store_size_sqft || 0;
+      const ratePerSqft = sqftRate?.price_per_sqft || 0;
+      const prescribedBudget = storeSqft * ratePerSqft;
+      const initialBudget = masterData?.planned_budget || 0;
+
+      // Create the store checklist with budget fields
       const { data: checklist, error: checklistError } = await supabase
         .from("nso_store_checklists")
         .insert({
           store_id: data.store_id,
           master_id: data.master_id,
-          name: master?.name || "New Store Opening",
+          name: masterData?.name || "New Store Opening",
           start_date: format(data.start_date, "yyyy-MM-dd"),
+          prescribed_budget: prescribedBudget,
+          budget: initialBudget,
+          final_budget: 0,
         })
         .select()
         .single();
@@ -470,6 +507,22 @@ export default function NewStoreOpening() {
       setAssignForm({ store_id: "", master_id: "", start_date: new Date() });
     },
     onError: () => toast.error("Failed to assign checklist"),
+  });
+
+  // Update checklist budget mutation
+  const updateChecklistBudgetMutation = useMutation({
+    mutationFn: async ({ checklistId, field, value }: { checklistId: string; field: "budget" | "final_budget"; value: number }) => {
+      const { error } = await supabase
+        .from("nso_store_checklists")
+        .update({ [field]: value })
+        .eq("id", checklistId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-store-checklists"] });
+      toast.success("Budget updated");
+    },
+    onError: () => toast.error("Failed to update budget"),
   });
 
   // Delete checklist mutation
@@ -893,152 +946,186 @@ export default function NewStoreOpening() {
                           <Progress value={progress} className="h-2" />
                         </div>
 
-                        {/* View Toggle and Actions */}
-                        <div className="rounded-lg border bg-card">
-                          <div className="p-4 border-b flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <h3 className="font-semibold">Checklist Tasks</h3>
-                              <ToggleGroup
-                                type="single"
-                                value={viewMode}
-                                onValueChange={(value) => value && setViewMode(value as "list" | "gantt")}
-                                className="border rounded-lg p-1"
-                              >
-                                <ToggleGroupItem value="list" aria-label="List view" className="h-8 px-3 gap-2">
-                                  <LayoutList className="h-4 w-4" />
-                                  List
-                                </ToggleGroupItem>
-                                <ToggleGroupItem value="gantt" aria-label="Gantt view" className="h-8 px-3 gap-2">
-                                  <GanttChart className="h-4 w-4" />
-                                  Gantt
-                                </ToggleGroupItem>
-                              </ToggleGroup>
-                            </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSectionForm({ name: "" });
-                                setSectionDialogOpen(true);
-                              }}
-                            >
-                              <FolderPlus className="h-4 w-4 mr-2" />
-                              Add Section
-                            </Button>
-                          </div>
+                        {/* Tabs for Tasks and Budget */}
+                        <Tabs defaultValue="tasks" className="space-y-4">
+                          <TabsList>
+                            <TabsTrigger value="tasks" className="gap-2">
+                              <LayoutList className="h-4 w-4" />
+                              Tasks
+                            </TabsTrigger>
+                            <TabsTrigger value="budget" className="gap-2">
+                              <Calculator className="h-4 w-4" />
+                              Budget
+                            </TabsTrigger>
+                          </TabsList>
 
-                          <div className="p-4">
-                            {checklistSections.length === 0 ? (
-                              <div className="text-center py-8 text-muted-foreground">
-                                <FolderPlus className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                                <p>No sections yet</p>
-                              </div>
-                            ) : viewMode === "gantt" ? (
-                              <NSOGanttChart
-                                sections={checklistSections}
-                                tasks={checklistTasks}
-                                onTaskUpdate={handleGanttTaskUpdate}
-                                onTaskClick={handleTaskClick}
-                                onAddTask={handleAddTask}
-                                onTaskReorder={handleTaskReorder}
-                              />
-                            ) : (
-                              <DndContext
-                                sensors={sensors}
-                                collisionDetection={closestCenter}
-                                onDragStart={handleDragStart}
-                                onDragEnd={handleDragEnd}
-                              >
-                                <Accordion
-                                  type="multiple"
-                                  defaultValue={checklistSections.map((s) => s.id)}
-                                  className="space-y-3"
+                          {/* Tasks Tab */}
+                          <TabsContent value="tasks" className="m-0">
+                            <div className="rounded-lg border bg-card">
+                              <div className="p-4 border-b flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                  <h3 className="font-semibold">Checklist Tasks</h3>
+                                  <ToggleGroup
+                                    type="single"
+                                    value={viewMode}
+                                    onValueChange={(value) => value && setViewMode(value as "list" | "gantt")}
+                                    className="border rounded-lg p-1"
+                                  >
+                                    <ToggleGroupItem value="list" aria-label="List view" className="h-8 px-3 gap-2">
+                                      <LayoutList className="h-4 w-4" />
+                                      List
+                                    </ToggleGroupItem>
+                                    <ToggleGroupItem value="gantt" aria-label="Gantt view" className="h-8 px-3 gap-2">
+                                      <GanttChart className="h-4 w-4" />
+                                      Gantt
+                                    </ToggleGroupItem>
+                                  </ToggleGroup>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSectionForm({ name: "" });
+                                    setSectionDialogOpen(true);
+                                  }}
                                 >
-                                  {checklistSections.map((section) => {
-                                    const sectionTasks = getTasksForSection(section.id);
-                                    return (
-                                      <AccordionItem
-                                        key={section.id}
-                                        value={section.id}
-                                        className="border rounded-lg"
-                                      >
-                                        <AccordionTrigger className="px-4 hover:no-underline">
-                                          <div className="flex items-center gap-3 flex-1">
-                                            <span className="font-medium">{section.name}</span>
-                                            <Badge variant="outline" className="ml-2">
-                                              {sectionTasks.filter((t) => t.status === "completed").length}/
-                                              {sectionTasks.length}
-                                            </Badge>
-                                            {section.is_custom && (
-                                              <Badge variant="secondary" className="text-xs">Custom</Badge>
-                                            )}
-                                          </div>
-                                          <div className="flex gap-1 mr-2" onClick={(e) => e.stopPropagation()}>
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-7 w-7 text-destructive"
-                                              onClick={() => deleteSectionMutation.mutate(section.id)}
-                                            >
-                                              <Trash2 className="h-3 w-3" />
-                                            </Button>
-                                          </div>
-                                        </AccordionTrigger>
-                                        <AccordionContent className="px-4 pb-4">
-                                          <SortableContext
-                                            items={sectionTasks.map(t => t.id)}
-                                            strategy={verticalListSortingStrategy}
+                                  <FolderPlus className="h-4 w-4 mr-2" />
+                                  Add Section
+                                </Button>
+                              </div>
+
+                              <div className="p-4">
+                                {checklistSections.length === 0 ? (
+                                  <div className="text-center py-8 text-muted-foreground">
+                                    <FolderPlus className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                                    <p>No sections yet</p>
+                                  </div>
+                                ) : viewMode === "gantt" ? (
+                                  <NSOGanttChart
+                                    sections={checklistSections}
+                                    tasks={checklistTasks}
+                                    onTaskUpdate={handleGanttTaskUpdate}
+                                    onTaskClick={handleTaskClick}
+                                    onAddTask={handleAddTask}
+                                    onTaskReorder={handleTaskReorder}
+                                  />
+                                ) : (
+                                  <DndContext
+                                    sensors={sensors}
+                                    collisionDetection={closestCenter}
+                                    onDragStart={handleDragStart}
+                                    onDragEnd={handleDragEnd}
+                                  >
+                                    <Accordion
+                                      type="multiple"
+                                      defaultValue={checklistSections.map((s) => s.id)}
+                                      className="space-y-3"
+                                    >
+                                      {checklistSections.map((section) => {
+                                        const sectionTasks = getTasksForSection(section.id);
+                                        return (
+                                          <AccordionItem
+                                            key={section.id}
+                                            value={section.id}
+                                            className="border rounded-lg"
                                           >
-                                            <Table>
-                                              <TableHeader>
-                                                <TableRow>
-                                                  <TableHead className="w-[250px]">Task</TableHead>
-                                                  <TableHead>Owner</TableHead>
-                                                  <TableHead>Start</TableHead>
-                                                  <TableHead>End</TableHead>
-                                                  <TableHead>Status</TableHead>
-                                                  <TableHead className="w-[80px]">Actions</TableHead>
-                                                </TableRow>
-                                              </TableHeader>
-                                              <TableBody>
-                                                {sectionTasks.map((task) => (
-                                                  <SortableTaskRow
-                                                    key={task.id}
-                                                    task={task}
-                                                    onTaskClick={handleTaskClick}
-                                                    onStatusChange={handleInlineStatusChange}
-                                                    onDelete={(id) => deleteTaskMutation.mutate(id)}
-                                                  />
-                                                ))}
-                                              </TableBody>
-                                            </Table>
-                                          </SortableContext>
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="mt-3"
-                                            onClick={() => handleAddTask(section.id)}
-                                          >
-                                            <ListPlus className="h-4 w-4 mr-2" />
-                                            Add Task
-                                          </Button>
-                                        </AccordionContent>
-                                      </AccordionItem>
-                                    );
-                                  })}
-                                </Accordion>
-                                <DragOverlay>
-                                  {activeDragTask ? (
-                                    <div className="bg-card border rounded-lg p-2 shadow-lg flex items-center gap-2">
-                                      <GripVertical className="h-4 w-4 text-muted-foreground" />
-                                      <span className="font-medium">{activeDragTask.name}</span>
-                                    </div>
-                                  ) : null}
-                                </DragOverlay>
-                              </DndContext>
-                            )}
-                          </div>
-                        </div>
+                                            <AccordionTrigger className="px-4 hover:no-underline">
+                                              <div className="flex items-center gap-3 flex-1">
+                                                <span className="font-medium">{section.name}</span>
+                                                <Badge variant="outline" className="ml-2">
+                                                  {sectionTasks.filter((t) => t.status === "completed").length}/
+                                                  {sectionTasks.length}
+                                                </Badge>
+                                                {section.is_custom && (
+                                                  <Badge variant="secondary" className="text-xs">Custom</Badge>
+                                                )}
+                                              </div>
+                                              <div className="flex gap-1 mr-2" onClick={(e) => e.stopPropagation()}>
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="h-7 w-7 text-destructive"
+                                                  onClick={() => deleteSectionMutation.mutate(section.id)}
+                                                >
+                                                  <Trash2 className="h-3 w-3" />
+                                                </Button>
+                                              </div>
+                                            </AccordionTrigger>
+                                            <AccordionContent className="px-4 pb-4">
+                                              <SortableContext
+                                                items={sectionTasks.map(t => t.id)}
+                                                strategy={verticalListSortingStrategy}
+                                              >
+                                                <Table>
+                                                  <TableHeader>
+                                                    <TableRow>
+                                                      <TableHead className="w-[250px]">Task</TableHead>
+                                                      <TableHead>Owner</TableHead>
+                                                      <TableHead>Start</TableHead>
+                                                      <TableHead>End</TableHead>
+                                                      <TableHead>Status</TableHead>
+                                                      <TableHead className="w-[80px]">Actions</TableHead>
+                                                    </TableRow>
+                                                  </TableHeader>
+                                                  <TableBody>
+                                                    {sectionTasks.map((task) => (
+                                                      <SortableTaskRow
+                                                        key={task.id}
+                                                        task={task}
+                                                        onTaskClick={handleTaskClick}
+                                                        onStatusChange={handleInlineStatusChange}
+                                                        onDelete={(id) => deleteTaskMutation.mutate(id)}
+                                                      />
+                                                    ))}
+                                                  </TableBody>
+                                                </Table>
+                                              </SortableContext>
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="mt-3"
+                                                onClick={() => handleAddTask(section.id)}
+                                              >
+                                                <ListPlus className="h-4 w-4 mr-2" />
+                                                Add Task
+                                              </Button>
+                                            </AccordionContent>
+                                          </AccordionItem>
+                                        );
+                                      })}
+                                    </Accordion>
+                                    <DragOverlay>
+                                      {activeDragTask ? (
+                                        <div className="bg-card border rounded-lg p-2 shadow-lg flex items-center gap-2">
+                                          <GripVertical className="h-4 w-4 text-muted-foreground" />
+                                          <span className="font-medium">{activeDragTask.name}</span>
+                                        </div>
+                                      ) : null}
+                                    </DragOverlay>
+                                  </DndContext>
+                                )}
+                              </div>
+                            </div>
+                          </TabsContent>
+
+                          {/* Budget Tab */}
+                          <TabsContent value="budget" className="m-0">
+                            <NSOStoreBudgetSection
+                              checklistId={checklist.id}
+                              storeId={checklist.store_id}
+                              prescribedBudget={checklist.prescribed_budget || 0}
+                              budget={checklist.budget || 0}
+                              finalBudget={checklist.final_budget || 0}
+                              onBudgetUpdate={(field, value) => 
+                                updateChecklistBudgetMutation.mutate({
+                                  checklistId: checklist.id,
+                                  field,
+                                  value,
+                                })
+                              }
+                            />
+                          </TabsContent>
+                        </Tabs>
                       </div>
                     )}
                   </div>
