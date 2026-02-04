@@ -34,6 +34,8 @@ import { format } from "date-fns";
 interface SqFtBudget {
   id: string;
   name: string | null;
+  min_sqft: number | null;
+  max_sqft: number | null;
   price_per_sqft: number;
   effective_from: string | null;
   status: string;
@@ -43,6 +45,8 @@ interface SqFtBudget {
 
 interface FormData {
   name: string;
+  min_sqft: string;
+  max_sqft: string;
   price_per_sqft: string;
   effective_from: string;
   status: string;
@@ -50,6 +54,8 @@ interface FormData {
 
 const defaultFormData: FormData = {
   name: "",
+  min_sqft: "0",
+  max_sqft: "",
   price_per_sqft: "",
   effective_from: "",
   status: "active",
@@ -67,7 +73,7 @@ export default function SqFtBudgetMaster() {
       const { data, error } = await supabase
         .from("sqft_budget_master")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("min_sqft", { ascending: true });
       if (error) throw error;
       return data as SqFtBudget[];
     },
@@ -77,6 +83,8 @@ export default function SqFtBudgetMaster() {
     mutationFn: async (data: FormData) => {
       const { error } = await supabase.from("sqft_budget_master").insert({
         name: data.name || null,
+        min_sqft: parseFloat(data.min_sqft) || 0,
+        max_sqft: data.max_sqft ? parseFloat(data.max_sqft) : null,
         price_per_sqft: parseFloat(data.price_per_sqft),
         effective_from: data.effective_from || null,
         status: data.status,
@@ -99,6 +107,8 @@ export default function SqFtBudgetMaster() {
         .from("sqft_budget_master")
         .update({
           name: data.name || null,
+          min_sqft: parseFloat(data.min_sqft) || 0,
+          max_sqft: data.max_sqft ? parseFloat(data.max_sqft) : null,
           price_per_sqft: parseFloat(data.price_per_sqft),
           effective_from: data.effective_from || null,
           status: data.status,
@@ -138,6 +148,8 @@ export default function SqFtBudgetMaster() {
       setEditingItem(item);
       setFormData({
         name: item.name || "",
+        min_sqft: (item.min_sqft || 0).toString(),
+        max_sqft: item.max_sqft?.toString() || "",
         price_per_sqft: item.price_per_sqft.toString(),
         effective_from: item.effective_from || "",
         status: item.status,
@@ -164,6 +176,14 @@ export default function SqFtBudgetMaster() {
       return;
     }
 
+    const minSqft = parseFloat(formData.min_sqft) || 0;
+    const maxSqft = formData.max_sqft ? parseFloat(formData.max_sqft) : null;
+    
+    if (maxSqft !== null && maxSqft <= minSqft) {
+      toast.error("Max Sq Ft must be greater than Min Sq Ft");
+      return;
+    }
+
     if (editingItem) {
       updateMutation.mutate({ id: editingItem.id, data: formData });
     } else {
@@ -177,13 +197,21 @@ export default function SqFtBudgetMaster() {
     }
   };
 
+  const formatSqFtRange = (min: number | null, max: number | null) => {
+    const minVal = min || 0;
+    if (max === null || max === undefined) {
+      return `${minVal.toLocaleString("en-IN")}+ sq ft`;
+    }
+    return `${minVal.toLocaleString("en-IN")} - ${max.toLocaleString("en-IN")} sq ft`;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Sq Ft Budget Master</h1>
           <p className="text-muted-foreground">
-            Manage price per square foot rates for store budget calculations
+            Manage price per square foot rates by store size ranges
           </p>
         </div>
         <Button onClick={() => handleOpenDialog()}>
@@ -197,6 +225,7 @@ export default function SqFtBudgetMaster() {
           <TableHeader>
             <TableRow>
               <TableHead>Budget Name</TableHead>
+              <TableHead>Sq Ft Range</TableHead>
               <TableHead>Price per Sq Ft</TableHead>
               <TableHead>Effective From</TableHead>
               <TableHead>Status</TableHead>
@@ -207,13 +236,13 @@ export default function SqFtBudgetMaster() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
+                <TableCell colSpan={7} className="text-center py-8">
                   Loading...
                 </TableCell>
               </TableRow>
             ) : budgets.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   No budget rates configured. Add one to get started.
                 </TableCell>
               </TableRow>
@@ -221,6 +250,9 @@ export default function SqFtBudgetMaster() {
               budgets.map((budget) => (
                 <TableRow key={budget.id}>
                   <TableCell>{budget.name || "-"}</TableCell>
+                  <TableCell className="font-medium">
+                    {formatSqFtRange(budget.min_sqft, budget.max_sqft)}
+                  </TableCell>
                   <TableCell className="font-medium">
                     ₹{budget.price_per_sqft.toLocaleString("en-IN", {
                       minimumFractionDigits: 2,
@@ -268,7 +300,7 @@ export default function SqFtBudgetMaster() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
               {editingItem ? "Edit Budget Rate" : "Add Budget Rate"}
@@ -283,8 +315,43 @@ export default function SqFtBudgetMaster() {
                 onChange={(e) =>
                   setFormData({ ...formData, name: e.target.value })
                 }
-                placeholder="e.g., Standard Rate, Premium Rate"
+                placeholder="e.g., Small Store Rate, Large Store Rate"
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="min_sqft">Min Sq Ft *</Label>
+                <Input
+                  id="min_sqft"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={formData.min_sqft}
+                  onChange={(e) =>
+                    setFormData({ ...formData, min_sqft: e.target.value })
+                  }
+                  placeholder="0"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="max_sqft">Max Sq Ft</Label>
+                <Input
+                  id="max_sqft"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={formData.max_sqft}
+                  onChange={(e) =>
+                    setFormData({ ...formData, max_sqft: e.target.value })
+                  }
+                  placeholder="Unlimited"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave empty for unlimited (e.g., 5000+)
+                </p>
+              </div>
             </div>
 
             <div className="space-y-2">
