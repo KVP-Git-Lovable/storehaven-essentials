@@ -289,6 +289,9 @@ export default function VendorContractView() {
         p4_response_mins: editableFields.p4_response_mins ? parseInt(editableFields.p4_response_mins) : null,
         p4_resolution_hrs: editableFields.p4_resolution_hrs ? parseInt(editableFields.p4_resolution_hrs) : null,
         notes: editableFields.notes || null,
+        // Mark as vendor update pending review
+        vendor_update_status: "pending_review",
+        vendor_updated_at: new Date().toISOString(),
       };
 
       const { error: updateError } = await supabase

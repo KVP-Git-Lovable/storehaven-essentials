@@ -73,14 +73,18 @@ export function VendorLinkSection({ contractId }: VendorLinkSectionProps) {
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
 
-      // Generate new link
+      // Generate new link with 30-day expiration
       const token = generateSecureToken();
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30);
+      
       const { data, error } = await supabase
         .from("service_contract_vendor_links")
         .insert({
           service_contract_id: contractId,
           token,
           is_active: true,
+          expires_at: expiresAt.toISOString(),
           created_by: user?.id || null,
         })
         .select()
@@ -229,6 +233,9 @@ export function VendorLinkSection({ contractId }: VendorLinkSectionProps) {
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground">
               Created: {new Date(link.created_at).toLocaleDateString()}
+              {link.expires_at && (
+                <> • Expires: {new Date(link.expires_at).toLocaleDateString()}</>
+              )}
               {link.last_accessed_at && (
                 <> • Last accessed: {new Date(link.last_accessed_at).toLocaleDateString()}</>
               )}
