@@ -91,6 +91,7 @@ type AssetMasterOption = {
   default_service_engagement: string | null;
   warranty_start_date: string | null;
   warranty_end_date: string | null;
+  default_purchase_date: string | null;
 };
 
 type Store = {
@@ -178,7 +179,7 @@ export default function AssetInventory() {
       supabase.from("vendors").select("id, name, vendor_type").order("name"),
       supabase
         .from("asset_masters")
-        .select("id, name, category_id, categories(name), standard_price, warranty_months, default_vendor_id, default_oem_id, default_asset_status, default_service_engagement, warranty_start_date, warranty_end_date")
+        .select("id, name, category_id, categories(name), standard_price, warranty_months, default_vendor_id, default_oem_id, default_asset_status, default_service_engagement, warranty_start_date, warranty_end_date, default_purchase_date")
         .eq("status", "active")
         .order("name"),
       supabase.from("stores").select("id, name, address").eq("status", "active").order("name"),
@@ -417,6 +418,10 @@ export default function AssetInventory() {
                             if (selectedMaster.default_service_engagement) {
                               form.setValue("condition", selectedMaster.default_service_engagement);
                             }
+                            // Set default purchase date
+                            if (selectedMaster.default_purchase_date) {
+                              form.setValue("purchaseDate", selectedMaster.default_purchase_date);
+                            }
                             // Set warranty dates from master if available
                             if (selectedMaster.warranty_start_date) {
                               form.setValue("warrantyStartDate", selectedMaster.warranty_start_date);
@@ -426,7 +431,7 @@ export default function AssetInventory() {
                             }
                             // If no warranty dates but warranty_months exists, calculate from purchase date
                             if (!selectedMaster.warranty_start_date && !selectedMaster.warranty_end_date && selectedMaster.warranty_months) {
-                              const purchaseDate = form.getValues("purchaseDate");
+                              const purchaseDate = selectedMaster.default_purchase_date || form.getValues("purchaseDate");
                               if (purchaseDate) {
                                 const startDate = new Date(purchaseDate);
                                 form.setValue("warrantyStartDate", purchaseDate);

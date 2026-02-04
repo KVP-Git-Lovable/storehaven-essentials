@@ -66,6 +66,7 @@ const assetMasterSchema = z.object({
   default_oem_id: z.string().uuid().optional().or(z.literal("")),
   default_asset_status: z.string().optional(),
   default_service_engagement: z.string().optional(),
+  default_purchase_date: z.string().optional(),
   
   // Physical Specifications
   weight_kg: z.coerce.number().min(0, "Weight must be 0 or more").optional().nullable(),
@@ -127,6 +128,7 @@ type AssetMaster = {
   default_oem_id?: string | null;
   default_asset_status?: string | null;
   default_service_engagement?: string | null;
+  default_purchase_date?: string | null;
   weight_kg?: number | null;
   dimensions_cm?: string | null;
   power_consumption_watts?: number | null;
@@ -294,6 +296,7 @@ export function AssetMasterFormDialog({
       default_oem_id: "",
       default_asset_status: "working",
       default_service_engagement: "under_warranty",
+      default_purchase_date: "",
       weight_kg: null,
       dimensions_cm: "",
       power_consumption_watts: null,
@@ -345,6 +348,7 @@ export function AssetMasterFormDialog({
           default_oem_id: editingAsset.default_oem_id || "",
           default_asset_status: editingAsset.default_asset_status || "working",
           default_service_engagement: editingAsset.default_service_engagement || "under_warranty",
+          default_purchase_date: editingAsset.default_purchase_date || "",
           weight_kg: editingAsset.weight_kg || null,
           dimensions_cm: editingAsset.dimensions_cm || "",
           power_consumption_watts: editingAsset.power_consumption_watts || null,
@@ -401,6 +405,7 @@ export function AssetMasterFormDialog({
       default_oem_id: data.default_oem_id || null,
       default_asset_status: data.default_asset_status || "working",
       default_service_engagement: data.default_service_engagement || "under_warranty",
+      default_purchase_date: data.default_purchase_date || null,
       weight_kg: data.weight_kg || null,
       dimensions_cm: data.dimensions_cm || null,
       power_consumption_watts: data.power_consumption_watts || null,
@@ -809,6 +814,24 @@ export function AssetMasterFormDialog({
                       )}
                     />
                   </div>
+
+                  <FormField
+                    control={form.control}
+                    name="default_purchase_date"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Purchase Date</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="date"
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
                   <FormField
                     control={form.control}
