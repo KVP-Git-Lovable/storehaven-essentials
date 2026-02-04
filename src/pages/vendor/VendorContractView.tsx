@@ -11,16 +11,24 @@ import {
   MapPin,
   ChevronDown,
   ChevronRight,
-  Shield
+  Shield,
+  Save,
+  Edit2,
+  Loader2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { 
   Collapsible, 
   CollapsibleContent, 
   CollapsibleTrigger 
 } from "@/components/ui/collapsible";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 
@@ -93,28 +101,99 @@ interface LocationData {
   store: { id: string; name: string; address: string } | null;
 }
 
+// Editable fields interface
+interface EditableFields {
+  // Escalation
+  escalation_l1_name: string;
+  escalation_l1_phone: string;
+  escalation_l1_email: string;
+  escalation_l2_name: string;
+  escalation_l2_phone: string;
+  escalation_l2_email: string;
+  escalation_l3_name: string;
+  escalation_l3_phone: string;
+  escalation_l3_email: string;
+  // SLA
+  p1_response_mins: string;
+  p1_resolution_hrs: string;
+  p2_response_mins: string;
+  p2_resolution_hrs: string;
+  p3_response_mins: string;
+  p3_resolution_hrs: string;
+  p4_response_mins: string;
+  p4_resolution_hrs: string;
+  // Notes
+  notes: string;
+}
+
 export default function VendorContractView() {
   const { token } = useParams<{ token: string }>();
   const [contract, setContract] = useState<ContractData | null>(null);
   const [assets, setAssets] = useState<AssetData[]>([]);
   const [locations, setLocations] = useState<LocationData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editableFields, setEditableFields] = useState<EditableFields>({
+    escalation_l1_name: "",
+    escalation_l1_phone: "",
+    escalation_l1_email: "",
+    escalation_l2_name: "",
+    escalation_l2_phone: "",
+    escalation_l2_email: "",
+    escalation_l3_name: "",
+    escalation_l3_phone: "",
+    escalation_l3_email: "",
+    p1_response_mins: "",
+    p1_resolution_hrs: "",
+    p2_response_mins: "",
+    p2_resolution_hrs: "",
+    p3_response_mins: "",
+    p3_resolution_hrs: "",
+    p4_response_mins: "",
+    p4_resolution_hrs: "",
+    notes: "",
+  });
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     overview: true,
     coverage: true,
     sla: true,
     pm: false,
-    escalation: false,
+    escalation: true,
     assets: false,
     locations: false,
   });
+  const { toast } = useToast();
 
   useEffect(() => {
     if (token) {
       validateAndFetchContract();
     }
   }, [token]);
+
+  const initializeEditableFields = (contractData: ContractData) => {
+    setEditableFields({
+      escalation_l1_name: contractData.escalation_l1_name || "",
+      escalation_l1_phone: contractData.escalation_l1_phone || "",
+      escalation_l1_email: contractData.escalation_l1_email || "",
+      escalation_l2_name: contractData.escalation_l2_name || "",
+      escalation_l2_phone: contractData.escalation_l2_phone || "",
+      escalation_l2_email: contractData.escalation_l2_email || "",
+      escalation_l3_name: contractData.escalation_l3_name || "",
+      escalation_l3_phone: contractData.escalation_l3_phone || "",
+      escalation_l3_email: contractData.escalation_l3_email || "",
+      p1_response_mins: contractData.p1_response_mins?.toString() || "",
+      p1_resolution_hrs: contractData.p1_resolution_hrs?.toString() || "",
+      p2_response_mins: contractData.p2_response_mins?.toString() || "",
+      p2_resolution_hrs: contractData.p2_resolution_hrs?.toString() || "",
+      p3_response_mins: contractData.p3_response_mins?.toString() || "",
+      p3_resolution_hrs: contractData.p3_resolution_hrs?.toString() || "",
+      p4_response_mins: contractData.p4_response_mins?.toString() || "",
+      p4_resolution_hrs: contractData.p4_resolution_hrs?.toString() || "",
+      notes: contractData.notes || "",
+    });
+  };
 
   const validateAndFetchContract = async () => {
     setLoading(true);
@@ -158,6 +237,7 @@ export default function VendorContractView() {
       }
 
       setContract(contractData);
+      initializeEditableFields(contractData);
 
       // Fetch assets and locations
       const [assetsRes, locationsRes] = await Promise.all([
@@ -185,6 +265,64 @@ export default function VendorContractView() {
     setLoading(false);
   };
 
+  const handleSaveChanges = async () => {
+    if (!contract) return;
+    
+    setSaving(true);
+    try {
+      const updateData = {
+        escalation_l1_name: editableFields.escalation_l1_name || null,
+        escalation_l1_phone: editableFields.escalation_l1_phone || null,
+        escalation_l1_email: editableFields.escalation_l1_email || null,
+        escalation_l2_name: editableFields.escalation_l2_name || null,
+        escalation_l2_phone: editableFields.escalation_l2_phone || null,
+        escalation_l2_email: editableFields.escalation_l2_email || null,
+        escalation_l3_name: editableFields.escalation_l3_name || null,
+        escalation_l3_phone: editableFields.escalation_l3_phone || null,
+        escalation_l3_email: editableFields.escalation_l3_email || null,
+        p1_response_mins: editableFields.p1_response_mins ? parseInt(editableFields.p1_response_mins) : null,
+        p1_resolution_hrs: editableFields.p1_resolution_hrs ? parseInt(editableFields.p1_resolution_hrs) : null,
+        p2_response_mins: editableFields.p2_response_mins ? parseInt(editableFields.p2_response_mins) : null,
+        p2_resolution_hrs: editableFields.p2_resolution_hrs ? parseInt(editableFields.p2_resolution_hrs) : null,
+        p3_response_mins: editableFields.p3_response_mins ? parseInt(editableFields.p3_response_mins) : null,
+        p3_resolution_hrs: editableFields.p3_resolution_hrs ? parseInt(editableFields.p3_resolution_hrs) : null,
+        p4_response_mins: editableFields.p4_response_mins ? parseInt(editableFields.p4_response_mins) : null,
+        p4_resolution_hrs: editableFields.p4_resolution_hrs ? parseInt(editableFields.p4_resolution_hrs) : null,
+        notes: editableFields.notes || null,
+      };
+
+      const { error: updateError } = await supabase
+        .from("service_contracts")
+        .update(updateData)
+        .eq("id", contract.id);
+
+      if (updateError) throw updateError;
+
+      // Update local contract state
+      setContract(prev => prev ? { ...prev, ...updateData } : null);
+      setIsEditMode(false);
+      toast({
+        title: "Changes Saved",
+        description: "Your updates have been saved successfully.",
+      });
+    } catch (err) {
+      console.error("Error saving changes:", err);
+      toast({
+        title: "Error",
+        description: "Failed to save changes. Please try again.",
+        variant: "destructive",
+      });
+    }
+    setSaving(false);
+  };
+
+  const handleCancelEdit = () => {
+    if (contract) {
+      initializeEditableFields(contract);
+    }
+    setIsEditMode(false);
+  };
+
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
@@ -204,6 +342,10 @@ export default function VendorContractView() {
       currency: "INR",
       maximumFractionDigits: 0,
     }).format(value);
+  };
+
+  const updateField = (field: keyof EditableFields, value: string) => {
+    setEditableFields(prev => ({ ...prev, [field]: value }));
   };
 
   if (loading) {
@@ -236,11 +378,13 @@ export default function VendorContractView() {
   const SectionHeader = ({ 
     title, 
     icon: Icon, 
-    section 
+    section,
+    editable = false 
   }: { 
     title: string; 
     icon: React.ElementType; 
-    section: string 
+    section: string;
+    editable?: boolean;
   }) => (
     <CollapsibleTrigger 
       onClick={() => toggleSection(section)}
@@ -249,6 +393,9 @@ export default function VendorContractView() {
       <div className="flex items-center gap-2">
         <Icon className="h-5 w-5 text-primary" />
         <span className="font-medium">{title}</span>
+        {editable && (
+          <Badge variant="outline" className="text-xs ml-2">Editable</Badge>
+        )}
       </div>
       {expandedSections[section] ? (
         <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -271,15 +418,38 @@ export default function VendorContractView() {
               </h1>
               <p className="text-sm text-muted-foreground">{contract.contract_number}</p>
             </div>
-            <Badge className={getStatusColor(contract.status)}>
-              {contract.status.charAt(0).toUpperCase() + contract.status.slice(1)}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge className={getStatusColor(contract.status)}>
+                {contract.status.charAt(0).toUpperCase() + contract.status.slice(1)}
+              </Badge>
+              {!isEditMode ? (
+                <Button size="sm" variant="outline" onClick={() => setIsEditMode(true)} className="gap-2">
+                  <Edit2 className="h-4 w-4" />
+                  Edit
+                </Button>
+              ) : (
+                <>
+                  <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={handleSaveChanges} disabled={saving} className="gap-2">
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Save
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
+          {isEditMode && (
+            <p className="text-xs text-muted-foreground mt-2">
+              You can edit Escalation Matrix, SLA times, and Notes. Other fields are read-only.
+            </p>
+          )}
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto p-4 space-y-4">
-        {/* Overview Section */}
+        {/* Overview Section - Read Only */}
         <Card>
           <Collapsible open={expandedSections.overview}>
             <SectionHeader title="Contract Overview" icon={FileText} section="overview" />
@@ -325,7 +495,7 @@ export default function VendorContractView() {
           </Collapsible>
         </Card>
 
-        {/* Coverage Section */}
+        {/* Coverage Section - Read Only */}
         <Card>
           <Collapsible open={expandedSections.coverage}>
             <SectionHeader title="Coverage & Entitlements" icon={Shield} section="coverage" />
@@ -379,10 +549,10 @@ export default function VendorContractView() {
           </Collapsible>
         </Card>
 
-        {/* SLA Section */}
-        <Card>
+        {/* SLA Section - Editable */}
+        <Card className={isEditMode ? "ring-2 ring-primary/20" : ""}>
           <Collapsible open={expandedSections.sla}>
-            <SectionHeader title="Service Level Agreement" icon={Clock} section="sla" />
+            <SectionHeader title="Service Level Agreement" icon={Clock} section="sla" editable />
             <CollapsibleContent>
               <CardContent className="pt-0 space-y-4">
                 <Separator />
@@ -396,32 +566,69 @@ export default function VendorContractView() {
                         : "Business Hours (9 AM - 6 PM)"}
                   </p>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <p className="text-xs text-muted-foreground">Response & Resolution Times</p>
-                  <div className="grid grid-cols-1 gap-2">
-                    {[
-                      { priority: "P1 - Critical", response: contract.p1_response_mins, resolution: contract.p1_resolution_hrs },
-                      { priority: "P2 - High", response: contract.p2_response_mins, resolution: contract.p2_resolution_hrs },
-                      { priority: "P3 - Medium", response: contract.p3_response_mins, resolution: contract.p3_resolution_hrs },
-                      { priority: "P4 - Low", response: contract.p4_response_mins, resolution: contract.p4_resolution_hrs },
-                    ].filter(p => p.response || p.resolution).map((p) => (
-                      <div key={p.priority} className="flex justify-between items-center p-2 bg-muted/50 rounded text-sm">
-                        <span className="font-medium">{p.priority}</span>
-                        <div className="text-right text-xs">
-                          {p.response && <span>Response: {p.response} mins</span>}
-                          {p.response && p.resolution && <span className="mx-2">|</span>}
-                          {p.resolution && <span>Resolution: {p.resolution} hrs</span>}
+                  {isEditMode ? (
+                    <div className="space-y-4">
+                      {[
+                        { priority: "P1 - Critical", responseKey: "p1_response_mins" as const, resolutionKey: "p1_resolution_hrs" as const },
+                        { priority: "P2 - High", responseKey: "p2_response_mins" as const, resolutionKey: "p2_resolution_hrs" as const },
+                        { priority: "P3 - Medium", responseKey: "p3_response_mins" as const, resolutionKey: "p3_resolution_hrs" as const },
+                        { priority: "P4 - Low", responseKey: "p4_response_mins" as const, resolutionKey: "p4_resolution_hrs" as const },
+                      ].map((p) => (
+                        <div key={p.priority} className="p-3 bg-muted/50 rounded-lg space-y-2">
+                          <p className="font-medium text-sm">{p.priority}</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label className="text-xs">Response (mins)</Label>
+                              <Input
+                                type="number"
+                                value={editableFields[p.responseKey]}
+                                onChange={(e) => updateField(p.responseKey, e.target.value)}
+                                placeholder="Minutes"
+                                className="h-8 mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Resolution (hrs)</Label>
+                              <Input
+                                type="number"
+                                value={editableFields[p.resolutionKey]}
+                                onChange={(e) => updateField(p.resolutionKey, e.target.value)}
+                                placeholder="Hours"
+                                className="h-8 mt-1"
+                              />
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2">
+                      {[
+                        { priority: "P1 - Critical", response: contract.p1_response_mins, resolution: contract.p1_resolution_hrs },
+                        { priority: "P2 - High", response: contract.p2_response_mins, resolution: contract.p2_resolution_hrs },
+                        { priority: "P3 - Medium", response: contract.p3_response_mins, resolution: contract.p3_resolution_hrs },
+                        { priority: "P4 - Low", response: contract.p4_response_mins, resolution: contract.p4_resolution_hrs },
+                      ].filter(p => p.response || p.resolution).map((p) => (
+                        <div key={p.priority} className="flex justify-between items-center p-2 bg-muted/50 rounded text-sm">
+                          <span className="font-medium">{p.priority}</span>
+                          <div className="text-right text-xs">
+                            {p.response && <span>Response: {p.response} mins</span>}
+                            {p.response && p.resolution && <span className="mx-2">|</span>}
+                            {p.resolution && <span>Resolution: {p.resolution} hrs</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </CollapsibleContent>
           </Collapsible>
         </Card>
 
-        {/* PM Schedule Section */}
+        {/* PM Schedule Section - Read Only */}
         {(contract.pm_frequency || contract.pm_task_type) && (
           <Card>
             <Collapsible open={expandedSections.pm}>
@@ -449,14 +656,56 @@ export default function VendorContractView() {
           </Card>
         )}
 
-        {/* Escalation Matrix */}
-        {(contract.escalation_l1_name || contract.escalation_l2_name || contract.escalation_l3_name) && (
-          <Card>
-            <Collapsible open={expandedSections.escalation}>
-              <SectionHeader title="Escalation Matrix" icon={AlertTriangle} section="escalation" />
-              <CollapsibleContent>
-                <CardContent className="pt-0 space-y-4">
-                  <Separator />
+        {/* Escalation Matrix - Editable */}
+        <Card className={isEditMode ? "ring-2 ring-primary/20" : ""}>
+          <Collapsible open={expandedSections.escalation}>
+            <SectionHeader title="Escalation Matrix" icon={AlertTriangle} section="escalation" editable />
+            <CollapsibleContent>
+              <CardContent className="pt-0 space-y-4">
+                <Separator />
+                {isEditMode ? (
+                  <div className="space-y-4">
+                    {[
+                      { level: "Level 1", nameKey: "escalation_l1_name" as const, phoneKey: "escalation_l1_phone" as const, emailKey: "escalation_l1_email" as const },
+                      { level: "Level 2", nameKey: "escalation_l2_name" as const, phoneKey: "escalation_l2_phone" as const, emailKey: "escalation_l2_email" as const },
+                      { level: "Level 3", nameKey: "escalation_l3_name" as const, phoneKey: "escalation_l3_phone" as const, emailKey: "escalation_l3_email" as const },
+                    ].map((e) => (
+                      <div key={e.level} className="p-3 bg-muted/50 rounded-lg space-y-3">
+                        <p className="font-medium text-sm">{e.level}</p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div>
+                            <Label className="text-xs">Name</Label>
+                            <Input
+                              value={editableFields[e.nameKey]}
+                              onChange={(ev) => updateField(e.nameKey, ev.target.value)}
+                              placeholder="Contact name"
+                              className="h-8 mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Phone</Label>
+                            <Input
+                              value={editableFields[e.phoneKey]}
+                              onChange={(ev) => updateField(e.phoneKey, ev.target.value)}
+                              placeholder="Phone number"
+                              className="h-8 mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Email</Label>
+                            <Input
+                              type="email"
+                              value={editableFields[e.emailKey]}
+                              onChange={(ev) => updateField(e.emailKey, ev.target.value)}
+                              placeholder="Email address"
+                              className="h-8 mt-1"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
                   <div className="space-y-3">
                     {[
                       { level: "Level 1", name: contract.escalation_l1_name, phone: contract.escalation_l1_phone, email: contract.escalation_l1_email },
@@ -472,14 +721,17 @@ export default function VendorContractView() {
                         </div>
                       </div>
                     ))}
+                    {!contract.escalation_l1_name && !contract.escalation_l2_name && !contract.escalation_l3_name && (
+                      <p className="text-sm text-muted-foreground">No escalation contacts defined.</p>
+                    )}
                   </div>
-                </CardContent>
-              </CollapsibleContent>
-            </Collapsible>
-          </Card>
-        )}
+                )}
+              </CardContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </Card>
 
-        {/* Covered Assets */}
+        {/* Covered Assets - Read Only */}
         {assets.length > 0 && (
           <Card>
             <Collapsible open={expandedSections.assets}>
@@ -508,7 +760,7 @@ export default function VendorContractView() {
           </Card>
         )}
 
-        {/* Covered Locations */}
+        {/* Covered Locations - Read Only */}
         {locations.length > 0 && (
           <Card>
             <Collapsible open={expandedSections.locations}>
@@ -530,22 +782,34 @@ export default function VendorContractView() {
           </Card>
         )}
 
-        {/* Notes */}
-        {contract.notes && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Additional Notes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">{contract.notes}</p>
-            </CardContent>
-          </Card>
-        )}
+        {/* Notes - Editable */}
+        <Card className={isEditMode ? "ring-2 ring-primary/20" : ""}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              Additional Notes
+              <Badge variant="outline" className="text-xs">Editable</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isEditMode ? (
+              <Textarea
+                value={editableFields.notes}
+                onChange={(e) => updateField("notes", e.target.value)}
+                placeholder="Add notes or comments..."
+                rows={4}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {contract.notes || "No notes added."}
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Footer */}
         <div className="text-center py-6 text-xs text-muted-foreground">
-          <p>This is a read-only view of the service contract.</p>
-          <p>For any queries, please contact your account manager.</p>
+          <p>You can edit Escalation Matrix, SLA times, and Notes.</p>
+          <p>For other changes, please contact your account manager.</p>
         </div>
       </div>
     </div>
