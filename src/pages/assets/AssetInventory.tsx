@@ -83,6 +83,8 @@ type AssetMasterOption = {
   name: string;
   category_id: string | null;
   categories?: { name: string } | null;
+  standard_price: number | null;
+  warranty_months: number | null;
 };
 
 type Store = {
@@ -171,7 +173,7 @@ export default function AssetInventory() {
       supabase.from("vendors").select("id, name, vendor_type").order("name"),
       supabase
         .from("asset_masters")
-        .select("id, name, category_id, categories(name)")
+        .select("id, name, category_id, categories(name), standard_price, warranty_months")
         .eq("status", "active")
         .order("name"),
       supabase.from("stores").select("id, name, address").eq("status", "active").order("name"),
@@ -402,7 +404,28 @@ export default function AssetInventory() {
                             subtitle: am.categories?.name,
                           }))}
                           value={field.value}
-                          onValueChange={field.onChange}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            // Auto-populate fields from selected Asset Master
+                            const selectedMaster = assetMasters.find((am) => am.id === value);
+                            if (selectedMaster) {
+                              // Set default value from standard_price
+                              if (selectedMaster.standard_price !== null) {
+                                form.setValue("value", selectedMaster.standard_price);
+                              }
+                              // Calculate warranty dates from warranty_months
+                              if (selectedMaster.warranty_months) {
+                                const purchaseDate = form.getValues("purchaseDate");
+                                if (purchaseDate) {
+                                  const startDate = new Date(purchaseDate);
+                                  form.setValue("warrantyStartDate", purchaseDate);
+                                  const endDate = new Date(startDate);
+                                  endDate.setMonth(endDate.getMonth() + selectedMaster.warranty_months);
+                                  form.setValue("warrantyEndDate", endDate.toISOString().split("T")[0]);
+                                }
+                              }
+                            }
+                          }}
                           placeholder="Select asset master"
                           searchPlaceholder="Search asset masters..."
                           emptyMessage="No asset masters found."
@@ -508,7 +531,22 @@ export default function AssetInventory() {
                       <FormItem>
                         <FormLabel>Purchase Date</FormLabel>
                         <FormControl>
-                          <Input type="date" {...field} />
+                          <Input 
+                            type="date" 
+                            {...field}
+                            onChange={(e) => {
+                              field.onChange(e);
+                              // Auto-calculate warranty dates based on Asset Master warranty_months
+                              const selectedMasterId = form.getValues("assetMasterId");
+                              const selectedMaster = assetMasters.find((am) => am.id === selectedMasterId);
+                              if (selectedMaster?.warranty_months && e.target.value) {
+                                form.setValue("warrantyStartDate", e.target.value);
+                                const endDate = new Date(e.target.value);
+                                endDate.setMonth(endDate.getMonth() + selectedMaster.warranty_months);
+                                form.setValue("warrantyEndDate", endDate.toISOString().split("T")[0]);
+                              }
+                            }}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
