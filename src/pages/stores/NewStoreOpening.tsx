@@ -140,16 +140,27 @@ export default function NewStoreOpening() {
         .eq("id", data.store_id)
         .single();
       
-      // Fetch active sq ft budget rate (must be effective now or in the past)
+      const storeSqft = storeData?.store_size_sqft || 0;
       const today = format(new Date(), "yyyy-MM-dd");
-      const { data: sqftRate } = await supabase
+      
+      // Fetch active sq ft budget rate matching the store size range
+      const { data: sqftRates } = await supabase
         .from("sqft_budget_master")
-        .select("price_per_sqft")
+        .select("price_per_sqft, min_sqft, max_sqft")
         .eq("status", "active")
-        .lte("effective_from", today)
-        .order("effective_from", { ascending: false })
-        .limit(1)
-        .single();
+        .or(`effective_from.is.null,effective_from.lte.${today}`)
+        .order("effective_from", { ascending: false });
+      
+      // Find the rate that matches the store's sq ft
+      let ratePerSqft = 0;
+      if (sqftRates && sqftRates.length > 0) {
+        const matchingRate = sqftRates.find((rate) => {
+          const min = rate.min_sqft || 0;
+          const max = rate.max_sqft;
+          return storeSqft >= min && (max === null || storeSqft <= max);
+        });
+        ratePerSqft = matchingRate?.price_per_sqft || 0;
+      }
       
       // Fetch master for planned_budget
       const { data: masterData } = await supabase
@@ -159,8 +170,6 @@ export default function NewStoreOpening() {
         .single();
       
       // Calculate prescribed budget
-      const storeSqft = storeData?.store_size_sqft || 0;
-      const ratePerSqft = sqftRate?.price_per_sqft || 0;
       const prescribedBudget = storeSqft * ratePerSqft;
       const initialBudget = masterData?.planned_budget || 0;
 

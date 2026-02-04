@@ -6134,6 +6134,8 @@ export type Database = {
           created_at: string
           effective_from: string | null
           id: string
+          max_sqft: number | null
+          min_sqft: number | null
           name: string | null
           price_per_sqft: number
           status: string
@@ -6143,6 +6145,8 @@ export type Database = {
           created_at?: string
           effective_from?: string | null
           id?: string
+          max_sqft?: number | null
+          min_sqft?: number | null
           name?: string | null
           price_per_sqft: number
           status?: string
@@ -6152,6 +6156,8 @@ export type Database = {
           created_at?: string
           effective_from?: string | null
           id?: string
+          max_sqft?: number | null
+          min_sqft?: number | null
           name?: string | null
           price_per_sqft?: number
           status?: string
