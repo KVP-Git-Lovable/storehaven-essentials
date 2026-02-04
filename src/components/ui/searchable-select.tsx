@@ -61,11 +61,11 @@ export function SearchableSelect({
     if (open && value && listRef.current) {
       // Small delay to ensure the list is rendered
       const timer = setTimeout(() => {
-        const selectedElement = listRef.current?.querySelector('[data-selected="true"]');
+        const selectedElement = listRef.current?.querySelector(`[data-value="${value}"]`);
         if (selectedElement) {
           selectedElement.scrollIntoView({ block: "nearest", behavior: "instant" });
         }
-      }, 0);
+      }, 50);
       return () => clearTimeout(timer);
     }
   }, [open, value]);
@@ -101,7 +101,7 @@ export function SearchableSelect({
                     onValueChange("none");
                     setOpen(false);
                   }}
-                  data-selected={value === "none"}
+                  data-value="none"
                 >
                   <Check
                     className={cn(
@@ -120,7 +120,7 @@ export function SearchableSelect({
                     onValueChange(option.value);
                     setOpen(false);
                   }}
-                  data-selected={value === option.value}
+                  data-value={option.value}
                 >
                   <Check
                     className={cn(
