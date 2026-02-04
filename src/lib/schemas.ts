@@ -7,6 +7,7 @@ export const storeSchema = z.object({
   manager: z.string().trim().max(100, "Name must be less than 100 characters").optional(),
   manager_id: z.string().uuid().optional().nullable(),
   status: z.enum(["active", "under-renovation", "closed"]),
+  store_size_sqft: z.coerce.number().min(0, "Size cannot be negative").max(10000000, "Size seems too high").optional().nullable(),
 });
 
 export const rentalSchema = z.object({

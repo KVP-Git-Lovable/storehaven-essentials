@@ -87,6 +87,7 @@ const storeEditSchema = z.object({
   phone: z.string().min(1, "Phone is required"),
   manager_id: z.string().optional().nullable(),
   status: z.enum(["active", "under-renovation", "closed"]),
+  store_size_sqft: z.coerce.number().min(0, "Size cannot be negative").optional().nullable(),
 });
 
 type ContactFormData = z.infer<typeof contactSchema>;
@@ -114,6 +115,7 @@ type Store = {
   manager_id: string | null;
   status: string;
   assets: number;
+  store_size_sqft: number | null;
   manager_profile?: {
     username: string;
     email: string;
@@ -237,7 +239,7 @@ export default function StoreDetails() {
 
   const storeEditForm = useForm<StoreEditFormData>({
     resolver: zodResolver(storeEditSchema),
-    defaultValues: { name: "", address: "", phone: "", manager_id: null, status: "active" },
+    defaultValues: { name: "", address: "", phone: "", manager_id: null, status: "active", store_size_sqft: null },
   });
 
   useEffect(() => {
@@ -306,6 +308,7 @@ export default function StoreDetails() {
       manager: managerName,
       manager_id: data.manager_id || null,
       status: data.status,
+      store_size_sqft: data.store_size_sqft || null,
     }).eq("id", id);
 
     if (error) {
@@ -325,6 +328,7 @@ export default function StoreDetails() {
         phone: store.phone,
         manager_id: store.manager_id || null,
         status: store.status as "active" | "under-renovation" | "closed",
+        store_size_sqft: store.store_size_sqft,
       });
       setEditDialogOpen(true);
     }
@@ -586,20 +590,42 @@ export default function StoreDetails() {
                   </FormItem>
                 )} />
               </div>
-              <FormField control={storeEditForm.control} name="status" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Status</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="under-renovation">Under Renovation</SelectItem>
-                      <SelectItem value="closed">Closed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={storeEditForm.control} name="status" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="under-renovation">Under Renovation</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={storeEditForm.control} name="store_size_sqft" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Store Size</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Input 
+                          type="number" 
+                          step="0.01" 
+                          min="0" 
+                          placeholder="e.g. 1500" 
+                          {...field} 
+                          value={field.value ?? ""} 
+                          onChange={(e) => field.onChange(e.target.value === "" ? null : parseFloat(e.target.value))}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">sq ft</span>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
               <div className="flex justify-end gap-2 pt-4">
                 <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
                 <Button type="submit">Save Changes</Button>
