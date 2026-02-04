@@ -51,9 +51,24 @@ export function SearchableSelect({
   noneLabel = "None",
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
+  const listRef = React.useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find((option) => option.value === value);
   const displayValue = selectedOption?.label ?? (value === "none" && allowNone ? noneLabel : null);
+
+  // Auto-scroll to selected item when dropdown opens
+  React.useEffect(() => {
+    if (open && value && listRef.current) {
+      // Small delay to ensure the list is rendered
+      const timer = setTimeout(() => {
+        const selectedElement = listRef.current?.querySelector('[data-selected="true"]');
+        if (selectedElement) {
+          selectedElement.scrollIntoView({ block: "nearest", behavior: "instant" });
+        }
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [open, value]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -76,7 +91,7 @@ export function SearchableSelect({
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
-          <CommandList>
+          <CommandList ref={listRef}>
             <CommandEmpty>{emptyMessage}</CommandEmpty>
             <CommandGroup>
               {allowNone && (
@@ -86,6 +101,7 @@ export function SearchableSelect({
                     onValueChange("none");
                     setOpen(false);
                   }}
+                  data-selected={value === "none"}
                 >
                   <Check
                     className={cn(
@@ -104,6 +120,7 @@ export function SearchableSelect({
                     onValueChange(option.value);
                     setOpen(false);
                   }}
+                  data-selected={value === option.value}
                 >
                   <Check
                     className={cn(
