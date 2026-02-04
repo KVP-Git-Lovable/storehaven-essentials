@@ -1693,10 +1693,8 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                 )}
               />
 
-              {/* Vendor Link Section - Only show in edit mode */}
-              {isEditMode && contractId && (
-                <VendorLinkSection contractId={contractId} />
-              )}
+              {/* Vendor Link Section */}
+              <VendorLinkSection contractId={contractId} />
 
               <div className="flex justify-end gap-2 pt-4 sticky bottom-0 bg-background pb-2 border-t mt-4">
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
 interface VendorLinkSectionProps {
-  contractId: string;
+  contractId?: string;
 }
 
 interface VendorLink {
@@ -134,6 +134,21 @@ export function VendorLinkSection({ contractId }: VendorLinkSectionProps) {
   const handleRegenerateLink = async () => {
     await handleGenerateLink();
   };
+
+  // Show placeholder during contract creation
+  if (!contractId) {
+    return (
+      <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
+        <Label className="text-sm font-medium flex items-center gap-2">
+          <Link2 className="h-4 w-4" />
+          Vendor Access Link
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          Save the contract first to generate a secure vendor access link.
+        </p>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
