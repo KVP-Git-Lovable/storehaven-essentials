@@ -2828,32 +2828,79 @@ export type Database = {
           },
         ]
       }
+      nso_store_budget_items: {
+        Row: {
+          amount: number
+          category: string
+          checklist_id: string
+          created_at: string | null
+          description: string
+          id: string
+          sort_order: number
+        }
+        Insert: {
+          amount?: number
+          category?: string
+          checklist_id: string
+          created_at?: string | null
+          description: string
+          id?: string
+          sort_order?: number
+        }
+        Update: {
+          amount?: number
+          category?: string
+          checklist_id?: string
+          created_at?: string | null
+          description?: string
+          id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nso_store_budget_items_checklist_id_fkey"
+            columns: ["checklist_id"]
+            isOneToOne: false
+            referencedRelation: "nso_store_checklists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nso_store_checklists: {
         Row: {
+          budget: number | null
           created_at: string
+          final_budget: number | null
           id: string
           master_id: string | null
           name: string
+          prescribed_budget: number | null
           start_date: string
           status: string
           store_id: string
           updated_at: string
         }
         Insert: {
+          budget?: number | null
           created_at?: string
+          final_budget?: number | null
           id?: string
           master_id?: string | null
           name: string
+          prescribed_budget?: number | null
           start_date: string
           status?: string
           store_id: string
           updated_at?: string
         }
         Update: {
+          budget?: number | null
           created_at?: string
+          final_budget?: number | null
           id?: string
           master_id?: string | null
           name?: string
+          prescribed_budget?: number | null
           start_date?: string
           status?: string
           store_id?: string
