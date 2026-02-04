@@ -5,6 +5,7 @@ import { z } from "zod";
 import { Plus, X, Upload, FileText, Trash2, ChevronDown, ChevronRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { VendorLinkSection } from "./VendorLinkSection";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
@@ -1691,6 +1692,11 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
                   </FormItem>
                 )}
               />
+
+              {/* Vendor Link Section - Only show in edit mode */}
+              {isEditMode && contractId && (
+                <VendorLinkSection contractId={contractId} />
+              )}
 
               <div className="flex justify-end gap-2 pt-4 sticky bottom-0 bg-background pb-2 border-t mt-4">
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

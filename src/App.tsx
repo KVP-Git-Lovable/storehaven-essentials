@@ -90,6 +90,7 @@ import RolePermissions from "./pages/admin/RolePermissions";
 import Profile from "./pages/admin/Profile";
 import Settings from "./pages/admin/Settings";
 import NotFound from "./pages/NotFound";
+import VendorContractView from "./pages/vendor/VendorContractView";
 import AssetManagementDashboard from "./pages/dashboards/AssetManagementDashboard";
 import InventoryDashboard from "./pages/dashboards/InventoryDashboard";
 import EmployeesDashboard from "./pages/dashboards/EmployeesDashboard";
@@ -114,6 +115,7 @@ const App = () => (
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<Login />} />
             <Route path="/install" element={<Install />} />
+            <Route path="/vendor/contract/:token" element={<VendorContractView />} />
             
             {/* Protected routes */}
             <Route
