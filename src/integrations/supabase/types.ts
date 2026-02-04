@@ -5522,6 +5522,8 @@ export type Database = {
           travel_rate_per_km: number | null
           updated_at: string
           uptime_measurement_method: string | null
+          vendor_update_status: string | null
+          vendor_updated_at: string | null
           visit_charge: number | null
         }
         Insert: {
@@ -5594,6 +5596,8 @@ export type Database = {
           travel_rate_per_km?: number | null
           updated_at?: string
           uptime_measurement_method?: string | null
+          vendor_update_status?: string | null
+          vendor_updated_at?: string | null
           visit_charge?: number | null
         }
         Update: {
@@ -5666,6 +5670,8 @@ export type Database = {
           travel_rate_per_km?: number | null
           updated_at?: string
           uptime_measurement_method?: string | null
+          vendor_update_status?: string | null
+          vendor_updated_at?: string | null
           visit_charge?: number | null
         }
         Relationships: [
