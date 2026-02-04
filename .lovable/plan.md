@@ -1,86 +1,180 @@
 
-# Add Edit Button for Each Service Contract
+# NSO Budget Flow - Implementation Plan
 
-## Overview
-Add an edit button to each contract card in the Service Contracts list, allowing users to modify existing contracts directly from the listing page.
+## Summary
 
-## Current State
-- `ContractSummaryCard.tsx` displays contract info with just a click-to-view action
-- `ContractFormDialog.tsx` already accepts a `contractId` prop (line 161) but only supports creation mode currently
-- `ServiceContracts.tsx` uses permission checks for create (`canCreate`)
+After exploring the codebase, I found that **some components exist** but the **complete budget tracking flow does not**. This plan will implement the full NSO Budget feature.
 
-## Implementation Plan
+---
 
-### 1. Update ContractSummaryCard Component
-**File: `src/components/services/ContractSummaryCard.tsx`**
+## What Already Exists
 
-Add an edit button (Pencil icon) to each card:
-- Add new prop: `onEdit?: () => void`
-- Add new prop: `canEdit?: boolean` to control visibility based on permissions
-- Add a small edit button in the top-right area of the card (near the badges)
-- Stop event propagation on edit button click so it doesn't trigger the card's onClick (navigate to details)
+| Component | Status |
+|-----------|--------|
+| Sq Ft Budget Master | Available at `/master/sqft-budget` |
+| Store Size (Sq Ft) field | Available in store creation/edit |
+| NSO Checklist assignment flow | Works correctly |
+| nso_store_assets table | Tracks required assets per checklist |
+| `planned_budget` & `prescribed_sqft` columns in masters | Already added |
 
+---
+
+## What Needs to Be Implemented
+
+### 1. Database Schema Updates
+
+Create new tables and columns to support budget tracking:
+
+**New table: `nso_store_budget_items`**
+- For additional line items (Rent, Labour charges, other expenses)
+- Columns: `id`, `checklist_id`, `description`, `category`, `amount`, `sort_order`, `created_at`
+
+**Add columns to `nso_store_checklists`:**
+- `prescribed_budget` (auto-calculated, read-only)
+- `budget` (editable by Admin/Store Manager)
+- `final_budget` (editable)
+
+### 2. Prescribed Budget Auto-Calculation Logic
+
+When a checklist template is assigned to a store:
 ```text
-+------------------------------------------+
-|  [FileText] SC-260203-WAO6    [Edit] [draft]
-|  -                                  [AMC]
-|  Provider: Exide Industries
-|  ...
-+------------------------------------------+
+Prescribed Budget = Store's Sq Ft × Active Sq Ft Budget Rate
 ```
+- Fetch the store's `store_size_sqft` from the `stores` table
+- Fetch the active rate from `sqft_budget_master` where `status = 'active'`
+- Store the calculated value in `nso_store_checklists.prescribed_budget`
 
-### 2. Update ServiceContracts Page
-**File: `src/pages/services/ServiceContracts.tsx`**
+### 3. Budget Section UI Component
 
-- Add permission check: `const canEdit = hasPermission("services.contracts", "edit")`
-- Add state for editing: `const [editingContractId, setEditingContractId] = useState<string | null>(null)`
-- Pass `onEdit` and `canEdit` props to `ContractSummaryCard`
-- Handle edit by setting `editingContractId` and opening the dialog
-- Pass `contractId` to `ContractFormDialog` when editing
+Create a new component `NSOStoreBudgetSection.tsx` that displays:
 
-### 3. Update ContractFormDialog for Edit Mode
-**File: `src/components/services/ContractFormDialog.tsx`**
+**Three Budget Fields:**
+- **Prescribed Budget** - Auto-calculated, read-only, shows store sq ft × rate
+- **Budget** - Editable input for planned budget
+- **Final Budget** - Editable input for final approved budget
 
-The dialog already accepts `contractId` but doesn't use it. Add:
-- Fetch existing contract data when `contractId` is provided
-- Pre-populate form with existing values
-- Fetch and pre-select linked assets and locations
-- Change submit button text to "Update Contract" in edit mode
-- Update the `onSubmit` logic to use `update` instead of `insert` when editing
+**Budget Usage Tracking:**
+- **Asset Costs Total** - Sum of (asset value × quantity) from `nso_store_assets`
+- **Additional Line Items Total** - Sum from `nso_store_budget_items`
+- **Total Utilized** - Asset Costs + Additional Items
+- **Remaining Budget** - Budget - Total Utilized
+
+**Visual Indicators:**
+- Green: Within budget (utilized < 80% of budget)
+- Amber: Nearing limit (80-100% of budget)
+- Red: Over budget (utilized > budget)
+
+### 4. Additional Line Items Management
+
+Within the Budget section, allow users to add line items:
+- **Description** (text input)
+- **Category** (dropdown: Rent, Labour Charges, Utilities, Marketing, Other)
+- **Amount** (numeric input)
+
+All items reduce the remaining budget in real-time.
+
+### 5. Update Checklist Assignment Flow
+
+Modify `NewStoreOpening.tsx` to:
+1. Fetch store's sq ft when assigning a checklist
+2. Fetch active Sq Ft Budget rate
+3. Calculate and store `prescribed_budget` during assignment
+4. Copy `planned_budget` from master as initial `budget` value
+
+### 6. Real-Time Budget Updates
+
+Ensure budget calculations update when:
+- Assets are added/removed/quantity changed
+- Line items are added/removed/amount changed
+- Budget or Final Budget fields are edited
+
+---
 
 ## Technical Details
 
-### ContractSummaryCard Changes
-| Change | Details |
-|--------|---------|
-| New imports | `Pencil` from lucide-react, `Button` from ui/button |
-| New props | `onEdit?: () => void`, `canEdit?: boolean` |
-| Edit button | Icon button with `stopPropagation()` to prevent card click |
+### Database Migration SQL
 
-### ServiceContracts Page Changes
-| Change | Details |
-|--------|---------|
-| New state | `editingContractId: string \| null` |
-| Permission | `canEdit = hasPermission("services.contracts", "edit")` |
-| Dialog props | Pass `contractId={editingContractId}` to form dialog |
-| Card props | Pass `onEdit` and `canEdit` to each card |
+```sql
+-- Add budget columns to nso_store_checklists
+ALTER TABLE nso_store_checklists
+  ADD COLUMN prescribed_budget NUMERIC DEFAULT 0,
+  ADD COLUMN budget NUMERIC DEFAULT 0,
+  ADD COLUMN final_budget NUMERIC DEFAULT 0;
 
-### ContractFormDialog Changes
-| Change | Details |
-|--------|---------|
-| New effect | Fetch contract data when `contractId` changes |
-| Form reset | Clear form when closing or switching between create/edit |
-| Submit logic | Branch between insert (create) and update (edit) |
-| Button text | Dynamic: "Create Contract" vs "Update Contract" |
-| Dialog title | Dynamic: "New Service Contract" vs "Edit Service Contract" |
+-- Create budget line items table
+CREATE TABLE nso_store_budget_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  checklist_id UUID NOT NULL REFERENCES nso_store_checklists(id) ON DELETE CASCADE,
+  description TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'other',
+  amount NUMERIC NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
-## Files to Modify
-1. `src/components/services/ContractSummaryCard.tsx` - Add edit button UI
-2. `src/pages/services/ServiceContracts.tsx` - Add edit state and permission
-3. `src/components/services/ContractFormDialog.tsx` - Add edit/update logic
+-- Enable RLS
+ALTER TABLE nso_store_budget_items ENABLE ROW LEVEL SECURITY;
 
-## Expected Result
-- Each contract card shows a small edit (pencil) button (if user has edit permission)
-- Clicking edit opens the contract form pre-filled with existing data
-- Users can modify and save changes
-- Card click still navigates to details page
+-- RLS policies
+CREATE POLICY "Authenticated users can view budget items"
+  ON nso_store_budget_items FOR SELECT
+  TO authenticated USING (true);
+
+CREATE POLICY "Authenticated users can manage budget items"
+  ON nso_store_budget_items FOR ALL
+  TO authenticated USING (true) WITH CHECK (true);
+```
+
+### Files to Create
+
+1. **`src/components/nso/NSOStoreBudgetSection.tsx`**
+   - Budget display component with three fields
+   - Asset costs breakdown
+   - Line items management
+   - Remaining budget with visual indicators
+
+### Files to Modify
+
+1. **`src/pages/stores/NewStoreOpening.tsx`**
+   - Add Budget section/tab to inline expanded checklist view
+   - Update assign mutation to calculate prescribed budget
+   - Add queries for budget items and asset values
+
+2. **`src/integrations/supabase/types.ts`**
+   - Auto-updated after migration
+
+---
+
+## User Flow After Implementation
+
+```text
+1. Admin defines rate in Sq Ft Budget Master (e.g., ₹200,000 per sq ft)
+2. Admin creates store with size (e.g., 1,500 sq ft)
+3. Admin goes to NSO and assigns checklist template to the store
+4. System auto-calculates: Prescribed Budget = 1,500 × ₹200,000 = ₹300,000,000
+5. Budget section appears in the checklist with:
+   - Prescribed Budget: ₹300,000,000 (read-only)
+   - Budget: [editable field]
+   - Final Budget: [editable field]
+6. As assets are added (e.g., 5 × AC @ ₹15,000 = ₹75,000):
+   - Asset Costs: ₹75,000
+   - Remaining Budget updates automatically
+7. Admin can add line items:
+   - Rent: ₹100,000
+   - Labour: ₹50,000
+8. Total Utilized: ₹225,000
+   Remaining: Budget - ₹225,000
+```
+
+---
+
+## Estimated Changes
+
+| Category | Count |
+|----------|-------|
+| New tables | 1 |
+| New columns | 3 |
+| New components | 1 |
+| Modified pages | 1 |
+
+This implementation provides complete budget tracking for NSO with real-time calculations and visual status indicators.
