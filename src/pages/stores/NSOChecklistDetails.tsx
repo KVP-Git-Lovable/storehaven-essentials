@@ -62,6 +62,7 @@ import {
   Store,
   MapPin,
 } from "lucide-react";
+import { IndianRupee } from "lucide-react";
 import { NSOStoreAssetsSection } from "@/components/nso/NSOStoreAssetsSection";
 import { format, addDays } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -264,7 +265,7 @@ export default function NSOChecklistDetails() {
       if (!checklistId) return null;
       const { data, error } = await supabase
         .from("nso_store_checklists")
-        .select("*, stores(id, name, address, store_size_sqft)")
+        .select("*, stores(id, name, address, store_size_sqft), nso_checklist_masters(id, name, estimated_budget, budget, actual_budget)")
         .eq("id", checklistId)
         .single();
       if (error) throw error;
@@ -629,7 +630,7 @@ export default function NSOChecklistDetails() {
 
       {/* Tabs for Tasks, Assets, Budget */}
         <Tabs defaultValue="tasks" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 md:w-auto md:inline-flex">
+          <TabsList className="grid w-full grid-cols-3 md:w-auto md:inline-flex">
           <TabsTrigger value="tasks" className="gap-2">
             <LayoutList className="h-4 w-4" />
             Tasks
@@ -637,6 +638,10 @@ export default function NSOChecklistDetails() {
           <TabsTrigger value="assets" className="gap-2">
             <Package className="h-4 w-4" />
             Required Assets
+          </TabsTrigger>
+          <TabsTrigger value="budget" className="gap-2">
+            <IndianRupee className="h-4 w-4" />
+            Budget
           </TabsTrigger>
         </TabsList>
 
@@ -781,6 +786,91 @@ export default function NSOChecklistDetails() {
                   queryClient.invalidateQueries({ queryKey: ["nso-budget-items", checklistId] });
                 }}
               />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Budget Tab */}
+        <TabsContent value="budget" className="m-0">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Budget Overview</CardTitle>
+              {checklist?.nso_checklist_masters && (
+                <p className="text-sm text-muted-foreground">
+                  Inherited from template: <span className="font-medium">{checklist.nso_checklist_masters.name}</span>
+                </p>
+              )}
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Estimated Budget
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold">
+                      {new Intl.NumberFormat("en-IN", {
+                        style: "currency",
+                        currency: "INR",
+                        maximumFractionDigits: 0,
+                      }).format(checklist?.nso_checklist_masters?.estimated_budget || 0)}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Initial estimate from template
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Budget
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold">
+                      {new Intl.NumberFormat("en-IN", {
+                        style: "currency",
+                        currency: "INR",
+                        maximumFractionDigits: 0,
+                      }).format(checklist?.nso_checklist_masters?.budget || 0)}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Planned budget from template
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Actual Budget
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold">
+                      {new Intl.NumberFormat("en-IN", {
+                        style: "currency",
+                        currency: "INR",
+                        maximumFractionDigits: 0,
+                      }).format(checklist?.nso_checklist_masters?.actual_budget || 0)}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Final approved amount
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {!checklist?.nso_checklist_masters && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <IndianRupee className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>No budget template linked</p>
+                  <p className="text-sm">Budget values are inherited from the NSO Checklist Master template</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
