@@ -2615,8 +2615,11 @@ export type Database = {
       }
       nso_checklist_masters: {
         Row: {
+          actual_budget: number | null
+          budget: number | null
           created_at: string
           description: string | null
+          estimated_budget: number | null
           id: string
           name: string
           planned_budget: number | null
@@ -2626,8 +2629,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          actual_budget?: number | null
+          budget?: number | null
           created_at?: string
           description?: string | null
+          estimated_budget?: number | null
           id?: string
           name: string
           planned_budget?: number | null
@@ -2637,8 +2643,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          actual_budget?: number | null
+          budget?: number | null
           created_at?: string
           description?: string | null
+          estimated_budget?: number | null
           id?: string
           name?: string
           planned_budget?: number | null
