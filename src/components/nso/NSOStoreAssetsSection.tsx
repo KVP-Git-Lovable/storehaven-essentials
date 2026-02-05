@@ -60,8 +60,10 @@ interface AssetMaster {
 
 const STATUS_OPTIONS = [
   { value: "pending", label: "Pending", color: "bg-muted text-muted-foreground" },
+  { value: "available", label: "Available", color: "bg-yellow-100 text-yellow-800" },
   { value: "ordered", label: "Ordered", color: "bg-blue-100 text-blue-800" },
-  { value: "delivered", label: "Delivered", color: "bg-green-100 text-green-800" },
+  { value: "delivered", label: "Delivered", color: "bg-purple-100 text-purple-800" },
+  { value: "deployed", label: "Deployed", color: "bg-green-100 text-green-800" },
 ];
 
 export function NSOStoreAssetsSection({
