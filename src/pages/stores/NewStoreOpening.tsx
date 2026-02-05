@@ -80,19 +80,54 @@ export default function NewStoreOpening() {
     },
   });
 
-  // Fetch checklist masters
+  // Fetch checklist masters with total duration
   const { data: masters = [] } = useQuery({
-    queryKey: ["nso-checklist-masters-active"],
+    queryKey: ["nso-checklist-masters-active-with-duration"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Fetch masters
+      const { data: mastersData, error: mastersError } = await supabase
         .from("nso_checklist_masters")
         .select("id, name, store_type")
         .eq("status", "active")
         .order("name");
-      if (error) throw error;
-      return data;
+      if (mastersError) throw mastersError;
+
+      // Fetch all sections and tasks to calculate total duration per master
+      const { data: sectionsData } = await supabase
+        .from("nso_master_sections")
+        .select("id, master_id");
+      
+      const { data: tasksData } = await supabase
+        .from("nso_master_tasks")
+        .select("section_id, duration_days");
+
+      // Build a map of section_id -> master_id
+      const sectionToMaster: Record<string, string> = {};
+      sectionsData?.forEach((s) => {
+        sectionToMaster[s.id] = s.master_id;
+      });
+
+      // Calculate total duration per master
+      const masterDurations: Record<string, number> = {};
+      tasksData?.forEach((t) => {
+        const masterId = sectionToMaster[t.section_id];
+        if (masterId) {
+          masterDurations[masterId] = (masterDurations[masterId] || 0) + (t.duration_days || 0);
+        }
+      });
+
+      return mastersData.map((m) => ({
+        ...m,
+        total_duration_days: masterDurations[m.id] || 0,
+      }));
     },
   });
+
+  // Calculate end date based on selected master and start date
+  const selectedMaster = masters.find((m) => m.id === assignForm.master_id);
+  const calculatedEndDate = selectedMaster && assignForm.start_date
+    ? addDays(assignForm.start_date, selectedMaster.total_duration_days - 1)
+    : null;
 
   // Fetch store checklists
   const { data: checklists = [], isLoading } = useQuery({
@@ -475,32 +510,49 @@ export default function NewStoreOpening() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Start Date *</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !assignForm.start_date && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {assignForm.start_date
-                      ? format(assignForm.start_date, "PPP")
-                      : "Pick a date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 bg-popover" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={assignForm.start_date}
-                    onSelect={(d) => setAssignForm((f) => ({ ...f, start_date: d || new Date() }))}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Start Date *</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !assignForm.start_date && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {assignForm.start_date
+                        ? format(assignForm.start_date, "PPP")
+                        : "Pick a date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 bg-popover" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={assignForm.start_date}
+                      onSelect={(d) => setAssignForm((f) => ({ ...f, start_date: d || new Date() }))}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="space-y-2">
+                <Label>End Date</Label>
+                <div className="h-10 px-3 py-2 rounded-md border bg-muted/50 flex items-center text-sm">
+                  {calculatedEndDate ? (
+                    <span>{format(calculatedEndDate, "PPP")}</span>
+                  ) : (
+                    <span className="text-muted-foreground">Select template</span>
+                  )}
+                </div>
+                {selectedMaster && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedMaster.total_duration_days} days from template
+                  </p>
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter>
