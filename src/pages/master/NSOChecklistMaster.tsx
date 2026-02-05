@@ -46,6 +46,8 @@ import {
   GripVertical,
   Copy,
   Package,
+  Calculator,
+  IndianRupee,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -58,6 +60,9 @@ interface ChecklistMaster {
   created_at: string;
   planned_budget: number | null;
   prescribed_sqft: number | null;
+  estimated_budget: number | null;
+  budget: number | null;
+  actual_budget: number | null;
 }
 
 interface MasterSection {
@@ -603,6 +608,26 @@ export default function NSOChecklistMaster() {
     onError: () => toast.error("Failed to remove required asset"),
   });
 
+  // Update budget mutation
+  const updateBudgetMutation = useMutation({
+    mutationFn: async (data: { id: string; estimated_budget: number; budget: number; actual_budget: number }) => {
+      const { error } = await supabase
+        .from("nso_checklist_masters")
+        .update({
+          estimated_budget: data.estimated_budget,
+          budget: data.budget,
+          actual_budget: data.actual_budget,
+        })
+        .eq("id", data.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["nso-checklist-masters"] });
+      toast.success("Budget updated successfully");
+    },
+    onError: () => toast.error("Failed to update budget"),
+  });
+
   const resetMasterForm = () => {
     setMasterForm({ name: "", store_type: "", description: "", status: "active" });
     setEditingMaster(null);
@@ -830,6 +855,10 @@ export default function NSOChecklistMaster() {
                         </Badge>
                       )}
                     </TabsTrigger>
+              <TabsTrigger value="budget">
+                <Calculator className="h-4 w-4 mr-2" />
+                Budget
+              </TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>
@@ -1049,6 +1078,105 @@ export default function NSOChecklistMaster() {
                   )}
                 </div>
                 )}
+
+              {activeTab === "budget" && (
+                <div className="p-6">
+                  <div className="max-w-2xl mx-auto space-y-6">
+                    <div className="text-center mb-6">
+                      <h3 className="text-lg font-semibold mb-1">Budget Settings</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Configure budget values for this checklist template
+                      </p>
+                    </div>
+
+                    <div className="grid gap-6">
+                      {/* Estimated Budget */}
+                      <div className="space-y-2">
+                        <Label htmlFor="estimated_budget">Estimated Budget</Label>
+                        <div className="relative">
+                          <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="estimated_budget"
+                            type="number"
+                            className="pl-9"
+                            placeholder="0"
+                            value={selectedMaster?.estimated_budget?.toString() || "0"}
+                            onChange={(e) => {
+                              if (selectedMaster) {
+                                updateBudgetMutation.mutate({
+                                  id: selectedMaster.id,
+                                  estimated_budget: parseFloat(e.target.value) || 0,
+                                  budget: selectedMaster.budget || 0,
+                                  actual_budget: selectedMaster.actual_budget || 0,
+                                });
+                              }
+                            }}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Initial estimated budget for store opening
+                        </p>
+                      </div>
+
+                      {/* Budget */}
+                      <div className="space-y-2">
+                        <Label htmlFor="budget">Budget</Label>
+                        <div className="relative">
+                          <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="budget"
+                            type="number"
+                            className="pl-9"
+                            placeholder="0"
+                            value={selectedMaster?.budget?.toString() || "0"}
+                            onChange={(e) => {
+                              if (selectedMaster) {
+                                updateBudgetMutation.mutate({
+                                  id: selectedMaster.id,
+                                  estimated_budget: selectedMaster.estimated_budget || 0,
+                                  budget: parseFloat(e.target.value) || 0,
+                                  actual_budget: selectedMaster.actual_budget || 0,
+                                });
+                              }
+                            }}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Approved budget for store opening
+                        </p>
+                      </div>
+
+                      {/* Actual Budget */}
+                      <div className="space-y-2">
+                        <Label htmlFor="actual_budget">Actual Budget</Label>
+                        <div className="relative">
+                          <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="actual_budget"
+                            type="number"
+                            className="pl-9"
+                            placeholder="0"
+                            value={selectedMaster?.actual_budget?.toString() || "0"}
+                            onChange={(e) => {
+                              if (selectedMaster) {
+                                updateBudgetMutation.mutate({
+                                  id: selectedMaster.id,
+                                  estimated_budget: selectedMaster.estimated_budget || 0,
+                                  budget: selectedMaster.budget || 0,
+                                  actual_budget: parseFloat(e.target.value) || 0,
+                                });
+                              }
+                            }}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Actual amount spent on store opening
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="rounded-xl border bg-card p-12 text-center text-muted-foreground">
