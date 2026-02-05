@@ -58,12 +58,10 @@ import {
   LayoutList,
   GanttChart,
   GripVertical,
-  Calculator,
   Package,
   Store,
   MapPin,
 } from "lucide-react";
-import { NSOStoreBudgetSection } from "@/components/nso/NSOStoreBudgetSection";
 import { NSOStoreAssetsSection } from "@/components/nso/NSOStoreAssetsSection";
 import { format, addDays } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -421,22 +419,6 @@ export default function NSOChecklistDetails() {
     onError: () => toast.error("Failed to delete task"),
   });
 
-  const updateChecklistBudgetMutation = useMutation({
-    mutationFn: async ({ field, value }: { field: "budget" | "final_budget"; value: number }) => {
-      if (!checklistId) throw new Error("No checklist");
-      const { error } = await supabase
-        .from("nso_store_checklists")
-        .update({ [field]: value })
-        .eq("id", checklistId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["nso-store-checklist", checklistId] });
-      toast.success("Budget updated");
-    },
-    onError: () => toast.error("Failed to update budget"),
-  });
-
   // Upload attachment
   const uploadAttachmentMutation = useMutation({
     mutationFn: async ({ taskId, file }: { taskId: string; file: File }) => {
@@ -637,8 +619,8 @@ export default function NSOChecklistDetails() {
       </div>
 
       {/* Tabs for Tasks, Assets, Budget */}
-      <Tabs defaultValue="tasks" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 md:w-auto md:inline-flex">
+        <Tabs defaultValue="tasks" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-2 md:w-auto md:inline-flex">
           <TabsTrigger value="tasks" className="gap-2">
             <LayoutList className="h-4 w-4" />
             Tasks
@@ -646,10 +628,6 @@ export default function NSOChecklistDetails() {
           <TabsTrigger value="assets" className="gap-2">
             <Package className="h-4 w-4" />
             Required Assets
-          </TabsTrigger>
-          <TabsTrigger value="budget" className="gap-2">
-            <Calculator className="h-4 w-4" />
-            Budget
           </TabsTrigger>
         </TabsList>
 
@@ -798,17 +776,6 @@ export default function NSOChecklistDetails() {
           </Card>
         </TabsContent>
 
-        {/* Budget Tab */}
-        <TabsContent value="budget" className="m-0">
-          <NSOStoreBudgetSection
-            checklistId={checklistId!}
-            storeId={checklist.store_id}
-            prescribedBudget={checklist.prescribed_budget || 0}
-            budget={checklist.budget || 0}
-            finalBudget={checklist.final_budget || 0}
-            onBudgetUpdate={(field, value) => updateChecklistBudgetMutation.mutate({ field, value })}
-          />
-        </TabsContent>
       </Tabs>
 
       {/* Add Section Dialog */}
