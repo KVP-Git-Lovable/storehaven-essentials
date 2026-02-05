@@ -80,7 +80,7 @@ export default function NewStoreOpening() {
     },
   });
 
-  // Fetch checklist masters with total duration
+  // Fetch checklist masters with total duration calculated per section (parallel execution)
   const { data: masters = [] } = useQuery({
     queryKey: ["nso-checklist-masters-active-with-duration"],
     queryFn: async () => {
@@ -95,25 +95,42 @@ export default function NewStoreOpening() {
       // Fetch all sections and tasks to calculate total duration per master
       const { data: sectionsData } = await supabase
         .from("nso_master_sections")
-        .select("id, master_id");
+        .select("id, master_id, sort_order")
+        .order("sort_order");
       
       const { data: tasksData } = await supabase
         .from("nso_master_tasks")
-        .select("section_id, duration_days");
+        .select("section_id, duration_days, sort_order")
+        .order("sort_order");
 
-      // Build a map of section_id -> master_id
-      const sectionToMaster: Record<string, string> = {};
+      // Group sections by master_id
+      const masterSections: Record<string, string[]> = {};
       sectionsData?.forEach((s) => {
-        sectionToMaster[s.id] = s.master_id;
+        if (!masterSections[s.master_id]) {
+          masterSections[s.master_id] = [];
+        }
+        masterSections[s.master_id].push(s.id);
       });
 
-      // Calculate total duration per master
-      const masterDurations: Record<string, number> = {};
+      // Calculate total duration per section (sum of tasks in that section)
+      const sectionDurations: Record<string, number> = {};
       tasksData?.forEach((t) => {
-        const masterId = sectionToMaster[t.section_id];
-        if (masterId) {
-          masterDurations[masterId] = (masterDurations[masterId] || 0) + (t.duration_days || 0);
-        }
+        sectionDurations[t.section_id] = (sectionDurations[t.section_id] || 0) + (t.duration_days || 0);
+      });
+
+      // Calculate total duration per master as the MAX section duration 
+      // Since sections run in PARALLEL (each section starts from the start_date),
+      // the longest section determines the end date
+      const masterDurations: Record<string, number> = {};
+      Object.entries(masterSections).forEach(([masterId, sectionIds]) => {
+        let maxDays = 0;
+        sectionIds.forEach((sectionId) => {
+          const sectionDuration = sectionDurations[sectionId] || 0;
+          if (sectionDuration > maxDays) {
+            maxDays = sectionDuration;
+          }
+        });
+        masterDurations[masterId] = maxDays;
       });
 
       return mastersData.map((m) => ({
