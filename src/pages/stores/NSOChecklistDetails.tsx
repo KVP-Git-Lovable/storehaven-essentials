@@ -61,8 +61,10 @@ import {
   Package,
   Store,
   MapPin,
+  Wallet,
 } from "lucide-react";
 import { NSOStoreAssetsSection } from "@/components/nso/NSOStoreAssetsSection";
+import { NSOStoreBudgetSection } from "@/components/nso/NSOStoreBudgetSection";
 import { format, addDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import { NSOGanttChart } from "@/components/nso/NSOGanttChart";
@@ -629,7 +631,7 @@ export default function NSOChecklistDetails() {
 
       {/* Tabs for Tasks, Assets, Budget */}
         <Tabs defaultValue="tasks" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 md:w-auto md:inline-flex">
+          <TabsList className="grid w-full grid-cols-3 md:w-auto md:inline-flex">
           <TabsTrigger value="tasks" className="gap-2">
             <LayoutList className="h-4 w-4" />
             Tasks
@@ -637,6 +639,10 @@ export default function NSOChecklistDetails() {
           <TabsTrigger value="assets" className="gap-2">
             <Package className="h-4 w-4" />
             Required Assets
+          </TabsTrigger>
+          <TabsTrigger value="budget" className="gap-2">
+            <Wallet className="h-4 w-4" />
+            Budget
           </TabsTrigger>
         </TabsList>
 
@@ -781,6 +787,15 @@ export default function NSOChecklistDetails() {
                   queryClient.invalidateQueries({ queryKey: ["nso-budget-items", checklistId] });
                 }}
               />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Budget Tab */}
+        <TabsContent value="budget" className="m-0">
+          <Card>
+            <CardContent className="pt-6">
+              <NSOStoreBudgetSection masterId={checklist.master_id} />
             </CardContent>
           </Card>
         </TabsContent>
