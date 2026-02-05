@@ -48,10 +48,6 @@ import {
   FolderPlus,
   ListPlus,
   Trash2,
-  Paperclip,
-  Upload,
-  X,
-  FileText,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -64,6 +60,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { NSOStoreAssetsSection } from "@/components/nso/NSOStoreAssetsSection";
+import { NSOTaskAttachments } from "@/components/nso/NSOTaskAttachments";
 import { NSOStoreBudgetSection } from "@/components/nso/NSOStoreBudgetSection";
 import { format, addDays } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -113,15 +110,6 @@ interface Vendor {
   name: string;
 }
 
-interface TaskAttachment {
-  id: string;
-  task_id: string;
-  file_name: string;
-  file_url: string;
-  file_type: string | null;
-  uploaded_by: string;
-  created_at: string;
-}
 
 const statusConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
   pending: { color: "bg-muted text-muted-foreground", icon: Clock, label: "Pending" },
@@ -316,23 +304,6 @@ export default function NSOChecklistDetails() {
     },
     enabled: !!checklistId,
   });
-
-  // Fetch attachments for selected task
-  const { data: attachments = [] } = useQuery({
-    queryKey: ["nso-task-attachments", selectedTask?.id],
-    queryFn: async () => {
-      if (!selectedTask) return [];
-      const { data, error } = await supabase
-        .from("nso_task_attachments")
-        .select("*")
-        .eq("task_id", selectedTask.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as TaskAttachment[];
-    },
-    enabled: !!selectedTask,
-  });
-
   // Mutations
   const createSectionMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -421,44 +392,6 @@ export default function NSOChecklistDetails() {
     onError: () => toast.error("Failed to delete task"),
   });
 
-  // Upload attachment
-  const uploadAttachmentMutation = useMutation({
-    mutationFn: async ({ taskId, file }: { taskId: string; file: File }) => {
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${taskId}/${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from("nso-attachments")
-        .upload(fileName, file);
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage.from("nso-attachments").getPublicUrl(fileName);
-      const { error: insertError } = await supabase.from("nso_task_attachments").insert({
-        task_id: taskId,
-        file_name: file.name,
-        file_url: urlData.publicUrl,
-        file_type: file.type,
-        uploaded_by: "current_user",
-      });
-      if (insertError) throw insertError;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["nso-task-attachments", selectedTask?.id] });
-      toast.success("File uploaded");
-    },
-    onError: () => toast.error("Failed to upload file"),
-  });
-
-  const deleteAttachmentMutation = useMutation({
-    mutationFn: async (attachmentId: string) => {
-      const { error } = await supabase.from("nso_task_attachments").delete().eq("id", attachmentId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["nso-task-attachments", selectedTask?.id] });
-      toast.success("Attachment deleted");
-    },
-    onError: () => toast.error("Failed to delete attachment"),
-  });
 
   // Helpers
   const getTasksForSection = (sectionId: string) => tasks.filter((t) => t.section_id === sectionId);
@@ -476,13 +409,6 @@ export default function NSOChecklistDetails() {
 
   const handleInlineStatusChange = (taskId: string, status: string) => {
     updateTaskMutation.mutate({ id: taskId, status });
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && selectedTask) {
-      uploadAttachmentMutation.mutate({ taskId: selectedTask.id, file });
-    }
   };
 
   const handleGanttTaskUpdate = (taskId: string, startDate: string, endDate: string) => {
@@ -980,40 +906,7 @@ export default function NSOChecklistDetails() {
                   <p className="mt-1 text-sm">{selectedTask.description}</p>
                 </div>
               )}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <Label className="text-muted-foreground flex items-center gap-2">
-                    <Paperclip className="h-4 w-4" />
-                    Attachments ({attachments.length})
-                  </Label>
-                  <label className="cursor-pointer">
-                    <Button variant="outline" size="sm" asChild>
-                      <span>
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload
-                      </span>
-                    </Button>
-                    <input type="file" className="hidden" onChange={handleFileUpload} />
-                  </label>
-                </div>
-                {attachments.length > 0 ? (
-                  <div className="space-y-2">
-                    {attachments.map((att) => (
-                      <div key={att.id} className="flex items-center justify-between p-2 border rounded-lg">
-                        <a href={att.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary hover:underline">
-                          <FileText className="h-4 w-4" />
-                          {att.file_name}
-                        </a>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => deleteAttachmentMutation.mutate(att.id)}>
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No attachments yet</p>
-                )}
-              </div>
+              <NSOTaskAttachments taskId={selectedTask.id} />
             </div>
           )}
         </DialogContent>
