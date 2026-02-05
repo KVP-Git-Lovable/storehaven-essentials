@@ -1,166 +1,154 @@
 
+# Plan: Enhance End Date Display with Task Reference
 
-# Add Required Assets Section to NSO Store Checklists
+## Current State Analysis
 
-## Problem Identified
+The End Date functionality **already works correctly**:
+- The End Date is dynamically calculated as the latest `end_date` across all tasks in the checklist
+- When any task date is edited (via Gantt chart drag/resize or task dialog), the End Date automatically updates
+- Database query confirms: "Pest Control, Electrical, AC, Etc." has end_date Feb 17, 2027 - which matches the displayed End Date
 
-The **Required Assets section is missing** from the New Store Opening checklist view. While assets ARE correctly copied from the master template when a checklist is assigned (the backend data exists in `nso_store_assets` table), there is NO UI to view or manage these assets in the store checklist.
-
-### Current State:
-- **NSOChecklistMaster.tsx**: Has a "Required Assets" tab where admins define template assets
-- **NewStoreOpening.tsx**: Only has "Tasks" and "Budget" tabs - NO Assets tab
-- **nso_store_assets table**: Contains the copied assets, but they're invisible to users
-
----
-
-## Solution
-
-Add a new **"Required Assets"** tab to the store checklist inline view in `NewStoreOpening.tsx` that:
-1. Displays all assets copied from the template
-2. Allows adding/editing/removing assets specific to this store
-3. Shows asset values and totals (ties into budget tracking)
+**What's Missing:**
+1. No indication of which task determines the End Date
+2. The NSO listing page doesn't show End Date at all
 
 ---
 
 ## Implementation Plan
 
-### 1. Create New Component: `NSOStoreAssetsSection.tsx`
+### 1. Add Task Reference to End Date Card (NSOChecklistDetails.tsx)
 
-Create a dedicated component to manage store-specific assets:
-
-**Features:**
-- Display table of required assets with columns:
-  - Asset Name
-  - Category  
-  - Unit Price (from Asset Master)
-  - Quantity (editable)
-  - Total Cost (calculated)
-  - Status (pending/ordered/delivered)
-  - Actions (edit/delete)
-- Add new asset form (select from Asset Master)
-- Show total asset costs summary
-- Real-time updates when assets change
-
-**Props:**
-- `checklistId`: The store checklist ID
-- `onAssetChange`: Callback to refresh budget calculations
-
-### 2. Update NewStoreOpening.tsx
-
-Add the "Required Assets" tab alongside Tasks and Budget:
-
-```text
-Tabs:
-  - Tasks (existing)
-  - Required Assets (NEW)
-  - Budget (existing)
-```
+Modify the End Date card in the header to show which task the date is based on:
 
 **Changes:**
-- Add import for Package icon and new component
-- Add TabsTrigger for "assets" 
-- Add TabsContent rendering the NSOStoreAssetsSection component
-- Add query for store assets with asset master details
+- Find the task with the latest end_date while calculating `calculatedEndDate`
+- Display the task name below the End Date in smaller text
+- Add a tooltip for long task names
 
-### 3. Database Query for Assets
-
-Fetch assets with joined Asset Master data:
-```typescript
-const { data: storeAssets = [] } = useQuery({
-  queryKey: ["nso-store-assets", checklistId],
-  queryFn: async () => {
-    const { data, error } = await supabase
-      .from("nso_store_assets")
-      .select(`
-        *,
-        asset_masters(
-          name,
-          standard_price,
-          criticality,
-          categories(name)
-        )
-      `)
-      .eq("checklist_id", checklistId)
-      .order("sort_order");
-    if (error) throw error;
-    return data;
-  },
-});
+**UI Example:**
+```
+┌─────────────────────────┐
+│ End Date                │
+│ Feb 17, 2027            │
+│ Based on: Pest Control, │
+│ Electrical, AC, Etc.    │
+└─────────────────────────┘
 ```
 
----
+### 2. Add End Date to NSO Listing Page (NewStoreOpening.tsx)
 
-## Files to Create
+Display the calculated End Date on each checklist card in the listing:
 
-| File | Purpose |
-|------|---------|
-| `src/components/nso/NSOStoreAssetsSection.tsx` | Asset management component for store checklists |
+**Changes:**
+- Fetch task end dates along with task counts
+- Calculate the latest end_date per checklist
+- Display "End: MMM d, yyyy" next to the existing "Start: MMM d, yyyy"
 
-## Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/pages/stores/NewStoreOpening.tsx` | Add "Required Assets" tab with TabsTrigger, TabsContent, and component |
-
----
-
-## UI Preview
-
-The inline checklist view will have three tabs:
-
-```text
-+-----------------------------------------------------------+
-| [Tasks] [Required Assets] [Budget]                         |
-+-----------------------------------------------------------+
-|                                                            |
-| Required Assets Tab Content:                               |
-|                                                            |
-| [+ Add Asset]                                              |
-|                                                            |
-| +--------------------------------------------------------+ |
-| | Asset Name | Category | Unit Price | Qty | Total | ... | |
-| +--------------------------------------------------------+ |
-| | AC - 1.5T  | HVAC     | ₹35,000    | 5   | ₹175,000    | |
-| | Deep Freezer| Freezer | ₹45,000    | 3   | ₹135,000    | |
-| +--------------------------------------------------------+ |
-|                                                            |
-| Total Asset Cost: ₹310,000                                 |
-+-----------------------------------------------------------+
+**UI Example:**
+```
+Start: Mar 1, 2026 → End: Feb 17, 2027
 ```
 
 ---
 
 ## Technical Details
 
-### NSOStoreAssetsSection Component Structure
+### File: src/pages/stores/NSOChecklistDetails.tsx
 
+**Modification 1 - Enhanced End Date Calculation (around line 542-547):**
 ```typescript
-interface NSOStoreAssetsSectionProps {
-  checklistId: string;
-  onAssetChange?: () => void;
-}
+// Calculate end date from tasks (latest end_date) and identify the task
+const endDateInfo = tasks.reduce((result: { date: Date | null; taskName: string | null }, task) => {
+  if (!task.end_date) return result;
+  const taskDate = new Date(task.end_date);
+  if (!result.date || taskDate > result.date) {
+    return { date: taskDate, taskName: task.name };
+  }
+  return result;
+}, { date: null, taskName: null });
 
-// Features:
-// - Query nso_store_assets with asset_masters join
-// - Add asset mutation (select from available Asset Masters)
-// - Update quantity mutation
-// - Update status mutation (pending/ordered/delivered)
-// - Delete asset mutation
-// - Calculate totals in real-time
+const calculatedEndDate = endDateInfo.date;
+const endDateTaskName = endDateInfo.taskName;
 ```
 
-### Asset Status Options
-- `pending` - Not yet ordered
-- `ordered` - Order placed with vendor
-- `delivered` - Received at store
+**Modification 2 - Update End Date Card (around line 606-615):**
+```typescript
+<Card>
+  <CardHeader className="pb-2">
+    <CardTitle className="text-sm font-medium text-muted-foreground">End Date</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <p className="text-2xl font-bold">
+      {calculatedEndDate ? format(calculatedEndDate, "MMM d, yyyy") : "-"}
+    </p>
+    {endDateTaskName && (
+      <p className="text-xs text-muted-foreground mt-1 truncate" title={endDateTaskName}>
+        Based on: {endDateTaskName}
+      </p>
+    )}
+  </CardContent>
+</Card>
+```
+
+### File: src/pages/stores/NewStoreOpening.tsx
+
+**Modification 1 - Update task counts query to include end dates:**
+```typescript
+const { data: taskCounts = {} } = useQuery({
+  queryKey: ["nso-task-counts"],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("nso_store_tasks")
+      .select("checklist_id, status, end_date");
+    if (error) throw error;
+    
+    const counts: Record<string, { 
+      total: number; 
+      completed: number; 
+      latestEndDate: string | null 
+    }> = {};
+    
+    data.forEach((task) => {
+      if (!counts[task.checklist_id]) {
+        counts[task.checklist_id] = { total: 0, completed: 0, latestEndDate: null };
+      }
+      counts[task.checklist_id].total++;
+      if (task.status === "completed") {
+        counts[task.checklist_id].completed++;
+      }
+      if (task.end_date) {
+        if (!counts[task.checklist_id].latestEndDate || 
+            task.end_date > counts[task.checklist_id].latestEndDate) {
+          counts[task.checklist_id].latestEndDate = task.end_date;
+        }
+      }
+    });
+    return counts;
+  },
+});
+```
+
+**Modification 2 - Display End Date in checklist cards:**
+```typescript
+<span className="text-xs text-muted-foreground">
+  Start: {format(new Date(checklist.start_date), "MMM d, yyyy")}
+  {counts.latestEndDate && (
+    <> → End: {format(new Date(counts.latestEndDate), "MMM d, yyyy")}</>
+  )}
+</span>
+```
 
 ---
 
-## Benefits
+## Summary
 
-1. **Visibility**: Users can see what assets are required for the store opening
-2. **Tracking**: Track status of each asset (pending/ordered/delivered)
-3. **Budget Integration**: Asset changes automatically reflect in Budget tab
-4. **Customization**: Store-specific assets can be added/modified
-5. **Accountability**: Clear view of what's needed vs what's delivered
+| Feature | Status | Action |
+|---------|--------|--------|
+| End Date auto-calculation | Already working | No changes needed |
+| Auto-update on task edit | Already working | No changes needed |
+| Show which task End Date is based on | Not implemented | Add to NSOChecklistDetails.tsx |
+| Show End Date on listing page | Not implemented | Add to NewStoreOpening.tsx |
 
+**Files to Modify:**
+1. `src/pages/stores/NSOChecklistDetails.tsx` - Add task reference to End Date card
+2. `src/pages/stores/NewStoreOpening.tsx` - Add End Date display to listing cards
