@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -138,6 +138,24 @@ export default function NSOChecklistMaster() {
     quantity: 1,
     notes: "",
   });
+
+  // Local state for budget form to enable smooth editing
+  const [budgetForm, setBudgetForm] = useState({
+    estimated_budget: 0,
+    budget: 0,
+    actual_budget: 0,
+  });
+
+  // Sync budget form when selected master changes
+  useEffect(() => {
+    if (selectedMaster) {
+      setBudgetForm({
+        estimated_budget: selectedMaster.estimated_budget || 0,
+        budget: selectedMaster.budget || 0,
+        actual_budget: selectedMaster.actual_budget || 0,
+      });
+    }
+  }, [selectedMaster?.id, selectedMaster?.estimated_budget, selectedMaster?.budget, selectedMaster?.actual_budget]);
 
   // Fetch checklist masters
   const { data: masters = [] } = useQuery({
@@ -1083,9 +1101,9 @@ export default function NSOChecklistMaster() {
                 <div className="p-6">
                   <div className="max-w-2xl mx-auto space-y-6">
                     <div className="text-center mb-6">
-                      <h3 className="text-lg font-semibold mb-1">Budget Settings</h3>
+                      <h3 className="text-lg font-semibold mb-1">Budget Configuration</h3>
                       <p className="text-sm text-muted-foreground">
-                        Configure budget values for this checklist template
+                        Configure budget values for "{selectedMaster.name}" template
                       </p>
                     </div>
 
@@ -1100,16 +1118,12 @@ export default function NSOChecklistMaster() {
                             type="number"
                             className="pl-9"
                             placeholder="0"
-                            value={selectedMaster?.estimated_budget?.toString() || "0"}
+                            value={budgetForm.estimated_budget}
                             onChange={(e) => {
-                              if (selectedMaster) {
-                                updateBudgetMutation.mutate({
-                                  id: selectedMaster.id,
-                                  estimated_budget: parseFloat(e.target.value) || 0,
-                                  budget: selectedMaster.budget || 0,
-                                  actual_budget: selectedMaster.actual_budget || 0,
-                                });
-                              }
+                              setBudgetForm((f) => ({
+                                ...f,
+                                estimated_budget: parseFloat(e.target.value) || 0,
+                              }));
                             }}
                           />
                         </div>
@@ -1128,16 +1142,12 @@ export default function NSOChecklistMaster() {
                             type="number"
                             className="pl-9"
                             placeholder="0"
-                            value={selectedMaster?.budget?.toString() || "0"}
+                            value={budgetForm.budget}
                             onChange={(e) => {
-                              if (selectedMaster) {
-                                updateBudgetMutation.mutate({
-                                  id: selectedMaster.id,
-                                  estimated_budget: selectedMaster.estimated_budget || 0,
-                                  budget: parseFloat(e.target.value) || 0,
-                                  actual_budget: selectedMaster.actual_budget || 0,
-                                });
-                              }
+                              setBudgetForm((f) => ({
+                                ...f,
+                                budget: parseFloat(e.target.value) || 0,
+                              }));
                             }}
                           />
                         </div>
@@ -1156,16 +1166,12 @@ export default function NSOChecklistMaster() {
                             type="number"
                             className="pl-9"
                             placeholder="0"
-                            value={selectedMaster?.actual_budget?.toString() || "0"}
+                            value={budgetForm.actual_budget}
                             onChange={(e) => {
-                              if (selectedMaster) {
-                                updateBudgetMutation.mutate({
-                                  id: selectedMaster.id,
-                                  estimated_budget: selectedMaster.estimated_budget || 0,
-                                  budget: selectedMaster.budget || 0,
-                                  actual_budget: parseFloat(e.target.value) || 0,
-                                });
-                              }
+                              setBudgetForm((f) => ({
+                                ...f,
+                                actual_budget: parseFloat(e.target.value) || 0,
+                              }));
                             }}
                           />
                         </div>
@@ -1173,6 +1179,22 @@ export default function NSOChecklistMaster() {
                           Actual amount spent on store opening
                         </p>
                       </div>
+                    </div>
+
+                    <div className="flex justify-end pt-4 border-t">
+                      <Button
+                        onClick={() => {
+                          if (selectedMaster) {
+                            updateBudgetMutation.mutate({
+                              id: selectedMaster.id,
+                              ...budgetForm,
+                            });
+                          }
+                        }}
+                        disabled={updateBudgetMutation.isPending}
+                      >
+                        {updateBudgetMutation.isPending ? "Saving..." : "Save Budget"}
+                      </Button>
                     </div>
                   </div>
                 </div>
