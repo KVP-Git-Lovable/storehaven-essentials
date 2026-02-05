@@ -539,12 +539,18 @@ export default function NSOChecklistDetails() {
   const completedTasks = tasks.filter((t) => t.status === "completed").length;
   const progress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
 
-  // Calculate end date from tasks (latest end_date)
-  const calculatedEndDate = tasks.reduce((latest: Date | null, task) => {
-    if (!task.end_date) return latest;
+  // Calculate end date from tasks (latest end_date) and identify the task
+  const endDateInfo = tasks.reduce((result: { date: Date | null; taskName: string | null }, task) => {
+    if (!task.end_date) return result;
     const taskDate = new Date(task.end_date);
-    return !latest || taskDate > latest ? taskDate : latest;
-  }, null);
+    if (!result.date || taskDate > result.date) {
+      return { date: taskDate, taskName: task.name };
+    }
+    return result;
+  }, { date: null, taskName: null });
+
+  const calculatedEndDate = endDateInfo.date;
+  const endDateTaskName = endDateInfo.taskName;
 
   if (checklistLoading) {
     return (
@@ -611,6 +617,11 @@ export default function NSOChecklistDetails() {
             <p className="text-2xl font-bold">
               {calculatedEndDate ? format(calculatedEndDate, "MMM d, yyyy") : "-"}
             </p>
+            {endDateTaskName && (
+              <p className="text-xs text-muted-foreground mt-1 truncate" title={endDateTaskName}>
+                Based on: {endDateTaskName}
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card>

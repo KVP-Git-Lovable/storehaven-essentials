@@ -107,23 +107,29 @@ export default function NewStoreOpening() {
     },
   });
 
-  // Fetch task counts for all checklists
+  // Fetch task counts and end dates for all checklists
   const { data: taskCounts = {} } = useQuery({
     queryKey: ["nso-task-counts"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("nso_store_tasks")
-        .select("checklist_id, status");
+        .select("checklist_id, status, end_date");
       if (error) throw error;
       
-      const counts: Record<string, { total: number; completed: number }> = {};
+      const counts: Record<string, { total: number; completed: number; latestEndDate: string | null }> = {};
       data.forEach((task) => {
         if (!counts[task.checklist_id]) {
-          counts[task.checklist_id] = { total: 0, completed: 0 };
+          counts[task.checklist_id] = { total: 0, completed: 0, latestEndDate: null };
         }
         counts[task.checklist_id].total++;
         if (task.status === "completed") {
           counts[task.checklist_id].completed++;
+        }
+        if (task.end_date) {
+          if (!counts[task.checklist_id].latestEndDate || 
+              task.end_date > counts[task.checklist_id].latestEndDate) {
+            counts[task.checklist_id].latestEndDate = task.end_date;
+          }
         }
       });
       return counts;
@@ -343,7 +349,7 @@ export default function NewStoreOpening() {
           ) : (
             checklists.map((checklist) => {
               const progress = getProgress(checklist.id);
-              const counts = taskCounts[checklist.id] || { total: 0, completed: 0 };
+              const counts = taskCounts[checklist.id] || { total: 0, completed: 0, latestEndDate: null };
               
               return (
                 <div
@@ -367,6 +373,9 @@ export default function NewStoreOpening() {
                         </Badge>
                         <span className="text-xs text-muted-foreground">
                           Start: {format(new Date(checklist.start_date), "MMM d, yyyy")}
+                          {counts.latestEndDate && (
+                            <> → End: {format(new Date(counts.latestEndDate), "MMM d, yyyy")}</>
+                          )}
                         </span>
                       </div>
                     </div>
