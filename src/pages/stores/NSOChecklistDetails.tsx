@@ -537,6 +537,13 @@ export default function NSOChecklistDetails() {
   const completedTasks = tasks.filter((t) => t.status === "completed").length;
   const progress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
 
+  // Calculate end date from tasks (latest end_date)
+  const calculatedEndDate = tasks.reduce((latest: Date | null, task) => {
+    if (!task.end_date) return latest;
+    const taskDate = new Date(task.end_date);
+    return !latest || taskDate > latest ? taskDate : latest;
+  }, null);
+
   if (checklistLoading) {
     return (
       <div className="p-6 flex items-center justify-center">
@@ -585,13 +592,23 @@ export default function NSOChecklistDetails() {
       </div>
 
       {/* Store Info & Progress Card */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Start Date</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">{format(new Date(checklist.start_date), "MMM d, yyyy")}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">End Date</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">
+              {calculatedEndDate ? format(calculatedEndDate, "MMM d, yyyy") : "-"}
+            </p>
           </CardContent>
         </Card>
         <Card>
