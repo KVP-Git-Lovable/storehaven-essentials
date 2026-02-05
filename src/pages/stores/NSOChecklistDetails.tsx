@@ -795,7 +795,7 @@ export default function NSOChecklistDetails() {
         <TabsContent value="budget" className="m-0">
           <Card>
             <CardContent className="pt-6">
-              <NSOStoreBudgetSection masterId={checklist.master_id} />
+              <NSOStoreBudgetSection checklistId={checklist.id} masterId={checklist.master_id} />
             </CardContent>
           </Card>
         </TabsContent>

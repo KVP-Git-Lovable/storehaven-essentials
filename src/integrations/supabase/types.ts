@@ -2839,31 +2839,49 @@ export type Database = {
       }
       nso_store_budget_items: {
         Row: {
+          actual_cost: number | null
           amount: number
           category: string
           checklist_id: string
           created_at: string | null
           description: string
           id: string
+          name: string
+          notes: string | null
+          planned_amount: number | null
           sort_order: number
+          status: string | null
+          updated_at: string | null
         }
         Insert: {
+          actual_cost?: number | null
           amount?: number
           category?: string
           checklist_id: string
           created_at?: string | null
           description: string
           id?: string
+          name: string
+          notes?: string | null
+          planned_amount?: number | null
           sort_order?: number
+          status?: string | null
+          updated_at?: string | null
         }
         Update: {
+          actual_cost?: number | null
           amount?: number
           category?: string
           checklist_id?: string
           created_at?: string | null
           description?: string
           id?: string
+          name?: string
+          notes?: string | null
+          planned_amount?: number | null
           sort_order?: number
+          status?: string | null
+          updated_at?: string | null
         }
         Relationships: [
           {
