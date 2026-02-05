@@ -585,15 +585,7 @@ export default function NSOChecklistDetails() {
       </div>
 
       {/* Store Info & Progress Card */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Store Size</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{checklist.stores?.store_size_sqft?.toLocaleString() || 0} sq ft</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Start Date</CardTitle>
