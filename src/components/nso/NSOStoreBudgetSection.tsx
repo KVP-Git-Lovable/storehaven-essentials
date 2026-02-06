@@ -303,8 +303,8 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Template Budget
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+                Estimated Budget
               </CardTitle>
             </div>
           </CardHeader>
