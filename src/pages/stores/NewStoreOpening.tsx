@@ -269,11 +269,12 @@ export default function NewStoreOpening() {
             .order("sort_order");
 
           if (masterTasks && masterTasks.length > 0) {
-            const storeTasks = masterTasks.map((task) => {
+            for (const task of masterTasks) {
               // Offset-based: start = buildup date + from_buildup_days
               const startDate = addDays(data.start_date, task.from_buildup_days || 0);
               const endDate = addDays(startDate, task.duration_days - 1);
-              return {
+              
+              const { data: storeTask } = await supabase.from("nso_store_tasks").insert({
                 section_id: storeSection.id,
                 checklist_id: checklist.id,
                 name: task.name,
@@ -283,9 +284,28 @@ export default function NewStoreOpening() {
                 sort_order: task.sort_order,
                 is_custom: false,
                 status: "pending",
-              };
-            });
-            await supabase.from("nso_store_tasks").insert(storeTasks);
+              }).select("id").single();
+
+              // Copy master task attachments to store task
+              if (storeTask) {
+                const { data: masterAttachments } = await supabase
+                  .from("nso_master_task_attachments")
+                  .select("*")
+                  .eq("task_id", task.id);
+                
+                if (masterAttachments && masterAttachments.length > 0) {
+                  const storeAttachments = masterAttachments.map((att) => ({
+                    task_id: storeTask.id,
+                    file_name: att.file_name,
+                    file_url: att.file_url,
+                    file_type: att.file_type,
+                    file_size: att.file_size,
+                    uploaded_by: att.uploaded_by,
+                  }));
+                  await supabase.from("nso_task_attachments").insert(storeAttachments);
+                }
+              }
+            }
           }
         }
       }

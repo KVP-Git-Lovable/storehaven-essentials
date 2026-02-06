@@ -66,6 +66,7 @@ import {
   Wallet,
   Filter,
   X,
+  Pencil,
 } from "lucide-react";
 import { NSOStoreAssetsSection } from "@/components/nso/NSOStoreAssetsSection";
 import { NSOTaskAttachments } from "@/components/nso/NSOTaskAttachments";
@@ -281,6 +282,7 @@ export default function NSOChecklistDetails() {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [ganttTimeFilter, setGanttTimeFilter] = useState<"all" | "day" | "week" | "month">("all");
+  const [isEditingTask, setIsEditingTask] = useState(false);
 
   // Form states
   const [sectionForm, setSectionForm] = useState({ name: "" });
@@ -291,6 +293,16 @@ export default function NSOChecklistDetails() {
     start_date: null as Date | null,
     end_date: null as Date | null,
     status: "pending",
+    vendor_id: "",
+  });
+  // Edit form state for task details dialog
+  const [editTaskForm, setEditTaskForm] = useState({
+    name: "",
+    description: "",
+    owner: "",
+    start_date: null as Date | null,
+    end_date: null as Date | null,
+    status: "open",
     vendor_id: "",
   });
 
@@ -481,7 +493,43 @@ export default function NSOChecklistDetails() {
 
   const handleTaskClick = (task: StoreTask) => {
     setSelectedTask(task);
+    setIsEditingTask(false);
+    setEditTaskForm({
+      name: task.name,
+      description: task.description || "",
+      owner: task.owner || "",
+      start_date: task.start_date ? parseISO(task.start_date) : null,
+      end_date: task.end_date ? parseISO(task.end_date) : null,
+      status: task.status === "pending" || task.status === "in_progress" || task.status === "blocked" ? "open" : task.status,
+      vendor_id: task.vendor_id || "",
+    });
     setTaskDetailsDialogOpen(true);
+  };
+
+  const handleSaveEditTask = () => {
+    if (!selectedTask) return;
+    updateTaskMutation.mutate({
+      id: selectedTask.id,
+      name: editTaskForm.name,
+      description: editTaskForm.description || null,
+      owner: editTaskForm.owner || null,
+      start_date: editTaskForm.start_date ? format(editTaskForm.start_date, "yyyy-MM-dd") : null,
+      end_date: editTaskForm.end_date ? format(editTaskForm.end_date, "yyyy-MM-dd") : null,
+      status: editTaskForm.status,
+      vendor_id: editTaskForm.vendor_id || null,
+    } as any);
+    setSelectedTask({
+      ...selectedTask,
+      name: editTaskForm.name,
+      description: editTaskForm.description || null,
+      owner: editTaskForm.owner || null,
+      start_date: editTaskForm.start_date ? format(editTaskForm.start_date, "yyyy-MM-dd") : null,
+      end_date: editTaskForm.end_date ? format(editTaskForm.end_date, "yyyy-MM-dd") : null,
+      status: editTaskForm.status,
+      vendor_id: editTaskForm.vendor_id || null,
+    });
+    setIsEditingTask(false);
+    toast.success("Task updated");
   };
 
   const handleAddTask = (sectionId: string) => {
@@ -1094,35 +1142,97 @@ export default function NSOChecklistDetails() {
       </Dialog>
 
       {/* Task Details Dialog */}
-      <Dialog open={taskDetailsDialogOpen} onOpenChange={setTaskDetailsDialogOpen}>
+      <Dialog open={taskDetailsDialogOpen} onOpenChange={(open) => {
+        setTaskDetailsDialogOpen(open);
+        if (!open) setIsEditingTask(false);
+      }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{selectedTask?.name}</DialogTitle>
+            <DialogTitle className="flex items-center justify-between pr-8">
+              <span>{isEditingTask ? "Edit Task" : selectedTask?.name}</span>
+            </DialogTitle>
           </DialogHeader>
           {selectedTask && (
             <div className="space-y-6 py-4 max-h-[60vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-muted-foreground">Owner</Label>
-                  <p className="font-medium">{selectedTask.owner || "-"}</p>
-                </div>
-              <div>
-                  <Label className="text-muted-foreground">Status</Label>
-                  <div className="flex items-center gap-2 mt-1">
-                    {(() => {
-                      const effStatus = getEffectiveStatus(selectedTask);
-                      return effStatus === "overdue" ? (
-                        <Badge className="bg-red-100 text-red-800 border-red-200">Overdue</Badge>
-                      ) : null;
-                    })()}
-                    <Select
-                      value={selectedTask.status === "pending" || selectedTask.status === "in_progress" || selectedTask.status === "blocked" ? "open" : selectedTask.status}
-                      onValueChange={(v) => {
-                        handleInlineStatusChange(selectedTask.id, v);
-                        setSelectedTask({ ...selectedTask, status: v });
-                      }}
-                    >
-                      <SelectTrigger className="h-8 w-[130px]">
+              {isEditingTask ? (
+                /* Edit Mode */
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Task Name *</Label>
+                    <Input
+                      value={editTaskForm.name}
+                      onChange={(e) => setEditTaskForm((f) => ({ ...f, name: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Textarea
+                      value={editTaskForm.description}
+                      onChange={(e) => setEditTaskForm((f) => ({ ...f, description: e.target.value }))}
+                      placeholder="Task details..."
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Owner</Label>
+                      <Input
+                        value={editTaskForm.owner}
+                        onChange={(e) => setEditTaskForm((f) => ({ ...f, owner: e.target.value }))}
+                        placeholder="Responsible person"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Vendor</Label>
+                      <Select
+                        value={editTaskForm.vendor_id || "none"}
+                        onValueChange={(v) => setEditTaskForm((f) => ({ ...f, vendor_id: v === "none" ? "" : v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select vendor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          {vendors.map((vendor) => (
+                            <SelectItem key={vendor.id} value={vendor.id}>{vendor.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Start Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !editTaskForm.start_date && "text-muted-foreground")}>
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {editTaskForm.start_date ? format(editTaskForm.start_date, "PPP") : "Pick a date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 bg-popover" align="start">
+                          <Calendar mode="single" selected={editTaskForm.start_date || undefined} onSelect={(d) => setEditTaskForm((f) => ({ ...f, start_date: d || null }))} />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>End Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !editTaskForm.end_date && "text-muted-foreground")}>
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {editTaskForm.end_date ? format(editTaskForm.end_date, "PPP") : "Pick a date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 bg-popover" align="start">
+                          <Calendar mode="single" selected={editTaskForm.end_date || undefined} onSelect={(d) => setEditTaskForm((f) => ({ ...f, end_date: d || null }))} />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select value={editTaskForm.status} onValueChange={(v) => setEditTaskForm((f) => ({ ...f, status: v }))}>
+                      <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1133,22 +1243,86 @@ export default function NSOChecklistDetails() {
                     </Select>
                   </div>
                 </div>
-                <div>
-                  <Label className="text-muted-foreground">Start Date</Label>
-                  <p className="font-medium">{selectedTask.start_date ? format(new Date(selectedTask.start_date), "PPP") : "-"}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">End Date</Label>
-                  <p className="font-medium">{selectedTask.end_date ? format(new Date(selectedTask.end_date), "PPP") : "-"}</p>
+              ) : (
+                /* View Mode */
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-muted-foreground">Owner</Label>
+                      <p className="font-medium">{selectedTask.owner || "-"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Status</Label>
+                      <div className="flex items-center gap-2 mt-1">
+                        {(() => {
+                          const effStatus = getEffectiveStatus(selectedTask);
+                          return effStatus === "overdue" ? (
+                            <Badge className="bg-red-100 text-red-800 border-red-200">Overdue</Badge>
+                          ) : null;
+                        })()}
+                        <Badge variant="outline">
+                          {statusConfig[getEffectiveStatus(selectedTask)]?.label || selectedTask.status}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Start Date</Label>
+                      <p className="font-medium">{selectedTask.start_date ? format(new Date(selectedTask.start_date), "PPP") : "-"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">End Date</Label>
+                      <p className="font-medium">{selectedTask.end_date ? format(new Date(selectedTask.end_date), "PPP") : "-"}</p>
+                    </div>
+                    {selectedTask.vendor_id && (
+                      <div>
+                        <Label className="text-muted-foreground">Vendor</Label>
+                        <p className="font-medium">
+                          {vendors.find((v) => v.id === selectedTask.vendor_id)?.name || "-"}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  {selectedTask.description && (
+                    <div>
+                      <Label className="text-muted-foreground">Description</Label>
+                      <p className="mt-1 text-sm">{selectedTask.description}</p>
+                    </div>
+                  )}
+                  <NSOTaskAttachments taskId={selectedTask.id} />
+                </>
+              )}
+              {/* Action buttons */}
+              <div className="flex items-center justify-between pt-4 border-t">
+                <div className="flex gap-2">
+                  {isEditingTask ? (
+                    <>
+                      <Button onClick={handleSaveEditTask} disabled={!editTaskForm.name.trim()}>
+                        Save Changes
+                      </Button>
+                      <Button variant="outline" onClick={() => setIsEditingTask(false)}>
+                        Cancel
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button variant="outline" onClick={() => setIsEditingTask(true)}>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() => {
+                          deleteTaskMutation.mutate(selectedTask.id);
+                          setTaskDetailsDialogOpen(false);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
-              {selectedTask.description && (
-                <div>
-                  <Label className="text-muted-foreground">Description</Label>
-                  <p className="mt-1 text-sm">{selectedTask.description}</p>
-                </div>
-              )}
-              <NSOTaskAttachments taskId={selectedTask.id} />
             </div>
           )}
         </DialogContent>
