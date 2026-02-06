@@ -78,6 +78,7 @@ interface MasterTask {
   name: string;
   description: string | null;
   duration_days: number;
+  from_buildup_days: number;
   sort_order: number;
   vendor_id: string | null;
 }
@@ -131,6 +132,7 @@ export default function NSOChecklistMaster() {
     name: "",
     description: "",
     duration_days: 1,
+    from_buildup_days: 0,
     vendor_id: "",
   });
   const [assetForm, setAssetForm] = useState({
@@ -378,6 +380,7 @@ export default function NSOChecklistMaster() {
         name: data.name,
         description: data.description || null,
         duration_days: data.duration_days,
+        from_buildup_days: data.from_buildup_days || 0,
         sort_order: maxOrder,
         vendor_id: data.vendor_id && data.vendor_id !== "none" ? data.vendor_id : null,
       }).select().single();
@@ -409,39 +412,24 @@ export default function NSOChecklistMaster() {
               .single();
 
             if (storeSection) {
-              // Find the latest end_date across ALL tasks in this store checklist
-              const { data: existingTasks } = await supabase
-                .from("nso_store_tasks")
-                .select("end_date")
-                .eq("checklist_id", checklist.id)
-                .not("end_date", "is", null)
-                .order("end_date", { ascending: false })
-                .limit(1);
+              // Offset-based: use the checklist's start_date + from_buildup_days
+              const { data: checklistData } = await supabase
+                .from("nso_store_checklists")
+                .select("start_date")
+                .eq("id", checklist.id)
+                .single();
 
               let startDate: string | null = null;
               let endDate: string | null = null;
 
-              if (existingTasks && existingTasks.length > 0 && existingTasks[0].end_date) {
-                const latestEnd = new Date(existingTasks[0].end_date);
-                const calcStart = new Date(latestEnd);
-                calcStart.setDate(calcStart.getDate() + 1);
+              if (checklistData?.start_date) {
+                const buildupDate = new Date(checklistData.start_date);
+                const calcStart = new Date(buildupDate);
+                calcStart.setDate(calcStart.getDate() + (data.from_buildup_days || 0));
                 const calcEnd = new Date(calcStart);
                 calcEnd.setDate(calcEnd.getDate() + (data.duration_days || 1) - 1);
                 startDate = calcStart.toISOString().split("T")[0];
                 endDate = calcEnd.toISOString().split("T")[0];
-              } else {
-                // Fallback: use the checklist's start_date
-                const { data: checklistData } = await supabase
-                  .from("nso_store_checklists")
-                  .select("start_date")
-                  .eq("id", checklist.id)
-                  .single();
-                if (checklistData?.start_date) {
-                  startDate = checklistData.start_date;
-                  const calcEnd = new Date(startDate);
-                  calcEnd.setDate(calcEnd.getDate() + (data.duration_days || 1) - 1);
-                  endDate = calcEnd.toISOString().split("T")[0];
-                }
               }
 
               await supabase.from("nso_store_tasks").insert({
@@ -481,6 +469,7 @@ export default function NSOChecklistMaster() {
           name: data.name,
           description: data.description || null,
           duration_days: data.duration_days,
+          from_buildup_days: data.from_buildup_days || 0,
           vendor_id: data.vendor_id && data.vendor_id !== "none" ? data.vendor_id : null,
         })
         .eq("id", data.id);
@@ -554,6 +543,7 @@ export default function NSOChecklistMaster() {
                 name: task.name,
                 description: task.description,
                 duration_days: task.duration_days,
+                from_buildup_days: task.from_buildup_days || 0,
                 sort_order: task.sort_order,
               }))
             );
@@ -689,7 +679,7 @@ export default function NSOChecklistMaster() {
   };
 
   const resetTaskForm = () => {
-    setTaskForm({ name: "", description: "", duration_days: 1, vendor_id: "" });
+    setTaskForm({ name: "", description: "", duration_days: 1, from_buildup_days: 0, vendor_id: "" });
     setEditingTask(null);
     setSelectedSectionId(null);
   };
@@ -732,6 +722,7 @@ export default function NSOChecklistMaster() {
       name: task.name,
       description: task.description || "",
       duration_days: task.duration_days,
+      from_buildup_days: task.from_buildup_days || 0,
       vendor_id: task.vendor_id || "",
     });
     setSelectedSectionId(task.section_id);
@@ -979,6 +970,7 @@ export default function NSOChecklistMaster() {
                                 <TableHeader>
                                   <TableRow>
                                     <TableHead>Task Name</TableHead>
+                                    <TableHead>From Buildup (Days)</TableHead>
                                     <TableHead>Duration (Days)</TableHead>
                                     <TableHead className="w-[100px]">Actions</TableHead>
                                   </TableRow>
@@ -996,6 +988,7 @@ export default function NSOChecklistMaster() {
                                           )}
                                         </div>
                                       </TableCell>
+                                      <TableCell>{task.from_buildup_days || 0}</TableCell>
                                       <TableCell>{task.duration_days}</TableCell>
                                       <TableCell>
                                         <div className="flex gap-1">
@@ -1021,7 +1014,7 @@ export default function NSOChecklistMaster() {
                                   ))}
                                   {getTasksForSection(section.id).length === 0 && (
                                     <TableRow>
-                                      <TableCell colSpan={3} className="text-center text-muted-foreground py-6">
+                                      <TableCell colSpan={4} className="text-center text-muted-foreground py-6">
                                         No tasks in this section
                                       </TableCell>
                                     </TableRow>
@@ -1380,6 +1373,20 @@ export default function NSOChecklistMaster() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
+                <Label>From Store Buildup Date (Days)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={taskForm.from_buildup_days}
+                  onChange={(e) =>
+                    setTaskForm((f) => ({ ...f, from_buildup_days: parseInt(e.target.value) || 0 }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Days offset from the store buildup start date
+                </p>
+              </div>
+              <div className="space-y-2">
                 <Label>Duration (Days)</Label>
                 <Input
                   type="number"
@@ -1390,28 +1397,28 @@ export default function NSOChecklistMaster() {
                   }
                 />
                 <p className="text-xs text-muted-foreground">
-                  Days to complete
+                  Days to complete this task
                 </p>
               </div>
-              <div className="space-y-2">
-                <Label>Vendor</Label>
-                <Select
-                  value={taskForm.vendor_id}
-                  onValueChange={(v) => setTaskForm((f) => ({ ...f, vendor_id: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select vendor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No Vendor</SelectItem>
-                    {vendors.map((vendor) => (
-                      <SelectItem key={vendor.id} value={vendor.id}>
-                        {vendor.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Vendor</Label>
+              <Select
+                value={taskForm.vendor_id}
+                onValueChange={(v) => setTaskForm((f) => ({ ...f, vendor_id: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select vendor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Vendor</SelectItem>
+                  {vendors.map((vendor) => (
+                    <SelectItem key={vendor.id} value={vendor.id}>
+                      {vendor.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>

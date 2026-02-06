@@ -2743,6 +2743,7 @@ export type Database = {
           created_at: string
           description: string | null
           duration_days: number
+          from_buildup_days: number
           id: string
           name: string
           section_id: string
@@ -2753,6 +2754,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           duration_days?: number
+          from_buildup_days?: number
           id?: string
           name: string
           section_id: string
@@ -2763,6 +2765,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           duration_days?: number
+          from_buildup_days?: number
           id?: string
           name?: string
           section_id?: string

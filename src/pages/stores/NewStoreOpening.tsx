@@ -100,7 +100,7 @@ export default function NewStoreOpening() {
       
       const { data: tasksData } = await supabase
         .from("nso_master_tasks")
-        .select("section_id, duration_days, sort_order")
+        .select("section_id, duration_days, from_buildup_days, sort_order")
         .order("sort_order");
 
       // Group sections by master_id
@@ -112,16 +112,16 @@ export default function NewStoreOpening() {
         masterSections[s.master_id].push(s.id);
       });
 
-      // Calculate total duration per master as SUM of all task durations
-      // since tasks run SEQUENTIALLY across all sections
+      // Calculate total duration per master using offset-based model
+      // Total duration = max(from_buildup_days + duration_days) across all tasks
       const masterDurations: Record<string, number> = {};
       tasksData?.forEach((t) => {
-        // Find which master this task's section belongs to
         const masterId = Object.entries(masterSections).find(([, sectionIds]) =>
           sectionIds.includes(t.section_id)
         )?.[0];
         if (masterId) {
-          masterDurations[masterId] = (masterDurations[masterId] || 0) + (t.duration_days || 0);
+          const taskEnd = (t.from_buildup_days || 0) + (t.duration_days || 0);
+          masterDurations[masterId] = Math.max(masterDurations[masterId] || 0, taskEnd);
         }
       });
 
@@ -247,9 +247,6 @@ export default function NewStoreOpening() {
         .order("sort_order");
 
       if (masterSections && masterSections.length > 0) {
-        // Track date across ALL sections for sequential chaining
-        let currentDate = data.start_date;
-
         for (const section of masterSections) {
           // Create store section
           const { data: storeSection, error: sectionError } = await supabase
@@ -273,9 +270,9 @@ export default function NewStoreOpening() {
 
           if (masterTasks && masterTasks.length > 0) {
             const storeTasks = masterTasks.map((task) => {
-              const startDate = currentDate;
+              // Offset-based: start = buildup date + from_buildup_days
+              const startDate = addDays(data.start_date, task.from_buildup_days || 0);
               const endDate = addDays(startDate, task.duration_days - 1);
-              currentDate = addDays(endDate, 1); // Next task starts day after this one ends
               return {
                 section_id: storeSection.id,
                 checklist_id: checklist.id,
