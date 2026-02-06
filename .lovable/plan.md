@@ -1,74 +1,87 @@
 
-# Sequential Task Date Calculation Across All Sections
 
-## Problem
-Currently, when a checklist is assigned to a store, each section independently resets its starting date to the checklist's Start Date. This means all sections start in parallel. However, based on the Excel template, the correct behavior is that ALL tasks across ALL sections should follow a single sequential chain -- each task's start date should be the day after the previous task's end date, regardless of section boundaries.
+# Template-Based Dynamic Fields for Asset Master
 
-## Current Behavior
-```text
-Section 1:  Task A [Mar 1-1]   Task B [Mar 2-2]
-Section 2:  Task C [Mar 1-1]   Task D [Mar 2-4]   <-- resets to Mar 1
-Section 3:  Task E [Mar 1-3]                        <-- resets to Mar 1
-```
+## Overview
+Add an "Asset Type" selector to the Asset Master form that controls which fields are visible in the UI. This is a **UI-only change** -- the database schema, data model, and all auto-fill bindings with the Asset Register remain completely untouched.
 
-## New Behavior (Sequential Chain)
-```text
-Section 1:  Task A [Mar 1-1]   Task B [Mar 2-2]
-Section 2:  Task C [Mar 3-3]   Task D [Mar 4-6]   <-- continues from Task B
-Section 3:  Task E [Mar 7-9]                        <-- continues from Task D
-```
+## What Changes
+- A new `asset_type` column will be added to the `asset_masters` database table (nullable, default null) to persist the selected template
+- The Asset Master form dialog will show a new "Asset Type" dropdown as the first field
+- Based on the selected type, only relevant fields will be rendered in the Basic tab
+- The Lifecycle, Compliance, and Documents tabs remain unchanged (they are universal)
+- All existing fields remain in the data model and schema -- hidden fields are simply not shown in the form
 
-The first task starts on the Store Opening Start Date. Every subsequent task starts the day after the previous task ends.
+## What Does NOT Change
+- The `asset_masters` table structure (no columns removed or renamed)
+- The Asset Register form and its auto-fill logic (reads from the same columns as before)
+- The Asset Master Details page (will show all populated fields regardless of template)
+- Any other module bindings (Service Tickets, Preventive Maintenance, Dashboards, etc.)
 
-## Changes Required
+## Asset Type Templates
 
-### 1. Fix Assignment Date Logic (NewStoreOpening.tsx)
-**Current**: The `assignChecklistMutation` resets `currentDate` to `data.start_date` at the beginning of each section loop iteration.
+| Template | Visible Fields (Basic Tab) |
+|----------|---------------------------|
+| **Electronics** | Brand, Model, Manufacturer, Power Consumption, Voltage, Energy Rating, Capacity, Weight, Dimensions, SKU, UPC/Barcode, HSN Code |
+| **Refrigeration** | Brand, Model, Manufacturer, Power Consumption, Voltage, Temperature Range, Capacity, Refrigerant Type, Energy Rating, Weight, Dimensions, SKU, UPC/Barcode, HSN Code |
+| **Furniture** | Brand, Manufacturer, Weight, Dimensions, SKU, HSN Code |
+| **Fixtures** | Brand, Model, Manufacturer, Power Consumption, Voltage, Weight, Dimensions, SKU, HSN Code |
+| **IT Equipment** | Brand, Model, Manufacturer, Power Consumption, Voltage, Capacity, SKU, UPC/Barcode, HSN Code |
+| **Vehicles** | Brand, Model, Manufacturer, Capacity, Weight, Dimensions, SKU, HSN Code |
+| **Consumables** | Brand, Manufacturer, Capacity, Weight, SKU, UPC/Barcode, HSN Code |
+| **General** | All fields visible (current behavior, used as fallback) |
 
-**Change**: Move the `currentDate` variable outside the section loop so it carries across sections. All tasks will be chained sequentially regardless of which section they belong to.
-
-### 2. Fix End Date Estimation in Assignment Dialog (NewStoreOpening.tsx)
-**Current**: The masters query calculates `total_duration_days` as the MAX duration of any single section (parallel assumption).
-
-**Change**: Calculate `total_duration_days` as the SUM of all task `duration_days` across all sections, since tasks now run sequentially.
-
-### 3. Auto-Calculate Dates for Manually Added Tasks (NSOChecklistDetails.tsx)
-When a user manually adds a task via the "Add Task" button, the system should auto-calculate start/end dates based on the last task in the global sequential chain. This ensures newly added tasks follow the same sequential logic.
-
-### 4. Sync Propagation with Dates (NSOChecklistMaster.tsx)
-When a new task is added to a master template and propagated to active store checklists, the synced store task should automatically receive calculated start/end dates based on the existing task chain in that store's checklist.
+Common fields shown for ALL templates: Asset Name, Category Type, Criticality, Investment Size, Asset Value, Currency, Unit of Measure, Vendor, OEM, Asset Status, Service Engagement, Purchase Date, Description.
 
 ## Technical Details
 
-### File: `src/pages/stores/NewStoreOpening.tsx`
+### 1. Database Migration
+Add a single nullable column to `asset_masters`:
+```sql
+ALTER TABLE public.asset_masters 
+ADD COLUMN asset_type text DEFAULT NULL;
+```
+No constraints needed -- this is a UI hint, not a structural element.
 
-**Masters query (estimated end date)** -- Change from MAX to SUM:
-- Replace the parallel (MAX) duration logic with a simple SUM of all `duration_days` across all sections for each master
-- This gives the correct total project timeline for the assignment dialog preview
+### 2. AssetMasterFormDialog.tsx Changes
 
-**Assignment mutation** -- Sequential chain across sections:
-- Move `let currentDate = data.start_date` before the section loop (instead of inside it)
-- Remove the per-section `currentDate` reset so the date carries continuously from one section's last task to the next section's first task
+**New template configuration** (defined as a constant object):
+- A mapping from each `asset_type` value to an array of field keys that should be visible
+- A "General" type that includes all fields (backward-compatible default)
 
-### File: `src/pages/stores/NSOChecklistDetails.tsx`
+**New state/form field**:
+- Add `asset_type` to the Zod schema (optional string)
+- Add it as the first field in the Basic tab, rendered as a Select dropdown
+- When the user selects a type, a helper function checks which fields are in that template's visibility list
 
-**Create task mutation** -- Auto-date calculation:
-- When adding a new task, find the latest `end_date` across ALL tasks in the checklist (not just the current section)
-- Set the new task's `start_date` to `latestEndDate + 1 day`
-- Set the new task's `end_date` to `start_date + duration - 1` (default 1 day if no duration specified)
-- Keep the manual date pickers available for override, but pre-populate with calculated values
+**Conditional rendering**:
+- Each field group in the Basic tab will be wrapped in a visibility check: `if (visibleFields.includes('brand'))` -- render the brand field, otherwise skip it
+- Fields that are hidden simply don't render in JSX; they keep their default values in the form state
+- On submit, all field values (including hidden ones) are sent as before -- no data loss
 
-### File: `src/pages/master/NSOChecklistMaster.tsx`
+### 3. AssetMaster.tsx (List Page) Changes
+- Display the Asset Type as a new column in the table (optional, for clarity)
+- Add Asset Type to the search filter
 
-**Create task sync logic** -- Date calculation for propagated tasks:
-- When syncing a new task to store checklists, query existing store tasks for that checklist
-- Find the latest `end_date` across all tasks
-- Calculate the new task's start/end dates as: `start = latestEnd + 1`, `end = start + duration_days - 1`
-- If no existing tasks, use the checklist's `start_date`
+### 4. AssetMasterDetails.tsx Changes
+- Show the Asset Type badge in the header/basic info section
+- Continue showing all populated fields in the detail view regardless of template (read-only view shows everything that has data)
 
-## Impact on Existing Features
-- **Gantt Chart**: No changes needed -- it reads dates from the database and will display correctly
-- **Task Details Dialog**: No changes needed -- shows dates from database
-- **End Date Card**: No changes needed -- already calculates from the latest task `end_date`
-- **Overdue Logic**: No changes needed -- still compares current date against `end_date`
-- **Drag-and-drop reordering**: Existing behavior preserved (reorder does not auto-recalculate dates)
+### 5. Data Integrity Guarantees
+- The `asset_type` field is nullable -- existing records without a type will default to "General" (all fields visible) in the UI
+- No columns are removed, renamed, or have their types changed
+- The Asset Register's auto-fill logic in `AssetInventory.tsx` reads `standard_price`, `default_vendor_id`, `default_oem_id`, `default_asset_status`, `default_service_engagement`, `default_purchase_date`, `warranty_start_date`, `warranty_end_date` -- none of these are affected
+- All form field keys remain identical
+
+## Files to Modify
+1. **Database**: Add `asset_type` column via migration
+2. **`src/components/assets/AssetMasterFormDialog.tsx`**: Add template selector and conditional field rendering
+3. **`src/pages/assets/AssetMaster.tsx`**: Show asset type in list table
+4. **`src/pages/assets/AssetMasterDetails.tsx`**: Show asset type in detail view
+
+## Files NOT Modified
+- `src/pages/assets/AssetInventory.tsx` (Asset Register -- zero changes)
+- `src/lib/schemas.ts` (Asset Register schema -- zero changes)
+- `src/integrations/supabase/types.ts` (auto-generated -- never edited)
+- `src/integrations/supabase/client.ts` (auto-generated -- never edited)
+
