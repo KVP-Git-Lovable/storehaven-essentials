@@ -309,7 +309,7 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(masterBudget?.budget || 0)}</p>
+            <p className="text-2xl font-bold">{formatCurrency(masterBudget?.estimated_budget || 0)}</p>
             <p className="text-xs text-muted-foreground mt-1">From master template</p>
           </CardContent>
         </Card>
