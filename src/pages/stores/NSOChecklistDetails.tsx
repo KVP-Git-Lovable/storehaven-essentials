@@ -39,6 +39,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
@@ -735,51 +741,75 @@ export default function NSOChecklistDetails() {
                 </ToggleGroup>
               </div>
               <div className="flex items-center gap-2">
-                {/* Status filter for list view */}
-                {viewMode === "list" && (
-                  <div className="flex items-center gap-1">
-                    <Filter className="h-4 w-4 text-muted-foreground" />
-                    <ToggleGroup
-                      type="single"
-                      value={statusFilter || ""}
-                      onValueChange={(value) => setStatusFilter(value || null)}
-                      className="border rounded-lg p-0.5"
-                    >
-                      {[
-                        { value: "open", label: "Open" },
-                        { value: "completed", label: "Completed" },
-                        { value: "cancelled", label: "Cancelled" },
-                        { value: "overdue", label: "Overdue" },
-                      ].map((s) => (
-                        <ToggleGroupItem key={s.value} value={s.value} className="h-7 px-2.5 text-xs">
-                          {s.label}
-                        </ToggleGroupItem>
-                      ))}
-                    </ToggleGroup>
-                    {statusFilter && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setStatusFilter(null)}>
-                        <X className="h-3 w-3" />
-                      </Button>
+                {/* Filter dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <Filter className="h-4 w-4" />
+                      {viewMode === "list" && statusFilter
+                        ? statusConfig[statusFilter]?.label || "Filter"
+                        : viewMode === "gantt" && ganttTimeFilter !== "all"
+                        ? ganttTimeFilter.charAt(0).toUpperCase() + ganttTimeFilter.slice(1)
+                        : "Filter"}
+                      {((viewMode === "list" && statusFilter) || (viewMode === "gantt" && ganttTimeFilter !== "all")) && (
+                        <span
+                          role="button"
+                          className="ml-1 rounded-full hover:bg-muted p-0.5"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (viewMode === "list") setStatusFilter(null);
+                            else setGanttTimeFilter("all");
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                        </span>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    {viewMode === "list" ? (
+                      <>
+                        {[
+                          { value: "open", label: "Open" },
+                          { value: "completed", label: "Completed" },
+                          { value: "cancelled", label: "Cancelled" },
+                          { value: "overdue", label: "Overdue" },
+                        ].map((s) => {
+                          const StatusIcon = statusConfig[s.value]?.icon || Clock;
+                          return (
+                            <DropdownMenuItem
+                              key={s.value}
+                              className="gap-2"
+                              onClick={() => setStatusFilter(statusFilter === s.value ? null : s.value)}
+                            >
+                              <StatusIcon className="h-4 w-4" />
+                              {s.label}
+                              {statusFilter === s.value && <CheckCircle2 className="h-4 w-4 ml-auto text-primary" />}
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </>
+                    ) : (
+                      <>
+                        {[
+                          { value: "all", label: "All" },
+                          { value: "day", label: "Day" },
+                          { value: "week", label: "Week" },
+                          { value: "month", label: "Month" },
+                        ].map((t) => (
+                          <DropdownMenuItem
+                            key={t.value}
+                            className="gap-2"
+                            onClick={() => setGanttTimeFilter(t.value as "all" | "day" | "week" | "month")}
+                          >
+                            {t.label}
+                            {ganttTimeFilter === t.value && <CheckCircle2 className="h-4 w-4 ml-auto text-primary" />}
+                          </DropdownMenuItem>
+                        ))}
+                      </>
                     )}
-                  </div>
-                )}
-                {/* Time filter for gantt view */}
-                {viewMode === "gantt" && (
-                  <div className="flex items-center gap-1">
-                    <Filter className="h-4 w-4 text-muted-foreground" />
-                    <ToggleGroup
-                      type="single"
-                      value={ganttTimeFilter}
-                      onValueChange={(value) => value && setGanttTimeFilter(value as "all" | "day" | "week" | "month")}
-                      className="border rounded-lg p-0.5"
-                    >
-                      <ToggleGroupItem value="all" className="h-7 px-2.5 text-xs">All</ToggleGroupItem>
-                      <ToggleGroupItem value="day" className="h-7 px-2.5 text-xs">Day</ToggleGroupItem>
-                      <ToggleGroupItem value="week" className="h-7 px-2.5 text-xs">Week</ToggleGroupItem>
-                      <ToggleGroupItem value="month" className="h-7 px-2.5 text-xs">Month</ToggleGroupItem>
-                    </ToggleGroup>
-                  </div>
-                )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                   variant="outline"
                   size="sm"
