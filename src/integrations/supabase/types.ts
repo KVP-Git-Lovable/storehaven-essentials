@@ -82,6 +82,7 @@ export type Database = {
           energy_rating: string | null
           environment_impact: string | null
           expected_lifespan_years: number | null
+          finish_color: string | null
           hsn_code: string | null
           id: string
           image_url: string | null
@@ -89,9 +90,11 @@ export type Database = {
           investment_size: string
           is_returnable: boolean | null
           lead_time_days: number | null
+          load_capacity: string | null
           maintenance_frequency: string | null
           manual_url: string | null
           manufacturer: string | null
+          material: string | null
           min_order_quantity: number | null
           model: string | null
           name: string
@@ -134,6 +137,7 @@ export type Database = {
           energy_rating?: string | null
           environment_impact?: string | null
           expected_lifespan_years?: number | null
+          finish_color?: string | null
           hsn_code?: string | null
           id?: string
           image_url?: string | null
@@ -141,9 +145,11 @@ export type Database = {
           investment_size?: string
           is_returnable?: boolean | null
           lead_time_days?: number | null
+          load_capacity?: string | null
           maintenance_frequency?: string | null
           manual_url?: string | null
           manufacturer?: string | null
+          material?: string | null
           min_order_quantity?: number | null
           model?: string | null
           name: string
@@ -186,6 +192,7 @@ export type Database = {
           energy_rating?: string | null
           environment_impact?: string | null
           expected_lifespan_years?: number | null
+          finish_color?: string | null
           hsn_code?: string | null
           id?: string
           image_url?: string | null
@@ -193,9 +200,11 @@ export type Database = {
           investment_size?: string
           is_returnable?: boolean | null
           lead_time_days?: number | null
+          load_capacity?: string | null
           maintenance_frequency?: string | null
           manual_url?: string | null
           manufacturer?: string | null
+          material?: string | null
           min_order_quantity?: number | null
           model?: string | null
           name?: string

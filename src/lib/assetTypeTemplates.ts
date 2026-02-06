@@ -1,12 +1,13 @@
 /**
  * Asset Type Template Configuration
  * 
- * Controls which template-specific fields are visible in the Asset Master form's Basic tab.
+ * Controls which fields are visible in the Asset Master form's Basic tab.
  * This is a UI-only concern — all fields remain in the data model regardless of template.
  * 
- * Common fields (always visible for ALL templates):
- *   Asset Name, Category Type, Criticality, Investment Size, Asset Value, Currency,
- *   Unit of Measure, Vendor, OEM, Asset Status, Service Engagement, Purchase Date, Description.
+ * Always-visible fields (never template-controlled):
+ *   Asset Type, Asset Name, Category Type.
+ * 
+ * All other Basic-tab fields are template-driven.
  */
 
 export const ASSET_TYPE_OPTIONS = [
@@ -24,37 +25,64 @@ export type AssetTypeValue = (typeof ASSET_TYPE_OPTIONS)[number]["value"];
 
 /** Field keys that can be toggled per template */
 export type TemplateFieldKey =
+  // Identity / Brand
   | "brand"
   | "model"
   | "manufacturer"
+  // Material & Finish (Furniture / Fixtures)
+  | "material"
+  | "finish_color"
+  | "load_capacity"
+  // Technical specs
   | "power_consumption_watts"
   | "voltage_requirement"
   | "energy_rating"
   | "capacity"
+  // Refrigeration-specific
+  | "temperature_range"
+  | "refrigerant_type"
+  // Physical
   | "weight_kg"
   | "dimensions_cm"
+  // Identifiers
   | "sku"
   | "upc_barcode"
   | "hsn_code"
-  | "temperature_range"
-  | "refrigerant_type";
+  // Classification
+  | "criticality"
+  | "investment_size"
+  // Pricing & Defaults
+  | "standard_price"
+  | "currency"
+  | "unit_of_measure"
+  | "vendor"
+  | "oem"
+  | "asset_status"
+  | "service_engagement"
+  | "purchase_date"
+  // Other
+  | "description";
 
 /** All possible template field keys (used for "General" = show everything) */
 const ALL_FIELDS: TemplateFieldKey[] = [
-  "brand",
-  "model",
-  "manufacturer",
-  "power_consumption_watts",
-  "voltage_requirement",
-  "energy_rating",
+  "brand", "model", "manufacturer",
+  "material", "finish_color", "load_capacity",
+  "power_consumption_watts", "voltage_requirement", "energy_rating",
   "capacity",
-  "weight_kg",
-  "dimensions_cm",
-  "sku",
-  "upc_barcode",
-  "hsn_code",
-  "temperature_range",
-  "refrigerant_type",
+  "temperature_range", "refrigerant_type",
+  "weight_kg", "dimensions_cm",
+  "sku", "upc_barcode", "hsn_code",
+  "criticality", "investment_size",
+  "standard_price", "currency", "unit_of_measure",
+  "vendor", "oem", "asset_status", "service_engagement", "purchase_date",
+  "description",
+];
+
+/** Common "operational" fields shared by most types (not consumables) */
+const COMMON_OPS: TemplateFieldKey[] = [
+  "standard_price", "currency", "unit_of_measure",
+  "vendor", "oem", "asset_status", "service_engagement", "purchase_date",
+  "description",
 ];
 
 /** Mapping from asset_type value → visible template-specific field keys */
@@ -62,42 +90,53 @@ const TEMPLATE_FIELDS: Record<AssetTypeValue, TemplateFieldKey[]> = {
   electronics: [
     "brand", "model", "manufacturer",
     "power_consumption_watts", "voltage_requirement", "energy_rating",
-    "capacity", "weight_kg", "dimensions_cm",
+    "weight_kg", "dimensions_cm",
     "sku", "upc_barcode", "hsn_code",
+    "criticality", "investment_size",
+    ...COMMON_OPS,
   ],
   refrigeration: [
     "brand", "model", "manufacturer",
-    "power_consumption_watts", "voltage_requirement",
-    "temperature_range", "capacity", "refrigerant_type", "energy_rating",
+    "power_consumption_watts", "voltage_requirement", "energy_rating",
+    "temperature_range", "capacity", "refrigerant_type",
     "weight_kg", "dimensions_cm",
     "sku", "upc_barcode", "hsn_code",
+    "criticality", "investment_size",
+    ...COMMON_OPS,
   ],
   furniture: [
     "brand", "manufacturer",
+    "material", "finish_color",
     "weight_kg", "dimensions_cm",
-    "sku", "hsn_code",
+    "criticality",
+    ...COMMON_OPS,
   ],
   fixtures: [
-    "brand", "model", "manufacturer",
+    "brand", "manufacturer",
+    "material", "finish_color", "load_capacity",
     "power_consumption_watts", "voltage_requirement",
     "weight_kg", "dimensions_cm",
-    "sku", "hsn_code",
+    "criticality",
+    ...COMMON_OPS,
   ],
   it_equipment: [
     "brand", "model", "manufacturer",
     "power_consumption_watts", "voltage_requirement",
     "capacity",
+    "weight_kg", "dimensions_cm",
     "sku", "upc_barcode", "hsn_code",
+    "criticality", "investment_size",
+    ...COMMON_OPS,
   ],
   vehicles: [
     "brand", "model", "manufacturer",
     "capacity", "weight_kg", "dimensions_cm",
     "sku", "hsn_code",
+    "criticality", "investment_size",
+    ...COMMON_OPS,
   ],
   consumables: [
-    "brand", "manufacturer",
-    "capacity", "weight_kg",
-    "sku", "upc_barcode", "hsn_code",
+    "unit_of_measure", "vendor", "standard_price",
   ],
   general: ALL_FIELDS,
 };
