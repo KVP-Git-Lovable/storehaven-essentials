@@ -398,7 +398,7 @@ export default function NSOChecklistMaster() {
           .eq("master_id", masterSection.master_id);
 
         if (assignedChecklists && assignedChecklists.length > 0) {
-          // For each checklist, find the corresponding section and add the task
+          // For each checklist, find the corresponding section and add the task with calculated dates
           for (const checklist of assignedChecklists) {
             const { data: storeSection } = await supabase
               .from("nso_store_sections")
@@ -409,11 +409,48 @@ export default function NSOChecklistMaster() {
               .single();
 
             if (storeSection) {
+              // Find the latest end_date across ALL tasks in this store checklist
+              const { data: existingTasks } = await supabase
+                .from("nso_store_tasks")
+                .select("end_date")
+                .eq("checklist_id", checklist.id)
+                .not("end_date", "is", null)
+                .order("end_date", { ascending: false })
+                .limit(1);
+
+              let startDate: string | null = null;
+              let endDate: string | null = null;
+
+              if (existingTasks && existingTasks.length > 0 && existingTasks[0].end_date) {
+                const latestEnd = new Date(existingTasks[0].end_date);
+                const calcStart = new Date(latestEnd);
+                calcStart.setDate(calcStart.getDate() + 1);
+                const calcEnd = new Date(calcStart);
+                calcEnd.setDate(calcEnd.getDate() + (data.duration_days || 1) - 1);
+                startDate = calcStart.toISOString().split("T")[0];
+                endDate = calcEnd.toISOString().split("T")[0];
+              } else {
+                // Fallback: use the checklist's start_date
+                const { data: checklistData } = await supabase
+                  .from("nso_store_checklists")
+                  .select("start_date")
+                  .eq("id", checklist.id)
+                  .single();
+                if (checklistData?.start_date) {
+                  startDate = checklistData.start_date;
+                  const calcEnd = new Date(startDate);
+                  calcEnd.setDate(calcEnd.getDate() + (data.duration_days || 1) - 1);
+                  endDate = calcEnd.toISOString().split("T")[0];
+                }
+              }
+
               await supabase.from("nso_store_tasks").insert({
                 section_id: storeSection.id,
                 checklist_id: checklist.id,
                 name: data.name,
                 description: data.description || null,
+                start_date: startDate,
+                end_date: endDate,
                 sort_order: maxOrder,
                 is_custom: false,
                 status: "pending",

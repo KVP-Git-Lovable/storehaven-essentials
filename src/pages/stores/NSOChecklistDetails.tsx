@@ -390,14 +390,41 @@ export default function NSOChecklistDetails() {
       if (!checklistId) throw new Error("No checklist selected");
       const sectionTasks = tasks.filter((t) => t.section_id === data.section_id);
       const maxOrder = sectionTasks.length > 0 ? Math.max(...sectionTasks.map((t) => t.sort_order)) + 1 : 0;
+
+      // Auto-calculate dates if not manually provided
+      let startDate = data.start_date ? format(data.start_date, "yyyy-MM-dd") : null;
+      let endDate = data.end_date ? format(data.end_date, "yyyy-MM-dd") : null;
+
+      if (!startDate) {
+        // Find the latest end_date across ALL tasks in this checklist
+        const allEndDates = tasks
+          .filter((t) => t.end_date)
+          .map((t) => t.end_date as string)
+          .sort();
+        
+        if (allEndDates.length > 0) {
+          const latestEndDate = parseISO(allEndDates[allEndDates.length - 1]);
+          const calculatedStart = addDays(latestEndDate, 1);
+          startDate = format(calculatedStart, "yyyy-MM-dd");
+          if (!endDate) {
+            endDate = startDate; // Default 1-day duration
+          }
+        } else if (checklist?.start_date) {
+          startDate = checklist.start_date;
+          if (!endDate) {
+            endDate = startDate;
+          }
+        }
+      }
+
       const { error } = await supabase.from("nso_store_tasks").insert({
         checklist_id: checklistId,
         section_id: data.section_id,
         name: data.name,
         description: data.description || null,
         owner: data.owner || null,
-        start_date: data.start_date ? format(data.start_date, "yyyy-MM-dd") : null,
-        end_date: data.end_date ? format(data.end_date, "yyyy-MM-dd") : null,
+        start_date: startDate,
+        end_date: endDate,
         status: data.status,
         vendor_id: data.vendor_id || null,
         sort_order: maxOrder,
@@ -449,7 +476,26 @@ export default function NSOChecklistDetails() {
 
   const handleAddTask = (sectionId: string) => {
     setSelectedSectionId(sectionId);
-    setTaskForm({ name: "", description: "", owner: "", start_date: null, end_date: null, status: "open", vendor_id: "" });
+    
+    // Pre-populate dates based on sequential chain
+    let preStartDate: Date | null = null;
+    let preEndDate: Date | null = null;
+    
+    const allEndDates = tasks
+      .filter((t) => t.end_date)
+      .map((t) => t.end_date as string)
+      .sort();
+    
+    if (allEndDates.length > 0) {
+      const latestEndDate = parseISO(allEndDates[allEndDates.length - 1]);
+      preStartDate = addDays(latestEndDate, 1);
+      preEndDate = preStartDate; // Default 1-day duration
+    } else if (checklist?.start_date) {
+      preStartDate = parseISO(checklist.start_date);
+      preEndDate = preStartDate;
+    }
+
+    setTaskForm({ name: "", description: "", owner: "", start_date: preStartDate, end_date: preEndDate, status: "open", vendor_id: "" });
     setTaskDialogOpen(true);
   };
 
