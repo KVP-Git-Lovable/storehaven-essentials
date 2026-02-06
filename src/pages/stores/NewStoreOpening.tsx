@@ -80,7 +80,7 @@ export default function NewStoreOpening() {
     },
   });
 
-  // Fetch checklist masters with total duration calculated per section (parallel execution)
+  // Fetch checklist masters with total duration calculated as SUM (sequential execution)
   const { data: masters = [] } = useQuery({
     queryKey: ["nso-checklist-masters-active-with-duration"],
     queryFn: async () => {
@@ -112,25 +112,17 @@ export default function NewStoreOpening() {
         masterSections[s.master_id].push(s.id);
       });
 
-      // Calculate total duration per section (sum of tasks in that section)
-      const sectionDurations: Record<string, number> = {};
-      tasksData?.forEach((t) => {
-        sectionDurations[t.section_id] = (sectionDurations[t.section_id] || 0) + (t.duration_days || 0);
-      });
-
-      // Calculate total duration per master as the MAX section duration 
-      // Since sections run in PARALLEL (each section starts from the start_date),
-      // the longest section determines the end date
+      // Calculate total duration per master as SUM of all task durations
+      // since tasks run SEQUENTIALLY across all sections
       const masterDurations: Record<string, number> = {};
-      Object.entries(masterSections).forEach(([masterId, sectionIds]) => {
-        let maxDays = 0;
-        sectionIds.forEach((sectionId) => {
-          const sectionDuration = sectionDurations[sectionId] || 0;
-          if (sectionDuration > maxDays) {
-            maxDays = sectionDuration;
-          }
-        });
-        masterDurations[masterId] = maxDays;
+      tasksData?.forEach((t) => {
+        // Find which master this task's section belongs to
+        const masterId = Object.entries(masterSections).find(([, sectionIds]) =>
+          sectionIds.includes(t.section_id)
+        )?.[0];
+        if (masterId) {
+          masterDurations[masterId] = (masterDurations[masterId] || 0) + (t.duration_days || 0);
+        }
       });
 
       return mastersData.map((m) => ({
@@ -255,6 +247,9 @@ export default function NewStoreOpening() {
         .order("sort_order");
 
       if (masterSections && masterSections.length > 0) {
+        // Track date across ALL sections for sequential chaining
+        let currentDate = data.start_date;
+
         for (const section of masterSections) {
           // Create store section
           const { data: storeSection, error: sectionError } = await supabase
@@ -277,11 +272,10 @@ export default function NewStoreOpening() {
             .order("sort_order");
 
           if (masterTasks && masterTasks.length > 0) {
-            let currentDate = data.start_date;
             const storeTasks = masterTasks.map((task) => {
               const startDate = currentDate;
               const endDate = addDays(startDate, task.duration_days - 1);
-              currentDate = addDays(endDate, 1);
+              currentDate = addDays(endDate, 1); // Next task starts day after this one ends
               return {
                 section_id: storeSection.id,
                 checklist_id: checklist.id,
