@@ -593,12 +593,16 @@ export default function NSOChecklistDetails() {
       if (!t.start_date && !t.end_date) return false;
       const tStart = t.start_date ? startOfDay(parseISO(t.start_date)) : null;
       const tEnd = t.end_date ? startOfDay(parseISO(t.end_date)) : null;
-      // Task overlaps with range if task start <= rangeEnd AND task end >= rangeStart
       const effectiveStart = tStart || tEnd!;
       const effectiveEnd = tEnd || tStart!;
       return effectiveStart <= rangeEnd && effectiveEnd >= rangeStart;
     });
   })();
+
+  // Filter sections for gantt view to hide empty ones when a time filter is active
+  const filteredGanttSections = ganttTimeFilter === "all"
+    ? sections
+    : sections.filter((s) => filteredGanttTasks.some((t) => t.section_id === s.id));
 
   // Calculate end date from tasks (latest end_date) and identify the task
   const endDateInfo = tasks.reduce((result: { date: Date | null; taskName: string | null }, task) => {
@@ -830,14 +834,22 @@ export default function NSOChecklistDetails() {
                   <p>No sections yet</p>
                 </div>
               ) : viewMode === "gantt" ? (
-                <NSOGanttChart
-                  sections={sections}
-                  tasks={filteredGanttTasks}
-                  onTaskUpdate={handleGanttTaskUpdate}
-                  onTaskClick={handleTaskClick}
-                  onAddTask={handleAddTask}
-                  onTaskReorder={handleTaskReorder}
-                />
+                filteredGanttTasks.length === 0 && ganttTimeFilter !== "all" ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Filter className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                    <p className="font-medium">No tasks found for this {ganttTimeFilter}</p>
+                    <p className="text-sm mt-1">Try a different time range or clear the filter</p>
+                  </div>
+                ) : (
+                  <NSOGanttChart
+                    sections={filteredGanttSections}
+                    tasks={filteredGanttTasks}
+                    onTaskUpdate={handleGanttTaskUpdate}
+                    onTaskClick={handleTaskClick}
+                    onAddTask={handleAddTask}
+                    onTaskReorder={handleTaskReorder}
+                  />
+                )
               ) : (
                 <DndContext
                   sensors={sensors}
