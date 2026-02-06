@@ -970,7 +970,12 @@ export default function NSOChecklistMaster() {
                                 <TableHeader>
                                   <TableRow>
                                     <TableHead>Task Name</TableHead>
-                                    <TableHead>From Buildup (Days)</TableHead>
+                                    <TableHead>
+                                      <div>
+                                        <span>From Store Buildup Date (Days)</span>
+                                        <p className="text-xs font-normal text-muted-foreground">Days offset from store buildup start date</p>
+                                      </div>
+                                    </TableHead>
                                     <TableHead>Duration (Days)</TableHead>
                                     <TableHead className="w-[100px]">Actions</TableHead>
                                   </TableRow>
@@ -988,7 +993,11 @@ export default function NSOChecklistMaster() {
                                           )}
                                         </div>
                                       </TableCell>
-                                      <TableCell>{task.from_buildup_days || 0}</TableCell>
+                                      <TableCell>
+                                        <Badge variant="outline" className="font-mono">
+                                          Day {task.from_buildup_days || 0}
+                                        </Badge>
+                                      </TableCell>
                                       <TableCell>{task.duration_days}</TableCell>
                                       <TableCell>
                                         <div className="flex gap-1">
