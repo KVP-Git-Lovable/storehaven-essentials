@@ -48,7 +48,9 @@ import {
   Package,
   Calculator,
   IndianRupee,
+  Paperclip,
 } from "lucide-react";
+import { NSOmasterTaskAttachments } from "@/components/nso/NSOmasterTaskAttachments";
 import { format } from "date-fns";
 
 interface ChecklistMaster {
@@ -121,6 +123,8 @@ export default function NSOChecklistMaster() {
   const [editingTask, setEditingTask] = useState<MasterTask | null>(null);
   const [editingAsset, setEditingAsset] = useState<NsoMasterAsset | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [taskDetailDialogOpen, setTaskDetailDialogOpen] = useState(false);
+  const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<MasterTask | null>(null);
   const [masterForm, setMasterForm] = useState({
     name: "",
     store_type: "",
@@ -984,10 +988,16 @@ export default function NSOChecklistMaster() {
                                   {getTasksForSection(section.id).map((task) => (
                                     <TableRow key={task.id}>
                                       <TableCell>
-                                        <div>
-                                          <span className="font-medium">{task.name}</span>
+                                        <div
+                                          className="cursor-pointer hover:text-primary transition-colors"
+                                          onClick={() => {
+                                            setSelectedTaskForDetail(task);
+                                            setTaskDetailDialogOpen(true);
+                                          }}
+                                        >
+                                          <span className="font-medium underline decoration-dotted underline-offset-4">{task.name}</span>
                                           {task.description && (
-                                            <p className="text-xs text-muted-foreground mt-0.5">
+                                            <p className="text-xs text-muted-foreground mt-0.5 no-underline">
                                               {task.description}
                                             </p>
                                           )}
@@ -1552,6 +1562,66 @@ export default function NSOChecklistMaster() {
               {editingAsset ? "Update" : "Add"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Master Task Detail Dialog */}
+      <Dialog open={taskDetailDialogOpen} onOpenChange={setTaskDetailDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{selectedTaskForDetail?.name}</DialogTitle>
+          </DialogHeader>
+          {selectedTaskForDetail && (
+            <div className="space-y-6 py-4 max-h-[60vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground">From Buildup Date</Label>
+                  <p className="font-medium">Day {selectedTaskForDetail.from_buildup_days || 0}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Duration</Label>
+                  <p className="font-medium">{selectedTaskForDetail.duration_days} day(s)</p>
+                </div>
+                {selectedTaskForDetail.vendor_id && (
+                  <div>
+                    <Label className="text-muted-foreground">Vendor</Label>
+                    <p className="font-medium">
+                      {vendors.find((v) => v.id === selectedTaskForDetail.vendor_id)?.name || "-"}
+                    </p>
+                  </div>
+                )}
+              </div>
+              {selectedTaskForDetail.description && (
+                <div>
+                  <Label className="text-muted-foreground">Description</Label>
+                  <p className="mt-1 text-sm">{selectedTaskForDetail.description}</p>
+                </div>
+              )}
+              <NSOmasterTaskAttachments taskId={selectedTaskForDetail.id} />
+              <div className="flex gap-2 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setTaskDetailDialogOpen(false);
+                    handleEditTask(selectedTaskForDetail);
+                  }}
+                >
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    deleteTaskMutation.mutate(selectedTaskForDetail.id);
+                    setTaskDetailDialogOpen(false);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
