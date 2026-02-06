@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { getAssetTypeLabel } from "@/lib/assetTypeTemplates";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, Loader2, Edit, Trash2, ExternalLink, Upload, FileText, Sparkles } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -399,7 +400,10 @@ export default function AssetMasterDetails() {
           </Button>
           <div>
             <h1 className="text-2xl font-semibold">{assetMaster.name}</h1>
-            <p className="text-muted-foreground">Asset Master Details</p>
+            <div className="flex items-center gap-2">
+              <p className="text-muted-foreground">Asset Master Details</p>
+              <Badge variant="outline">{getAssetTypeLabel((assetMaster as any).asset_type)}</Badge>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">

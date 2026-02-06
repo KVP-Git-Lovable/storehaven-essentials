@@ -61,6 +61,7 @@ export type Database = {
       }
       asset_masters: {
         Row: {
+          asset_type: string | null
           brand: string | null
           capacity: string | null
           category_id: string | null
@@ -112,6 +113,7 @@ export type Database = {
           weight_kg: number | null
         }
         Insert: {
+          asset_type?: string | null
           brand?: string | null
           capacity?: string | null
           category_id?: string | null
@@ -163,6 +165,7 @@ export type Database = {
           weight_kg?: number | null
         }
         Update: {
+          asset_type?: string | null
           brand?: string | null
           capacity?: string | null
           category_id?: string | null
