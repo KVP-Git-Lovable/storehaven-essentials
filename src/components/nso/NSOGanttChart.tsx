@@ -38,11 +38,30 @@ interface NSOGanttChartProps {
 }
 
 const statusConfig: Record<string, { color: string; icon: React.ElementType }> = {
-  pending: { color: "bg-muted", icon: Clock },
-  in_progress: { color: "bg-blue-500", icon: AlertCircle },
+  open: { color: "bg-muted", icon: Clock },
   completed: { color: "bg-green-500", icon: CheckCircle2 },
-  blocked: { color: "bg-destructive", icon: AlertCircle },
+  cancelled: { color: "bg-gray-400", icon: Clock },
+  overdue: { color: "bg-destructive", icon: AlertCircle },
 };
+
+// Compute effective status for Gantt display
+function getEffectiveStatus(task: { status: string; end_date: string | null }): string {
+  if (task.status === "completed" || task.status === "cancelled") {
+    return task.status;
+  }
+  if (task.end_date) {
+    const endDate = startOfDay(parseISO(task.end_date));
+    const today = startOfDay(new Date());
+    if (today > endDate) {
+      return "overdue";
+    }
+  }
+  // Map legacy statuses to "open"
+  if (task.status === "pending" || task.status === "in_progress" || task.status === "blocked") {
+    return "open";
+  }
+  return task.status;
+}
 
 const DAY_WIDTH = 32;
 const ROW_HEIGHT = 40;
@@ -344,7 +363,8 @@ export function NSOGanttChart({
                 );
               } else {
                 const task = row.data as StoreTask;
-                const StatusIcon = statusConfig[task.status]?.icon || Clock;
+                const effectiveStatus = getEffectiveStatus(task);
+                const StatusIcon = statusConfig[effectiveStatus]?.icon || Clock;
                 const isBeingReordered = reorderDragging?.taskId === task.id;
                 
                 return (
@@ -362,7 +382,7 @@ export function NSOGanttChart({
                     >
                       <GripVertical className="h-3 w-3 text-muted-foreground" />
                     </div>
-                    <StatusIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <StatusIcon className={cn("h-4 w-4 flex-shrink-0", effectiveStatus === "overdue" ? "text-destructive" : "text-muted-foreground")} />
                     <span 
                       className="truncate text-sm cursor-pointer hover:text-primary"
                       onClick={() => onTaskClick(task)}
@@ -423,7 +443,8 @@ export function NSOGanttChart({
                 
                 const isDragging = dragging?.taskId === task.id;
                 const isReordering = reorderDragging?.taskId === task.id;
-                const statusColor = statusConfig[task.status]?.color || "bg-muted";
+                const effectiveStatus = getEffectiveStatus(task);
+                const statusColor = statusConfig[effectiveStatus]?.color || "bg-muted";
                 
                 return (
                   <div
@@ -441,8 +462,9 @@ export function NSOGanttChart({
                             "absolute top-1.5 rounded-md flex items-center cursor-move transition-shadow group",
                             statusColor,
                             isDragging && "shadow-lg ring-2 ring-primary z-10",
-                            task.status === "pending" && "text-muted-foreground",
-                            task.status !== "pending" && "text-white"
+                            effectiveStatus === "open" && "text-muted-foreground",
+                            (effectiveStatus === "completed" || effectiveStatus === "overdue") && "text-white",
+                            effectiveStatus === "cancelled" && "text-white opacity-60"
                           )}
                           style={{
                             left: position.left + 2,
@@ -483,8 +505,8 @@ export function NSOGanttChart({
                             {task.start_date && format(parseISO(task.start_date), "MMM d")} - {" "}
                             {task.end_date && format(parseISO(task.end_date), "MMM d, yyyy")}
                           </p>
-                          <Badge variant="outline" className="text-xs">
-                            {task.status.replace("_", " ")}
+                          <Badge variant="outline" className={cn("text-xs", effectiveStatus === "overdue" && "border-red-300 text-red-700")}>
+                            {effectiveStatus.replace("_", " ")}
                           </Badge>
                         </div>
                       </TooltipContent>

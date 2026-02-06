@@ -62,7 +62,7 @@ import {
 import { NSOStoreAssetsSection } from "@/components/nso/NSOStoreAssetsSection";
 import { NSOTaskAttachments } from "@/components/nso/NSOTaskAttachments";
 import { NSOStoreBudgetSection } from "@/components/nso/NSOStoreBudgetSection";
-import { format, addDays } from "date-fns";
+import { format, addDays, isPast, parseISO, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { NSOGanttChart } from "@/components/nso/NSOGanttChart";
 import {
@@ -112,11 +112,37 @@ interface Vendor {
 
 
 const statusConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
-  pending: { color: "bg-muted text-muted-foreground", icon: Clock, label: "Pending" },
-  in_progress: { color: "bg-blue-100 text-blue-800", icon: AlertCircle, label: "In Progress" },
+  open: { color: "bg-muted text-muted-foreground", icon: Clock, label: "Open" },
   completed: { color: "bg-green-100 text-green-800", icon: CheckCircle2, label: "Completed" },
-  blocked: { color: "bg-red-100 text-red-800", icon: AlertCircle, label: "Blocked" },
+  cancelled: { color: "bg-gray-100 text-gray-500", icon: Clock, label: "Cancelled" },
+  overdue: { color: "bg-red-100 text-red-800", icon: AlertCircle, label: "Overdue" },
 };
+
+// Manual statuses that users can select
+const MANUAL_STATUSES = [
+  { value: "open", label: "Open" },
+  { value: "completed", label: "Completed" },
+  { value: "cancelled", label: "Cancelled" },
+];
+
+// Compute effective status: auto-applies "overdue" when end_date is past and status is not completed/cancelled
+function getEffectiveStatus(task: StoreTask): string {
+  if (task.status === "completed" || task.status === "cancelled") {
+    return task.status;
+  }
+  if (task.end_date) {
+    const endDate = startOfDay(parseISO(task.end_date));
+    const today = startOfDay(new Date());
+    if (today > endDate) {
+      return "overdue";
+    }
+  }
+  // Map legacy statuses to "open"
+  if (task.status === "pending" || task.status === "in_progress" || task.status === "blocked") {
+    return "open";
+  }
+  return task.status;
+}
 
 // Sortable Task Row Component
 function SortableTaskRow({ 
@@ -144,7 +170,9 @@ function SortableTaskRow({
     transition,
   };
 
-  const StatusIcon = statusConfig[task.status]?.icon || Clock;
+  const effectiveStatus = getEffectiveStatus(task);
+  const StatusIcon = statusConfig[effectiveStatus]?.icon || Clock;
+  const statusStyle = statusConfig[effectiveStatus];
 
   return (
     <TableRow
@@ -166,7 +194,7 @@ function SortableTaskRow({
           >
             <GripVertical className="h-3 w-3 text-muted-foreground" />
           </div>
-          <StatusIcon className="h-4 w-4 text-muted-foreground" />
+          <StatusIcon className={cn("h-4 w-4", effectiveStatus === "overdue" ? "text-destructive" : "text-muted-foreground")} />
           <span className="font-medium">{task.name}</span>
         </div>
       </TableCell>
@@ -184,20 +212,38 @@ function SortableTaskRow({
         </span>
       </TableCell>
       <TableCell onClick={(e) => e.stopPropagation()}>
-        <Select
-          value={task.status}
-          onValueChange={(v) => onStatusChange(task.id, v)}
-        >
-          <SelectTrigger className="h-8 w-[130px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="in_progress">In Progress</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="blocked">Blocked</SelectItem>
-          </SelectContent>
-        </Select>
+        {effectiveStatus === "overdue" ? (
+          <div className="flex items-center gap-2">
+            <Badge className="bg-red-100 text-red-800 border-red-200">Overdue</Badge>
+            <Select
+              value={task.status}
+              onValueChange={(v) => onStatusChange(task.id, v)}
+            >
+              <SelectTrigger className="h-8 w-[110px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MANUAL_STATUSES.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : (
+          <Select
+            value={task.status === "pending" || task.status === "in_progress" || task.status === "blocked" ? "open" : task.status}
+            onValueChange={(v) => onStatusChange(task.id, v)}
+          >
+            <SelectTrigger className="h-8 w-[130px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MANUAL_STATUSES.map((s) => (
+                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </TableCell>
       <TableCell onClick={(e) => e.stopPropagation()}>
         <Button
@@ -363,7 +409,7 @@ export default function NSOChecklistDetails() {
       queryClient.invalidateQueries({ queryKey: ["nso-store-tasks", checklistId] });
       toast.success("Task added");
       setTaskDialogOpen(false);
-      setTaskForm({ name: "", description: "", owner: "", start_date: null, end_date: null, status: "pending", vendor_id: "" });
+      setTaskForm({ name: "", description: "", owner: "", start_date: null, end_date: null, status: "open", vendor_id: "" });
     },
     onError: () => toast.error("Failed to add task"),
   });
@@ -403,7 +449,7 @@ export default function NSOChecklistDetails() {
 
   const handleAddTask = (sectionId: string) => {
     setSelectedSectionId(sectionId);
-    setTaskForm({ name: "", description: "", owner: "", start_date: null, end_date: null, status: "pending", vendor_id: "" });
+    setTaskForm({ name: "", description: "", owner: "", start_date: null, end_date: null, status: "open", vendor_id: "" });
     setTaskDialogOpen(true);
   };
 
@@ -461,9 +507,10 @@ export default function NSOChecklistDetails() {
     }
   };
 
-  // Calculate progress
-  const completedTasks = tasks.filter((t) => t.status === "completed").length;
-  const progress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
+  // Calculate progress (exclude cancelled tasks from total)
+  const activeTasks = tasks.filter((t) => t.status !== "cancelled");
+  const completedTasks = activeTasks.filter((t) => t.status === "completed").length;
+  const progress = activeTasks.length > 0 ? Math.round((completedTasks / activeTasks.length) * 100) : 0;
 
   // Calculate end date from tasks (latest end_date) and identify the task
   const endDateInfo = tasks.reduce((result: { date: Date | null; taskName: string | null }, task) => {
@@ -558,7 +605,7 @@ export default function NSOChecklistDetails() {
             <div className="flex items-center gap-3">
               <span className="text-2xl font-bold text-primary">{progress}%</span>
               <span className="text-sm text-muted-foreground">
-                ({completedTasks}/{tasks.length} tasks)
+                ({completedTasks}/{activeTasks.length} tasks)
               </span>
             </div>
             <Progress value={progress} className="h-2 mt-2" />
@@ -854,10 +901,9 @@ export default function NSOChecklistDetails() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="blocked">Blocked</SelectItem>
+                  {MANUAL_STATUSES.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -887,9 +933,32 @@ export default function NSOChecklistDetails() {
                   <Label className="text-muted-foreground">Owner</Label>
                   <p className="font-medium">{selectedTask.owner || "-"}</p>
                 </div>
-                <div>
+              <div>
                   <Label className="text-muted-foreground">Status</Label>
-                  <Badge className={statusConfig[selectedTask.status]?.color}>{statusConfig[selectedTask.status]?.label}</Badge>
+                  <div className="flex items-center gap-2 mt-1">
+                    {(() => {
+                      const effStatus = getEffectiveStatus(selectedTask);
+                      return effStatus === "overdue" ? (
+                        <Badge className="bg-red-100 text-red-800 border-red-200">Overdue</Badge>
+                      ) : null;
+                    })()}
+                    <Select
+                      value={selectedTask.status === "pending" || selectedTask.status === "in_progress" || selectedTask.status === "blocked" ? "open" : selectedTask.status}
+                      onValueChange={(v) => {
+                        handleInlineStatusChange(selectedTask.id, v);
+                        setSelectedTask({ ...selectedTask, status: v });
+                      }}
+                    >
+                      <SelectTrigger className="h-8 w-[130px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MANUAL_STATUSES.map((s) => (
+                          <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">Start Date</Label>
