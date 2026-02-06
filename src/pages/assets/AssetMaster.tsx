@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Loader2, Edit, Trash2, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { getAssetTypeLabel } from "@/lib/assetTypeTemplates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -167,7 +168,8 @@ export default function AssetMaster() {
       asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       asset.categories?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       asset.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      asset.model?.toLowerCase().includes(searchQuery.toLowerCase())
+      asset.model?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      getAssetTypeLabel((asset as any).asset_type).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const getCriticalityBadge = (criticality: string) => {
@@ -217,6 +219,7 @@ export default function AssetMaster() {
           <TableHeader>
             <TableRow>
               <TableHead>Asset Name</TableHead>
+              <TableHead>Asset Type</TableHead>
               <TableHead>Brand / Model</TableHead>
               <TableHead>Category Path</TableHead>
               <TableHead>Criticality</TableHead>
@@ -228,7 +231,7 @@ export default function AssetMaster() {
           <TableBody>
             {filteredAssets.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   No asset masters found
                 </TableCell>
               </TableRow>
@@ -242,6 +245,11 @@ export default function AssetMaster() {
                     onClick={() => navigate(`/assets/master/${asset.id}`)}
                   >
                     <TableCell className="font-medium">{asset.name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {getAssetTypeLabel((asset as any).asset_type)}
+                      </Badge>
+                    </TableCell>
                     <TableCell>
                       {asset.brand || asset.model ? (
                         <span className="text-sm">
