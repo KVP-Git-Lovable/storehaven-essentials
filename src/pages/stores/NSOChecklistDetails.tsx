@@ -58,11 +58,13 @@ import {
   Store,
   MapPin,
   Wallet,
+  Filter,
+  X,
 } from "lucide-react";
 import { NSOStoreAssetsSection } from "@/components/nso/NSOStoreAssetsSection";
 import { NSOTaskAttachments } from "@/components/nso/NSOTaskAttachments";
 import { NSOStoreBudgetSection } from "@/components/nso/NSOStoreBudgetSection";
-import { format, addDays, isPast, parseISO, startOfDay } from "date-fns";
+import { format, addDays, isPast, parseISO, startOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
 import { cn } from "@/lib/utils";
 import { NSOGanttChart } from "@/components/nso/NSOGanttChart";
 import {
@@ -271,6 +273,8 @@ export default function NSOChecklistDetails() {
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "gantt">("list");
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [ganttTimeFilter, setGanttTimeFilter] = useState<"all" | "day" | "week" | "month">("all");
 
   // Form states
   const [sectionForm, setSectionForm] = useState({ name: "" });
@@ -558,6 +562,38 @@ export default function NSOChecklistDetails() {
   const completedTasks = activeTasks.filter((t) => t.status === "completed").length;
   const progress = activeTasks.length > 0 ? Math.round((completedTasks / activeTasks.length) * 100) : 0;
 
+  // Filtered tasks for list view (status filter)
+  const filteredListTasks = statusFilter
+    ? tasks.filter((t) => getEffectiveStatus(t) === statusFilter)
+    : tasks;
+
+  // Filtered tasks for gantt view (time filter)
+  const filteredGanttTasks = (() => {
+    if (ganttTimeFilter === "all") return tasks;
+    const today = startOfDay(new Date());
+    let rangeStart: Date;
+    let rangeEnd: Date;
+    if (ganttTimeFilter === "day") {
+      rangeStart = today;
+      rangeEnd = today;
+    } else if (ganttTimeFilter === "week") {
+      rangeStart = startOfWeek(today, { weekStartsOn: 1 });
+      rangeEnd = endOfWeek(today, { weekStartsOn: 1 });
+    } else {
+      rangeStart = startOfMonth(today);
+      rangeEnd = endOfMonth(today);
+    }
+    return tasks.filter((t) => {
+      if (!t.start_date && !t.end_date) return false;
+      const tStart = t.start_date ? startOfDay(parseISO(t.start_date)) : null;
+      const tEnd = t.end_date ? startOfDay(parseISO(t.end_date)) : null;
+      // Task overlaps with range if task start <= rangeEnd AND task end >= rangeStart
+      const effectiveStart = tStart || tEnd!;
+      const effectiveEnd = tEnd || tStart!;
+      return effectiveStart <= rangeEnd && effectiveEnd >= rangeStart;
+    });
+  })();
+
   // Calculate end date from tasks (latest end_date) and identify the task
   const endDateInfo = tasks.reduce((result: { date: Date | null; taskName: string | null }, task) => {
     if (!task.end_date) return result;
@@ -698,17 +734,64 @@ export default function NSOChecklistDetails() {
                   </ToggleGroupItem>
                 </ToggleGroup>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSectionForm({ name: "" });
-                  setSectionDialogOpen(true);
-                }}
-              >
-                <FolderPlus className="h-4 w-4 mr-2" />
-                Add Section
-              </Button>
+              <div className="flex items-center gap-2">
+                {/* Status filter for list view */}
+                {viewMode === "list" && (
+                  <div className="flex items-center gap-1">
+                    <Filter className="h-4 w-4 text-muted-foreground" />
+                    <ToggleGroup
+                      type="single"
+                      value={statusFilter || ""}
+                      onValueChange={(value) => setStatusFilter(value || null)}
+                      className="border rounded-lg p-0.5"
+                    >
+                      {[
+                        { value: "open", label: "Open" },
+                        { value: "completed", label: "Completed" },
+                        { value: "cancelled", label: "Cancelled" },
+                        { value: "overdue", label: "Overdue" },
+                      ].map((s) => (
+                        <ToggleGroupItem key={s.value} value={s.value} className="h-7 px-2.5 text-xs">
+                          {s.label}
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                    {statusFilter && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setStatusFilter(null)}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {/* Time filter for gantt view */}
+                {viewMode === "gantt" && (
+                  <div className="flex items-center gap-1">
+                    <Filter className="h-4 w-4 text-muted-foreground" />
+                    <ToggleGroup
+                      type="single"
+                      value={ganttTimeFilter}
+                      onValueChange={(value) => value && setGanttTimeFilter(value as "all" | "day" | "week" | "month")}
+                      className="border rounded-lg p-0.5"
+                    >
+                      <ToggleGroupItem value="all" className="h-7 px-2.5 text-xs">All</ToggleGroupItem>
+                      <ToggleGroupItem value="day" className="h-7 px-2.5 text-xs">Day</ToggleGroupItem>
+                      <ToggleGroupItem value="week" className="h-7 px-2.5 text-xs">Week</ToggleGroupItem>
+                      <ToggleGroupItem value="month" className="h-7 px-2.5 text-xs">Month</ToggleGroupItem>
+                    </ToggleGroup>
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSectionForm({ name: "" });
+                    setSectionDialogOpen(true);
+                  }}
+                >
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                  Add Section
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {sections.length === 0 ? (
@@ -719,7 +802,7 @@ export default function NSOChecklistDetails() {
               ) : viewMode === "gantt" ? (
                 <NSOGanttChart
                   sections={sections}
-                  tasks={tasks}
+                  tasks={filteredGanttTasks}
                   onTaskUpdate={handleGanttTaskUpdate}
                   onTaskClick={handleTaskClick}
                   onAddTask={handleAddTask}
@@ -734,14 +817,16 @@ export default function NSOChecklistDetails() {
                 >
                   <Accordion type="multiple" defaultValue={sections.map((s) => s.id)} className="space-y-3">
                     {sections.map((section) => {
-                      const sectionTasks = getTasksForSection(section.id);
+                      const sectionTasks = filteredListTasks.filter((t) => t.section_id === section.id);
+                      if (statusFilter && sectionTasks.length === 0) return null;
+                      const allSectionTasks = tasks.filter((t) => t.section_id === section.id);
                       return (
                         <AccordionItem key={section.id} value={section.id} className="border rounded-lg">
                           <AccordionTrigger className="px-4 hover:no-underline">
                             <div className="flex items-center gap-3 flex-1">
                               <span className="font-medium">{section.name}</span>
                               <Badge variant="outline" className="ml-2">
-                                {sectionTasks.filter((t) => t.status === "completed").length}/{sectionTasks.length}
+                                {allSectionTasks.filter((t) => t.status === "completed").length}/{allSectionTasks.length}
                               </Badge>
                               {section.is_custom && (
                                 <Badge variant="secondary" className="text-xs">Custom</Badge>
