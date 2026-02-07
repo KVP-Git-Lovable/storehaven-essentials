@@ -2679,6 +2679,7 @@ export type Database = {
           notes: string | null
           quantity: number
           sort_order: number
+          vendor_id: string | null
         }
         Insert: {
           asset_master_id: string
@@ -2688,6 +2689,7 @@ export type Database = {
           notes?: string | null
           quantity?: number
           sort_order?: number
+          vendor_id?: string | null
         }
         Update: {
           asset_master_id?: string
@@ -2697,6 +2699,7 @@ export type Database = {
           notes?: string | null
           quantity?: number
           sort_order?: number
+          vendor_id?: string | null
         }
         Relationships: [
           {
@@ -2713,6 +2716,13 @@ export type Database = {
             referencedRelation: "nso_checklist_masters"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "nso_master_assets_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
         ]
       }
       nso_master_budget_items: {
@@ -2726,6 +2736,7 @@ export type Database = {
           planned_amount: number | null
           sort_order: number
           updated_at: string | null
+          vendor_id: string | null
         }
         Insert: {
           category?: string
@@ -2737,6 +2748,7 @@ export type Database = {
           planned_amount?: number | null
           sort_order?: number
           updated_at?: string | null
+          vendor_id?: string | null
         }
         Update: {
           category?: string
@@ -2748,6 +2760,7 @@ export type Database = {
           planned_amount?: number | null
           sort_order?: number
           updated_at?: string | null
+          vendor_id?: string | null
         }
         Relationships: [
           {
@@ -2755,6 +2768,13 @@ export type Database = {
             columns: ["master_id"]
             isOneToOne: false
             referencedRelation: "nso_checklist_masters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nso_master_budget_items_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
             referencedColumns: ["id"]
           },
         ]
@@ -2895,6 +2915,7 @@ export type Database = {
           sort_order: number
           status: string
           updated_at: string
+          vendor_id: string | null
         }
         Insert: {
           asset_master_id: string
@@ -2907,6 +2928,7 @@ export type Database = {
           sort_order?: number
           status?: string
           updated_at?: string
+          vendor_id?: string | null
         }
         Update: {
           asset_master_id?: string
@@ -2919,6 +2941,7 @@ export type Database = {
           sort_order?: number
           status?: string
           updated_at?: string
+          vendor_id?: string | null
         }
         Relationships: [
           {
@@ -2933,6 +2956,13 @@ export type Database = {
             columns: ["checklist_id"]
             isOneToOne: false
             referencedRelation: "nso_store_checklists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nso_store_assets_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
             referencedColumns: ["id"]
           },
         ]
@@ -2952,6 +2982,7 @@ export type Database = {
           sort_order: number
           status: string | null
           updated_at: string | null
+          vendor_id: string | null
         }
         Insert: {
           actual_cost?: number | null
@@ -2967,6 +2998,7 @@ export type Database = {
           sort_order?: number
           status?: string | null
           updated_at?: string | null
+          vendor_id?: string | null
         }
         Update: {
           actual_cost?: number | null
@@ -2982,6 +3014,7 @@ export type Database = {
           sort_order?: number
           status?: string | null
           updated_at?: string | null
+          vendor_id?: string | null
         }
         Relationships: [
           {
@@ -2989,6 +3022,13 @@ export type Database = {
             columns: ["checklist_id"]
             isOneToOne: false
             referencedRelation: "nso_store_checklists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nso_store_budget_items_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
             referencedColumns: ["id"]
           },
         ]

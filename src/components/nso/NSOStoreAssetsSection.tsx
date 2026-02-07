@@ -40,6 +40,7 @@ interface StoreAsset {
   sort_order: number;
   is_custom: boolean;
   status: string;
+  vendor_id: string | null;
   asset_masters?: {
     id: string;
     name: string;
@@ -56,6 +57,11 @@ interface AssetMaster {
   criticality: string;
   category_id: string | null;
   categories?: { name: string } | null;
+}
+
+interface Vendor {
+  id: string;
+  name: string;
 }
 
 const STATUS_OPTIONS = [
@@ -77,6 +83,7 @@ export function NSOStoreAssetsSection({
   const [newAsset, setNewAsset] = useState({
     asset_master_id: "",
     quantity: 1,
+    vendor_id: "",
   });
 
   // Fetch store assets
@@ -123,6 +130,16 @@ export function NSOStoreAssetsSection({
     },
   });
 
+  // Fetch vendors
+  const { data: vendors = [] } = useQuery({
+    queryKey: ["vendors"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("vendors").select("id, name").order("name");
+      if (error) throw error;
+      return data as Vendor[];
+    },
+  });
+
   // Add asset mutation
   const addAssetMutation = useMutation({
     mutationFn: async (data: typeof newAsset) => {
@@ -136,6 +153,7 @@ export function NSOStoreAssetsSection({
         sort_order: maxOrder,
         is_custom: true,
         status: "pending",
+        vendor_id: data.vendor_id && data.vendor_id !== "none" ? data.vendor_id : null,
       });
       if (error) throw error;
     },
@@ -143,7 +161,7 @@ export function NSOStoreAssetsSection({
       queryClient.invalidateQueries({ queryKey: ["nso-store-assets", checklistId] });
       queryClient.invalidateQueries({ queryKey: ["nso-store-assets-with-values", checklistId] });
       toast.success("Asset added");
-      setNewAsset({ asset_master_id: "", quantity: 1 });
+      setNewAsset({ asset_master_id: "", quantity: 1, vendor_id: "" });
       setIsAddingAsset(false);
       onAssetChange?.();
     },
@@ -244,8 +262,8 @@ export function NSOStoreAssetsSection({
       {isAddingAsset && (
         <Card className="border-dashed">
           <CardContent className="pt-4">
-            <div className="flex gap-3 items-end">
-              <div className="flex-1">
+            <div className="flex gap-3 items-end flex-wrap">
+              <div className="flex-1 min-w-[200px]">
                 <Label className="text-xs">Asset</Label>
                 <SearchableSelect
                   options={availableAssetMasters.map((am) => ({
@@ -258,6 +276,19 @@ export function NSOStoreAssetsSection({
                     setNewAsset((prev) => ({ ...prev, asset_master_id: v }))
                   }
                   placeholder="Select asset..."
+                />
+              </div>
+              <div className="flex-1 min-w-[180px]">
+                <Label className="text-xs">Vendor</Label>
+                <SearchableSelect
+                  options={vendors.map((v) => ({ value: v.id, label: v.name }))}
+                  value={newAsset.vendor_id}
+                  onValueChange={(v) =>
+                    setNewAsset((prev) => ({ ...prev, vendor_id: v }))
+                  }
+                  placeholder="Select vendor..."
+                  allowNone
+                  noneLabel="No Vendor"
                 />
               </div>
               <div className="w-24">
@@ -286,7 +317,7 @@ export function NSOStoreAssetsSection({
                 variant="ghost"
                 onClick={() => {
                   setIsAddingAsset(false);
-                  setNewAsset({ asset_master_id: "", quantity: 1 });
+                  setNewAsset({ asset_master_id: "", quantity: 1, vendor_id: "" });
                 }}
               >
                 <X className="h-4 w-4" />
@@ -319,6 +350,7 @@ export function NSOStoreAssetsSection({
                 <TableRow>
                   <TableHead>Asset Name</TableHead>
                   <TableHead>Category</TableHead>
+                  <TableHead>Vendor</TableHead>
                   <TableHead className="text-right">Unit Price</TableHead>
                   <TableHead className="text-center w-24">Qty</TableHead>
                   <TableHead className="text-right">Total Cost</TableHead>
@@ -350,6 +382,22 @@ export function NSOStoreAssetsSection({
                         <span className="text-sm text-muted-foreground">
                           {asset.asset_masters?.categories?.name || "-"}
                         </span>
+                      </TableCell>
+                      <TableCell>
+                        <SearchableSelect
+                          options={vendors.map((v) => ({ value: v.id, label: v.name }))}
+                          value={asset.vendor_id || "none"}
+                          onValueChange={(v) =>
+                            updateAssetMutation.mutate({
+                              id: asset.id,
+                              updates: { vendor_id: v === "none" ? null : v },
+                            })
+                          }
+                          placeholder="Select vendor"
+                          allowNone
+                          noneLabel="No Vendor"
+                          className="h-8 text-xs"
+                        />
                       </TableCell>
                       <TableCell className="text-right">
                         {formatCurrency(price)}
@@ -433,7 +481,7 @@ export function NSOStoreAssetsSection({
 
                 {/* Total Row */}
                 <TableRow className="bg-muted/50 font-semibold">
-                  <TableCell colSpan={4}>Total Asset Cost</TableCell>
+                  <TableCell colSpan={5}>Total Asset Cost</TableCell>
                   <TableCell className="text-right">
                     {formatCurrency(totalAssetCost)}
                   </TableCell>
