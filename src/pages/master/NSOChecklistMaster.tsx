@@ -105,6 +105,7 @@ interface NsoMasterAsset {
   quantity: number;
   notes: string | null;
   sort_order: number;
+  vendor_id: string | null;
   asset_masters?: AssetMaster;
 }
 
@@ -143,6 +144,7 @@ export default function NSOChecklistMaster() {
     asset_master_id: "",
     quantity: 1,
     notes: "",
+    vendor_id: "",
   });
 
   // Budget form state removed - now handled by NSOmasterBudgetSection component
@@ -224,7 +226,7 @@ export default function NSOChecklistMaster() {
       if (!selectedMaster) return [];
       const { data, error } = await supabase
         .from("nso_master_assets")
-        .select("*, asset_masters(id, name, criticality, standard_price, categories(name))")
+        .select("*, asset_masters(id, name, criticality, standard_price, categories(name)), vendors:vendor_id(id, name)")
         .eq("master_id", selectedMaster.id)
         .order("sort_order");
       if (error) throw error;
@@ -552,6 +554,7 @@ export default function NSOChecklistMaster() {
             quantity: asset.quantity,
             notes: asset.notes,
             sort_order: asset.sort_order,
+            vendor_id: asset.vendor_id,
           }))
         );
       }
@@ -574,6 +577,7 @@ export default function NSOChecklistMaster() {
         quantity: data.quantity,
         notes: data.notes || null,
         sort_order: maxOrder,
+        vendor_id: data.vendor_id && data.vendor_id !== "none" ? data.vendor_id : null,
       }).select().single();
       if (error) throw error;
 
@@ -592,6 +596,7 @@ export default function NSOChecklistMaster() {
           sort_order: maxOrder,
           is_custom: false,
           status: "pending",
+          vendor_id: data.vendor_id && data.vendor_id !== "none" ? data.vendor_id : null,
         }));
         await supabase.from("nso_store_assets").insert(storeAssets);
       }
@@ -616,6 +621,7 @@ export default function NSOChecklistMaster() {
           asset_master_id: data.asset_master_id,
           quantity: data.quantity,
           notes: data.notes || null,
+          vendor_id: data.vendor_id && data.vendor_id !== "none" ? data.vendor_id : null,
         })
         .eq("id", data.id);
       if (error) throw error;
@@ -655,7 +661,7 @@ export default function NSOChecklistMaster() {
   };
 
   const resetAssetForm = () => {
-    setAssetForm({ asset_master_id: "", quantity: 1, notes: "" });
+    setAssetForm({ asset_master_id: "", quantity: 1, notes: "", vendor_id: "" });
     setEditingAsset(null);
   };
 
@@ -665,6 +671,7 @@ export default function NSOChecklistMaster() {
       asset_master_id: asset.asset_master_id,
       quantity: asset.quantity,
       notes: asset.notes || "",
+      vendor_id: asset.vendor_id || "",
     });
     setAssetDialogOpen(true);
   };
@@ -1051,6 +1058,7 @@ export default function NSOChecklistMaster() {
                           <TableHead>Asset Name</TableHead>
                           <TableHead>Category</TableHead>
                           <TableHead>Criticality</TableHead>
+                          <TableHead>Vendor</TableHead>
                           <TableHead>Quantity</TableHead>
                           <TableHead>Notes</TableHead>
                           <TableHead className="w-[100px]">Actions</TableHead>
@@ -1079,6 +1087,9 @@ export default function NSOChecklistMaster() {
                               >
                                 {asset.asset_masters?.criticality}
                               </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {asset.vendor_id ? vendors.find(v => v.id === asset.vendor_id)?.name || "-" : "-"}
                             </TableCell>
                             <TableCell>{asset.quantity}</TableCell>
                             <TableCell className="text-muted-foreground text-sm">
@@ -1398,6 +1409,25 @@ export default function NSOChecklistMaster() {
                 </>
               );
             })()}
+            <div className="space-y-2">
+              <Label>Vendor</Label>
+              <Select
+                value={assetForm.vendor_id}
+                onValueChange={(v) => setAssetForm((f) => ({ ...f, vendor_id: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select vendor (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Vendor</SelectItem>
+                  {vendors.map((vendor) => (
+                    <SelectItem key={vendor.id} value={vendor.id}>
+                      {vendor.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>Notes</Label>
               <Textarea

@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, TrendingUp, DollarSign, CheckCircle2, Wallet } from "lucide-react";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 interface NSOStoreBudgetSectionProps {
   checklistId: string;
@@ -57,6 +58,12 @@ interface BudgetItem {
   status: string;
   notes: string | null;
   sort_order: number;
+  vendor_id: string | null;
+}
+
+interface Vendor {
+  id: string;
+  name: string;
 }
 
 
@@ -95,6 +102,7 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
     actual_cost: "",
     status: "pending",
     notes: "",
+    vendor_id: "",
   });
 
   // Fetch master budget items total for estimated budget reference
@@ -126,6 +134,16 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
     },
   });
 
+  // Fetch vendors
+  const { data: vendors = [] } = useQuery({
+    queryKey: ["vendors"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("vendors").select("id, name").order("name");
+      if (error) throw error;
+      return data as Vendor[];
+    },
+  });
+
   // Calculate totals
   const calculatedBudget = budgetItems.reduce((sum, item) => sum + (Number(item.planned_amount) || 0), 0);
   const calculatedActual = budgetItems
@@ -141,14 +159,15 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
       const { error } = await supabase.from("nso_store_budget_items").insert({
         checklist_id: checklistId,
         name: data.name,
-        description: data.name, // Required by schema
+        description: data.name,
         category: data.category,
-        amount: parseFloat(data.planned_amount) || 0, // Required by schema
+        amount: parseFloat(data.planned_amount) || 0,
         planned_amount: parseFloat(data.planned_amount) || 0,
         actual_cost: parseFloat(data.actual_cost) || 0,
         status: data.status,
         notes: data.notes || null,
         sort_order: maxSortOrder + 1,
+        vendor_id: data.vendor_id && data.vendor_id !== "none" ? data.vendor_id : null,
       });
       if (error) throw error;
     },
@@ -172,6 +191,7 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
           actual_cost: parseFloat(data.actual_cost) || 0,
           status: data.status,
           notes: data.notes || null,
+          vendor_id: data.vendor_id && data.vendor_id !== "none" ? data.vendor_id : null,
         })
         .eq("id", id);
       if (error) throw error;
@@ -224,6 +244,7 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
       actual_cost: "",
       status: "pending",
       notes: "",
+      vendor_id: "",
     });
   };
 
@@ -236,6 +257,7 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
       actual_cost: item.actual_cost?.toString() || "",
       status: item.status,
       notes: item.notes || "",
+      vendor_id: item.vendor_id || "",
     });
     setItemDialogOpen(true);
   };
@@ -380,6 +402,7 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
               <TableRow>
                 <TableHead>Item Name</TableHead>
                 <TableHead>Category</TableHead>
+                <TableHead>Vendor</TableHead>
                 <TableHead className="text-right">Planned</TableHead>
                 <TableHead className="text-right">Actual</TableHead>
                 <TableHead>Status</TableHead>
@@ -394,6 +417,9 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell>
                       <span className="text-muted-foreground text-sm">{categoryLabel}</span>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {item.vendor_id ? vendors.find(v => v.id === item.vendor_id)?.name || "-" : "-"}
                     </TableCell>
                     <TableCell className="text-right">{formatCurrency(item.planned_amount)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(item.actual_cost)}</TableCell>
@@ -521,6 +547,18 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
                   placeholder="0"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Vendor</Label>
+              <SearchableSelect
+                options={vendors.map((v) => ({ value: v.id, label: v.name }))}
+                value={formData.vendor_id}
+                onValueChange={(v) => setFormData((f) => ({ ...f, vendor_id: v }))}
+                placeholder="Select vendor (optional)"
+                allowNone
+                noneLabel="No Vendor"
+              />
             </div>
 
             <div className="space-y-2">

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Dialog,
   DialogContent,
@@ -54,6 +55,12 @@ interface MasterBudgetItem {
   planned_amount: number;
   notes: string | null;
   sort_order: number;
+  vendor_id: string | null;
+}
+
+interface Vendor {
+  id: string;
+  name: string;
 }
 
 const CATEGORY_OPTIONS = [
@@ -82,6 +89,7 @@ export function NSOmasterBudgetSection({ masterId }: NSOmasterBudgetSectionProps
     category: "other",
     planned_amount: "",
     notes: "",
+    vendor_id: "",
   });
 
   // Fetch budget items for this master
@@ -95,6 +103,16 @@ export function NSOmasterBudgetSection({ masterId }: NSOmasterBudgetSectionProps
         .order("sort_order");
       if (error) throw error;
       return data as MasterBudgetItem[];
+    },
+  });
+
+  // Fetch vendors
+  const { data: vendors = [] } = useQuery({
+    queryKey: ["vendors"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("vendors").select("id, name").order("name");
+      if (error) throw error;
+      return data as Vendor[];
     },
   });
 
@@ -112,6 +130,7 @@ export function NSOmasterBudgetSection({ masterId }: NSOmasterBudgetSectionProps
         planned_amount: parseFloat(data.planned_amount) || 0,
         notes: data.notes || null,
         sort_order: maxSortOrder + 1,
+        vendor_id: data.vendor_id && data.vendor_id !== "none" ? data.vendor_id : null,
       });
       if (error) throw error;
     },
@@ -133,6 +152,7 @@ export function NSOmasterBudgetSection({ masterId }: NSOmasterBudgetSectionProps
           category: data.category,
           planned_amount: parseFloat(data.planned_amount) || 0,
           notes: data.notes || null,
+          vendor_id: data.vendor_id && data.vendor_id !== "none" ? data.vendor_id : null,
         })
         .eq("id", id);
       if (error) throw error;
@@ -163,7 +183,7 @@ export function NSOmasterBudgetSection({ masterId }: NSOmasterBudgetSectionProps
   const closeDialog = () => {
     setItemDialogOpen(false);
     setEditingItem(null);
-    setFormData({ name: "", category: "other", planned_amount: "", notes: "" });
+    setFormData({ name: "", category: "other", planned_amount: "", notes: "", vendor_id: "" });
   };
 
   const openEditDialog = (item: MasterBudgetItem) => {
@@ -173,6 +193,7 @@ export function NSOmasterBudgetSection({ masterId }: NSOmasterBudgetSectionProps
       category: item.category || "other",
       planned_amount: item.planned_amount?.toString() || "",
       notes: item.notes || "",
+      vendor_id: item.vendor_id || "",
     });
     setItemDialogOpen(true);
   };
@@ -266,6 +287,7 @@ export function NSOmasterBudgetSection({ masterId }: NSOmasterBudgetSectionProps
               <TableRow>
                 <TableHead>Item Name</TableHead>
                 <TableHead>Category</TableHead>
+                <TableHead>Vendor</TableHead>
                 <TableHead className="text-right">Estimated Amount</TableHead>
                 <TableHead>Notes</TableHead>
                 <TableHead className="w-[100px]">Actions</TableHead>
@@ -279,6 +301,9 @@ export function NSOmasterBudgetSection({ masterId }: NSOmasterBudgetSectionProps
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-xs">{categoryLabel}</Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {item.vendor_id ? vendors.find(v => v.id === item.vendor_id)?.name || "-" : "-"}
                     </TableCell>
                     <TableCell className="text-right">{formatCurrency(item.planned_amount)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
@@ -308,6 +333,7 @@ export function NSOmasterBudgetSection({ masterId }: NSOmasterBudgetSectionProps
               {/* Total Row */}
               <TableRow className="bg-muted/50 font-semibold">
                 <TableCell>Total</TableCell>
+                <TableCell />
                 <TableCell />
                 <TableCell className="text-right">{formatCurrency(totalEstimated)}</TableCell>
                 <TableCell />
@@ -363,6 +389,18 @@ export function NSOmasterBudgetSection({ masterId }: NSOmasterBudgetSectionProps
                   placeholder="0"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Vendor</Label>
+              <SearchableSelect
+                options={vendors.map((v) => ({ value: v.id, label: v.name }))}
+                value={formData.vendor_id}
+                onValueChange={(v) => setFormData((f) => ({ ...f, vendor_id: v }))}
+                placeholder="Select vendor (optional)"
+                allowNone
+                noneLabel="No Vendor"
+              />
             </div>
 
             <div className="space-y-2">

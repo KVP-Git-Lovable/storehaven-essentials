@@ -326,6 +326,7 @@ export default function NewStoreOpening() {
           sort_order: asset.sort_order,
           is_custom: false,
           status: "pending",
+          vendor_id: asset.vendor_id || null,
         }));
         await supabase.from("nso_store_assets").insert(storeAssets);
       }
@@ -349,6 +350,7 @@ export default function NewStoreOpening() {
           status: "pending",
           notes: item.notes,
           sort_order: item.sort_order,
+          vendor_id: item.vendor_id || null,
         }));
         await supabase.from("nso_store_budget_items").insert(storeBudgetItems);
       }
