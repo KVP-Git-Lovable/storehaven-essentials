@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -47,10 +47,10 @@ import {
   Copy,
   Package,
   Calculator,
-  IndianRupee,
   Paperclip,
 } from "lucide-react";
 import { NSOmasterTaskAttachments } from "@/components/nso/NSOmasterTaskAttachments";
+import { NSOmasterBudgetSection } from "@/components/nso/NSOmasterBudgetSection";
 import { format } from "date-fns";
 
 interface ChecklistMaster {
@@ -145,23 +145,7 @@ export default function NSOChecklistMaster() {
     notes: "",
   });
 
-  // Local state for budget form to enable smooth editing
-  const [budgetForm, setBudgetForm] = useState({
-    estimated_budget: 0,
-    budget: 0,
-    actual_budget: 0,
-  });
-
-  // Sync budget form when selected master changes
-  useEffect(() => {
-    if (selectedMaster) {
-      setBudgetForm({
-        estimated_budget: selectedMaster.estimated_budget || 0,
-        budget: selectedMaster.budget || 0,
-        actual_budget: selectedMaster.actual_budget || 0,
-      });
-    }
-  }, [selectedMaster?.id, selectedMaster?.estimated_budget, selectedMaster?.budget, selectedMaster?.actual_budget]);
+  // Budget form state removed - now handled by NSOmasterBudgetSection component
 
   // Fetch checklist masters
   const { data: masters = [] } = useQuery({
@@ -657,25 +641,7 @@ export default function NSOChecklistMaster() {
     onError: () => toast.error("Failed to remove required asset"),
   });
 
-  // Update budget mutation
-  const updateBudgetMutation = useMutation({
-    mutationFn: async (data: { id: string; estimated_budget: number; budget: number; actual_budget: number }) => {
-      const { error } = await supabase
-        .from("nso_checklist_masters")
-        .update({
-          estimated_budget: data.estimated_budget,
-          budget: data.budget,
-          actual_budget: data.actual_budget,
-        })
-        .eq("id", data.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["nso-checklist-masters"] });
-      toast.success("Budget updated successfully");
-    },
-    onError: () => toast.error("Failed to update budget"),
-  });
+  // Budget mutation removed - now handled by NSOmasterBudgetSection component
 
   const resetMasterForm = () => {
     setMasterForm({ name: "", store_type: "", description: "", status: "active" });
@@ -1147,105 +1113,8 @@ export default function NSOChecklistMaster() {
                 )}
 
               {activeTab === "budget" && (
-                <div className="p-6">
-                  <div className="max-w-2xl mx-auto space-y-6">
-                    <div className="text-center mb-6">
-                      <h3 className="text-lg font-semibold mb-1">Budget Configuration</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Configure budget values for "{selectedMaster.name}" template
-                      </p>
-                    </div>
-
-                    <div className="grid gap-6">
-                      {/* Estimated Budget */}
-                      <div className="space-y-2">
-                        <Label htmlFor="estimated_budget">Estimated Budget</Label>
-                        <div className="relative">
-                          <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="estimated_budget"
-                            type="number"
-                            className="pl-9"
-                            placeholder="0"
-                            value={budgetForm.estimated_budget}
-                            onChange={(e) => {
-                              setBudgetForm((f) => ({
-                                ...f,
-                                estimated_budget: parseFloat(e.target.value) || 0,
-                              }));
-                            }}
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Initial estimated budget for store opening
-                        </p>
-                      </div>
-
-                      {/* Budget */}
-                      <div className="space-y-2">
-                        <Label htmlFor="budget">Budget</Label>
-                        <div className="relative">
-                          <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="budget"
-                            type="number"
-                            className="pl-9"
-                            placeholder="0"
-                            value={budgetForm.budget}
-                            onChange={(e) => {
-                              setBudgetForm((f) => ({
-                                ...f,
-                                budget: parseFloat(e.target.value) || 0,
-                              }));
-                            }}
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Approved budget for store opening
-                        </p>
-                      </div>
-
-                      {/* Actual Budget */}
-                      <div className="space-y-2">
-                        <Label htmlFor="actual_budget">Actual Budget</Label>
-                        <div className="relative">
-                          <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="actual_budget"
-                            type="number"
-                            className="pl-9"
-                            placeholder="0"
-                            value={budgetForm.actual_budget}
-                            onChange={(e) => {
-                              setBudgetForm((f) => ({
-                                ...f,
-                                actual_budget: parseFloat(e.target.value) || 0,
-                              }));
-                            }}
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Actual amount spent on store opening
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end pt-4 border-t">
-                      <Button
-                        onClick={() => {
-                          if (selectedMaster) {
-                            updateBudgetMutation.mutate({
-                              id: selectedMaster.id,
-                              ...budgetForm,
-                            });
-                          }
-                        }}
-                        disabled={updateBudgetMutation.isPending}
-                      >
-                        {updateBudgetMutation.isPending ? "Saving..." : "Save Budget"}
-                      </Button>
-                    </div>
-                  </div>
+                <div className="p-4">
+                  <NSOmasterBudgetSection masterId={selectedMaster.id} />
                 </div>
               )}
             </div>
