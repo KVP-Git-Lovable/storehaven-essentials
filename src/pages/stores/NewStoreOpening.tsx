@@ -330,6 +330,29 @@ export default function NewStoreOpening() {
         await supabase.from("nso_store_assets").insert(storeAssets);
       }
 
+      // Copy master budget items to store budget items
+      const { data: masterBudgetItems } = await supabase
+        .from("nso_master_budget_items")
+        .select("*")
+        .eq("master_id", data.master_id)
+        .order("sort_order");
+
+      if (masterBudgetItems && masterBudgetItems.length > 0) {
+        const storeBudgetItems = masterBudgetItems.map((item) => ({
+          checklist_id: checklist.id,
+          name: item.name,
+          description: item.name,
+          category: item.category,
+          amount: item.planned_amount || 0,
+          planned_amount: item.planned_amount || 0,
+          actual_cost: 0,
+          status: "pending",
+          notes: item.notes,
+          sort_order: item.sort_order,
+        }));
+        await supabase.from("nso_store_budget_items").insert(storeBudgetItems);
+      }
+
       return checklist;
     },
     onSuccess: (checklist) => {

@@ -40,33 +40,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, TrendingUp, DollarSign, CheckCircle2, Wallet } from "lucide-react";
+import { Plus, Pencil, Trash2, DollarSign, Wallet } from "lucide-react";
 
-interface NSOStoreBudgetSectionProps {
-  checklistId: string;
-  masterId: string | null;
+interface NSOmasterBudgetSectionProps {
+  masterId: string;
 }
 
-interface BudgetItem {
+interface MasterBudgetItem {
   id: string;
-  checklist_id: string;
+  master_id: string;
   name: string;
-  category: string | null;
+  category: string;
   planned_amount: number;
-  actual_cost: number;
-  status: string;
   notes: string | null;
   sort_order: number;
 }
-
-
-const STATUS_OPTIONS = [
-  { value: "pending", label: "Pending", color: "bg-muted text-muted-foreground" },
-  { value: "approved", label: "Approved", color: "bg-blue-100 text-blue-800" },
-  { value: "ordered", label: "Ordered", color: "bg-yellow-100 text-yellow-800" },
-  { value: "delivered", label: "Delivered", color: "bg-purple-100 text-purple-800" },
-  { value: "deployed", label: "Deployed", color: "bg-green-100 text-green-800" },
-];
 
 const CATEGORY_OPTIONS = [
   { value: "construction", label: "Construction" },
@@ -77,121 +65,94 @@ const CATEGORY_OPTIONS = [
   { value: "utilities", label: "Utilities" },
   { value: "licensing", label: "Licensing & Permits" },
   { value: "marketing", label: "Marketing" },
+  { value: "rent", label: "Rent" },
+  { value: "labour", label: "Labour" },
+  { value: "raw_materials", label: "Raw Materials" },
   { value: "other", label: "Other" },
 ];
 
-const INCLUDED_IN_ACTUAL_STATUSES = ["delivered", "deployed"];
-
-export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetSectionProps) {
+export function NSOmasterBudgetSection({ masterId }: NSOmasterBudgetSectionProps) {
   const queryClient = useQueryClient();
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<BudgetItem | null>(null);
-  const [itemToDelete, setItemToDelete] = useState<BudgetItem | null>(null);
+  const [editingItem, setEditingItem] = useState<MasterBudgetItem | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<MasterBudgetItem | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     category: "other",
     planned_amount: "",
-    actual_cost: "",
-    status: "pending",
     notes: "",
   });
 
-  // Fetch master budget items total for estimated budget reference
-  const { data: masterBudgetTotal } = useQuery({
-    queryKey: ["nso-master-budget-total", masterId],
+  // Fetch budget items for this master
+  const { data: budgetItems = [], isLoading } = useQuery({
+    queryKey: ["nso-master-budget-items", masterId],
     queryFn: async () => {
-      if (!masterId) return 0;
       const { data, error } = await supabase
         .from("nso_master_budget_items")
-        .select("planned_amount")
-        .eq("master_id", masterId);
-      if (error) throw error;
-      return (data || []).reduce((sum, item) => sum + (Number(item.planned_amount) || 0), 0);
-    },
-    enabled: !!masterId,
-  });
-
-  // Fetch budget items for this checklist
-  const { data: budgetItems = [], isLoading } = useQuery({
-    queryKey: ["nso-budget-items", checklistId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("nso_store_budget_items")
         .select("*")
-        .eq("checklist_id", checklistId)
+        .eq("master_id", masterId)
         .order("sort_order");
       if (error) throw error;
-      return data as BudgetItem[];
+      return data as MasterBudgetItem[];
     },
   });
 
-  // Calculate totals
-  const calculatedBudget = budgetItems.reduce((sum, item) => sum + (Number(item.planned_amount) || 0), 0);
-  const calculatedActual = budgetItems
-    .filter((item) => INCLUDED_IN_ACTUAL_STATUSES.includes(item.status))
-    .reduce((sum, item) => sum + (Number(item.actual_cost) || 0), 0);
-  const variance = calculatedBudget - calculatedActual;
-  const variancePercent = calculatedBudget > 0 ? ((variance / calculatedBudget) * 100).toFixed(1) : "0";
+  // Calculate total
+  const totalEstimated = budgetItems.reduce((sum, item) => sum + (Number(item.planned_amount) || 0), 0);
 
-  // Add budget item mutation
+  // Add item mutation
   const addItemMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const maxSortOrder = budgetItems.length > 0 ? Math.max(...budgetItems.map((i) => i.sort_order)) : 0;
-      const { error } = await supabase.from("nso_store_budget_items").insert({
-        checklist_id: checklistId,
+      const { error } = await supabase.from("nso_master_budget_items").insert({
+        master_id: masterId,
         name: data.name,
-        description: data.name, // Required by schema
         category: data.category,
-        amount: parseFloat(data.planned_amount) || 0, // Required by schema
         planned_amount: parseFloat(data.planned_amount) || 0,
-        actual_cost: parseFloat(data.actual_cost) || 0,
-        status: data.status,
         notes: data.notes || null,
         sort_order: maxSortOrder + 1,
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["nso-budget-items", checklistId] });
+      queryClient.invalidateQueries({ queryKey: ["nso-master-budget-items", masterId] });
       toast.success("Budget item added");
       closeDialog();
     },
     onError: () => toast.error("Failed to add budget item"),
   });
 
-  // Update budget item mutation
+  // Update item mutation
   const updateItemMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
       const { error } = await supabase
-        .from("nso_store_budget_items")
+        .from("nso_master_budget_items")
         .update({
           name: data.name,
           category: data.category,
           planned_amount: parseFloat(data.planned_amount) || 0,
-          actual_cost: parseFloat(data.actual_cost) || 0,
-          status: data.status,
           notes: data.notes || null,
         })
         .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["nso-budget-items", checklistId] });
+      queryClient.invalidateQueries({ queryKey: ["nso-master-budget-items", masterId] });
       toast.success("Budget item updated");
       closeDialog();
     },
     onError: () => toast.error("Failed to update budget item"),
   });
 
-  // Delete budget item mutation
+  // Delete item mutation
   const deleteItemMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("nso_store_budget_items").delete().eq("id", id);
+      const { error } = await supabase.from("nso_master_budget_items").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["nso-budget-items", checklistId] });
+      queryClient.invalidateQueries({ queryKey: ["nso-master-budget-items", masterId] });
       toast.success("Budget item deleted");
       setDeleteDialogOpen(false);
       setItemToDelete(null);
@@ -199,42 +160,18 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
     onError: () => toast.error("Failed to delete budget item"),
   });
 
-  // Inline status update
-  const updateStatusMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase
-        .from("nso_store_budget_items")
-        .update({ status })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["nso-budget-items", checklistId] });
-    },
-    onError: () => toast.error("Failed to update status"),
-  });
-
   const closeDialog = () => {
     setItemDialogOpen(false);
     setEditingItem(null);
-    setFormData({
-      name: "",
-      category: "other",
-      planned_amount: "",
-      actual_cost: "",
-      status: "pending",
-      notes: "",
-    });
+    setFormData({ name: "", category: "other", planned_amount: "", notes: "" });
   };
 
-  const openEditDialog = (item: BudgetItem) => {
+  const openEditDialog = (item: MasterBudgetItem) => {
     setEditingItem(item);
     setFormData({
       name: item.name,
       category: item.category || "other",
       planned_amount: item.planned_amount?.toString() || "",
-      actual_cost: item.actual_cost?.toString() || "",
-      status: item.status,
       notes: item.notes || "",
     });
     setItemDialogOpen(true);
@@ -261,64 +198,32 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
     }).format(value);
   };
 
-  const getStatusBadge = (status: string) => {
-    const statusOption = STATUS_OPTIONS.find((s) => s.value === status);
-    return (
-      <Badge className={`${statusOption?.color || "bg-muted"} text-xs`}>
-        {statusOption?.label || status}
-      </Badge>
-    );
-  };
-
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i}>
-              <CardHeader className="pb-2">
-                <Skeleton className="h-4 w-24" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-8 w-32" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <Card>
+          <CardHeader className="pb-2"><Skeleton className="h-4 w-24" /></CardHeader>
+          <CardContent><Skeleton className="h-8 w-32" /></CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-                Estimated Budget
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(masterBudgetTotal || 0)}</p>
-            <p className="text-xs text-muted-foreground mt-1">From master template</p>
-          </CardContent>
-        </Card>
-
+      {/* Summary Card */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-blue-500" />
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Planned Budget
+                Total Estimated Budget
               </CardTitle>
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-blue-600">{formatCurrency(calculatedBudget)}</p>
+            <p className="text-2xl font-bold text-blue-600">{formatCurrency(totalEstimated)}</p>
             <p className="text-xs text-muted-foreground mt-1">Sum of all planned items</p>
           </CardContent>
         </Card>
@@ -326,34 +231,15 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <Wallet className="h-4 w-4 text-muted-foreground" />
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Actual Spent
+                Total Items
               </CardTitle>
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-green-600">{formatCurrency(calculatedActual)}</p>
-            <p className="text-xs text-muted-foreground mt-1">Delivered/Deployed items only</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <Wallet className="h-4 w-4 text-amber-500" />
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Variance
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className={`text-2xl font-bold ${variance >= 0 ? "text-green-600" : "text-red-600"}`}>
-              {formatCurrency(Math.abs(variance))}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {variance >= 0 ? "Under budget" : "Over budget"} ({variancePercent}%)
-            </p>
+            <p className="text-2xl font-bold">{budgetItems.length}</p>
+            <p className="text-xs text-muted-foreground mt-1">Budget line items configured</p>
           </CardContent>
         </Card>
       </div>
@@ -372,7 +258,7 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
           <div className="p-8 text-center text-muted-foreground">
             <Wallet className="h-12 w-12 mx-auto mb-3 opacity-50" />
             <p>No budget items yet</p>
-            <p className="text-sm">Click "Add Item" to start tracking your budget</p>
+            <p className="text-sm">Add items to define the estimated budget for this template</p>
           </div>
         ) : (
           <Table>
@@ -380,9 +266,8 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
               <TableRow>
                 <TableHead>Item Name</TableHead>
                 <TableHead>Category</TableHead>
-                <TableHead className="text-right">Planned</TableHead>
-                <TableHead className="text-right">Actual</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Estimated Amount</TableHead>
+                <TableHead>Notes</TableHead>
                 <TableHead className="w-[100px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -393,35 +278,15 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell>
-                      <span className="text-muted-foreground text-sm">{categoryLabel}</span>
+                      <Badge variant="outline" className="text-xs">{categoryLabel}</Badge>
                     </TableCell>
                     <TableCell className="text-right">{formatCurrency(item.planned_amount)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(item.actual_cost)}</TableCell>
-                    <TableCell>
-                      <Select
-                        value={item.status}
-                        onValueChange={(value) => updateStatusMutation.mutate({ id: item.id, status: value })}
-                      >
-                        <SelectTrigger className="w-[130px] h-8">
-                          <SelectValue>{getStatusBadge(item.status)}</SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {STATUS_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
+                      {item.notes || "-"}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => openEditDialog(item)}
-                        >
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(item)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button
@@ -440,6 +305,14 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
                   </TableRow>
                 );
               })}
+              {/* Total Row */}
+              <TableRow className="bg-muted/50 font-semibold">
+                <TableCell>Total</TableCell>
+                <TableCell />
+                <TableCell className="text-right">{formatCurrency(totalEstimated)}</TableCell>
+                <TableCell />
+                <TableCell />
+              </TableRow>
             </TableBody>
           </Table>
         )}
@@ -482,28 +355,7 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
               </div>
 
               <div className="space-y-2">
-                <Label>Status</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(v) => setFormData((f) => ({ ...f, status: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((status) => (
-                      <SelectItem key={status.value} value={status.value}>
-                        {status.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Planned Amount (₹)</Label>
+                <Label>Estimated Amount (₹)</Label>
                 <Input
                   type="number"
                   value={formData.planned_amount}
@@ -511,50 +363,31 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
                   placeholder="0"
                 />
               </div>
-
-              <div className="space-y-2">
-                <Label>Actual Cost (₹)</Label>
-                <Input
-                  type="number"
-                  value={formData.actual_cost}
-                  onChange={(e) => setFormData((f) => ({ ...f, actual_cost: e.target.value }))}
-                  placeholder="0"
-                />
-              </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Notes (optional)</Label>
+              <Label>Notes</Label>
               <Input
                 value={formData.notes}
                 onChange={(e) => setFormData((f) => ({ ...f, notes: e.target.value }))}
-                placeholder="Additional details..."
+                placeholder="Optional notes..."
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={closeDialog}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={addItemMutation.isPending || updateItemMutation.isPending}
-            >
-              {addItemMutation.isPending || updateItemMutation.isPending
-                ? "Saving..."
-                : editingItem
-                ? "Update Item"
-                : "Add Item"}
+            <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+            <Button onClick={handleSubmit}>
+              {editingItem ? "Update" : "Add"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Budget Item?</AlertDialogTitle>
+            <AlertDialogTitle>Delete Budget Item</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{itemToDelete?.name}"? This action cannot be undone.
             </AlertDialogDescription>
@@ -562,8 +395,8 @@ export function NSOStoreBudgetSection({ checklistId, masterId }: NSOStoreBudgetS
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => itemToDelete && deleteItemMutation.mutate(itemToDelete.id)}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => itemToDelete && deleteItemMutation.mutate(itemToDelete.id)}
             >
               Delete
             </AlertDialogAction>

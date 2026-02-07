@@ -2715,6 +2715,50 @@ export type Database = {
           },
         ]
       }
+      nso_master_budget_items: {
+        Row: {
+          category: string
+          created_at: string | null
+          id: string
+          master_id: string
+          name: string
+          notes: string | null
+          planned_amount: number | null
+          sort_order: number
+          updated_at: string | null
+        }
+        Insert: {
+          category?: string
+          created_at?: string | null
+          id?: string
+          master_id: string
+          name: string
+          notes?: string | null
+          planned_amount?: number | null
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          id?: string
+          master_id?: string
+          name?: string
+          notes?: string | null
+          planned_amount?: number | null
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nso_master_budget_items_master_id_fkey"
+            columns: ["master_id"]
+            isOneToOne: false
+            referencedRelation: "nso_checklist_masters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nso_master_sections: {
         Row: {
           created_at: string
