@@ -5,7 +5,7 @@ import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useStoreAccess } from "@/hooks/useStoreAccess";
-import { Plus, Search, ClipboardList, CheckCircle2, Clock, Truck, Trash2 } from "lucide-react";
+import { Plus, Search, ClipboardList, CheckCircle2, Clock, Truck, Trash2, Pencil, PlusCircle } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,11 +42,11 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { SearchableSelect, type SearchableSelectOption } from "@/components/ui/searchable-select";
 
 const requisitionSchema = z.object({
   store_id: z.string().min(1, "Store is required"),
-  requested_by: z.string().min(1, "Requester name is required"),
+  requested_by: z.string().min(1, "Requester is required"),
   priority: z.string().min(1),
   notes: z.string().optional(),
 });
@@ -93,10 +93,17 @@ interface Requisition {
   }[];
 }
 
+interface Profile {
+  id: string;
+  username: string;
+  email: string;
+}
+
 export default function Requisitions() {
   const [requisitions, setRequisitions] = useState<Requisition[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -105,9 +112,13 @@ export default function Requisitions() {
   
   // Items being added to the requisition
   const [selectedItems, setSelectedItems] = useState<RequisitionItemEntry[]>([]);
-  const [itemSearchQuery, setItemSearchQuery] = useState("");
-  const [selectedItemId, setSelectedItemId] = useState("");
-  const [itemQuantity, setItemQuantity] = useState(1);
+  // Inline row for adding new item
+  const [newRowItemId, setNewRowItemId] = useState("");
+  const [newRowQuantity, setNewRowQuantity] = useState(1);
+  const [showNewRow, setShowNewRow] = useState(true);
+  // Editing state
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editQuantity, setEditQuantity] = useState(1);
 
   const form = useForm<RequisitionFormData>({
     resolver: zodResolver(requisitionSchema),
@@ -129,7 +140,6 @@ export default function Requisitions() {
     try {
       const storeIds = Array.from(accessibleStoreIds);
       
-      // Build requisitions query with store filter
       let reqQuery = supabase
         .from("requisitions")
         .select("*, stores(name), requisition_items(id, quantity_requested, inventory_items(name, unit))")
@@ -139,10 +149,11 @@ export default function Requisitions() {
         reqQuery = reqQuery.in("store_id", storeIds);
       }
       
-      const [reqRes, storeRes, itemsRes] = await Promise.all([
+      const [reqRes, storeRes, itemsRes, profilesRes] = await Promise.all([
         reqQuery,
         supabase.from("stores").select("id, name").eq("status", "active"),
         supabase.from("inventory_items").select("id, name, sku, category, unit").eq("status", "active"),
+        supabase.from("profiles").select("id, username, email"),
       ]);
 
       if (reqRes.error) throw reqRes.error;
@@ -150,10 +161,10 @@ export default function Requisitions() {
       if (itemsRes.error) throw itemsRes.error;
 
       setRequisitions(reqRes.data || []);
-      // Filter stores for non-admins
       const allStores = storeRes.data || [];
       setStores(isAdmin ? allStores : allStores.filter(s => accessibleStoreIds.has(s.id)));
       setInventoryItems(itemsRes.data || []);
+      setProfiles(profilesRes.data || []);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to fetch data");
@@ -173,20 +184,19 @@ export default function Requisitions() {
   };
 
   const addItemToRequisition = () => {
-    if (!selectedItemId) {
+    if (!newRowItemId) {
       toast.error("Please select an item");
       return;
     }
-    if (itemQuantity < 1) {
+    if (newRowQuantity < 1) {
       toast.error("Quantity must be at least 1");
       return;
     }
     
-    const item = inventoryItems.find(i => i.id === selectedItemId);
+    const item = inventoryItems.find(i => i.id === newRowItemId);
     if (!item) return;
     
-    // Check if item already added
-    if (selectedItems.some(si => si.item_id === selectedItemId)) {
+    if (selectedItems.some(si => si.item_id === newRowItemId)) {
       toast.error("Item already added to requisition");
       return;
     }
@@ -194,16 +204,37 @@ export default function Requisitions() {
     setSelectedItems(prev => [...prev, {
       item_id: item.id,
       item_name: item.name,
-      quantity: itemQuantity,
+      quantity: newRowQuantity,
       unit: item.unit,
     }]);
     
-    setSelectedItemId("");
-    setItemQuantity(1);
+    setNewRowItemId("");
+    setNewRowQuantity(1);
   };
 
   const removeItemFromRequisition = (itemId: string) => {
     setSelectedItems(prev => prev.filter(i => i.item_id !== itemId));
+    if (editingItemId === itemId) setEditingItemId(null);
+  };
+
+  const startEditItem = (item: RequisitionItemEntry) => {
+    setEditingItemId(item.item_id);
+    setEditQuantity(item.quantity);
+  };
+
+  const saveEditItem = (itemId: string) => {
+    if (editQuantity < 1) {
+      toast.error("Quantity must be at least 1");
+      return;
+    }
+    setSelectedItems(prev =>
+      prev.map(i => i.item_id === itemId ? { ...i, quantity: editQuantity } : i)
+    );
+    setEditingItemId(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingItemId(null);
   };
 
   const onSubmit = async (data: RequisitionFormData) => {
@@ -213,7 +244,6 @@ export default function Requisitions() {
     }
     
     try {
-      // Create requisition
       const { data: reqData, error: reqError } = await supabase
         .from("requisitions")
         .insert([{
@@ -229,7 +259,6 @@ export default function Requisitions() {
       
       if (reqError) throw reqError;
       
-      // Create requisition items
       const itemsToInsert = selectedItems.map(item => ({
         requisition_id: reqData.id,
         item_id: item.item_id,
@@ -280,11 +309,6 @@ export default function Requisitions() {
     return matchesSearch && matchesStatus;
   });
 
-  const filteredInventoryItems = inventoryItems.filter(item =>
-    item.name.toLowerCase().includes(itemSearchQuery.toLowerCase()) ||
-    (item.sku && item.sku.toLowerCase().includes(itemSearchQuery.toLowerCase()))
-  );
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case "pending": return "bg-yellow-500 text-white";
@@ -306,6 +330,26 @@ export default function Requisitions() {
     }
   };
 
+  // Build options for SearchableSelect
+  const profileOptions: SearchableSelectOption[] = profiles.map(p => ({
+    value: p.username || p.email || p.id,
+    label: p.username || p.email || "Unknown",
+    subtitle: p.email || undefined,
+  }));
+
+  const storeOptions: SearchableSelectOption[] = stores.map(s => ({
+    value: s.id,
+    label: s.name,
+  }));
+
+  const inventoryItemOptions: SearchableSelectOption[] = inventoryItems
+    .filter(item => !selectedItems.some(si => si.item_id === item.id))
+    .map(item => ({
+      value: item.id,
+      label: item.name,
+      subtitle: [item.sku, item.category].filter(Boolean).join(" · "),
+    }));
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -317,9 +361,10 @@ export default function Requisitions() {
           setIsDialogOpen(open);
           if (!open) {
             setSelectedItems([]);
-            setSelectedItemId("");
-            setItemQuantity(1);
-            setItemSearchQuery("");
+            setNewRowItemId("");
+            setNewRowQuantity(1);
+            setEditingItemId(null);
+            setShowNewRow(true);
           }
         }}>
           <DialogTrigger asChild>
@@ -328,170 +373,205 @@ export default function Requisitions() {
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-            <DialogHeader>
+            <DialogHeader className="flex-shrink-0">
               <DialogTitle>Create Stock Requisition</DialogTitle>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 flex-1 overflow-hidden flex flex-col">
-                <div className="grid grid-cols-2 gap-4">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col gap-0">
+                {/* Scrollable form body */}
+                <div className="flex-1 overflow-y-auto space-y-4 pr-1 pb-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="store_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Requesting Store</FormLabel>
+                          <FormControl>
+                            <SearchableSelect
+                              options={storeOptions}
+                              value={field.value}
+                              onValueChange={field.onChange}
+                              placeholder="Select store"
+                              searchPlaceholder="Search stores..."
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="requested_by"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Requested By</FormLabel>
+                          <FormControl>
+                            <SearchableSelect
+                              options={profileOptions}
+                              value={field.value}
+                              onValueChange={field.onChange}
+                              placeholder="Select user"
+                              searchPlaceholder="Search users..."
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
                   <FormField
                     control={form.control}
-                    name="store_id"
+                    name="priority"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Requesting Store</FormLabel>
+                        <FormLabel>Priority</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select store" />
+                            <SelectTrigger className="w-40">
+                              <SelectValue />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {stores.map(store => (
-                              <SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>
-                            ))}
+                            <SelectItem value="low">Low</SelectItem>
+                            <SelectItem value="normal">Normal</SelectItem>
+                            <SelectItem value="high">High</SelectItem>
+                            <SelectItem value="urgent">Urgent</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+                  
+                  {/* Redesigned Item Selection Section */}
+                  <div className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-sm">Requisition Items</h4>
+                      {selectedItems.length > 0 && (
+                        <span className="text-xs text-muted-foreground">{selectedItems.length} item(s)</span>
+                      )}
+                    </div>
+
+                    {/* Existing items list */}
+                    {selectedItems.length > 0 && (
+                      <div className="border rounded-md divide-y">
+                        {selectedItems.map((item) => (
+                          <div key={item.item_id} className="flex items-center gap-2 px-3 py-2">
+                            {editingItemId === item.item_id ? (
+                              <>
+                                <div className="flex-1 text-sm font-medium">{item.item_name}</div>
+                                <Input
+                                  type="number"
+                                  className="w-20 h-8 text-sm"
+                                  min={1}
+                                  value={editQuantity}
+                                  onChange={(e) => setEditQuantity(parseInt(e.target.value) || 1)}
+                                  autoFocus
+                                />
+                                <span className="text-xs text-muted-foreground w-10">{item.unit}</span>
+                                <Button type="button" size="sm" variant="default" className="h-7 px-2 text-xs" onClick={() => saveEditItem(item.item_id)}>
+                                  Save
+                                </Button>
+                                <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={cancelEdit}>
+                                  Cancel
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <div className="flex-1 text-sm">{item.item_name}</div>
+                                <span className="text-sm font-medium w-20 text-center">{item.quantity} {item.unit}</span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => startEditItem(item)}
+                                >
+                                  <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => removeItemFromRequisition(item.item_id)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add new item row */}
+                    {showNewRow && (
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1">
+                          <label className="text-xs text-muted-foreground mb-1 block">Item</label>
+                          <SearchableSelect
+                            options={inventoryItemOptions}
+                            value={newRowItemId}
+                            onValueChange={setNewRowItemId}
+                            placeholder="Select item..."
+                            searchPlaceholder="Search inventory..."
+                            emptyMessage="No items available."
+                          />
+                        </div>
+                        <div className="w-20">
+                          <label className="text-xs text-muted-foreground mb-1 block">Qty</label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={newRowQuantity}
+                            onChange={(e) => setNewRowQuantity(parseInt(e.target.value) || 1)}
+                            className="h-10"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="icon"
+                          className="h-10 w-10 shrink-0"
+                          onClick={addItemToRequisition}
+                          title="Add item"
+                        >
+                          <PlusCircle className="h-5 w-5" />
+                        </Button>
+                      </div>
+                    )}
+
+                    {selectedItems.length === 0 && !newRowItemId && (
+                      <p className="text-xs text-muted-foreground text-center py-2">
+                        Select an item and quantity above, then click + to add.
+                      </p>
+                    )}
+                  </div>
+                  
                   <FormField
                     control={form.control}
-                    name="requested_by"
+                    name="notes"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Requested By</FormLabel>
+                        <FormLabel>Notes</FormLabel>
                         <FormControl>
-                          <Input placeholder="Store Manager name" {...field} />
+                          <Textarea placeholder="Additional notes..." {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
-                
-                <FormField
-                  control={form.control}
-                  name="priority"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Priority</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger className="w-40">
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="low">Low</SelectItem>
-                          <SelectItem value="normal">Normal</SelectItem>
-                          <SelectItem value="high">High</SelectItem>
-                          <SelectItem value="urgent">Urgent</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                {/* Item Selection Section */}
-                <div className="border rounded-lg p-4 space-y-3">
-                  <h4 className="font-medium text-sm">Add Items to Requisition</h4>
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <Select value={selectedItemId} onValueChange={setSelectedItemId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select inventory item" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <div className="p-2">
-                            <Input 
-                              placeholder="Search items..." 
-                              value={itemSearchQuery}
-                              onChange={(e) => setItemSearchQuery(e.target.value)}
-                              className="mb-2"
-                            />
-                          </div>
-                          <ScrollArea className="h-48">
-                            {filteredInventoryItems.map(item => (
-                              <SelectItem key={item.id} value={item.id}>
-                                {item.name} {item.sku ? `(${item.sku})` : ''} - {item.category}
-                              </SelectItem>
-                            ))}
-                          </ScrollArea>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Input 
-                      type="number" 
-                      placeholder="Qty" 
-                      className="w-24"
-                      min={1}
-                      value={itemQuantity}
-                      onChange={(e) => setItemQuantity(parseInt(e.target.value) || 1)}
-                    />
-                    <Button type="button" variant="secondary" onClick={addItemToRequisition}>
-                      Add
-                    </Button>
-                  </div>
-                  
-                  {/* Selected Items List */}
-                  {selectedItems.length > 0 && (
-                    <div className="border rounded-md">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Item</TableHead>
-                            <TableHead className="w-24 text-center">Quantity</TableHead>
-                            <TableHead className="w-16"></TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {selectedItems.map((item) => (
-                            <TableRow key={item.item_id}>
-                              <TableCell>{item.item_name}</TableCell>
-                              <TableCell className="text-center">{item.quantity} {item.unit}</TableCell>
-                              <TableCell>
-                                <Button 
-                                  type="button" 
-                                  variant="ghost" 
-                                  size="icon"
-                                  onClick={() => removeItemFromRequisition(item.item_id)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
-                  
-                  {selectedItems.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      No items added yet. Select items above to add to this requisition.
-                    </p>
-                  )}
+
+                {/* Fixed footer */}
+                <div className="flex-shrink-0 pt-4 border-t mt-2">
+                  <Button type="submit" className="w-full" disabled={selectedItems.length === 0}>
+                    Create Requisition ({selectedItems.length} items)
+                  </Button>
                 </div>
-                
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Notes</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="Additional notes..." {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button type="submit" className="w-full" disabled={selectedItems.length === 0}>
-                  Create Requisition ({selectedItems.length} items)
-                </Button>
               </form>
             </Form>
           </DialogContent>
