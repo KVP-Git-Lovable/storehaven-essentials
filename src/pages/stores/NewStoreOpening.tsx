@@ -540,6 +540,24 @@ export default function NewStoreOpening() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
+              <Label>Link to Store Plan *</Label>
+              <Select
+                value={assignForm.store_plan_id}
+                onValueChange={(v) => setAssignForm((f) => ({ ...f, store_plan_id: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a store plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {storePlansForNSO.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} {p.city ? `(${p.city})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label>Store *</Label>
               <Select
                 value={assignForm.store_id}
@@ -552,25 +570,6 @@ export default function NewStoreOpening() {
                   {stores.map((store) => (
                     <SelectItem key={store.id} value={store.id}>
                       {store.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Link to Store Plan</Label>
-              <Select
-                value={assignForm.store_plan_id}
-                onValueChange={(v) => setAssignForm((f) => ({ ...f, store_plan_id: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Optional — link to a plan" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {storePlansForNSO.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name} {p.city ? `(${p.city})` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -645,7 +644,7 @@ export default function NewStoreOpening() {
             </Button>
             <Button
               onClick={() => assignChecklistMutation.mutate(assignForm)}
-              disabled={!assignForm.store_id || !assignForm.master_id || assignChecklistMutation.isPending}
+              disabled={!assignForm.store_id || !assignForm.master_id || !assignForm.store_plan_id || assignChecklistMutation.isPending}
             >
               {assignChecklistMutation.isPending ? "Assigning..." : "Assign Checklist"}
             </Button>

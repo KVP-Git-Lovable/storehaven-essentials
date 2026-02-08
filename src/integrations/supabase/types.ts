@@ -1466,6 +1466,7 @@ export type Database = {
       }
       franchisees: {
         Row: {
+          alignment: string | null
           city: string | null
           created_at: string
           created_by: string | null
@@ -1487,6 +1488,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          alignment?: string | null
           city?: string | null
           created_at?: string
           created_by?: string | null
@@ -1508,6 +1510,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          alignment?: string | null
           city?: string | null
           created_at?: string
           created_by?: string | null
@@ -7225,13 +7228,16 @@ export type Database = {
           current_approval_level: number | null
           description: string | null
           estimated_budget: number | null
+          franchisee_identified: boolean
           id: string
           location: string | null
           name: string
           region: string | null
           state: string | null
           status: string
+          store_identified: boolean
           target_open_date: string | null
+          target_store_identification_date: string | null
           updated_at: string
         }
         Insert: {
@@ -7242,13 +7248,16 @@ export type Database = {
           current_approval_level?: number | null
           description?: string | null
           estimated_budget?: number | null
+          franchisee_identified?: boolean
           id?: string
           location?: string | null
           name: string
           region?: string | null
           state?: string | null
           status?: string
+          store_identified?: boolean
           target_open_date?: string | null
+          target_store_identification_date?: string | null
           updated_at?: string
         }
         Update: {
@@ -7259,13 +7268,16 @@ export type Database = {
           current_approval_level?: number | null
           description?: string | null
           estimated_budget?: number | null
+          franchisee_identified?: boolean
           id?: string
           location?: string | null
           name?: string
           region?: string | null
           state?: string | null
           status?: string
+          store_identified?: boolean
           target_open_date?: string | null
+          target_store_identification_date?: string | null
           updated_at?: string
         }
         Relationships: []

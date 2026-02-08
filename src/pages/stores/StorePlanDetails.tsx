@@ -29,8 +29,9 @@ import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
   ArrowLeft, Plus, Trash2, Upload, FileImage, FileVideo, Download,
-  MapPin, Building2, Send, CheckCircle2, XCircle, Clock,
+  MapPin, Building2, Send, CheckCircle2, XCircle, Clock, Check,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function StorePlanDetails() {
   const { id } = useParams<{ id: string }>();
@@ -378,7 +379,7 @@ export default function StorePlanDetails() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card><CardContent className="p-4">
           <p className="text-xs text-muted-foreground">Budget</p>
           <p className="text-lg font-bold">₹{Number(plan.estimated_budget || 0).toLocaleString()}</p>
@@ -390,6 +391,27 @@ export default function StorePlanDetails() {
           </p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
+          <div className="flex items-center gap-2">
+            <Checkbox checked={plan.store_identified || potentialStores.some(s => s.status === "finalized")} disabled className="pointer-events-none" />
+            <div>
+              <p className="text-xs text-muted-foreground">Store Identified</p>
+              <p className="text-sm font-medium">{(plan.store_identified || potentialStores.some(s => s.status === "finalized")) ? "Yes" : "Pending"}</p>
+            </div>
+          </div>
+        </CardContent></Card>
+        <Card><CardContent className="p-4">
+          <div className="flex items-center gap-2">
+            <Checkbox checked={plan.franchisee_identified || linkedFranchisees.some(f => f.status === "active" || f.status === "onboarding")} disabled className="pointer-events-none" />
+            <div>
+              <p className="text-xs text-muted-foreground">Franchisee Identified</p>
+              <p className="text-sm font-medium">{(plan.franchisee_identified || linkedFranchisees.some(f => f.status === "active" || f.status === "onboarding")) ? "Yes" : "Pending"}</p>
+            </div>
+          </div>
+        </CardContent></Card>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card><CardContent className="p-4">
           <p className="text-xs text-muted-foreground">Potential Stores</p>
           <p className="text-lg font-bold">{potentialStores.length}</p>
         </CardContent></Card>
@@ -400,6 +422,12 @@ export default function StorePlanDetails() {
         <Card><CardContent className="p-4">
           <p className="text-xs text-muted-foreground">NSO Checklists</p>
           <p className="text-lg font-bold">{linkedNSO.length}</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-4">
+          <p className="text-xs text-muted-foreground">Store ID Date</p>
+          <p className="text-sm font-bold">
+            {plan.target_store_identification_date ? format(new Date(plan.target_store_identification_date), "dd MMM yyyy") : "—"}
+          </p>
         </CardContent></Card>
       </div>
 
@@ -669,6 +697,9 @@ export default function StorePlanDetails() {
                 <div><Label className="text-muted-foreground">City</Label><p>{plan.city || "—"}</p></div>
                 <div><Label className="text-muted-foreground">State</Label><p>{plan.state || "—"}</p></div>
                 <div><Label className="text-muted-foreground">Region</Label><p>{plan.region || "—"}</p></div>
+                <div><Label className="text-muted-foreground">Target Store ID Date</Label>
+                  <p>{plan.target_store_identification_date ? format(new Date(plan.target_store_identification_date), "dd MMM yyyy") : "—"}</p>
+                </div>
                 <div><Label className="text-muted-foreground">Created</Label><p>{format(new Date(plan.created_at), "dd MMM yyyy")}</p></div>
               </div>
             </CardContent>

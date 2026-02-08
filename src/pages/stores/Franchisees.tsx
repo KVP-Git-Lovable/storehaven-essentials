@@ -50,10 +50,10 @@ export default function Franchisees() {
   const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({
-    name: "", email: "", phone: "", interested_location: "", city: "", state: "",
+    name: "", email: "", phone: "", city: "", state: "",
     status: "lead", sign_up_by_date: "", probability: "medium",
     previous_work_experience: "", infrastructure_details: "",
-    current_business_background: "", notes: "", store_plan_id: "",
+    current_business_background: "", notes: "", store_plan_id: "", alignment: "average",
   });
 
   const { data: storePlans = [] } = useQuery({
@@ -81,7 +81,6 @@ export default function Franchisees() {
         name: form.name,
         email: form.email || null,
         phone: form.phone || null,
-        interested_location: form.interested_location || null,
         city: form.city || null,
         state: form.state || null,
         status: form.status,
@@ -93,6 +92,7 @@ export default function Franchisees() {
         notes: form.notes || null,
         created_by: user?.id,
         store_plan_id: form.store_plan_id || null,
+        alignment: form.alignment || "average",
       });
       if (error) throw error;
     },
@@ -119,16 +119,15 @@ export default function Franchisees() {
   });
 
   const resetForm = () => setForm({
-    name: "", email: "", phone: "", interested_location: "", city: "", state: "",
+    name: "", email: "", phone: "", city: "", state: "",
     status: "lead", sign_up_by_date: "", probability: "medium",
     previous_work_experience: "", infrastructure_details: "",
-    current_business_background: "", notes: "", store_plan_id: "",
+    current_business_background: "", notes: "", store_plan_id: "", alignment: "average",
   });
 
   const filtered = franchisees.filter((f) =>
     f.name?.toLowerCase().includes(search.toLowerCase()) ||
-    f.city?.toLowerCase().includes(search.toLowerCase()) ||
-    f.interested_location?.toLowerCase().includes(search.toLowerCase())
+    f.city?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -175,8 +174,8 @@ export default function Franchisees() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Store Plan</TableHead>
+                <TableHead>Interested Store Location</TableHead>
+                <TableHead>Alignment</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Probability</TableHead>
                 <TableHead>Sign-up By</TableHead>
@@ -198,13 +197,21 @@ export default function Franchisees() {
                         {f.email && <p className="text-xs text-muted-foreground">{f.email}</p>}
                       </div>
                     </TableCell>
-                    <TableCell>{[f.interested_location, f.city].filter(Boolean).join(", ") || "—"}</TableCell>
                     <TableCell>
                       {(f as any).store_plans?.name ? (
                         <Badge variant="outline" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); navigate(`/expansion/plans/${(f as any).store_plans.id}`); }}>
                           {(f as any).store_plans.name}
                         </Badge>
                       ) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={
+                        f.alignment === "good" ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" :
+                        f.alignment === "not_aligned" ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" :
+                        "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+                      }>
+                        {f.alignment === "not_aligned" ? "Not Aligned" : (f.alignment || "average").charAt(0).toUpperCase() + (f.alignment || "average").slice(1)}
+                      </Badge>
                     </TableCell>
                     <TableCell><Badge className={statusColors[f.status] || ""}>{f.status}</Badge></TableCell>
                     <TableCell>
@@ -243,14 +250,22 @@ export default function Franchisees() {
               <div className="md:col-span-2 space-y-2"><Label>Name *</Label>
                 <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </div>
+              <div className="md:col-span-2 space-y-2"><Label>Interested Store Location</Label>
+                <Select value={form.store_plan_id} onValueChange={(v) => setForm({ ...form, store_plan_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select a store plan" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {storePlans.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name} {p.city ? `(${p.city})` : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2"><Label>Email</Label>
                 <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
               </div>
               <div className="space-y-2"><Label>Phone</Label>
                 <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-              </div>
-              <div className="space-y-2"><Label>Interested Location</Label>
-                <Input value={form.interested_location} onChange={(e) => setForm({ ...form, interested_location: e.target.value })} />
               </div>
               <div className="space-y-2"><Label>City</Label>
                 <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
@@ -270,6 +285,16 @@ export default function Franchisees() {
                     <SelectItem value="onboarding">Onboarding</SelectItem>
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2"><Label>Alignment with Our Plan</Label>
+                <Select value={form.alignment} onValueChange={(v) => setForm({ ...form, alignment: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="good">Good</SelectItem>
+                    <SelectItem value="average">Average</SelectItem>
+                    <SelectItem value="not_aligned">Not Aligned</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -297,17 +322,6 @@ export default function Franchisees() {
               </div>
               <div className="md:col-span-2 space-y-2"><Label>Notes</Label>
                 <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />
-              </div>
-              <div className="md:col-span-2 space-y-2"><Label>Link to Store Plan</Label>
-                <Select value={form.store_plan_id} onValueChange={(v) => setForm({ ...form, store_plan_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Optional — link to a store plan" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {storePlans.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name} {p.city ? `(${p.city})` : ""}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
             </div>
           </div>
