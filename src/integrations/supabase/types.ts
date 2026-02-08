@@ -14,6 +14,98 @@ export type Database = {
   }
   public: {
     Tables: {
+      asset_definition_fields: {
+        Row: {
+          category_id: string
+          created_at: string
+          field_label: string
+          field_name: string
+          field_type: string
+          id: string
+          is_required: boolean
+          options: Json | null
+          placeholder: string | null
+          sort_order: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          field_label: string
+          field_name: string
+          field_type?: string
+          id?: string
+          is_required?: boolean
+          options?: Json | null
+          placeholder?: string | null
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          field_label?: string
+          field_name?: string
+          field_type?: string
+          id?: string
+          is_required?: boolean
+          options?: Json | null
+          placeholder?: string | null
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_definition_fields_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      asset_master_custom_values: {
+        Row: {
+          asset_master_id: string
+          created_at: string
+          field_id: string
+          id: string
+          value: string | null
+        }
+        Insert: {
+          asset_master_id: string
+          created_at?: string
+          field_id: string
+          id?: string
+          value?: string | null
+        }
+        Update: {
+          asset_master_id?: string
+          created_at?: string
+          field_id?: string
+          id?: string
+          value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_master_custom_values_asset_master_id_fkey"
+            columns: ["asset_master_id"]
+            isOneToOne: false
+            referencedRelation: "asset_masters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_master_custom_values_field_id_fkey"
+            columns: ["field_id"]
+            isOneToOne: false
+            referencedRelation: "asset_definition_fields"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       asset_master_vendors: {
         Row: {
           asset_master_id: string

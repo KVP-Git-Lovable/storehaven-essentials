@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { getAssetTypeLabel } from "@/lib/assetTypeTemplates";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, Loader2, Edit, Trash2, ExternalLink, Upload, FileText, Sparkles } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -179,6 +178,7 @@ export default function AssetMasterDetails() {
   const [associatedAssets, setAssociatedAssets] = useState<AssociatedAsset[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [customFieldValues, setCustomFieldValues] = useState<{field_label: string; value: string; field_type: string}[]>([]);
   const [vendorDialogOpen, setVendorDialogOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<AssociatedVendor | null>(null);
   const [deleteVendorId, setDeleteVendorId] = useState<string | null>(null);
@@ -250,6 +250,25 @@ export default function AssetMasterDetails() {
     setAssociatedVendors(assocVendorsRes.data || []);
     setAssociatedAssets(assocAssetsRes.data || []);
     setAllCategories(categoriesRes.data || []);
+    
+    // Load custom field values
+    if (assetMasterRes.data?.category_id) {
+      const { data: customData } = await supabase
+        .from("asset_master_custom_values")
+        .select("value, field_id, asset_definition_fields(field_label, field_type)")
+        .eq("asset_master_id", id as string);
+      
+      if (customData) {
+        setCustomFieldValues(
+          customData.map((row: any) => ({
+            field_label: row.asset_definition_fields?.field_label || "Unknown",
+            value: row.value || "-",
+            field_type: row.asset_definition_fields?.field_type || "text",
+          }))
+        );
+      }
+    }
+    
     setLoading(false);
   };
 
@@ -402,7 +421,9 @@ export default function AssetMasterDetails() {
             <h1 className="text-2xl font-semibold">{assetMaster.name}</h1>
             <div className="flex items-center gap-2">
               <p className="text-muted-foreground">Asset Master Details</p>
-              <Badge variant="outline">{getAssetTypeLabel((assetMaster as any).asset_type)}</Badge>
+              {assetMaster.categories && (
+                <Badge variant="outline">{assetMaster.categories.name}</Badge>
+              )}
             </div>
           </div>
         </div>
@@ -426,6 +447,7 @@ export default function AssetMasterDetails() {
       <Tabs defaultValue="details" className="space-y-4">
         <TabsList>
           <TabsTrigger value="details">Asset Details</TabsTrigger>
+          <TabsTrigger value="custom-fields">Custom Fields ({customFieldValues.length})</TabsTrigger>
           <TabsTrigger value="vendors">Associated Vendors ({associatedVendors.length})</TabsTrigger>
           <TabsTrigger value="stores">Associated Stores ({associatedAssets.length})</TabsTrigger>
         </TabsList>
@@ -586,6 +608,30 @@ export default function AssetMasterDetails() {
                 <DetailField label="Datasheet" value={assetMaster.datasheet_url} type="url" />
                 <DetailField label="User Manual" value={assetMaster.manual_url} type="url" />
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="custom-fields">
+          <Card>
+            <CardHeader>
+              <CardTitle>Custom Fields</CardTitle>
+              <CardDescription>Fields defined via the Asset Definition Master for this category</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {customFieldValues.length === 0 ? (
+                <p className="text-muted-foreground text-center py-6">No custom fields configured for this category.</p>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                  {customFieldValues.map((cf, idx) => (
+                    <DetailField
+                      key={idx}
+                      label={cf.field_label}
+                      value={cf.field_type === "boolean" ? (cf.value === "true" ? "Yes" : "No") : cf.value}
+                    />
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
