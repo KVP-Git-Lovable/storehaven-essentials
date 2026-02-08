@@ -52,6 +52,7 @@ import MeterMaster from "./pages/master/MeterMaster";
 import DepartmentMaster from "./pages/master/DepartmentMaster";
 import PositionMaster from "./pages/master/PositionMaster";
 import CategoryMaster from "./pages/master/CategoryMaster";
+import AssetDefinitionMaster from "./pages/master/AssetDefinitionMaster";
 
 import NSOChecklistMaster from "./pages/master/NSOChecklistMaster";
 import PMChecklistMaster from "./pages/master/PMChecklistMaster";
@@ -188,6 +189,7 @@ const App = () => (
               <Route path="/master/department" element={<DepartmentMaster />} />
               <Route path="/master/position" element={<PositionMaster />} />
               <Route path="/master/category" element={<CategoryMaster />} />
+              <Route path="/master/asset-definition" element={<AssetDefinitionMaster />} />
               
               <Route path="/master/nso-checklist" element={<NSOChecklistMaster />} />
               <Route path="/master/pm-checklist" element={<PMChecklistMaster />} />

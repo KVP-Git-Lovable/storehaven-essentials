@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ASSET_TYPE_OPTIONS, getVisibleFields } from "@/lib/assetTypeTemplates";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,8 +42,6 @@ type Vendor = {
 };
 
 const assetMasterSchema = z.object({
-  // Template
-  asset_type: z.string().optional(),
   // Basic Information
   name: z.string().trim().min(1, "Asset name is required").max(100, "Name must be less than 100 characters"),
   category_id: z.string().min(1, "Category is required"),
@@ -256,619 +254,342 @@ const unitOfMeasureOptions = [
   { value: "lot", label: "Lot" },
 ];
 
-/** Template-specific fields that render based on the selected asset_type */
-function TemplateFieldsSection({ form, vendors }: { form: any; vendors: Vendor[] }) {
-  const assetType = form.watch("asset_type");
-  const visible = getVisibleFields(assetType);
-
+/** Renders all basic fields (brand, model, specs, etc.) — shown for all categories */
+function BasicFieldsSection({ form, vendors }: { form: any; vendors: Vendor[] }) {
   return (
     <>
       {/* Brand / Model / Manufacturer */}
-      {(visible.has("brand") || visible.has("model") || visible.has("manufacturer")) && (
-        <div className="grid grid-cols-3 gap-4">
-          {visible.has("brand") && (
-            <FormField
-              control={form.control}
-              name="brand"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Brand</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. Blue Star" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-          {visible.has("model") && (
-            <FormField
-              control={form.control}
-              name="model"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Model</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. DF-500" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-          {visible.has("manufacturer") && (
-            <FormField
-              control={form.control}
-              name="manufacturer"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Manufacturer</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. Blue Star Ltd" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Material / Finish / Load Capacity (Furniture & Fixtures) */}
-      {(visible.has("material") || visible.has("finish_color") || visible.has("load_capacity")) && (
-        <div className="grid grid-cols-3 gap-4">
-          {visible.has("material") && (
-            <FormField
-              control={form.control}
-              name="material"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Material</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. Solid Wood, Steel" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-          {visible.has("finish_color") && (
-            <FormField
-              control={form.control}
-              name="finish_color"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Finish / Color</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. Walnut, Matte Black" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-          {visible.has("load_capacity") && (
-            <FormField
-              control={form.control}
-              name="load_capacity"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Load Capacity</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. 50 kg" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Technical Specifications */}
-      {(visible.has("power_consumption_watts") || visible.has("voltage_requirement") || visible.has("energy_rating")) && (
-        <div className="grid grid-cols-3 gap-4">
-          {visible.has("power_consumption_watts") && (
-            <FormField
-              control={form.control}
-              name="power_consumption_watts"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Power Consumption (W)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      placeholder="e.g. 500"
-                      {...field}
-                      value={field.value ?? ""}
-                      onChange={(e: any) => field.onChange(e.target.value ? Number(e.target.value) : null)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-          {visible.has("voltage_requirement") && (
-            <FormField
-              control={form.control}
-              name="voltage_requirement"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Voltage</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. 220V" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-          {visible.has("energy_rating") && (
-            <FormField
-              control={form.control}
-              name="energy_rating"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Energy Rating</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || "none"}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select rating" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="none">Not Rated</SelectItem>
-                      {energyRatingOptions.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Refrigeration-specific */}
-      {(visible.has("temperature_range") || visible.has("capacity") || visible.has("refrigerant_type")) && (
-        <div className="grid grid-cols-3 gap-4">
-          {visible.has("temperature_range") && (
-            <FormField
-              control={form.control}
-              name="temperature_range"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Temperature Range</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. -18°C to -24°C" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-          {visible.has("capacity") && (
-            <FormField
-              control={form.control}
-              name="capacity"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Capacity</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. 500 Litres" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-          {visible.has("refrigerant_type") && (
-            <FormField
-              control={form.control}
-              name="refrigerant_type"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Refrigerant Type</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || "none"}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="none">Not Specified</SelectItem>
-                      {refrigerantOptions.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Physical: Weight & Dimensions */}
-      {(visible.has("weight_kg") || visible.has("dimensions_cm")) && (
-        <div className="grid grid-cols-2 gap-4">
-          {visible.has("weight_kg") && (
-            <FormField
-              control={form.control}
-              name="weight_kg"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Weight (kg)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      placeholder="e.g. 45"
-                      {...field}
-                      value={field.value ?? ""}
-                      onChange={(e: any) => field.onChange(e.target.value ? Number(e.target.value) : null)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-          {visible.has("dimensions_cm") && (
-            <FormField
-              control={form.control}
-              name="dimensions_cm"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Dimensions (cm)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="L × W × H e.g. 120×60×85" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Identifiers: SKU, UPC/Barcode, HSN Code */}
-      {(visible.has("sku") || visible.has("upc_barcode") || visible.has("hsn_code")) && (
-        <div className="grid grid-cols-3 gap-4">
-          {visible.has("sku") && (
-            <FormField
-              control={form.control}
-              name="sku"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>SKU</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Internal SKU" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-          {visible.has("upc_barcode") && (
-            <FormField
-              control={form.control}
-              name="upc_barcode"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>UPC/Barcode</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Barcode number" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-          {visible.has("hsn_code") && (
-            <FormField
-              control={form.control}
-              name="hsn_code"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>HSN Code</FormLabel>
-                  <FormControl>
-                    <Input placeholder="For GST" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-        </div>
-      )}
+      <div className="grid grid-cols-3 gap-4">
+        <FormField control={form.control} name="brand" render={({ field }: any) => (
+          <FormItem><FormLabel>Brand</FormLabel><FormControl><Input placeholder="e.g. Blue Star" {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+        <FormField control={form.control} name="model" render={({ field }: any) => (
+          <FormItem><FormLabel>Model</FormLabel><FormControl><Input placeholder="e.g. DF-500" {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+        <FormField control={form.control} name="manufacturer" render={({ field }: any) => (
+          <FormItem><FormLabel>Manufacturer</FormLabel><FormControl><Input placeholder="e.g. Blue Star Ltd" {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+      </div>
 
       {/* Classification: Criticality & Investment Size */}
-      {(visible.has("criticality") || visible.has("investment_size")) && (
-        <div className="grid grid-cols-2 gap-4">
-          {visible.has("criticality") && (
-            <FormField
-              control={form.control}
-              name="criticality"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Criticality *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select criticality" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {criticalityOptions.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-          {visible.has("investment_size") && (
-            <FormField
-              control={form.control}
-              name="investment_size"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Investment Size *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select investment size" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {investmentOptions.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-        </div>
-      )}
+      <div className="grid grid-cols-2 gap-4">
+        <FormField control={form.control} name="criticality" render={({ field }: any) => (
+          <FormItem>
+            <FormLabel>Criticality *</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value}>
+              <FormControl><SelectTrigger><SelectValue placeholder="Select criticality" /></SelectTrigger></FormControl>
+              <SelectContent>
+                {criticalityOptions.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )} />
+        <FormField control={form.control} name="investment_size" render={({ field }: any) => (
+          <FormItem>
+            <FormLabel>Investment Size *</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value}>
+              <FormControl><SelectTrigger><SelectValue placeholder="Select investment size" /></SelectTrigger></FormControl>
+              <SelectContent>
+                {investmentOptions.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )} />
+      </div>
 
       {/* Pricing: Asset Value, Currency, Unit of Measure */}
-      {(visible.has("standard_price") || visible.has("currency") || visible.has("unit_of_measure")) && (
-        <div className="grid grid-cols-3 gap-4">
-          {visible.has("standard_price") && (
-            <FormField
-              control={form.control}
-              name="standard_price"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Asset Value</FormLabel>
-                  <FormControl>
-                    <Input type="number" placeholder="0" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-          {visible.has("currency") && (
-            <FormField
-              control={form.control}
-              name="currency"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Currency</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="INR">INR (₹)</SelectItem>
-                      <SelectItem value="USD">USD ($)</SelectItem>
-                      <SelectItem value="EUR">EUR (€)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-          {visible.has("unit_of_measure") && (
-            <FormField
-              control={form.control}
-              name="unit_of_measure"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Unit of Measure</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || "unit"}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select unit" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {unitOfMeasureOptions.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-        </div>
-      )}
+      <div className="grid grid-cols-3 gap-4">
+        <FormField control={form.control} name="standard_price" render={({ field }: any) => (
+          <FormItem><FormLabel>Asset Value</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
+        )} />
+        <FormField control={form.control} name="currency" render={({ field }: any) => (
+          <FormItem>
+            <FormLabel>Currency</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value}>
+              <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+              <SelectContent>
+                <SelectItem value="INR">INR (₹)</SelectItem>
+                <SelectItem value="USD">USD ($)</SelectItem>
+                <SelectItem value="EUR">EUR (€)</SelectItem>
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )} />
+        <FormField control={form.control} name="unit_of_measure" render={({ field }: any) => (
+          <FormItem>
+            <FormLabel>Unit of Measure</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value || "unit"}>
+              <FormControl><SelectTrigger><SelectValue placeholder="Select unit" /></SelectTrigger></FormControl>
+              <SelectContent>
+                {unitOfMeasureOptions.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )} />
+      </div>
 
       {/* Vendor & OEM */}
-      {(visible.has("vendor") || visible.has("oem")) && (
-        <div className="grid grid-cols-2 gap-4">
-          {visible.has("vendor") && (
-            <FormField
-              control={form.control}
-              name="default_vendor_id"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Vendor</FormLabel>
-                  <SearchableSelect
-                    options={vendors.map((v) => ({ value: v.id, label: v.name }))}
-                    value={field.value || ""}
-                    onValueChange={field.onChange}
-                    placeholder="Select vendor..."
-                    searchPlaceholder="Search vendors..."
-                    emptyMessage="No vendors found"
-                  />
-                  <FormMessage />
-                </FormItem>
-              )}
+      <div className="grid grid-cols-2 gap-4">
+        <FormField control={form.control} name="default_vendor_id" render={({ field }: any) => (
+          <FormItem>
+            <FormLabel>Vendor</FormLabel>
+            <SearchableSelect
+              options={vendors.map((v) => ({ value: v.id, label: v.name }))}
+              value={field.value || ""}
+              onValueChange={field.onChange}
+              placeholder="Select vendor..."
+              searchPlaceholder="Search vendors..."
+              emptyMessage="No vendors found"
             />
-          )}
-          {visible.has("oem") && (
-            <FormField
-              control={form.control}
-              name="default_oem_id"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>OEM</FormLabel>
-                  <SearchableSelect
-                    options={vendors.map((v) => ({ value: v.id, label: v.name }))}
-                    value={field.value || ""}
-                    onValueChange={field.onChange}
-                    placeholder="Select OEM..."
-                    searchPlaceholder="Search OEMs..."
-                    emptyMessage="No OEMs found"
-                  />
-                  <FormMessage />
-                </FormItem>
-              )}
+            <FormMessage />
+          </FormItem>
+        )} />
+        <FormField control={form.control} name="default_oem_id" render={({ field }: any) => (
+          <FormItem>
+            <FormLabel>OEM</FormLabel>
+            <SearchableSelect
+              options={vendors.map((v) => ({ value: v.id, label: v.name }))}
+              value={field.value || ""}
+              onValueChange={field.onChange}
+              placeholder="Select OEM..."
+              searchPlaceholder="Search OEMs..."
+              emptyMessage="No OEMs found"
             />
-          )}
-        </div>
-      )}
+            <FormMessage />
+          </FormItem>
+        )} />
+      </div>
 
       {/* Asset Status & Service Engagement */}
-      {(visible.has("asset_status") || visible.has("service_engagement")) && (
-        <div className="grid grid-cols-2 gap-4">
-          {visible.has("asset_status") && (
-            <FormField
-              control={form.control}
-              name="default_asset_status"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Asset Status</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || "working"}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="requisition_raised">Requisition Raised</SelectItem>
-                      <SelectItem value="purchase_order_placed">Purchase Order Placed</SelectItem>
-                      <SelectItem value="in_transit">In Transit</SelectItem>
-                      <SelectItem value="delivered">Delivered</SelectItem>
-                      <SelectItem value="installed">Installed</SelectItem>
-                      <SelectItem value="working">Working</SelectItem>
-                      <SelectItem value="under_repair">Under Repair</SelectItem>
-                      <SelectItem value="withdrawn">Withdrawn</SelectItem>
-                      <SelectItem value="drop">Drop</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-          {visible.has("service_engagement") && (
-            <FormField
-              control={form.control}
-              name="default_service_engagement"
-              render={({ field }: any) => (
-                <FormItem>
-                  <FormLabel>Service Engagement</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || "under_warranty"}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select service type" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="under_warranty">Under Warranty</SelectItem>
-                      <SelectItem value="under_amc">Under AMC</SelectItem>
-                      <SelectItem value="need_based_support">Need Based Support</SelectItem>
-                      <SelectItem value="no_service_support">No Service Support</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-        </div>
-      )}
+      <div className="grid grid-cols-2 gap-4">
+        <FormField control={form.control} name="default_asset_status" render={({ field }: any) => (
+          <FormItem>
+            <FormLabel>Asset Status</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value || "working"}>
+              <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl>
+              <SelectContent>
+                <SelectItem value="requisition_raised">Requisition Raised</SelectItem>
+                <SelectItem value="purchase_order_placed">Purchase Order Placed</SelectItem>
+                <SelectItem value="in_transit">In Transit</SelectItem>
+                <SelectItem value="delivered">Delivered</SelectItem>
+                <SelectItem value="installed">Installed</SelectItem>
+                <SelectItem value="working">Working</SelectItem>
+                <SelectItem value="under_repair">Under Repair</SelectItem>
+                <SelectItem value="withdrawn">Withdrawn</SelectItem>
+                <SelectItem value="drop">Drop</SelectItem>
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )} />
+        <FormField control={form.control} name="default_service_engagement" render={({ field }: any) => (
+          <FormItem>
+            <FormLabel>Service Engagement</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value || "under_warranty"}>
+              <FormControl><SelectTrigger><SelectValue placeholder="Select service type" /></SelectTrigger></FormControl>
+              <SelectContent>
+                <SelectItem value="under_warranty">Under Warranty</SelectItem>
+                <SelectItem value="under_amc">Under AMC</SelectItem>
+                <SelectItem value="need_based_support">Need Based Support</SelectItem>
+                <SelectItem value="no_service_support">No Service Support</SelectItem>
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )} />
+      </div>
 
       {/* Purchase Date */}
-      {visible.has("purchase_date") && (
-        <FormField
-          control={form.control}
-          name="default_purchase_date"
-          render={({ field }: any) => (
-            <FormItem>
-              <FormLabel>Purchase Date</FormLabel>
-              <FormControl>
-                <Input
-                  type="date"
-                  {...field}
-                  value={field.value ?? ""}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      )}
+      <FormField control={form.control} name="default_purchase_date" render={({ field }: any) => (
+        <FormItem><FormLabel>Purchase Date</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>
+      )} />
 
       {/* Description */}
-      {visible.has("description") && (
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }: any) => (
-            <FormItem>
-              <FormLabel>Description</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="Detailed description of the asset..."
-                  className="resize-none"
-                  rows={3}
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      )}
+      <FormField control={form.control} name="description" render={({ field }: any) => (
+        <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea placeholder="Detailed description of the asset..." className="resize-none" rows={3} {...field} /></FormControl><FormMessage /></FormItem>
+      )} />
     </>
+  );
+}
+
+type DefinitionField = {
+  id: string;
+  field_name: string;
+  field_label: string;
+  field_type: string;
+  options: string[] | null;
+  is_required: boolean;
+  placeholder: string | null;
+  sort_order: number;
+};
+
+/** Dynamic custom fields tab driven by Asset Definition Master */
+function CustomFieldsTab({ 
+  categoryId, 
+  assetMasterId,
+  customValues,
+  onCustomValuesChange,
+}: { 
+  categoryId: string;
+  assetMasterId?: string;
+  customValues: Record<string, string>;
+  onCustomValuesChange: (values: Record<string, string>) => void;
+}) {
+  const [definitionFields, setDefinitionFields] = useState<DefinitionField[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (categoryId) {
+      fetchDefinitionFields(categoryId);
+    } else {
+      setDefinitionFields([]);
+    }
+  }, [categoryId]);
+
+  const fetchDefinitionFields = async (catId: string) => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("asset_definition_fields")
+      .select("id, field_name, field_label, field_type, options, is_required, placeholder, sort_order")
+      .eq("category_id", catId)
+      .eq("status", "active")
+      .order("sort_order");
+
+    if (data) {
+      setDefinitionFields(data as DefinitionField[]);
+    }
+    setLoading(false);
+  };
+
+  const updateValue = (fieldId: string, value: string) => {
+    onCustomValuesChange({ ...customValues, [fieldId]: value });
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-32">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!categoryId) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        Select an Asset Category in the Basic tab first to see custom fields.
+      </div>
+    );
+  }
+
+  if (definitionFields.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No custom fields defined for this category. Configure them in the Asset Definition Master.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {definitionFields.map((field) => {
+        const value = customValues[field.id] || "";
+
+        if (field.field_type === "text") {
+          return (
+            <div key={field.id}>
+              <FormLabel>{field.field_label}{field.is_required && " *"}</FormLabel>
+              <Input
+                className="mt-1.5"
+                placeholder={field.placeholder || ""}
+                value={value}
+                onChange={(e) => updateValue(field.id, e.target.value)}
+              />
+            </div>
+          );
+        }
+
+        if (field.field_type === "number") {
+          return (
+            <div key={field.id}>
+              <FormLabel>{field.field_label}{field.is_required && " *"}</FormLabel>
+              <Input
+                className="mt-1.5"
+                type="number"
+                placeholder={field.placeholder || ""}
+                value={value}
+                onChange={(e) => updateValue(field.id, e.target.value)}
+              />
+            </div>
+          );
+        }
+
+        if (field.field_type === "date") {
+          return (
+            <div key={field.id}>
+              <FormLabel>{field.field_label}{field.is_required && " *"}</FormLabel>
+              <Input
+                className="mt-1.5"
+                type="date"
+                value={value}
+                onChange={(e) => updateValue(field.id, e.target.value)}
+              />
+            </div>
+          );
+        }
+
+        if (field.field_type === "select" && field.options) {
+          return (
+            <div key={field.id}>
+              <FormLabel>{field.field_label}{field.is_required && " *"}</FormLabel>
+              <Select value={value || "none"} onValueChange={(v) => updateValue(field.id, v === "none" ? "" : v)}>
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue placeholder={field.placeholder || "Select..."} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not Selected</SelectItem>
+                  {(field.options as string[]).map((opt) => (
+                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          );
+        }
+
+        if (field.field_type === "boolean") {
+          return (
+            <div key={field.id} className="flex items-center space-x-2 rounded-md border p-4">
+              <Checkbox
+                checked={value === "true"}
+                onCheckedChange={(checked) => updateValue(field.id, checked ? "true" : "false")}
+              />
+              <FormLabel>{field.field_label}{field.is_required && " *"}</FormLabel>
+            </div>
+          );
+        }
+
+        if (field.field_type === "textarea") {
+          return (
+            <div key={field.id}>
+              <FormLabel>{field.field_label}{field.is_required && " *"}</FormLabel>
+              <Textarea
+                className="mt-1.5 resize-none"
+                rows={3}
+                placeholder={field.placeholder || ""}
+                value={value}
+                onChange={(e) => updateValue(field.id, e.target.value)}
+              />
+            </div>
+          );
+        }
+
+        return null;
+      })}
+    </div>
   );
 }
 
@@ -881,6 +602,7 @@ export function AssetMasterFormDialog({
   const { toast } = useToast();
   const [categoryRefreshKey, setCategoryRefreshKey] = useState(0);
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const fetchVendors = async () => {
@@ -897,7 +619,6 @@ export function AssetMasterFormDialog({
   const form = useForm<AssetMasterFormData>({
     resolver: zodResolver(assetMasterSchema),
     defaultValues: {
-      asset_type: "",
       name: "",
       category_id: "",
       brand: "",
@@ -953,7 +674,6 @@ export function AssetMasterFormDialog({
       setCategoryRefreshKey((k) => k + 1);
       if (editingAsset) {
         form.reset({
-          asset_type: (editingAsset as any).asset_type || "",
           name: editingAsset.name,
           category_id: editingAsset.category_id || "",
           brand: editingAsset.brand || "",
@@ -1002,11 +722,48 @@ export function AssetMasterFormDialog({
           datasheet_url: editingAsset.datasheet_url || "",
           manual_url: editingAsset.manual_url || "",
         });
+        // Load custom values for editing
+        loadCustomValues(editingAsset.id);
       } else {
         form.reset();
+        setCustomValues({});
       }
     }
   }, [open, editingAsset, form]);
+
+  const loadCustomValues = async (masterId: string) => {
+    const { data } = await supabase
+      .from("asset_master_custom_values")
+      .select("field_id, value")
+      .eq("asset_master_id", masterId);
+    
+    if (data) {
+      const vals: Record<string, string> = {};
+      data.forEach((row) => {
+        vals[row.field_id] = row.value || "";
+      });
+      setCustomValues(vals);
+    }
+  };
+
+  const saveCustomValues = async (masterId: string) => {
+    const entries = Object.entries(customValues).filter(([, v]) => v !== "");
+    if (entries.length === 0) return;
+
+    // Delete existing custom values and re-insert
+    await supabase
+      .from("asset_master_custom_values")
+      .delete()
+      .eq("asset_master_id", masterId);
+
+    const inserts = entries.map(([fieldId, value]) => ({
+      asset_master_id: masterId,
+      field_id: fieldId,
+      value,
+    }));
+
+    await supabase.from("asset_master_custom_values").insert(inserts);
+  };
 
   const onSubmit = async (data: AssetMasterFormData) => {
     const certArray = data.certifications
@@ -1014,7 +771,6 @@ export function AssetMasterFormDialog({
       : null;
 
     const payload: Record<string, any> = {
-      asset_type: data.asset_type || null,
       name: data.name,
       category_id: data.category_id,
       brand: data.brand || null,
@@ -1073,16 +829,20 @@ export function AssetMasterFormDialog({
       if (error) {
         toast({ title: "Error", description: "Failed to update asset master", variant: "destructive" });
       } else {
+        await saveCustomValues(editingAsset.id);
         toast({ title: "Success", description: "Asset master updated" });
         onOpenChange(false);
         onSuccess();
       }
     } else {
-      const { error } = await supabase.from("asset_masters").insert(payload as any);
+      const { data: insertedData, error } = await supabase.from("asset_masters").insert(payload as any).select("id").single();
 
       if (error) {
         toast({ title: "Error", description: "Failed to add asset master", variant: "destructive" });
       } else {
+        if (insertedData) {
+          await saveCustomValues(insertedData.id);
+        }
         toast({ title: "Success", description: "Asset master added" });
         onOpenChange(false);
         onSuccess();
@@ -1115,8 +875,9 @@ export function AssetMasterFormDialog({
           >
             <Tabs defaultValue="basic" className="flex-1 flex flex-col overflow-hidden">
               <div className="px-6">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                   <TabsTrigger value="basic">Basic</TabsTrigger>
+                  <TabsTrigger value="asset-details">Asset Details</TabsTrigger>
                   <TabsTrigger value="lifecycle">Lifecycle</TabsTrigger>
                   <TabsTrigger value="compliance">Compliance</TabsTrigger>
                   <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -1125,32 +886,6 @@ export function AssetMasterFormDialog({
 
               <div className="flex-1 overflow-y-auto px-6 py-4" style={{ maxHeight: 'calc(90vh - 200px)' }}>
                 <TabsContent value="basic" className="mt-0 space-y-4 data-[state=active]:block">
-                  {/* Asset Type Template Selector — always visible */}
-                  <FormField
-                    control={form.control}
-                    name="asset_type"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Asset Type</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || "general"}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select asset type" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {ASSET_TYPE_OPTIONS.map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
                   {/* Asset Name — always visible */}
                   <FormField
                     control={form.control}
@@ -1166,7 +901,7 @@ export function AssetMasterFormDialog({
                     )}
                   />
 
-                  {/* Category — always visible */}
+                  {/* Asset Category — replaces old category + asset type */}
                   <FormField
                     control={form.control}
                     name="category_id"
@@ -1174,7 +909,10 @@ export function AssetMasterFormDialog({
                       <FormItem>
                         <HierarchicalCategorySelector
                           value={field.value || null}
-                          onChange={(categoryId) => field.onChange(categoryId || "")}
+                          onChange={(categoryId) => {
+                            field.onChange(categoryId || "");
+                            if (!editingAsset) setCustomValues({});
+                          }}
                           initialCategoryType={editingAsset?.categories?.type}
                           refreshKey={categoryRefreshKey}
                         />
@@ -1183,8 +921,17 @@ export function AssetMasterFormDialog({
                     )}
                   />
 
-                  {/* All remaining Basic fields — template-driven */}
-                  <TemplateFieldsSection form={form} vendors={vendors} />
+                  {/* All remaining Basic fields */}
+                  <BasicFieldsSection form={form} vendors={vendors} />
+                </TabsContent>
+
+                <TabsContent value="asset-details" className="mt-0 space-y-4">
+                  <CustomFieldsTab
+                    categoryId={form.watch("category_id")}
+                    assetMasterId={editingAsset?.id}
+                    customValues={customValues}
+                    onCustomValuesChange={setCustomValues}
+                  />
                 </TabsContent>
 
                 <TabsContent value="lifecycle" className="mt-0 space-y-4">
