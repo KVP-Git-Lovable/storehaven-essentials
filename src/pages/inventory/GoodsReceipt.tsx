@@ -5,9 +5,10 @@ import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useStoreAccess } from "@/hooks/useStoreAccess";
-import { Plus, Search, Package, CheckCircle, AlertTriangle, FileCheck, ScanLine } from "lucide-react";
+import { Plus, Search, Package, CheckCircle, AlertTriangle, FileCheck, ScanLine, ClipboardCheck, ShieldAlert, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import { BarcodeScanner } from "@/components/inventory/BarcodeScanner";
+import { GRNQualityCheckDialog } from "@/components/inventory/GRNQualityCheckDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -75,6 +76,16 @@ interface GRN {
   notes: string | null;
   received_at: string;
   verified_at: string | null;
+  qa_status: string;
+  qa_overall_result: string | null;
+  qa_performed_by: string | null;
+  qa_notes: string | null;
+  requires_manager_review: boolean;
+  manager_decision: string | null;
+  manager_decision_by: string | null;
+  manager_comments: string | null;
+  return_to_vendor_flagged: boolean;
+  return_to_vendor_reason: string | null;
   stores?: { name: string };
   shipments?: { shipment_number: string } | null;
 }
@@ -86,6 +97,8 @@ export default function GoodsReceipt() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [qaGrn, setQaGrn] = useState<GRN | null>(null);
+  const [qaDialogOpen, setQaDialogOpen] = useState(false);
   const { accessibleStoreIds, isAdmin, loading: accessLoading } = useStoreAccess();
 
   const form = useForm<GRNFormData>({
@@ -177,24 +190,7 @@ export default function GoodsReceipt() {
     }
   };
 
-  const verifyGrn = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from("grn")
-        .update({
-          status: "verified",
-          verified_by: "Admin",
-          verified_at: new Date().toISOString(),
-        })
-        .eq("id", id);
-      if (error) throw error;
-      toast.success("GRN verified successfully");
-      fetchData();
-    } catch (error) {
-      console.error("Error verifying GRN:", error);
-      toast.error("Failed to verify GRN");
-    }
-  };
+
 
   const completeGrn = async (id: string) => {
     try {
@@ -236,6 +232,18 @@ export default function GoodsReceipt() {
     switch (status) {
       case "pending": return "bg-yellow-500 text-white";
       case "verified": return "bg-blue-500 text-white";
+      case "completed": return "bg-green-500 text-white";
+      case "qa_hold": return "bg-orange-500 text-white";
+      case "return_to_vendor": return "bg-red-500 text-white";
+      case "rejected": return "bg-red-700 text-white";
+      default: return "bg-muted text-muted-foreground";
+    }
+  };
+
+  const getQAStatusColor = (status: string) => {
+    switch (status) {
+      case "not_started": return "bg-muted text-muted-foreground";
+      case "in_progress": return "bg-blue-400 text-white";
       case "completed": return "bg-green-500 text-white";
       default: return "bg-muted text-muted-foreground";
     }
@@ -351,7 +359,7 @@ export default function GoodsReceipt() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total GRNs</CardTitle>
@@ -363,12 +371,23 @@ export default function GoodsReceipt() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Verification</CardTitle>
+            <CardTitle className="text-sm font-medium">Pending</CardTitle>
             <AlertTriangle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">
               {grns.filter(g => g.status === 'pending').length}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">QA Hold</CardTitle>
+            <ShieldAlert className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">
+              {grns.filter(g => g.status === 'qa_hold').length}
             </div>
           </CardContent>
         </Card>
@@ -391,6 +410,17 @@ export default function GoodsReceipt() {
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
               {grns.filter(g => g.status === 'completed').length}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Return to Vendor</CardTitle>
+            <Undo2 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">
+              {grns.filter(g => g.status === 'return_to_vendor').length}
             </div>
           </CardContent>
         </Card>
@@ -418,6 +448,7 @@ export default function GoodsReceipt() {
                 <TableHead>Shipment</TableHead>
                 <TableHead>Received By</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead>QA Status</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -425,11 +456,11 @@ export default function GoodsReceipt() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">Loading...</TableCell>
+                  <TableCell colSpan={8} className="text-center py-8">Loading...</TableCell>
                 </TableRow>
               ) : filteredGrns.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No GRNs found.
                   </TableCell>
                 </TableRow>
@@ -442,21 +473,61 @@ export default function GoodsReceipt() {
                     <TableCell>{grn.received_by}</TableCell>
                     <TableCell>{format(new Date(grn.received_at), 'dd MMM yyyy HH:mm')}</TableCell>
                     <TableCell>
-                      <Badge className={getStatusColor(grn.status)}>
-                        {grn.status}
+                      <Badge className={getQAStatusColor(grn.qa_status)}>
+                        {grn.qa_status.replace(/_/g, " ")}
                       </Badge>
+                      {grn.qa_overall_result && (
+                        <Badge variant="outline" className="ml-1 text-xs">
+                          {grn.qa_overall_result}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
-                      {grn.status === 'pending' && (
-                        <Button size="sm" variant="outline" onClick={() => verifyGrn(grn.id)}>
-                          Verify
-                        </Button>
+                      <Badge className={getStatusColor(grn.status)}>
+                        {grn.status.replace(/_/g, " ")}
+                      </Badge>
+                      {grn.return_to_vendor_flagged && (
+                        <Badge variant="outline" className="ml-1 text-xs text-red-600 border-red-300">
+                          <Undo2 className="h-3 w-3 mr-1" /> RTV
+                        </Badge>
                       )}
-                      {grn.status === 'verified' && (
-                        <Button size="sm" variant="outline" onClick={() => completeGrn(grn.id)}>
-                          Complete
-                        </Button>
-                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1 flex-wrap">
+                        {grn.status === 'pending' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => { setQaGrn(grn); setQaDialogOpen(true); }}
+                          >
+                            <ClipboardCheck className="mr-1 h-3 w-3" /> QA Check
+                          </Button>
+                        )}
+                        {grn.status === 'qa_hold' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-orange-400 text-orange-600"
+                            onClick={() => { setQaGrn(grn); setQaDialogOpen(true); }}
+                          >
+                            <ShieldAlert className="mr-1 h-3 w-3" /> Review
+                          </Button>
+                        )}
+                        {grn.status === 'verified' && (
+                          <Button size="sm" variant="outline" onClick={() => completeGrn(grn.id)}>
+                            Complete
+                          </Button>
+                        )}
+                        {['completed', 'return_to_vendor', 'rejected'].includes(grn.status) && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => { setQaGrn(grn); setQaDialogOpen(true); }}
+                          >
+                            View QA
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -465,6 +536,16 @@ export default function GoodsReceipt() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* QA Dialog */}
+      {qaGrn && (
+        <GRNQualityCheckDialog
+          grn={qaGrn}
+          open={qaDialogOpen}
+          onOpenChange={setQaDialogOpen}
+          onComplete={fetchData}
+        />
+      )}
     </div>
   );
 }
