@@ -95,7 +95,7 @@ const navigation: NavItem[] = [
     ],
   },
   {
-    title: "Vis Merch (VM)",
+    title: "Visual Merch (VM)",
     icon: BarChart3,
     moduleKey: "vm",
     children: [

@@ -427,7 +427,7 @@ export default function ComplianceTasks() {
           setAnalysisComplete(true); // Allow saving even if analysis fails
         } else if (analysisData) {
           // Check if it's a placeholder image error
-          if (analysisData.error === "placeholder_image") {
+                      if (analysisData.error === "placeholder_image") {
             toast({ 
               title: "Analysis Skipped", 
               description: "Planogram is a placeholder image. Photo uploaded but no auto-analysis available.",
@@ -439,6 +439,51 @@ export default function ComplianceTasks() {
             setReviewStatus(analysisData.reviewStatus);
             setMatchReasoning(analysisData.reasoning);
             setAnalysisComplete(true);
+            
+            // Auto-create compliance audit record if match < 80%
+            if (analysisData.matchPercentage !== null && analysisData.matchPercentage < 80 && selectedViewTask) {
+              try {
+                // Create a photo submission record first
+                const { data: submissionData, error: submissionError } = await supabase
+                  .from("vm_photo_submissions")
+                  .insert({
+                    task_id: selectedViewTask.id,
+                    image_url: uploadedPhotoUrl,
+                    latitude: location?.lat || null,
+                    longitude: location?.lng || null,
+                    location_address: location?.address || null,
+                    notes: `Auto-flagged: ${analysisData.matchPercentage}% match (below 80% threshold)`,
+                  })
+                  .select("id")
+                  .single();
+
+                if (!submissionError && submissionData) {
+                  // Create the compliance audit review record
+                  const { error: reviewError } = await supabase
+                    .from("vm_reviews")
+                    .insert({
+                      task_id: selectedViewTask.id,
+                      submission_id: submissionData.id,
+                      status: analysisData.reviewStatus || "low_match",
+                      rating: Math.max(1, Math.round(analysisData.matchPercentage / 20)),
+                      feedback: `AI Auto-Audit: ${analysisData.matchPercentage}% match detected (threshold: 80%). ${analysisData.reasoning || ""}`,
+                      reviewed_by: "ai-compliance-check",
+                    });
+
+                  if (reviewError) {
+                    console.error("Failed to create audit record:", reviewError);
+                  } else {
+                    toast({
+                      title: "Compliance Audit Created",
+                      description: `Match ${analysisData.matchPercentage}% is below 80% threshold. An audit record has been created.`,
+                      variant: "destructive",
+                    });
+                  }
+                }
+              } catch (auditErr) {
+                console.error("Failed to create compliance audit:", auditErr);
+              }
+            }
           }
         }
       } catch (err) {
@@ -878,13 +923,22 @@ export default function ComplianceTasks() {
                     </TableCell>
                     <TableCell>
                       {task.review_status ? (
-                        <div className="flex flex-col gap-1">
-                          <Badge className={reviewStatusColors[task.review_status] || ""}>
-                            {reviewStatusOptions.find(r => r.value === task.review_status)?.label}
-                          </Badge>
-                          {task.match_percentage !== null && (
-                            <span className="text-xs text-muted-foreground">{task.match_percentage}% match</span>
-                          )}
+                        <div className="flex items-center gap-2">
+                          {/* Color flag */}
+                          <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                            (task.match_percentage || 0) >= 80 ? 'bg-green-500' :
+                            (task.match_percentage || 0) >= 50 ? 'bg-amber-500' :
+                            'bg-red-500'
+                          }`} />
+                          <div className="flex flex-col gap-1">
+                            <span className={`text-sm font-semibold ${
+                              (task.match_percentage || 0) >= 80 ? 'text-green-600 dark:text-green-400' :
+                              (task.match_percentage || 0) >= 50 ? 'text-amber-600 dark:text-amber-400' :
+                              'text-red-600 dark:text-red-400'
+                            }`}>
+                              {task.match_percentage ?? 0}%
+                            </span>
+                          </div>
                         </div>
                       ) : (
                         <span className="text-muted-foreground">-</span>
@@ -1106,7 +1160,16 @@ export default function ComplianceTasks() {
                     )}
 
                     {/* Auto-calculated Review Results */}
-                    <div className="p-4 rounded-lg border bg-muted/30 space-y-4">
+                    <div className={`p-4 rounded-lg border space-y-4 ${
+                      (() => {
+                        const pct = matchPercentage || selectedViewTask.match_percentage || 0;
+                        const hasResult = reviewStatus || selectedViewTask.review_status;
+                        if (!hasResult) return 'bg-muted/30';
+                        if (pct >= 80) return 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800';
+                        if (pct >= 50) return 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800';
+                        return 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800';
+                      })()
+                    }`}>
                       <div className="flex items-center justify-between">
                         <Label className="font-semibold">AI Match Analysis</Label>
                         {analyzingMatch && (
@@ -1119,31 +1182,65 @@ export default function ComplianceTasks() {
                       
                       {(reviewStatus || selectedViewTask.review_status) ? (
                         <div className="space-y-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label className="text-sm text-muted-foreground">Match Status</Label>
-                              <Badge className={`mt-2 ${reviewStatusColors[reviewStatus || selectedViewTask.review_status || ""] || ""}`}>
-                                {reviewStatusOptions.find(r => r.value === (reviewStatus || selectedViewTask.review_status))?.label}
-                              </Badge>
+                          {/* Match result with flag */}
+                          <div className="flex items-center gap-4">
+                            {/* Color flag indicator */}
+                            <div className={`flex items-center justify-center w-16 h-16 rounded-full flex-shrink-0 ${
+                              (() => {
+                                const pct = matchPercentage || selectedViewTask.match_percentage || 0;
+                                if (pct === 100) return 'bg-green-500 text-white';
+                                if (pct >= 80) return 'bg-green-400 text-white';
+                                if (pct >= 50) return 'bg-amber-400 text-white';
+                                if (pct > 0) return 'bg-orange-500 text-white';
+                                return 'bg-red-500 text-white';
+                              })()
+                            }`}>
+                              {(() => {
+                                const pct = matchPercentage || selectedViewTask.match_percentage || 0;
+                                if (pct >= 80) return <CheckCircle className="h-8 w-8" />;
+                                if (pct >= 50) return <AlertTriangle className="h-8 w-8" />;
+                                return <XCircle className="h-8 w-8" />;
+                              })()}
                             </div>
-                            <div>
-                              <Label className="text-sm text-muted-foreground">Match Percentage</Label>
-                              <div className="mt-2 flex items-center gap-2">
-                                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                                  <div 
-                                    className={`h-full transition-all ${
-                                      (matchPercentage || selectedViewTask.match_percentage || 0) >= 90 ? 'bg-green-500' :
-                                      (matchPercentage || selectedViewTask.match_percentage || 0) >= 60 ? 'bg-blue-500' :
-                                      (matchPercentage || selectedViewTask.match_percentage || 0) >= 20 ? 'bg-orange-500' :
-                                      'bg-red-500'
-                                    }`}
-                                    style={{ width: `${matchPercentage || selectedViewTask.match_percentage || 0}%` }}
-                                  />
-                                </div>
-                                <span className="font-semibold text-lg">{matchPercentage || selectedViewTask.match_percentage || 0}%</span>
+                            <div className="flex-1">
+                              <div className="flex items-baseline gap-2">
+                                <span className={`text-3xl font-bold ${
+                                  (() => {
+                                    const pct = matchPercentage || selectedViewTask.match_percentage || 0;
+                                    if (pct >= 80) return 'text-green-600 dark:text-green-400';
+                                    if (pct >= 50) return 'text-amber-600 dark:text-amber-400';
+                                    return 'text-red-600 dark:text-red-400';
+                                  })()
+                                }`}>
+                                  {matchPercentage || selectedViewTask.match_percentage || 0}%
+                                </span>
+                                <Badge className={reviewStatusColors[reviewStatus || selectedViewTask.review_status || ""] || ""}>
+                                  {reviewStatusOptions.find(r => r.value === (reviewStatus || selectedViewTask.review_status))?.label}
+                                </Badge>
+                              </div>
+                              <div className="mt-2 h-3 bg-muted rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full transition-all rounded-full ${
+                                    (() => {
+                                      const pct = matchPercentage || selectedViewTask.match_percentage || 0;
+                                      if (pct >= 80) return 'bg-green-500';
+                                      if (pct >= 50) return 'bg-amber-500';
+                                      return 'bg-red-500';
+                                    })()
+                                  }`}
+                                  style={{ width: `${matchPercentage || selectedViewTask.match_percentage || 0}%` }}
+                                />
                               </div>
                             </div>
                           </div>
+
+                          {/* Low match warning */}
+                          {(matchPercentage || selectedViewTask.match_percentage || 0) < 80 && (
+                            <div className="flex items-start gap-2 p-3 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 text-sm">
+                              <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                              <span>Match is below 80% threshold. A compliance audit record has been auto-created for review.</span>
+                            </div>
+                          )}
                           
                           {matchReasoning && (
                             <div className="p-3 rounded bg-muted">
