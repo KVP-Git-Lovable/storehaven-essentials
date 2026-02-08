@@ -101,6 +101,7 @@ import UserHierarchy from "./pages/admin/UserHierarchy";
 import RolePermissions from "./pages/admin/RolePermissions";
 import Profile from "./pages/admin/Profile";
 import Settings from "./pages/admin/Settings";
+import CompanyInformation from "./pages/admin/CompanyInformation";
 import NotFound from "./pages/NotFound";
 import VendorContractView from "./pages/vendor/VendorContractView";
 import AssetManagementDashboard from "./pages/dashboards/AssetManagementDashboard";
@@ -235,6 +236,7 @@ const App = () => (
               <Route path="/admin/roles" element={<UserRoles />} />
               <Route path="/admin/hierarchy" element={<UserHierarchy />} />
               <Route path="/admin/permissions" element={<RolePermissions />} />
+              <Route path="/admin/company" element={<CompanyInformation />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/settings" element={<Settings />} />
             </Route>

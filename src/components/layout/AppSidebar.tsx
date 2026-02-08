@@ -28,6 +28,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { useAttendanceRole } from "@/hooks/useAttendanceRole";
+import { useCompanyInfo } from "@/hooks/useCompanyInfo";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -138,7 +139,7 @@ const navigation: NavItem[] = [
   },
   { title: "Vendors", href: "/vendors", icon: Building2, moduleKey: "vendors" },
   {
-    title: "Employee Engagement",
+    title: "Employee",
     icon: CalendarCheck,
     moduleKey: "staff",
     children: [
@@ -226,6 +227,13 @@ const navigation: NavItem[] = [
           { title: "Permission Set", href: "/admin/permissions", moduleKey: "usermanagement.permissions" },
         ]
       },
+      { 
+        title: "Company", 
+        isSubSection: true,
+        subChildren: [
+          { title: "Company Information", href: "/admin/company", moduleKey: "admin.company" },
+        ]
+      },
     ],
   },
 ];
@@ -243,6 +251,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
   const { hasPermission, isAdmin, loading } = usePermissions();
   const { profile } = useAuth();
   const { visibleAttendanceMenus } = useAttendanceRole();
+  const { data: companyInfo } = useCompanyInfo();
   const [openMenus, setOpenMenus] = useState<string[]>(["Store Management", "Assets & Vendors"]);
 
   // Filter navigation based on permissions
@@ -252,7 +261,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
     return navigation
       .map((item) => {
         // Special handling for Employee Engagement module - filter children based on role
-        if (item.title === "Employee Engagement" && item.children) {
+        if (item.title === "Employee" && item.children) {
           const filteredChildren = item.children.filter(
             (child) => child.moduleKey && visibleAttendanceMenus.includes(child.moduleKey)
           );
@@ -315,9 +324,9 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
       )}>
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 overflow-hidden">
-            <img src={quickappLogo} alt="StoreOps" className="h-6 w-6 object-contain" />
+            <img src={companyInfo?.logo_url || quickappLogo} alt={companyInfo?.company_name || "StoreOps"} className="h-6 w-6 object-contain" />
           </div>
-          {!collapsed && <span className="font-display text-lg font-semibold">StoreOps</span>}
+          {!collapsed && <span className="font-display text-lg font-semibold">{companyInfo?.company_name || "StoreOps"}</span>}
         </div>
         {isMobile && (
           <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8">
