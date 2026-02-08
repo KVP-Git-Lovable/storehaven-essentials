@@ -1483,6 +1483,7 @@ export type Database = {
           sign_up_by_date: string | null
           state: string | null
           status: string
+          store_plan_id: string | null
           updated_at: string
         }
         Insert: {
@@ -1503,6 +1504,7 @@ export type Database = {
           sign_up_by_date?: string | null
           state?: string | null
           status?: string
+          store_plan_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -1523,9 +1525,18 @@ export type Database = {
           sign_up_by_date?: string | null
           state?: string | null
           status?: string
+          store_plan_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "franchisees_store_plan_id_fkey"
+            columns: ["store_plan_id"]
+            isOneToOne: false
+            referencedRelation: "store_plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       frequency_master: {
         Row: {
@@ -3328,6 +3339,7 @@ export type Database = {
           start_date: string
           status: string
           store_id: string
+          store_plan_id: string | null
           updated_at: string
         }
         Insert: {
@@ -3341,6 +3353,7 @@ export type Database = {
           start_date: string
           status?: string
           store_id: string
+          store_plan_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -3354,6 +3367,7 @@ export type Database = {
           start_date?: string
           status?: string
           store_id?: string
+          store_plan_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -3369,6 +3383,13 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nso_store_checklists_store_plan_id_fkey"
+            columns: ["store_plan_id"]
+            isOneToOne: false
+            referencedRelation: "store_plans"
             referencedColumns: ["id"]
           },
         ]

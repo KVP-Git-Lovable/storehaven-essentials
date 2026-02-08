@@ -40,7 +40,11 @@ export default function StorePlanDetails() {
   const queryClient = useQueryClient();
   const [showPotentialStoreForm, setShowPotentialStoreForm] = useState(false);
   const [showApprovalForm, setShowApprovalForm] = useState(false);
+  const [showLinkFranchiseeForm, setShowLinkFranchiseeForm] = useState(false);
+  const [showLinkNSOForm, setShowLinkNSOForm] = useState(false);
   const [deleteStoreId, setDeleteStoreId] = useState<string | null>(null);
+  const [selectedFranchiseeId, setSelectedFranchiseeId] = useState("");
+  const [selectedNSOId, setSelectedNSOId] = useState("");
   const [potentialForm, setPotentialForm] = useState({
     name: "", address: "", city: "", state: "", pin_code: "",
     size_sqft: "", status: "prospective", advantages: "", disadvantages: "",
@@ -109,6 +113,53 @@ export default function StorePlanDetails() {
     },
     enabled: potentialStores.length > 0,
   });
+
+  // Linked Franchisees
+  const { data: linkedFranchisees = [] } = useQuery({
+    queryKey: ["linked-franchisees", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("franchisees").select("*").eq("store_plan_id", id!).order("created_at");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+  });
+
+  // Unlinked Franchisees (for linking)
+  const { data: availableFranchisees = [] } = useQuery({
+    queryKey: ["available-franchisees"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("franchisees").select("id, name, city, status").is("store_plan_id", null).order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Linked NSO Checklists
+  const { data: linkedNSO = [] } = useQuery({
+    queryKey: ["linked-nso", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("nso_store_checklists").select("*, stores(name)").eq("store_plan_id", id!).order("created_at");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+  });
+
+  // Unlinked NSO Checklists (for linking)
+  const { data: availableNSO = [] } = useQuery({
+    queryKey: ["available-nso"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("nso_store_checklists").select("id, name, stores(name), status, start_date").is("store_plan_id", null).order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
 
   const addPotentialStore = useMutation({
     mutationFn: async () => {
@@ -220,6 +271,65 @@ export default function StorePlanDetails() {
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  // Link/unlink franchisee mutations
+  const linkFranchisee = useMutation({
+    mutationFn: async (franchiseeId: string) => {
+      const { error } = await supabase.from("franchisees").update({ store_plan_id: id }).eq("id", franchiseeId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["linked-franchisees", id] });
+      queryClient.invalidateQueries({ queryKey: ["available-franchisees"] });
+      setShowLinkFranchiseeForm(false);
+      setSelectedFranchiseeId("");
+      toast({ title: "Franchisee linked to plan" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const unlinkFranchisee = useMutation({
+    mutationFn: async (franchiseeId: string) => {
+      const { error } = await supabase.from("franchisees").update({ store_plan_id: null }).eq("id", franchiseeId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["linked-franchisees", id] });
+      queryClient.invalidateQueries({ queryKey: ["available-franchisees"] });
+      toast({ title: "Franchisee unlinked from plan" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  // Link/unlink NSO mutations
+  const linkNSO = useMutation({
+    mutationFn: async (nsoId: string) => {
+      const { error } = await supabase.from("nso_store_checklists").update({ store_plan_id: id }).eq("id", nsoId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["linked-nso", id] });
+      queryClient.invalidateQueries({ queryKey: ["available-nso"] });
+      setShowLinkNSOForm(false);
+      setSelectedNSOId("");
+      toast({ title: "NSO checklist linked to plan" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const unlinkNSO = useMutation({
+    mutationFn: async (nsoId: string) => {
+      const { error } = await supabase.from("nso_store_checklists").update({ store_plan_id: null }).eq("id", nsoId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["linked-nso", id] });
+      queryClient.invalidateQueries({ queryKey: ["available-nso"] });
+      toast({ title: "NSO checklist unlinked from plan" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+
   const handleFileUpload = async (potentialStoreId: string, files: FileList) => {
     for (const file of Array.from(files)) {
       const ext = file.name.split(".").pop();
@@ -268,7 +378,7 @@ export default function StorePlanDetails() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card><CardContent className="p-4">
           <p className="text-xs text-muted-foreground">Budget</p>
           <p className="text-lg font-bold">₹{Number(plan.estimated_budget || 0).toLocaleString()}</p>
@@ -284,14 +394,20 @@ export default function StorePlanDetails() {
           <p className="text-lg font-bold">{potentialStores.length}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <p className="text-xs text-muted-foreground">Region</p>
-          <p className="text-lg font-bold">{plan.region || "—"}</p>
+          <p className="text-xs text-muted-foreground">Franchisees</p>
+          <p className="text-lg font-bold">{linkedFranchisees.length}</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-4">
+          <p className="text-xs text-muted-foreground">NSO Checklists</p>
+          <p className="text-lg font-bold">{linkedNSO.length}</p>
         </CardContent></Card>
       </div>
 
       <Tabs defaultValue="potential-stores">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="potential-stores">Potential Stores</TabsTrigger>
+          <TabsTrigger value="franchisees">Franchisees ({linkedFranchisees.length})</TabsTrigger>
+          <TabsTrigger value="nso">NSO ({linkedNSO.length})</TabsTrigger>
           <TabsTrigger value="approval">Approval Workflow</TabsTrigger>
           <TabsTrigger value="details">Plan Details</TabsTrigger>
         </TabsList>
@@ -383,6 +499,86 @@ export default function StorePlanDetails() {
                         <input type="file" multiple accept="image/*,video/*" className="hidden"
                           onChange={(e) => e.target.files && handleFileUpload(store.id, e.target.files)} />
                       </label>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* FRANCHISEES TAB */}
+        <TabsContent value="franchisees" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold">Linked Franchisees</h3>
+            <PermissionGate moduleKey="expansion.franchisees" action="edit">
+              <Button size="sm" variant="outline" onClick={() => setShowLinkFranchiseeForm(true)}>
+                <Plus className="h-4 w-4 mr-1" /> Link Franchisee
+              </Button>
+            </PermissionGate>
+          </div>
+          {linkedFranchisees.length === 0 ? (
+            <Card><CardContent className="p-8 text-center text-muted-foreground">
+              No franchisees linked to this plan. Link an existing franchisee or create one from the Franchisees module.
+            </CardContent></Card>
+          ) : (
+            <div className="space-y-3">
+              {linkedFranchisees.map((f) => (
+                <Card key={f.id} className="cursor-pointer hover:bg-accent/50 transition-colors"
+                  onClick={() => navigate(`/expansion/franchisees/${f.id}`)}>
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{f.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {[f.interested_location, f.city, f.state].filter(Boolean).join(", ") || "No location"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{f.status}</Badge>
+                      <Badge variant="outline" className="capitalize">{f.probability || "—"}</Badge>
+                      <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); unlinkFranchisee.mutate(f.id); }}>
+                        <XCircle className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* NSO TAB */}
+        <TabsContent value="nso" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold">New Store Openings</h3>
+            <PermissionGate moduleKey="stores.nso" action="edit">
+              <Button size="sm" variant="outline" onClick={() => setShowLinkNSOForm(true)}>
+                <Plus className="h-4 w-4 mr-1" /> Link NSO
+              </Button>
+            </PermissionGate>
+          </div>
+          {linkedNSO.length === 0 ? (
+            <Card><CardContent className="p-8 text-center text-muted-foreground">
+              No NSO checklists linked. Link an existing checklist from the New Store Opening module.
+            </CardContent></Card>
+          ) : (
+            <div className="space-y-3">
+              {linkedNSO.map((nso) => (
+                <Card key={nso.id} className="cursor-pointer hover:bg-accent/50 transition-colors"
+                  onClick={() => navigate(`/stores/new-opening/${nso.id}`)}>
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{nso.stores?.name || "Unknown Store"}</p>
+                      <p className="text-sm text-muted-foreground">{nso.name}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Start: {format(new Date(nso.start_date), "dd MMM yyyy")}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={nso.status === "completed" ? "default" : "outline"}>{nso.status}</Badge>
+                      <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); unlinkNSO.mutate(nso.id); }}>
+                        <XCircle className="h-4 w-4 text-muted-foreground" />
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -594,6 +790,67 @@ export default function StorePlanDetails() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Link Franchisee Dialog */}
+      <Dialog open={showLinkFranchiseeForm} onOpenChange={setShowLinkFranchiseeForm}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Link Franchisee to Plan</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Select Franchisee</Label>
+              <Select value={selectedFranchiseeId} onValueChange={setSelectedFranchiseeId}>
+                <SelectTrigger><SelectValue placeholder="Choose a franchisee..." /></SelectTrigger>
+                <SelectContent>
+                  {availableFranchisees.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.name} {f.city ? `(${f.city})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {availableFranchisees.length === 0 && (
+              <p className="text-sm text-muted-foreground">No unlinked franchisees available. Create one from the Franchisees module first.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLinkFranchiseeForm(false)}>Cancel</Button>
+            <Button onClick={() => linkFranchisee.mutate(selectedFranchiseeId)} disabled={!selectedFranchiseeId || linkFranchisee.isPending}>
+              {linkFranchisee.isPending ? "Linking..." : "Link Franchisee"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Link NSO Dialog */}
+      <Dialog open={showLinkNSOForm} onOpenChange={setShowLinkNSOForm}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Link NSO Checklist to Plan</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Select NSO Checklist</Label>
+              <Select value={selectedNSOId} onValueChange={setSelectedNSOId}>
+                <SelectTrigger><SelectValue placeholder="Choose a checklist..." /></SelectTrigger>
+                <SelectContent>
+                  {availableNSO.map((n: any) => (
+                    <SelectItem key={n.id} value={n.id}>
+                      {n.stores?.name || "Unknown"} — {n.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {availableNSO.length === 0 && (
+              <p className="text-sm text-muted-foreground">No unlinked NSO checklists available. Create one from New Store Opening first.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLinkNSOForm(false)}>Cancel</Button>
+            <Button onClick={() => linkNSO.mutate(selectedNSOId)} disabled={!selectedNSOId || linkNSO.isPending}>
+              {linkNSO.isPending ? "Linking..." : "Link NSO"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
