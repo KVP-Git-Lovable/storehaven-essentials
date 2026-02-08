@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2 } from "lucide-react";
+import { Loader2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -424,6 +424,7 @@ type DefinitionField = {
   options: string[] | null;
   is_required: boolean;
   placeholder: string | null;
+  help_text: string | null;
   sort_order: number;
 };
 
@@ -454,7 +455,7 @@ function CustomFieldsTab({
     setLoading(true);
     const { data } = await supabase
       .from("asset_definition_fields")
-      .select("id, field_name, field_label, field_type, options, is_required, placeholder, sort_order")
+      .select("id, field_name, field_label, field_type, options, is_required, placeholder, help_text, sort_order")
       .eq("category_id", catId)
       .eq("status", "active")
       .order("sort_order");
@@ -493,6 +494,20 @@ function CustomFieldsTab({
     );
   }
 
+  const FieldLabel = ({ field: f }: { field: DefinitionField }) => (
+    <div className="flex items-center gap-1.5">
+      <FormLabel>{f.field_label}{f.is_required && " *"}</FormLabel>
+      {f.help_text && (
+        <div className="relative group">
+          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2.5 py-1.5 text-xs rounded-md border bg-popover text-popover-foreground shadow-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 max-w-xs text-wrap">
+            {f.help_text}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       {definitionFields.map((field) => {
@@ -501,7 +516,7 @@ function CustomFieldsTab({
         if (field.field_type === "text") {
           return (
             <div key={field.id}>
-              <FormLabel>{field.field_label}{field.is_required && " *"}</FormLabel>
+              <FieldLabel field={field} />
               <Input
                 className="mt-1.5"
                 placeholder={field.placeholder || ""}
@@ -515,7 +530,7 @@ function CustomFieldsTab({
         if (field.field_type === "number") {
           return (
             <div key={field.id}>
-              <FormLabel>{field.field_label}{field.is_required && " *"}</FormLabel>
+              <FieldLabel field={field} />
               <Input
                 className="mt-1.5"
                 type="number"
@@ -530,7 +545,7 @@ function CustomFieldsTab({
         if (field.field_type === "date") {
           return (
             <div key={field.id}>
-              <FormLabel>{field.field_label}{field.is_required && " *"}</FormLabel>
+              <FieldLabel field={field} />
               <Input
                 className="mt-1.5"
                 type="date"
@@ -544,7 +559,7 @@ function CustomFieldsTab({
         if (field.field_type === "select" && field.options) {
           return (
             <div key={field.id}>
-              <FormLabel>{field.field_label}{field.is_required && " *"}</FormLabel>
+              <FieldLabel field={field} />
               <Select value={value || "none"} onValueChange={(v) => updateValue(field.id, v === "none" ? "" : v)}>
                 <SelectTrigger className="mt-1.5">
                   <SelectValue placeholder={field.placeholder || "Select..."} />
@@ -568,6 +583,14 @@ function CustomFieldsTab({
                 onCheckedChange={(checked) => updateValue(field.id, checked ? "true" : "false")}
               />
               <FormLabel>{field.field_label}{field.is_required && " *"}</FormLabel>
+              {field.help_text && (
+                <div className="relative group">
+                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2.5 py-1.5 text-xs rounded-md border bg-popover text-popover-foreground shadow-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 max-w-xs text-wrap">
+                    {field.help_text}
+                  </div>
+                </div>
+              )}
             </div>
           );
         }
@@ -575,7 +598,7 @@ function CustomFieldsTab({
         if (field.field_type === "textarea") {
           return (
             <div key={field.id}>
-              <FormLabel>{field.field_label}{field.is_required && " *"}</FormLabel>
+              <FieldLabel field={field} />
               <Textarea
                 className="mt-1.5 resize-none"
                 rows={3}

@@ -1,0 +1,1 @@
+ALTER TABLE public.asset_definition_fields ADD COLUMN help_text text DEFAULT NULL;

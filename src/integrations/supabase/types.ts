@@ -21,6 +21,7 @@ export type Database = {
           field_label: string
           field_name: string
           field_type: string
+          help_text: string | null
           id: string
           is_required: boolean
           options: Json | null
@@ -35,6 +36,7 @@ export type Database = {
           field_label: string
           field_name: string
           field_type?: string
+          help_text?: string | null
           id?: string
           is_required?: boolean
           options?: Json | null
@@ -49,6 +51,7 @@ export type Database = {
           field_label?: string
           field_name?: string
           field_type?: string
+          help_text?: string | null
           id?: string
           is_required?: boolean
           options?: Json | null

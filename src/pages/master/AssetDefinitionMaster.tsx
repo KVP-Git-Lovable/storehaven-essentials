@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Loader2, Edit, Trash2, GripVertical } from "lucide-react";
+import { Plus, Search, Loader2, Edit, Trash2, GripVertical, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +56,7 @@ type DefinitionField = {
   options: string[] | null;
   is_required: boolean;
   placeholder: string | null;
+  help_text: string | null;
   sort_order: number;
   status: string;
   created_at: string;
@@ -86,6 +87,7 @@ export default function AssetDefinitionMaster() {
   const [fieldType, setFieldType] = useState("text");
   const [isRequired, setIsRequired] = useState(false);
   const [placeholder, setPlaceholder] = useState("");
+  const [helpText, setHelpText] = useState("");
   const [optionsText, setOptionsText] = useState("");
 
   useEffect(() => {
@@ -140,6 +142,7 @@ export default function AssetDefinitionMaster() {
     setFieldType("text");
     setIsRequired(false);
     setPlaceholder("");
+    setHelpText("");
     setOptionsText("");
     setEditingField(null);
   };
@@ -151,6 +154,7 @@ export default function AssetDefinitionMaster() {
       setFieldType(field.field_type);
       setIsRequired(field.is_required);
       setPlaceholder(field.placeholder || "");
+      setHelpText(field.help_text || "");
       setOptionsText(
         field.options ? (field.options as string[]).join(", ") : ""
       );
@@ -185,6 +189,7 @@ export default function AssetDefinitionMaster() {
       options: options as any,
       is_required: isRequired,
       placeholder: placeholder.trim() || null,
+      help_text: helpText.trim() || null,
       sort_order: editingField ? editingField.sort_order : fields.length,
     };
 
@@ -447,6 +452,19 @@ export default function AssetDefinitionMaster() {
                 value={placeholder}
                 onChange={(e) => setPlaceholder(e.target.value)}
               />
+            </div>
+
+            <div>
+              <Label>Help Text</Label>
+              <Input
+                className="mt-1.5"
+                placeholder="e.g. Unique identifier printed on the asset label"
+                value={helpText}
+                onChange={(e) => setHelpText(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Shown as an ⓘ tooltip next to the field label
+              </p>
             </div>
 
             <div className="flex items-center space-x-2">
