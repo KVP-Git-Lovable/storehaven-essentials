@@ -19,6 +19,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   CalendarCheck,
+  Wrench,
 } from "lucide-react";
 import quickappLogo from "@/assets/quickapp-logo.png";
 import { cn } from "@/lib/utils";
@@ -80,18 +81,25 @@ const navigation: NavItem[] = [
   },
   { title: "New Store Opening", href: "/stores/new-opening", icon: Building2, moduleKey: "stores.nso" },
   {
-    title: "Store Management",
+    title: "Finance Overview",
     icon: Store,
     moduleKey: "stores",
     children: [
       { title: "All Stores", href: "/stores", moduleKey: "stores.all" },
       { title: "Rentals & Leases", href: "/stores/rentals", moduleKey: "stores.rentals" },
+      { title: "Store Targets", href: "/stores/targets", moduleKey: "stores.all" },
       { title: "Store Budget", href: "/stores/budget", moduleKey: "stores.budget" },
+      { title: "Petty Cash", href: "/petty-cash", moduleKey: "pettycash" },
+      { title: "Footfall", href: "/footfall", moduleKey: "footfall" },
+    ],
+  },
+  {
+    title: "Maintenance Tasks",
+    icon: Wrench,
+    moduleKey: "operations",
+    children: [
       { title: "Store Maintenance Tasks", href: "/operations/adherence", moduleKey: "operations.adherence" },
       { title: "Store Heatmap", href: "/operations/heatmap", moduleKey: "operations.heatmap" },
-      { title: "Footfall", href: "/footfall", moduleKey: "footfall" },
-      { title: "Petty Cash", href: "/petty-cash", moduleKey: "pettycash" },
-      { title: "Store Targets", href: "/stores/targets", moduleKey: "stores.all" },
     ],
   },
   {
