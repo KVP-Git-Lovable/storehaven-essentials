@@ -37,6 +37,8 @@ import Vendors from "./pages/Vendors";
 import PettyCash from "./pages/PettyCash";
 import Utilities from "./pages/Utilities";
 import Employees from "./pages/staff/Employees";
+import Recruitment from "./pages/staff/Recruitment";
+import EmployeeFeedback from "./pages/staff/EmployeeFeedback";
 import Attendance from "./pages/staff/Attendance";
 import LeaveManagement from "./pages/staff/LeaveManagement";
 import Regularization from "./pages/staff/Regularization";
@@ -178,6 +180,8 @@ const App = () => (
               <Route path="/petty-cash" element={<PettyCash />} />
               <Route path="/utilities" element={<Utilities />} />
               <Route path="/staff/employees" element={<Employees />} />
+              <Route path="/staff/recruitment" element={<Recruitment />} />
+              <Route path="/staff/feedback" element={<EmployeeFeedback />} />
               <Route path="/staff/attendance" element={<Attendance />} />
               <Route path="/staff/leave" element={<LeaveManagement />} />
               <Route path="/staff/regularization" element={<Regularization />} />

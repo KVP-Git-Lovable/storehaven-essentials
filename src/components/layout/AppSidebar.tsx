@@ -138,10 +138,13 @@ const navigation: NavItem[] = [
   },
   { title: "Vendors", href: "/vendors", icon: Building2, moduleKey: "vendors" },
   {
-    title: "Attendance",
+    title: "Employee Engagement",
     icon: CalendarCheck,
     moduleKey: "staff",
     children: [
+      { title: "Employees", href: "/staff/employees", moduleKey: "staff.employees" },
+      { title: "Recruitment", href: "/staff/recruitment", moduleKey: "staff.recruitment" },
+      { title: "Employee Feedback", href: "/staff/feedback", moduleKey: "staff.feedback" },
       { title: "Live Attendance", href: "/staff/attendance", moduleKey: "staff.attendance" },
       { title: "Leave Management", href: "/staff/leave", moduleKey: "staff.leave" },
       { title: "Regularization", href: "/staff/regularization", moduleKey: "staff.regularization" },
@@ -245,8 +248,8 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
     
     return navigation
       .map((item) => {
-        // Special handling for Attendance module - filter children based on role
-        if (item.title === "Attendance" && item.children) {
+        // Special handling for Employee Engagement module - filter children based on role
+        if (item.title === "Employee Engagement" && item.children) {
           const filteredChildren = item.children.filter(
             (child) => child.moduleKey && visibleAttendanceMenus.includes(child.moduleKey)
           );
