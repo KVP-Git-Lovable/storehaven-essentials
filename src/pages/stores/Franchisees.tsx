@@ -53,14 +53,23 @@ export default function Franchisees() {
     name: "", email: "", phone: "", interested_location: "", city: "", state: "",
     status: "lead", sign_up_by_date: "", probability: "medium",
     previous_work_experience: "", infrastructure_details: "",
-    current_business_background: "", notes: "",
+    current_business_background: "", notes: "", store_plan_id: "",
+  });
+
+  const { data: storePlans = [] } = useQuery({
+    queryKey: ["store-plans-for-linking"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("store_plans").select("id, name, city").order("name");
+      if (error) throw error;
+      return data;
+    },
   });
 
   const { data: franchisees = [], isLoading } = useQuery({
     queryKey: ["franchisees"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("franchisees").select("*").order("created_at", { ascending: false });
+        .from("franchisees").select("*, store_plans:store_plan_id(id, name)").order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -83,6 +92,7 @@ export default function Franchisees() {
         current_business_background: form.current_business_background || null,
         notes: form.notes || null,
         created_by: user?.id,
+        store_plan_id: form.store_plan_id || null,
       });
       if (error) throw error;
     },
@@ -112,7 +122,7 @@ export default function Franchisees() {
     name: "", email: "", phone: "", interested_location: "", city: "", state: "",
     status: "lead", sign_up_by_date: "", probability: "medium",
     previous_work_experience: "", infrastructure_details: "",
-    current_business_background: "", notes: "",
+    current_business_background: "", notes: "", store_plan_id: "",
   });
 
   const filtered = franchisees.filter((f) =>
@@ -166,6 +176,7 @@ export default function Franchisees() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Location</TableHead>
+                <TableHead>Store Plan</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Probability</TableHead>
                 <TableHead>Sign-up By</TableHead>
@@ -175,9 +186,9 @@ export default function Franchisees() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8">Loading...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-8">Loading...</TableCell></TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No franchisees found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No franchisees found</TableCell></TableRow>
               ) : (
                 filtered.map((f) => (
                   <TableRow key={f.id} className="cursor-pointer" onClick={() => navigate(`/expansion/franchisees/${f.id}`)}>
@@ -188,6 +199,13 @@ export default function Franchisees() {
                       </div>
                     </TableCell>
                     <TableCell>{[f.interested_location, f.city].filter(Boolean).join(", ") || "—"}</TableCell>
+                    <TableCell>
+                      {(f as any).store_plans?.name ? (
+                        <Badge variant="outline" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); navigate(`/expansion/plans/${(f as any).store_plans.id}`); }}>
+                          {(f as any).store_plans.name}
+                        </Badge>
+                      ) : "—"}
+                    </TableCell>
                     <TableCell><Badge className={statusColors[f.status] || ""}>{f.status}</Badge></TableCell>
                     <TableCell>
                       <span className={`font-medium ${probabilityColors[f.probability || "medium"]}`}>
@@ -279,6 +297,17 @@ export default function Franchisees() {
               </div>
               <div className="md:col-span-2 space-y-2"><Label>Notes</Label>
                 <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />
+              </div>
+              <div className="md:col-span-2 space-y-2"><Label>Link to Store Plan</Label>
+                <Select value={form.store_plan_id} onValueChange={(v) => setForm({ ...form, store_plan_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Optional — link to a store plan" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {storePlans.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name} {p.city ? `(${p.city})` : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>

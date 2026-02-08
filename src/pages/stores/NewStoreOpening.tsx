@@ -68,6 +68,17 @@ export default function NewStoreOpening() {
     store_id: "",
     master_id: "",
     start_date: new Date(),
+    store_plan_id: "",
+  });
+
+  // Fetch store plans for linking
+  const { data: storePlansForNSO = [] } = useQuery({
+    queryKey: ["store-plans-for-nso"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("store_plans").select("id, name, city").order("name");
+      if (error) throw error;
+      return data;
+    },
   });
 
   // Fetch stores
@@ -234,6 +245,7 @@ export default function NewStoreOpening() {
           prescribed_budget: prescribedBudget,
           budget: initialBudget,
           final_budget: 0,
+          store_plan_id: data.store_plan_id || null,
         })
         .select()
         .single();
@@ -362,7 +374,7 @@ export default function NewStoreOpening() {
       queryClient.invalidateQueries({ queryKey: ["nso-task-counts"] });
       toast.success("Checklist assigned successfully");
       setAssignDialogOpen(false);
-      setAssignForm({ store_id: "", master_id: "", start_date: new Date() });
+      setAssignForm({ store_id: "", master_id: "", start_date: new Date(), store_plan_id: "" });
       // Navigate to the new checklist
       navigate(`/stores/new-opening/${checklist.id}`);
     },
@@ -540,6 +552,25 @@ export default function NewStoreOpening() {
                   {stores.map((store) => (
                     <SelectItem key={store.id} value={store.id}>
                       {store.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Link to Store Plan</Label>
+              <Select
+                value={assignForm.store_plan_id}
+                onValueChange={(v) => setAssignForm((f) => ({ ...f, store_plan_id: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Optional — link to a plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {storePlansForNSO.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} {p.city ? `(${p.city})` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
