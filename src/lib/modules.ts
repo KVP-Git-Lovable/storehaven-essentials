@@ -46,7 +46,7 @@ export const modules: ModuleDefinition[] = [
   { key: "assets.knowledge", name: "Knowledge Base", parent: "assets" },
   { key: "utilities", name: "Meter Readings", parent: "assets" },
   { key: "vendors", name: "Vendors" },
-  { key: "staff", name: "Employee Engagement" },
+  { key: "staff", name: "Employee" },
   { key: "staff.employees", name: "Employees", parent: "staff" },
   { key: "staff.recruitment", name: "Recruitment", parent: "staff" },
   { key: "staff.performance", name: "Performance Reviews", parent: "staff" },
@@ -86,6 +86,7 @@ export const modules: ModuleDefinition[] = [
   { key: "usermanagement.roles", name: "User Roles", parent: "usermanagement" },
   { key: "usermanagement.hierarchy", name: "User Hierarchy", parent: "usermanagement" },
   { key: "usermanagement.permissions", name: "Permission Set", parent: "usermanagement" },
+  { key: "admin.company", name: "Company Information", parent: "admin" },
 ];
 
 // Get parent modules only
@@ -160,4 +161,5 @@ export const routeToModuleKey: Record<string, string> = {
   "/admin/roles": "usermanagement.roles",
   "/admin/hierarchy": "usermanagement.hierarchy",
   "/admin/permissions": "usermanagement.permissions",
+  "/admin/company": "admin.company",
 };

@@ -908,6 +908,114 @@ export type Database = {
           },
         ]
       }
+      company_information: {
+        Row: {
+          about: string | null
+          address_line1: string | null
+          address_line2: string | null
+          city: string | null
+          company_name: string
+          company_type: string | null
+          country: string | null
+          created_at: string
+          currency: string | null
+          email: string | null
+          facebook_url: string | null
+          fax: string | null
+          fiscal_year_start: string | null
+          founded_date: string | null
+          gst_number: string | null
+          id: string
+          industry: string | null
+          instagram_url: string | null
+          linkedin_url: string | null
+          logo_url: string | null
+          number_of_employees: number | null
+          pan_number: string | null
+          phone: string | null
+          postal_code: string | null
+          registration_number: string | null
+          secondary_phone: string | null
+          state: string | null
+          tagline: string | null
+          tax_id: string | null
+          timezone: string | null
+          twitter_url: string | null
+          updated_at: string
+          website: string | null
+        }
+        Insert: {
+          about?: string | null
+          address_line1?: string | null
+          address_line2?: string | null
+          city?: string | null
+          company_name?: string
+          company_type?: string | null
+          country?: string | null
+          created_at?: string
+          currency?: string | null
+          email?: string | null
+          facebook_url?: string | null
+          fax?: string | null
+          fiscal_year_start?: string | null
+          founded_date?: string | null
+          gst_number?: string | null
+          id?: string
+          industry?: string | null
+          instagram_url?: string | null
+          linkedin_url?: string | null
+          logo_url?: string | null
+          number_of_employees?: number | null
+          pan_number?: string | null
+          phone?: string | null
+          postal_code?: string | null
+          registration_number?: string | null
+          secondary_phone?: string | null
+          state?: string | null
+          tagline?: string | null
+          tax_id?: string | null
+          timezone?: string | null
+          twitter_url?: string | null
+          updated_at?: string
+          website?: string | null
+        }
+        Update: {
+          about?: string | null
+          address_line1?: string | null
+          address_line2?: string | null
+          city?: string | null
+          company_name?: string
+          company_type?: string | null
+          country?: string | null
+          created_at?: string
+          currency?: string | null
+          email?: string | null
+          facebook_url?: string | null
+          fax?: string | null
+          fiscal_year_start?: string | null
+          founded_date?: string | null
+          gst_number?: string | null
+          id?: string
+          industry?: string | null
+          instagram_url?: string | null
+          linkedin_url?: string | null
+          logo_url?: string | null
+          number_of_employees?: number | null
+          pan_number?: string | null
+          phone?: string | null
+          postal_code?: string | null
+          registration_number?: string | null
+          secondary_phone?: string | null
+          state?: string | null
+          tagline?: string | null
+          tax_id?: string | null
+          timezone?: string | null
+          twitter_url?: string | null
+          updated_at?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
       consumption_logs: {
         Row: {
           consumption_date: string
