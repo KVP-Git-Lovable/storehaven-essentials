@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Plus, Search, Loader2, Star, MessageSquare } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,6 +26,7 @@ type FeedbackEntry = {
   rating: number;
   feedback_text: string | null;
   feedback_date: string;
+  feedback_type: string;
   created_at: string;
   employee_name?: string;
   reviewer_name?: string;
@@ -45,6 +47,7 @@ export default function EmployeeFeedback() {
   const [formEmployeeId, setFormEmployeeId] = useState("");
   const [formRating, setFormRating] = useState(0);
   const [formText, setFormText] = useState("");
+  const [formType, setFormType] = useState("manager");
 
   useEffect(() => {
     fetchData();
@@ -94,6 +97,7 @@ export default function EmployeeFeedback() {
       reviewer_id: user?.id || null,
       rating: formRating,
       feedback_text: formText || null,
+      feedback_type: formType,
     });
     if (error) {
       toast({ title: "Error", description: "Failed to submit feedback", variant: "destructive" });
@@ -103,6 +107,7 @@ export default function EmployeeFeedback() {
       setFormEmployeeId("");
       setFormRating(0);
       setFormText("");
+      setFormType("manager");
       fetchData();
     }
   };
@@ -156,6 +161,7 @@ export default function EmployeeFeedback() {
           <TableHeader>
             <TableRow>
               <TableHead>Employee</TableHead>
+              <TableHead>Type</TableHead>
               <TableHead>Rating</TableHead>
               <TableHead>Feedback</TableHead>
               <TableHead>Reviewed By</TableHead>
@@ -165,7 +171,7 @@ export default function EmployeeFeedback() {
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                   No feedback found
                 </TableCell>
               </TableRow>
@@ -173,6 +179,9 @@ export default function EmployeeFeedback() {
               filtered.map((fb) => (
                 <TableRow key={fb.id}>
                   <TableCell className="font-medium">{fb.employee_name}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="capitalize">{fb.feedback_type || "manager"}</Badge>
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-0.5">
                       {[1, 2, 3, 4, 5].map(s => (
@@ -207,6 +216,19 @@ export default function EmployeeFeedback() {
                   {profiles.map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.username || "Unnamed"}</SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Feedback Type</Label>
+              <Select value={formType} onValueChange={setFormType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manager">Manager Feedback</SelectItem>
+                  <SelectItem value="peer">Peer / Team Feedback</SelectItem>
+                  <SelectItem value="self">Self Assessment</SelectItem>
                 </SelectContent>
               </Select>
             </div>
