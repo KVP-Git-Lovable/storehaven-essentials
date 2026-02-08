@@ -144,7 +144,10 @@ const navigation: NavItem[] = [
     children: [
       { title: "Employees", href: "/staff/employees", moduleKey: "staff.employees" },
       { title: "Recruitment", href: "/staff/recruitment", moduleKey: "staff.recruitment" },
+      { title: "Performance Reviews", href: "/staff/performance", moduleKey: "staff.performance" },
+      { title: "Training Programs", href: "/staff/training", moduleKey: "staff.training" },
       { title: "Employee Feedback", href: "/staff/feedback", moduleKey: "staff.feedback" },
+      { title: "Offboarding", href: "/staff/offboarding", moduleKey: "staff.offboarding" },
       { title: "Live Attendance", href: "/staff/attendance", moduleKey: "staff.attendance" },
       { title: "Leave Management", href: "/staff/leave", moduleKey: "staff.leave" },
       { title: "Regularization", href: "/staff/regularization", moduleKey: "staff.regularization" },

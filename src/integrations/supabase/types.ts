@@ -1260,6 +1260,7 @@ export type Database = {
           employee_id: string | null
           feedback_date: string
           feedback_text: string | null
+          feedback_type: string
           id: string
           rating: number
           reviewer_id: string | null
@@ -1270,6 +1271,7 @@ export type Database = {
           employee_id?: string | null
           feedback_date?: string
           feedback_text?: string | null
+          feedback_type?: string
           id?: string
           rating: number
           reviewer_id?: string | null
@@ -1280,6 +1282,7 @@ export type Database = {
           employee_id?: string | null
           feedback_date?: string
           feedback_text?: string | null
+          feedback_type?: string
           id?: string
           rating?: number
           reviewer_id?: string | null
@@ -1298,6 +1301,92 @@ export type Database = {
             columns: ["reviewer_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_offboarding: {
+        Row: {
+          assets_returned: boolean | null
+          created_at: string
+          employee_id: string
+          exit_interview_date: string | null
+          exit_interview_done: boolean | null
+          exit_interview_notes: string | null
+          final_settlement_amount: number | null
+          final_settlement_status: string | null
+          handover_status: string | null
+          handover_to: string | null
+          id: string
+          id_card_returned: boolean | null
+          it_access_revoked: boolean | null
+          knowledge_transfer_done: boolean | null
+          last_working_date: string | null
+          notes: string | null
+          processed_by: string | null
+          reason: string
+          rehire_eligible: boolean | null
+          rehire_notes: string | null
+          resignation_date: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          assets_returned?: boolean | null
+          created_at?: string
+          employee_id: string
+          exit_interview_date?: string | null
+          exit_interview_done?: boolean | null
+          exit_interview_notes?: string | null
+          final_settlement_amount?: number | null
+          final_settlement_status?: string | null
+          handover_status?: string | null
+          handover_to?: string | null
+          id?: string
+          id_card_returned?: boolean | null
+          it_access_revoked?: boolean | null
+          knowledge_transfer_done?: boolean | null
+          last_working_date?: string | null
+          notes?: string | null
+          processed_by?: string | null
+          reason?: string
+          rehire_eligible?: boolean | null
+          rehire_notes?: string | null
+          resignation_date: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          assets_returned?: boolean | null
+          created_at?: string
+          employee_id?: string
+          exit_interview_date?: string | null
+          exit_interview_done?: boolean | null
+          exit_interview_notes?: string | null
+          final_settlement_amount?: number | null
+          final_settlement_status?: string | null
+          handover_status?: string | null
+          handover_to?: string | null
+          id?: string
+          id_card_returned?: boolean | null
+          it_access_revoked?: boolean | null
+          knowledge_transfer_done?: boolean | null
+          last_working_date?: string | null
+          notes?: string | null
+          processed_by?: string | null
+          reason?: string
+          rehire_eligible?: boolean | null
+          rehire_notes?: string | null
+          resignation_date?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_offboarding_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -8630,6 +8719,74 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "task_template"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_programs: {
+        Row: {
+          certificate_url: string | null
+          cost: number | null
+          created_at: string
+          department: string | null
+          duration_hours: number | null
+          employee_id: string | null
+          end_date: string | null
+          feedback: string | null
+          id: string
+          notes: string | null
+          program_name: string
+          score: number | null
+          start_date: string
+          status: string
+          trainer: string | null
+          training_type: string
+          updated_at: string
+        }
+        Insert: {
+          certificate_url?: string | null
+          cost?: number | null
+          created_at?: string
+          department?: string | null
+          duration_hours?: number | null
+          employee_id?: string | null
+          end_date?: string | null
+          feedback?: string | null
+          id?: string
+          notes?: string | null
+          program_name: string
+          score?: number | null
+          start_date: string
+          status?: string
+          trainer?: string | null
+          training_type?: string
+          updated_at?: string
+        }
+        Update: {
+          certificate_url?: string | null
+          cost?: number | null
+          created_at?: string
+          department?: string | null
+          duration_hours?: number | null
+          employee_id?: string | null
+          end_date?: string | null
+          feedback?: string | null
+          id?: string
+          notes?: string | null
+          program_name?: string
+          score?: number | null
+          start_date?: string
+          status?: string
+          trainer?: string | null
+          training_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_programs_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]

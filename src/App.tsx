@@ -39,6 +39,9 @@ import Utilities from "./pages/Utilities";
 import Employees from "./pages/staff/Employees";
 import Recruitment from "./pages/staff/Recruitment";
 import EmployeeFeedback from "./pages/staff/EmployeeFeedback";
+import PerformanceReviews from "./pages/staff/PerformanceReviews";
+import TrainingPrograms from "./pages/staff/TrainingPrograms";
+import EmployeeOffboarding from "./pages/staff/EmployeeOffboarding";
 import Attendance from "./pages/staff/Attendance";
 import LeaveManagement from "./pages/staff/LeaveManagement";
 import Regularization from "./pages/staff/Regularization";
@@ -181,7 +184,10 @@ const App = () => (
               <Route path="/utilities" element={<Utilities />} />
               <Route path="/staff/employees" element={<Employees />} />
               <Route path="/staff/recruitment" element={<Recruitment />} />
+              <Route path="/staff/performance" element={<PerformanceReviews />} />
+              <Route path="/staff/training" element={<TrainingPrograms />} />
               <Route path="/staff/feedback" element={<EmployeeFeedback />} />
+              <Route path="/staff/offboarding" element={<EmployeeOffboarding />} />
               <Route path="/staff/attendance" element={<Attendance />} />
               <Route path="/staff/leave" element={<LeaveManagement />} />
               <Route path="/staff/regularization" element={<Regularization />} />
