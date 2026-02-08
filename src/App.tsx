@@ -16,6 +16,10 @@ import StoreDetails from "./pages/stores/StoreDetails";
 import Rentals from "./pages/stores/Rentals";
 import NewStoreOpening from "./pages/stores/NewStoreOpening";
 import NSOChecklistDetails from "./pages/stores/NSOChecklistDetails";
+import StorePlans from "./pages/stores/StorePlans";
+import StorePlanDetails from "./pages/stores/StorePlanDetails";
+import Franchisees from "./pages/stores/Franchisees";
+import FranchiseeDetails from "./pages/stores/FranchiseeDetails";
 import StoreTargets from "./pages/stores/StoreTargets";
 import StoreTargetDetails from "./pages/stores/StoreTargetDetails";
 import StoreTargetDashboard from "./pages/stores/StoreTargetDashboard";
@@ -160,6 +164,10 @@ const App = () => (
               <Route path="/assets/master/:id" element={<AssetMasterDetails />} />
               <Route path="/assets/inventory" element={<AssetInventory />} />
               <Route path="/assets/inventory/:id" element={<AssetDetails />} />
+              <Route path="/expansion/plans" element={<StorePlans />} />
+              <Route path="/expansion/plans/:id" element={<StorePlanDetails />} />
+              <Route path="/expansion/franchisees" element={<Franchisees />} />
+              <Route path="/expansion/franchisees/:id" element={<FranchiseeDetails />} />
               
               <Route path="/services/contracts" element={<ServiceContracts />} />
               <Route path="/services/contracts/:id" element={<ServiceContractDetails />} />

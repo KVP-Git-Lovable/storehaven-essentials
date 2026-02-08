@@ -20,6 +20,7 @@ import {
   PanelLeft,
   CalendarCheck,
   Wrench,
+  Rocket,
 } from "lucide-react";
 import quickappLogo from "@/assets/quickapp-logo.png";
 import { cn } from "@/lib/utils";
@@ -79,7 +80,16 @@ const navigation: NavItem[] = [
       { title: "Product Master", href: "/pos/products", moduleKey: "pos.products" },
     ],
   },
-  { title: "New Store Opening", href: "/stores/new-opening", icon: Building2, moduleKey: "stores.nso" },
+  {
+    title: "New Store Plan",
+    icon: Rocket,
+    moduleKey: "expansion",
+    children: [
+      { title: "Store Plans", href: "/expansion/plans", moduleKey: "expansion.plans" },
+      { title: "New Store Opening", href: "/stores/new-opening", moduleKey: "stores.nso" },
+      { title: "Franchisees", href: "/expansion/franchisees", moduleKey: "expansion.franchisees" },
+    ],
+  },
   {
     title: "Finance Overview",
     icon: Store,

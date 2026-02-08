@@ -1339,6 +1339,194 @@ export type Database = {
           },
         ]
       }
+      franchisee_documents: {
+        Row: {
+          created_at: string
+          document_name: string | null
+          document_type: string
+          file_name: string
+          file_url: string
+          franchisee_id: string
+          id: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          document_name?: string | null
+          document_type?: string
+          file_name: string
+          file_url: string
+          franchisee_id: string
+          id?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          document_name?: string | null
+          document_type?: string
+          file_name?: string
+          file_url?: string
+          franchisee_id?: string
+          id?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "franchisee_documents_franchisee_id_fkey"
+            columns: ["franchisee_id"]
+            isOneToOne: false
+            referencedRelation: "franchisees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      franchisee_onboarding_items: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_required: boolean | null
+          sort_order: number | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_required?: boolean | null
+          sort_order?: number | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_required?: boolean | null
+          sort_order?: number | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      franchisee_onboarding_progress: {
+        Row: {
+          checklist_item_id: string
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          franchisee_id: string
+          id: string
+          is_completed: boolean | null
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          checklist_item_id: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          franchisee_id: string
+          id?: string
+          is_completed?: boolean | null
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          checklist_item_id?: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          franchisee_id?: string
+          id?: string
+          is_completed?: boolean | null
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "franchisee_onboarding_progress_checklist_item_id_fkey"
+            columns: ["checklist_item_id"]
+            isOneToOne: false
+            referencedRelation: "franchisee_onboarding_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "franchisee_onboarding_progress_franchisee_id_fkey"
+            columns: ["franchisee_id"]
+            isOneToOne: false
+            referencedRelation: "franchisees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      franchisees: {
+        Row: {
+          city: string | null
+          created_at: string
+          created_by: string | null
+          current_business_background: string | null
+          email: string | null
+          id: string
+          infrastructure_details: string | null
+          interested_location: string | null
+          name: string
+          notes: string | null
+          onboarding_status: string
+          phone: string | null
+          previous_work_experience: string | null
+          probability: string | null
+          sign_up_by_date: string | null
+          state: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_business_background?: string | null
+          email?: string | null
+          id?: string
+          infrastructure_details?: string | null
+          interested_location?: string | null
+          name: string
+          notes?: string | null
+          onboarding_status?: string
+          phone?: string | null
+          previous_work_experience?: string | null
+          probability?: string | null
+          sign_up_by_date?: string | null
+          state?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_business_background?: string | null
+          email?: string | null
+          id?: string
+          infrastructure_details?: string | null
+          interested_location?: string | null
+          name?: string
+          notes?: string | null
+          onboarding_status?: string
+          phone?: string | null
+          previous_work_experience?: string | null
+          probability?: string | null
+          sign_up_by_date?: string | null
+          state?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       frequency_master: {
         Row: {
           created_at: string
@@ -4218,6 +4406,121 @@ export type Database = {
           },
         ]
       }
+      potential_store_attachments: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_size: number | null
+          file_type: string
+          file_url: string
+          id: string
+          potential_store_id: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_size?: number | null
+          file_type?: string
+          file_url: string
+          id?: string
+          potential_store_id: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_size?: number | null
+          file_type?: string
+          file_url?: string
+          id?: string
+          potential_store_id?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "potential_store_attachments_potential_store_id_fkey"
+            columns: ["potential_store_id"]
+            isOneToOne: false
+            referencedRelation: "potential_stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      potential_stores: {
+        Row: {
+          address: string | null
+          advantages: string | null
+          available_from: string | null
+          budget_asked: number | null
+          city: string | null
+          contact_person: string | null
+          contact_phone: string | null
+          created_at: string
+          created_by: string | null
+          disadvantages: string | null
+          id: string
+          name: string
+          notes: string | null
+          pin_code: string | null
+          size_sqft: number | null
+          state: string | null
+          status: string
+          store_plan_id: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          advantages?: string | null
+          available_from?: string | null
+          budget_asked?: number | null
+          city?: string | null
+          contact_person?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by?: string | null
+          disadvantages?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          pin_code?: string | null
+          size_sqft?: number | null
+          state?: string | null
+          status?: string
+          store_plan_id: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          advantages?: string | null
+          available_from?: string | null
+          budget_asked?: number | null
+          city?: string | null
+          contact_person?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by?: string | null
+          disadvantages?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          pin_code?: string | null
+          size_sqft?: number | null
+          state?: string | null
+          status?: string
+          store_plan_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "potential_stores_store_plan_id_fkey"
+            columns: ["store_plan_id"]
+            isOneToOne: false
+            referencedRelation: "store_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       price_rules: {
         Row: {
           category_ids: string[] | null
@@ -6847,6 +7150,104 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      store_plan_approval_levels: {
+        Row: {
+          acted_at: string | null
+          approver_role: string
+          approver_user_id: string | null
+          comments: string | null
+          created_at: string
+          id: string
+          level_order: number
+          status: string
+          store_plan_id: string
+        }
+        Insert: {
+          acted_at?: string | null
+          approver_role: string
+          approver_user_id?: string | null
+          comments?: string | null
+          created_at?: string
+          id?: string
+          level_order?: number
+          status?: string
+          store_plan_id: string
+        }
+        Update: {
+          acted_at?: string | null
+          approver_role?: string
+          approver_user_id?: string | null
+          comments?: string | null
+          created_at?: string
+          id?: string
+          level_order?: number
+          status?: string
+          store_plan_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_plan_approval_levels_store_plan_id_fkey"
+            columns: ["store_plan_id"]
+            isOneToOne: false
+            referencedRelation: "store_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_plans: {
+        Row: {
+          approval_status: string
+          city: string | null
+          created_at: string
+          created_by: string | null
+          current_approval_level: number | null
+          description: string | null
+          estimated_budget: number | null
+          id: string
+          location: string | null
+          name: string
+          region: string | null
+          state: string | null
+          status: string
+          target_open_date: string | null
+          updated_at: string
+        }
+        Insert: {
+          approval_status?: string
+          city?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_approval_level?: number | null
+          description?: string | null
+          estimated_budget?: number | null
+          id?: string
+          location?: string | null
+          name: string
+          region?: string | null
+          state?: string | null
+          status?: string
+          target_open_date?: string | null
+          updated_at?: string
+        }
+        Update: {
+          approval_status?: string
+          city?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_approval_level?: number | null
+          description?: string | null
+          estimated_budget?: number | null
+          id?: string
+          location?: string | null
+          name?: string
+          region?: string | null
+          state?: string | null
+          status?: string
+          target_open_date?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       store_preventive_maintenance: {
         Row: {
