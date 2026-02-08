@@ -39,6 +39,9 @@ export function useAttendanceRole() {
   const visibleAttendanceMenus = useMemo(() => {
     if (isManager) {
       return [
+        "staff.employees",       // Employees
+        "staff.recruitment",     // Recruitment
+        "staff.feedback",        // Employee Feedback
         "staff.attendance",      // Live Attendance
         "staff.leave",           // Leave Management (with approvals)
         "staff.regularization",  // Regularization
@@ -51,6 +54,8 @@ export function useAttendanceRole() {
 
     // Employees see limited menu
     return [
+      "staff.employees",       // Employees (own profile)
+      "staff.feedback",        // Employee Feedback
       "staff.attendance",      // Live Attendance
       "staff.leave",           // Leave Management (own only)
       "staff.leave-balances",  // Leave Balances (own only)

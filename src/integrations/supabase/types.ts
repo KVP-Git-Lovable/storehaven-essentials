@@ -693,6 +693,118 @@ export type Database = {
           },
         ]
       }
+      candidate_documents: {
+        Row: {
+          candidate_id: string
+          created_at: string
+          document_name: string | null
+          document_type: string
+          file_name: string
+          file_url: string
+          id: string
+          verified: boolean | null
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          candidate_id: string
+          created_at?: string
+          document_name?: string | null
+          document_type: string
+          file_name: string
+          file_url: string
+          id?: string
+          verified?: boolean | null
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          candidate_id?: string
+          created_at?: string
+          document_name?: string | null
+          document_type?: string
+          file_name?: string
+          file_url?: string
+          id?: string
+          verified?: boolean | null
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidate_documents_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      candidates: {
+        Row: {
+          created_at: string
+          current_company: string | null
+          current_designation: string | null
+          email: string | null
+          expected_salary: number | null
+          experience_years: number | null
+          id: string
+          name: string
+          notes: string | null
+          notice_period_days: number | null
+          phone: string | null
+          requisition_id: string | null
+          resume_url: string | null
+          source: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_company?: string | null
+          current_designation?: string | null
+          email?: string | null
+          expected_salary?: number | null
+          experience_years?: number | null
+          id?: string
+          name: string
+          notes?: string | null
+          notice_period_days?: number | null
+          phone?: string | null
+          requisition_id?: string | null
+          resume_url?: string | null
+          source?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_company?: string | null
+          current_designation?: string | null
+          email?: string | null
+          expected_salary?: number | null
+          experience_years?: number | null
+          id?: string
+          name?: string
+          notes?: string | null
+          notice_period_days?: number | null
+          phone?: string | null
+          requisition_id?: string | null
+          resume_url?: string | null
+          source?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidates_requisition_id_fkey"
+            columns: ["requisition_id"]
+            isOneToOne: false
+            referencedRelation: "job_requisitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cashier_sessions: {
         Row: {
           actual_closing: number | null
@@ -1138,6 +1250,54 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_feedback: {
+        Row: {
+          created_at: string
+          employee_id: string | null
+          feedback_date: string
+          feedback_text: string | null
+          id: string
+          rating: number
+          reviewer_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id?: string | null
+          feedback_date?: string
+          feedback_text?: string | null
+          id?: string
+          rating: number
+          reviewer_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string | null
+          feedback_date?: string
+          feedback_text?: string | null
+          id?: string
+          rating?: number
+          reviewer_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_feedback_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_feedback_reviewer_id_fkey"
+            columns: ["reviewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1946,6 +2106,65 @@ export type Database = {
           },
         ]
       }
+      interview_rounds: {
+        Row: {
+          candidate_id: string
+          created_at: string
+          duration_minutes: number | null
+          feedback: string | null
+          id: string
+          interviewer_id: string | null
+          interviewer_name: string | null
+          rating: number | null
+          recommendation: string | null
+          round_number: number
+          round_type: string
+          scheduled_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          candidate_id: string
+          created_at?: string
+          duration_minutes?: number | null
+          feedback?: string | null
+          id?: string
+          interviewer_id?: string | null
+          interviewer_name?: string | null
+          rating?: number | null
+          recommendation?: string | null
+          round_number?: number
+          round_type?: string
+          scheduled_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          candidate_id?: string
+          created_at?: string
+          duration_minutes?: number | null
+          feedback?: string | null
+          id?: string
+          interviewer_id?: string | null
+          interviewer_name?: string | null
+          rating?: number | null
+          recommendation?: string | null
+          round_number?: number
+          round_type?: string
+          scheduled_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interview_rounds_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory_items: {
         Row: {
           asset_master_id: string | null
@@ -2020,6 +2239,77 @@ export type Database = {
             columns: ["vendor_id"]
             isOneToOne: false
             referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_requisitions: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          department: string
+          description: string | null
+          id: string
+          number_of_openings: number
+          position: string
+          priority: string
+          requested_by: string | null
+          requirements: string | null
+          salary_range_max: number | null
+          salary_range_min: number | null
+          status: string
+          store_id: string | null
+          target_join_date: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          department: string
+          description?: string | null
+          id?: string
+          number_of_openings?: number
+          position: string
+          priority?: string
+          requested_by?: string | null
+          requirements?: string | null
+          salary_range_max?: number | null
+          salary_range_min?: number | null
+          status?: string
+          store_id?: string | null
+          target_join_date?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          department?: string
+          description?: string | null
+          id?: string
+          number_of_openings?: number
+          position?: string
+          priority?: string
+          requested_by?: string | null
+          requirements?: string | null
+          salary_range_max?: number | null
+          salary_range_min?: number | null
+          status?: string
+          store_id?: string | null
+          target_join_date?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_requisitions_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
             referencedColumns: ["id"]
           },
         ]
@@ -3542,6 +3832,72 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "nso_store_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      offer_letters: {
+        Row: {
+          candidate_id: string
+          created_at: string
+          expiry_date: string | null
+          id: string
+          joining_date: string | null
+          notes: string | null
+          offer_date: string
+          offer_letter_url: string | null
+          offered_department: string
+          offered_position: string
+          offered_salary: number | null
+          requisition_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          candidate_id: string
+          created_at?: string
+          expiry_date?: string | null
+          id?: string
+          joining_date?: string | null
+          notes?: string | null
+          offer_date?: string
+          offer_letter_url?: string | null
+          offered_department: string
+          offered_position: string
+          offered_salary?: number | null
+          requisition_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          candidate_id?: string
+          created_at?: string
+          expiry_date?: string | null
+          id?: string
+          joining_date?: string | null
+          notes?: string | null
+          offer_date?: string
+          offer_letter_url?: string | null
+          offered_department?: string
+          offered_position?: string
+          offered_salary?: number | null
+          requisition_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offer_letters_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_letters_requisition_id_fkey"
+            columns: ["requisition_id"]
+            isOneToOne: false
+            referencedRelation: "job_requisitions"
             referencedColumns: ["id"]
           },
         ]
