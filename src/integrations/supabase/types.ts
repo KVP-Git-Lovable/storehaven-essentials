@@ -1859,9 +1859,22 @@ export type Database = {
           created_at: string
           grn_number: string
           id: string
+          manager_comments: string | null
+          manager_decision: string | null
+          manager_decision_at: string | null
+          manager_decision_by: string | null
           notes: string | null
+          qa_notes: string | null
+          qa_overall_result: string | null
+          qa_performed_at: string | null
+          qa_performed_by: string | null
+          qa_status: string
           received_at: string
           received_by: string
+          requires_manager_review: boolean
+          return_to_vendor_flagged: boolean
+          return_to_vendor_quantity: number | null
+          return_to_vendor_reason: string | null
           shipment_id: string | null
           status: string
           store_id: string
@@ -1872,9 +1885,22 @@ export type Database = {
           created_at?: string
           grn_number: string
           id?: string
+          manager_comments?: string | null
+          manager_decision?: string | null
+          manager_decision_at?: string | null
+          manager_decision_by?: string | null
           notes?: string | null
+          qa_notes?: string | null
+          qa_overall_result?: string | null
+          qa_performed_at?: string | null
+          qa_performed_by?: string | null
+          qa_status?: string
           received_at?: string
           received_by: string
+          requires_manager_review?: boolean
+          return_to_vendor_flagged?: boolean
+          return_to_vendor_quantity?: number | null
+          return_to_vendor_reason?: string | null
           shipment_id?: string | null
           status?: string
           store_id: string
@@ -1885,9 +1911,22 @@ export type Database = {
           created_at?: string
           grn_number?: string
           id?: string
+          manager_comments?: string | null
+          manager_decision?: string | null
+          manager_decision_at?: string | null
+          manager_decision_by?: string | null
           notes?: string | null
+          qa_notes?: string | null
+          qa_overall_result?: string | null
+          qa_performed_at?: string | null
+          qa_performed_by?: string | null
+          qa_status?: string
           received_at?: string
           received_by?: string
+          requires_manager_review?: boolean
+          return_to_vendor_flagged?: boolean
+          return_to_vendor_quantity?: number | null
+          return_to_vendor_reason?: string | null
           shipment_id?: string | null
           status?: string
           store_id?: string
@@ -1967,6 +2006,153 @@ export type Database = {
             columns: ["item_id"]
             isOneToOne: false
             referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      grn_line_items: {
+        Row: {
+          accepted_quantity: number
+          created_at: string
+          expected_quantity: number
+          grn_id: string
+          id: string
+          inventory_item_id: string | null
+          item_name: string
+          notes: string | null
+          qa_status: string
+          received_quantity: number
+          rejected_quantity: number
+          rejection_reason: string | null
+          updated_at: string
+        }
+        Insert: {
+          accepted_quantity?: number
+          created_at?: string
+          expected_quantity?: number
+          grn_id: string
+          id?: string
+          inventory_item_id?: string | null
+          item_name: string
+          notes?: string | null
+          qa_status?: string
+          received_quantity?: number
+          rejected_quantity?: number
+          rejection_reason?: string | null
+          updated_at?: string
+        }
+        Update: {
+          accepted_quantity?: number
+          created_at?: string
+          expected_quantity?: number
+          grn_id?: string
+          id?: string
+          inventory_item_id?: string | null
+          item_name?: string
+          notes?: string | null
+          qa_status?: string
+          received_quantity?: number
+          rejected_quantity?: number
+          rejection_reason?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "grn_line_items_grn_id_fkey"
+            columns: ["grn_id"]
+            isOneToOne: false
+            referencedRelation: "grn"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "grn_line_items_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      grn_qa_criteria: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          is_mandatory: boolean
+          name: string
+          sort_order: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_mandatory?: boolean
+          name: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_mandatory?: boolean
+          name?: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      grn_qa_results: {
+        Row: {
+          checked_at: string | null
+          checked_by: string | null
+          created_at: string
+          criteria_id: string
+          grn_id: string
+          id: string
+          remarks: string | null
+          result: string
+        }
+        Insert: {
+          checked_at?: string | null
+          checked_by?: string | null
+          created_at?: string
+          criteria_id: string
+          grn_id: string
+          id?: string
+          remarks?: string | null
+          result?: string
+        }
+        Update: {
+          checked_at?: string | null
+          checked_by?: string | null
+          created_at?: string
+          criteria_id?: string
+          grn_id?: string
+          id?: string
+          remarks?: string | null
+          result?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "grn_qa_results_criteria_id_fkey"
+            columns: ["criteria_id"]
+            isOneToOne: false
+            referencedRelation: "grn_qa_criteria"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "grn_qa_results_grn_id_fkey"
+            columns: ["grn_id"]
+            isOneToOne: false
+            referencedRelation: "grn"
             referencedColumns: ["id"]
           },
         ]
