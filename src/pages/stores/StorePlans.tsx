@@ -48,6 +48,7 @@ export default function StorePlans() {
   const [form, setForm] = useState({
     name: "", description: "", location: "", city: "", state: "", region: "",
     target_open_date: "", estimated_budget: "", status: "draft",
+    target_store_identification_date: "",
   });
 
   const { data: plans = [], isLoading } = useQuery({
@@ -74,6 +75,7 @@ export default function StorePlans() {
         target_open_date: form.target_open_date || null,
         estimated_budget: form.estimated_budget ? Number(form.estimated_budget) : 0,
         status: form.status,
+        target_store_identification_date: form.target_store_identification_date || null,
         created_by: user?.id,
       });
       if (error) throw error;
@@ -101,7 +103,7 @@ export default function StorePlans() {
   });
 
   const resetForm = () =>
-    setForm({ name: "", description: "", location: "", city: "", state: "", region: "", target_open_date: "", estimated_budget: "", status: "draft" });
+    setForm({ name: "", description: "", location: "", city: "", state: "", region: "", target_open_date: "", estimated_budget: "", status: "draft", target_store_identification_date: "" });
 
   const filtered = plans.filter((p) =>
     p.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -167,6 +169,8 @@ export default function StorePlans() {
                 <TableHead>Location</TableHead>
                 <TableHead>Target Date</TableHead>
                 <TableHead>Budget</TableHead>
+                <TableHead>Store</TableHead>
+                <TableHead>Franchisee</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Approval</TableHead>
                 <TableHead className="w-[100px]">Actions</TableHead>
@@ -174,9 +178,9 @@ export default function StorePlans() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8">Loading...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center py-8">Loading...</TableCell></TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No store plans found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No store plans found</TableCell></TableRow>
               ) : (
                 filtered.map((plan) => (
                   <TableRow key={plan.id} className="cursor-pointer" onClick={() => navigate(`/expansion/plans/${plan.id}`)}>
@@ -200,6 +204,20 @@ export default function StorePlans() {
                         <DollarSign className="h-3 w-3 text-muted-foreground" />
                         ₹{Number(plan.estimated_budget || 0).toLocaleString()}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {plan.store_identified ? (
+                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">✓ Identified</Badge>
+                      ) : (
+                        <Badge variant="outline">Pending</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {plan.franchisee_identified ? (
+                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">✓ Identified</Badge>
+                      ) : (
+                        <Badge variant="outline">Pending</Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge className={statusColors[plan.status] || ""}>{plan.status}</Badge>
@@ -258,6 +276,10 @@ export default function StorePlans() {
               <div className="space-y-2">
                 <Label>Region</Label>
                 <Input value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Target Store Identification Date</Label>
+                <Input type="date" value={form.target_store_identification_date} onChange={(e) => setForm({ ...form, target_store_identification_date: e.target.value })} />
               </div>
               <div className="space-y-2">
                 <Label>Target Open Date</Label>
