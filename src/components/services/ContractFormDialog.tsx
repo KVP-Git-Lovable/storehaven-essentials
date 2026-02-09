@@ -1695,17 +1695,18 @@ export function ContractFormDialog({ open, onOpenChange, onSuccess, contractId }
 
               {/* Vendor Link Section */}
               <VendorLinkSection contractId={contractId} />
-
-              <div className="flex justify-end gap-2 pt-4 sticky bottom-0 bg-background pb-2 border-t mt-4">
-                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={uploading}>
-                  {uploading ? (isEditMode ? "Updating..." : "Creating...") : (isEditMode ? "Update Contract" : "Create Contract")}
-                </Button>
-              </div>
             </form>
           </Form>
+        </div>
+
+        {/* Sticky footer outside scrollable area */}
+        <div className="flex justify-end gap-2 px-6 py-4 border-t bg-background shrink-0">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={uploading} onClick={form.handleSubmit(onSubmit)}>
+            {uploading ? (isEditMode ? "Updating..." : "Creating...") : (isEditMode ? "Update Contract" : "Create Contract")}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
