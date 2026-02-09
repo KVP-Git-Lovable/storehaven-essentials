@@ -282,6 +282,7 @@ export default function NSOChecklistDetails() {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [ganttTimeFilter, setGanttTimeFilter] = useState<"all" | "day" | "week" | "month">("all");
+  const [listTimeFilter, setListTimeFilter] = useState<"all" | "day" | "week" | "month">("all");
   const [isEditingTask, setIsEditingTask] = useState(false);
 
   // Form states
@@ -616,10 +617,36 @@ export default function NSOChecklistDetails() {
   const completedTasks = activeTasks.filter((t) => t.status === "completed").length;
   const progress = activeTasks.length > 0 ? Math.round((completedTasks / activeTasks.length) * 100) : 0;
 
-  // Filtered tasks for list view (status filter)
-  const filteredListTasks = statusFilter
-    ? tasks.filter((t) => getEffectiveStatus(t) === statusFilter)
-    : tasks;
+  // Filtered tasks for list view (status filter + time filter)
+  const filteredListTasks = (() => {
+    let result = statusFilter
+      ? tasks.filter((t) => getEffectiveStatus(t) === statusFilter)
+      : tasks;
+    if (listTimeFilter !== "all") {
+      const today = startOfDay(new Date());
+      let rangeStart: Date;
+      let rangeEnd: Date;
+      if (listTimeFilter === "day") {
+        rangeStart = today;
+        rangeEnd = today;
+      } else if (listTimeFilter === "week") {
+        rangeStart = startOfWeek(today, { weekStartsOn: 1 });
+        rangeEnd = endOfWeek(today, { weekStartsOn: 1 });
+      } else {
+        rangeStart = startOfMonth(today);
+        rangeEnd = endOfMonth(today);
+      }
+      result = result.filter((t) => {
+        if (!t.start_date && !t.end_date) return false;
+        const tStart = t.start_date ? startOfDay(parseISO(t.start_date)) : null;
+        const tEnd = t.end_date ? startOfDay(parseISO(t.end_date)) : null;
+        const effectiveStart = tStart || tEnd!;
+        const effectiveEnd = tEnd || tStart!;
+        return effectiveStart <= rangeEnd && effectiveEnd >= rangeStart;
+      });
+    }
+    return result;
+  })();
 
   // Filtered tasks for gantt view (time filter)
   const filteredGanttTasks = (() => {
@@ -797,20 +824,29 @@ export default function NSOChecklistDetails() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="gap-2">
-                      <Filter className="h-4 w-4" />
-                      {viewMode === "list" && statusFilter
-                        ? statusConfig[statusFilter]?.label || "Filter"
-                        : viewMode === "gantt" && ganttTimeFilter !== "all"
+                     <Filter className="h-4 w-4" />
+                      {viewMode === "list"
+                        ? (statusFilter || listTimeFilter !== "all")
+                          ? [
+                              statusFilter ? statusConfig[statusFilter]?.label : null,
+                              listTimeFilter !== "all" ? listTimeFilter.charAt(0).toUpperCase() + listTimeFilter.slice(1) : null,
+                            ].filter(Boolean).join(" · ")
+                          : "Filter"
+                        : ganttTimeFilter !== "all"
                         ? ganttTimeFilter.charAt(0).toUpperCase() + ganttTimeFilter.slice(1)
                         : "Filter"}
-                      {((viewMode === "list" && statusFilter) || (viewMode === "gantt" && ganttTimeFilter !== "all")) && (
+                      {((viewMode === "list" && (statusFilter || listTimeFilter !== "all")) || (viewMode === "gantt" && ganttTimeFilter !== "all")) && (
                         <span
                           role="button"
                           className="ml-1 rounded-full hover:bg-muted p-0.5"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (viewMode === "list") setStatusFilter(null);
-                            else setGanttTimeFilter("all");
+                            if (viewMode === "list") {
+                              setStatusFilter(null);
+                              setListTimeFilter("all");
+                            } else {
+                              setGanttTimeFilter("all");
+                            }
                           }}
                         >
                           <X className="h-3 w-3" />
@@ -818,9 +854,10 @@ export default function NSOChecklistDetails() {
                       )}
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuContent align="end" className="w-48">
                     {viewMode === "list" ? (
                       <>
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Status</div>
                         {[
                           { value: "open", label: "Open" },
                           { value: "completed", label: "Completed" },
@@ -840,6 +877,24 @@ export default function NSOChecklistDetails() {
                             </DropdownMenuItem>
                           );
                         })}
+                        <div className="my-1 h-px bg-border" />
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Time Range</div>
+                        {[
+                          { value: "all", label: "All" },
+                          { value: "day", label: "Day" },
+                          { value: "week", label: "Week" },
+                          { value: "month", label: "Month" },
+                        ].map((t) => (
+                          <DropdownMenuItem
+                            key={t.value}
+                            className="gap-2"
+                            onClick={() => setListTimeFilter(t.value as "all" | "day" | "week" | "month")}
+                          >
+                            <CalendarIcon className="h-4 w-4" />
+                            {t.label}
+                            {listTimeFilter === t.value && <CheckCircle2 className="h-4 w-4 ml-auto text-primary" />}
+                          </DropdownMenuItem>
+                        ))}
                       </>
                     ) : (
                       <>
@@ -908,7 +963,7 @@ export default function NSOChecklistDetails() {
                   <Accordion type="multiple" defaultValue={sections.map((s) => s.id)} className="space-y-3">
                     {sections.map((section) => {
                       const sectionTasks = filteredListTasks.filter((t) => t.section_id === section.id);
-                      if (statusFilter && sectionTasks.length === 0) return null;
+                      if ((statusFilter || listTimeFilter !== "all") && sectionTasks.length === 0) return null;
                       const allSectionTasks = tasks.filter((t) => t.section_id === section.id);
                       return (
                         <AccordionItem key={section.id} value={section.id} className="border rounded-lg">
