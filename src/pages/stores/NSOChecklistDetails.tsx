@@ -713,26 +713,26 @@ export default function NSOChecklistDetails() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-6 overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/stores/new-opening")}>
+      <div className="flex items-center gap-3 md:gap-4">
+        <Button variant="ghost" size="icon" className="flex-shrink-0" onClick={() => navigate("/stores/new-opening")}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">{checklist.name}</h1>
-          <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-lg md:text-2xl font-bold truncate">{checklist.name}</h1>
+          <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-1 text-xs md:text-sm text-muted-foreground">
             <div className="flex items-center gap-1">
-              <Store className="h-4 w-4" />
-              {checklist.stores?.name || "Unknown Store"}
+              <Store className="h-3 w-3 md:h-4 md:w-4" />
+              <span className="truncate">{checklist.stores?.name || "Unknown Store"}</span>
             </div>
             {checklist.stores?.address && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 hidden sm:flex">
                 <MapPin className="h-4 w-4" />
-                {checklist.stores.address}
+                <span className="truncate">{checklist.stores.address}</span>
               </div>
             )}
-            <Badge variant={checklist.status === "completed" ? "default" : "outline"}>
+            <Badge variant={checklist.status === "completed" ? "default" : "outline"} className="text-xs">
               {checklist.status}
             </Badge>
           </div>
@@ -800,21 +800,21 @@ export default function NSOChecklistDetails() {
         {/* Tasks Tab */}
         <TabsContent value="tasks" className="m-0">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between py-4">
-              <div className="flex items-center gap-4">
-                <CardTitle className="text-lg">Checklist Tasks</CardTitle>
+            <CardHeader className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-3 flex-wrap">
+                <CardTitle className="text-base md:text-lg">Checklist Tasks</CardTitle>
                 <ToggleGroup
                   type="single"
                   value={viewMode}
                   onValueChange={(value) => value && setViewMode(value as "list" | "gantt")}
                   className="border rounded-lg p-1"
                 >
-                  <ToggleGroupItem value="list" aria-label="List view" className="h-8 px-3 gap-2">
-                    <LayoutList className="h-4 w-4" />
+                  <ToggleGroupItem value="list" aria-label="List view" className="h-7 md:h-8 px-2 md:px-3 gap-1.5 text-xs md:text-sm">
+                    <LayoutList className="h-3.5 w-3.5 md:h-4 md:w-4" />
                     List
                   </ToggleGroupItem>
-                  <ToggleGroupItem value="gantt" aria-label="Gantt view" className="h-8 px-3 gap-2">
-                    <GanttChart className="h-4 w-4" />
+                  <ToggleGroupItem value="gantt" aria-label="Gantt view" className="h-7 md:h-8 px-2 md:px-3 gap-1.5 text-xs md:text-sm">
+                    <GanttChart className="h-3.5 w-3.5 md:h-4 md:w-4" />
                     Gantt
                   </ToggleGroupItem>
                 </ToggleGroup>
@@ -823,8 +823,8 @@ export default function NSOChecklistDetails() {
                 {/* Filter dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-2">
-                     <Filter className="h-4 w-4" />
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs md:text-sm">
+                     <Filter className="h-3.5 w-3.5 md:h-4 md:w-4" />
                       {viewMode === "list"
                         ? (statusFilter || listTimeFilter !== "all")
                           ? [
@@ -922,13 +922,15 @@ export default function NSOChecklistDetails() {
                 <Button
                   variant="outline"
                   size="sm"
+                  className="text-xs md:text-sm"
                   onClick={() => {
                     setSectionForm({ name: "" });
                     setSectionDialogOpen(true);
                   }}
                 >
-                  <FolderPlus className="h-4 w-4 mr-2" />
-                  Add Section
+                  <FolderPlus className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1 md:mr-2" />
+                  <span className="hidden sm:inline">Add Section</span>
+                  <span className="sm:hidden">Add</span>
                 </Button>
               </div>
             </CardHeader>

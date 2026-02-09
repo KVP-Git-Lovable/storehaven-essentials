@@ -158,30 +158,31 @@ export default function PreventiveMaintenance() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Preventive Maintenance</h1>
-          <p className="text-muted-foreground">Schedule and track routine maintenance</p>
+          <h1 className="text-xl md:text-2xl font-semibold">Preventive Maintenance</h1>
+          <p className="text-xs md:text-sm text-muted-foreground">Schedule and track routine maintenance</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3">
           <ToggleGroup
             type="single"
             value={viewMode}
             onValueChange={(value) => value && setViewMode(value as "list" | "calendar")}
             className="bg-muted rounded-lg p-1"
           >
-            <ToggleGroupItem value="list" className="px-3 py-1.5 text-sm gap-1.5">
-              <List className="h-4 w-4" />
+            <ToggleGroupItem value="list" className="px-2 md:px-3 py-1 md:py-1.5 text-xs md:text-sm gap-1 md:gap-1.5">
+              <List className="h-3.5 w-3.5 md:h-4 md:w-4" />
               List
             </ToggleGroupItem>
-            <ToggleGroupItem value="calendar" className="px-3 py-1.5 text-sm gap-1.5">
-              <Calendar className="h-4 w-4" />
+            <ToggleGroupItem value="calendar" className="px-2 md:px-3 py-1 md:py-1.5 text-xs md:text-sm gap-1 md:gap-1.5">
+              <Calendar className="h-3.5 w-3.5 md:h-4 md:w-4" />
               Calendar
             </ToggleGroupItem>
           </ToggleGroup>
-          <Button className="gap-2" onClick={handleAddClick}>
-            <Plus className="h-4 w-4" />
-            Add Schedule
+          <Button className="gap-1.5 md:gap-2 text-xs md:text-sm" size="sm" onClick={handleAddClick}>
+            <Plus className="h-3.5 w-3.5 md:h-4 md:w-4" />
+            <span className="hidden sm:inline">Add Schedule</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         </div>
       </div>

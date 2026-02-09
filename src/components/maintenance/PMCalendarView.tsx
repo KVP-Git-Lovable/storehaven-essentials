@@ -462,13 +462,13 @@ export function PMCalendarView({ schedules, onTaskClick }: PMCalendarViewProps) 
         {/* Calendar */}
         <div className="lg:col-span-3 rounded-xl border bg-card overflow-hidden">
           {/* Header with Mode Toggle */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-b bg-muted/30">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 md:p-4 border-b bg-muted/30">
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={navigatePrev}>
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={navigatePrev}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <h3 className="font-semibold text-lg min-w-[200px] text-center">{getHeaderTitle()}</h3>
-              <Button variant="outline" size="icon" onClick={navigateNext}>
+              <h3 className="font-semibold text-sm md:text-lg min-w-0 text-center">{getHeaderTitle()}</h3>
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={navigateNext}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -478,13 +478,13 @@ export function PMCalendarView({ schedules, onTaskClick }: PMCalendarViewProps) 
               onValueChange={(value) => value && setCalendarMode(value as CalendarMode)}
               className="bg-muted rounded-lg p-1"
             >
-              <ToggleGroupItem value="day" className="px-3 py-1 text-sm">
+              <ToggleGroupItem value="day" className="px-2 md:px-3 py-1 text-xs md:text-sm">
                 Day
               </ToggleGroupItem>
-              <ToggleGroupItem value="week" className="px-3 py-1 text-sm">
+              <ToggleGroupItem value="week" className="px-2 md:px-3 py-1 text-xs md:text-sm">
                 Week
               </ToggleGroupItem>
-              <ToggleGroupItem value="month" className="px-3 py-1 text-sm">
+              <ToggleGroupItem value="month" className="px-2 md:px-3 py-1 text-xs md:text-sm">
                 Month
               </ToggleGroupItem>
             </ToggleGroup>
