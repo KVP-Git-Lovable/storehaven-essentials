@@ -869,7 +869,7 @@ export default function NSOChecklistDetails() {
                             <DropdownMenuItem
                               key={s.value}
                               className="gap-2"
-                              onClick={() => setStatusFilter(statusFilter === s.value ? null : s.value)}
+                              onSelect={() => setStatusFilter(statusFilter === s.value ? null : s.value)}
                             >
                               <StatusIcon className="h-4 w-4" />
                               {s.label}
@@ -888,7 +888,7 @@ export default function NSOChecklistDetails() {
                           <DropdownMenuItem
                             key={t.value}
                             className="gap-2"
-                            onClick={() => setListTimeFilter(t.value as "all" | "day" | "week" | "month")}
+                            onSelect={() => setListTimeFilter(t.value as "all" | "day" | "week" | "month")}
                           >
                             <CalendarIcon className="h-4 w-4" />
                             {t.label}
@@ -898,6 +898,7 @@ export default function NSOChecklistDetails() {
                       </>
                     ) : (
                       <>
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Time Range</div>
                         {[
                           { value: "all", label: "All" },
                           { value: "day", label: "Day" },
@@ -907,8 +908,9 @@ export default function NSOChecklistDetails() {
                           <DropdownMenuItem
                             key={t.value}
                             className="gap-2"
-                            onClick={() => setGanttTimeFilter(t.value as "all" | "day" | "week" | "month")}
+                            onSelect={() => setGanttTimeFilter(t.value as "all" | "day" | "week" | "month")}
                           >
+                            <CalendarIcon className="h-4 w-4" />
                             {t.label}
                             {ganttTimeFilter === t.value && <CheckCircle2 className="h-4 w-4 ml-auto text-primary" />}
                           </DropdownMenuItem>
