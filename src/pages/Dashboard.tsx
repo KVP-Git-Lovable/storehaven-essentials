@@ -92,7 +92,7 @@ export default function Dashboard() {
       const totalExpenses = (expensesData || []).reduce((sum, e) => sum + (e.amount || 0), 0);
       const formattedExpenses = totalExpenses >= 100000 
         ? `₹${(totalExpenses / 100000).toFixed(1)}L`
-        : `₹${totalExpenses.toLocaleString()}`;
+        : `₹${totalExpenses.toLocaleString("en-IN")}`;
 
       // Fetch employees count
       const { count: staffCount } = await supabase.from("employees").select("id", { count: "exact", head: true }).eq("status", "active");
@@ -178,7 +178,7 @@ export default function Dashboard() {
         <p className="text-sm text-muted-foreground">Welcome back! Here's your store operations overview.</p>
       </div>
 
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         {statCards.map((stat) => (
           <StatCard key={stat.title} {...stat} />
         ))}
