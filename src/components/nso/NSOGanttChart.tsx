@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useMemo } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { format, differenceInDays, addDays, parseISO, startOfDay, min, max } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -66,7 +67,8 @@ function getEffectiveStatus(task: { status: string; end_date: string | null }): 
 const DAY_WIDTH = 32;
 const ROW_HEIGHT = 40;
 const HEADER_HEIGHT = 60;
-const LEFT_PANEL_WIDTH = 320;
+const LEFT_PANEL_WIDTH_MOBILE = 160;
+const LEFT_PANEL_WIDTH_DESKTOP = 320;
 
 export function NSOGanttChart({ 
   sections, 
@@ -76,6 +78,9 @@ export function NSOGanttChart({
   onAddTask,
   onTaskReorder
 }: NSOGanttChartProps) {
+  const isMobile = useIsMobile();
+  const LEFT_PANEL_WIDTH = isMobile ? LEFT_PANEL_WIDTH_MOBILE : LEFT_PANEL_WIDTH_DESKTOP;
+
   const [dragging, setDragging] = useState<{
     taskId: string;
     type: "move" | "resize-start" | "resize-end";
