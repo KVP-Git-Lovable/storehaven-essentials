@@ -133,3 +133,29 @@
     @apply grid gap-3 md:gap-4;
   }
 }
+
+/* Mobile-first responsive global fixes */
+@layer base {
+  /* Prevent horizontal overflow at root */
+  html, body {
+    @apply overflow-x-hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  #root {
+    @apply w-full min-h-screen overflow-x-hidden;
+  }
+
+  /* Ensure tap targets are at least 44px on mobile */
+  @media (max-width: 767px) {
+    button, a, [role="button"], input[type="checkbox"], input[type="radio"] {
+      min-height: 36px;
+      min-width: 36px;
+    }
+
+    /* Mobile form inputs should be full-width */
+    input, select, textarea {
+      font-size: 16px; /* Prevents iOS zoom on focus */
+    }
+  }
+}

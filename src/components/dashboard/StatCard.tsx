@@ -22,8 +22,8 @@ export function StatCard({
     <div className="stat-card">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-xs md:text-sm font-medium text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">{title}</p>
-          <p className="mt-1 md:mt-2 text-xl md:text-2xl lg:text-3xl font-semibold tracking-tight whitespace-nowrap">{value}</p>
+          <p className="text-[11px] sm:text-xs md:text-sm font-medium text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">{title}</p>
+          <p className="mt-1 md:mt-2 text-lg sm:text-xl md:text-2xl lg:text-3xl font-semibold tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">{value}</p>
           {change && (
             <p
               className={cn(
