@@ -5,7 +5,8 @@ import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Plus, Search, Package, Barcode, AlertTriangle, Camera, CalendarIcon, Eye, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, Package, Barcode, AlertTriangle, CalendarIcon, Eye, Edit, Trash2, ScanLine } from "lucide-react";
+import { BarcodeScanner } from "@/components/inventory/BarcodeScanner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -106,7 +107,7 @@ export default function InventoryItems() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [scanMode, setScanMode] = useState(false);
+  // scanMode state removed - using BarcodeScanner component instead
   const [assetMasters, setAssetMasters] = useState<AssetMaster[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [viewItem, setViewItem] = useState<InventoryItem | null>(null);
@@ -686,10 +687,15 @@ export default function InventoryItems() {
             className="pl-10"
           />
         </div>
-        <Button variant="outline" onClick={() => setScanMode(!scanMode)}>
-          <Camera className="mr-2 h-4 w-4" />
-          {scanMode ? "Stop Scan" : "Scan Barcode"}
-        </Button>
+        <BarcodeScanner
+          onScan={(barcode) => setSearchQuery(barcode)}
+          trigger={
+            <Button variant="outline">
+              <ScanLine className="mr-2 h-4 w-4" />
+              Scan Barcode
+            </Button>
+          }
+        />
       </div>
 
       {/* Table */}
