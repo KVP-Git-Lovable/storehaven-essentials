@@ -10,6 +10,46 @@ interface BarcodeScannerProps {
   trigger?: React.ReactNode;
 }
 
+/**
+ * Wrapper component that creates a DOM node for html5-qrcode imperatively,
+ * preventing React from trying to reconcile nodes that html5-qrcode manages.
+ */
+function ScannerContainer({ id, isScanning }: { id: string; isScanning: boolean }) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    // Create scanner div imperatively so React doesn't track its children
+    const scannerDiv = document.createElement("div");
+    scannerDiv.id = id;
+    scannerDiv.style.width = "100%";
+    scannerDiv.style.height = "100%";
+    wrapper.appendChild(scannerDiv);
+
+    return () => {
+      // Clean up imperatively — safe from React reconciliation errors
+      while (wrapper.firstChild) {
+        wrapper.removeChild(wrapper.firstChild);
+      }
+    };
+  }, [id]);
+
+  return (
+    <div className="relative w-full aspect-video bg-muted rounded-lg overflow-hidden">
+      <div ref={wrapperRef} className="w-full h-full" />
+      {!isScanning && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="animate-pulse text-muted-foreground">
+            Starting camera...
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -32,23 +72,11 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
     if (scanner) {
       try {
         const state = scanner.getState();
-        if (state === 2) { // Html5QrcodeScannerState.SCANNING
+        if (state === 2) {
           await scanner.stop();
         }
       } catch (err) {
-        // Ignore stop errors - DOM may already be cleaned up by React
-      }
-      // Clear any remaining DOM children that html5-qrcode left behind
-      // to prevent React removeChild errors
-      try {
-        const container = document.getElementById(scannerContainerId.current);
-        if (container) {
-          while (container.firstChild) {
-            container.removeChild(container.firstChild);
-          }
-        }
-      } catch (err) {
-        // Ignore cleanup errors
+        // Ignore stop errors
       }
     }
     
@@ -78,9 +106,7 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
         (decodedText) => {
           handleScanSuccess(decodedText);
         },
-        () => {
-          // Ignore errors during scanning (no QR code in frame)
-        }
+        () => {}
       );
 
       if (isMountedRef.current) {
@@ -103,7 +129,6 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
   const handleScanSuccess = useCallback((barcode: string) => {
     toast.success(`Scanned: ${barcode}`);
     onScan(barcode);
-    // Stop scanner first, then close
     stopScanner();
     setIsOpen(false);
     setError(null);
@@ -121,10 +146,8 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
     setError(null);
   }, [stopScanner]);
 
-  // Start scanner when dialog opens
   useEffect(() => {
     if (isOpen) {
-      // Small delay to ensure the container is mounted
       const timer = setTimeout(() => {
         startScanner();
       }, 200);
@@ -132,7 +155,6 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
     }
   }, [isOpen, startScanner]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopScanner();
@@ -153,7 +175,6 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
         open={isOpen} 
         onOpenChange={(open) => {
           if (!open) {
-            // Stop scanner first synchronously, then close dialog
             stopScanner();
             setIsOpen(false);
             setError(null);
@@ -182,18 +203,7 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
               </div>
             ) : (
               <>
-                <div 
-                  id={scannerContainerId.current}
-                  className="relative w-full aspect-video bg-muted rounded-lg overflow-hidden"
-                >
-                  {!isScanning && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="animate-pulse text-muted-foreground">
-                        Starting camera...
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <ScannerContainer id={scannerContainerId.current} isScanning={isScanning} />
 
                 <div className="text-center text-sm text-muted-foreground">
                   <p>Position the barcode within the frame</p>
