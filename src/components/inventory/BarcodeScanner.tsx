@@ -38,6 +38,18 @@ export function BarcodeScanner({ onScan, trigger }: BarcodeScannerProps) {
       } catch (err) {
         // Ignore stop errors - DOM may already be cleaned up by React
       }
+      // Clear any remaining DOM children that html5-qrcode left behind
+      // to prevent React removeChild errors
+      try {
+        const container = document.getElementById(scannerContainerId.current);
+        if (container) {
+          while (container.firstChild) {
+            container.removeChild(container.firstChild);
+          }
+        }
+      } catch (err) {
+        // Ignore cleanup errors
+      }
     }
     
     if (isMountedRef.current) {
