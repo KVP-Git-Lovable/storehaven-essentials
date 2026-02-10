@@ -91,7 +91,7 @@ export function SearchableSelect({
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
-          <CommandList ref={listRef}>
+          <CommandList ref={listRef} className="max-h-60 overflow-y-auto">
             <CommandEmpty>{emptyMessage}</CommandEmpty>
             <CommandGroup>
               {allowNone && (
