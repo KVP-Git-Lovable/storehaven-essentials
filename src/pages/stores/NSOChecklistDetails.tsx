@@ -228,7 +228,7 @@ function SortableTaskRow({
               value={task.status}
               onValueChange={(v) => onStatusChange(task.id, v)}
             >
-              <SelectTrigger className="h-8 w-[110px]">
+              <SelectTrigger className="h-8 w-24 sm:w-[110px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -243,7 +243,7 @@ function SortableTaskRow({
             value={task.status === "pending" || task.status === "in_progress" || task.status === "blocked" ? "open" : task.status}
             onValueChange={(v) => onStatusChange(task.id, v)}
           >
-            <SelectTrigger className="h-8 w-[130px]">
+            <SelectTrigger className="h-8 w-24 sm:w-[130px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -713,7 +713,7 @@ export default function NSOChecklistDetails() {
   }
 
   return (
-    <div className="p-3 md:p-6 space-y-4 md:space-y-6 overflow-x-hidden">
+    <div className="w-full max-w-full p-2 sm:p-3 md:p-6 space-y-3 md:space-y-6 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 md:gap-4">
         <Button variant="ghost" size="icon" className="flex-shrink-0" onClick={() => navigate("/stores/new-opening")}>
@@ -740,7 +740,7 @@ export default function NSOChecklistDetails() {
       </div>
 
       {/* Store Info & Progress Card */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Start Date</CardTitle>
