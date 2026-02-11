@@ -782,17 +782,18 @@ export default function NSOChecklistDetails() {
 
       {/* Tabs for Tasks, Assets, Budget */}
         <Tabs defaultValue="tasks" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3 md:w-auto md:inline-flex">
-          <TabsTrigger value="tasks" className="gap-1 sm:gap-2 text-xs sm:text-sm">
-            <LayoutList className="h-4 w-4 hidden sm:block" />
+          <TabsList className="grid w-full grid-cols-3 md:w-auto md:inline-flex h-auto">
+          <TabsTrigger value="tasks" className="gap-1 sm:gap-2 text-[11px] sm:text-sm px-1.5 sm:px-3 py-1.5">
+            <LayoutList className="h-3.5 w-3.5 hidden sm:block" />
             Tasks
           </TabsTrigger>
-          <TabsTrigger value="assets" className="gap-1 sm:gap-2 text-xs sm:text-sm">
-            <Package className="h-4 w-4 hidden sm:block" />
-            Required Assets
+          <TabsTrigger value="assets" className="gap-1 sm:gap-2 text-[11px] sm:text-sm px-1.5 sm:px-3 py-1.5">
+            <Package className="h-3.5 w-3.5 hidden sm:block" />
+            <span className="sm:hidden">Assets</span>
+            <span className="hidden sm:inline">Required Assets</span>
           </TabsTrigger>
-          <TabsTrigger value="budget" className="gap-1 sm:gap-2 text-xs sm:text-sm">
-            <Wallet className="h-4 w-4 hidden sm:block" />
+          <TabsTrigger value="budget" className="gap-1 sm:gap-2 text-[11px] sm:text-sm px-1.5 sm:px-3 py-1.5">
+            <Wallet className="h-3.5 w-3.5 hidden sm:block" />
             Budget
           </TabsTrigger>
         </TabsList>
