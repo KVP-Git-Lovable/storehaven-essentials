@@ -1,65 +1,72 @@
 
-# Add "From Store Buildup Date" Field to NSO Master Tasks
 
-## Overview
-Introduce a new field called **"From Store Buildup Date"** (number of days offset) on each task in the NSO Checklist Master. This changes the task scheduling model from a purely sequential chain to an **offset-based model**, where each task's start date is independently calculated relative to the Store Buildup Date.
+# Mobile Responsiveness Compact Layout Fix
 
-## How It Works Today
-- Tasks in the master template only have `duration_days`
-- When assigned to a store, tasks are chained sequentially: Task 1 starts on the Store Buildup Date, Task 2 starts the day after Task 1 ends, and so on
-- Users have no control over individual task start offsets
+## Problem
+On mobile devices, the app has excessive whitespace, oversized card padding, large heading fonts, and too much vertical spacing between elements. Cards like Start Date / End Date in NSO take up too much screen real estate. Buttons can overflow outside the viewport.
 
-## How It Will Work After This Change
-- Each master task gets a new field: **From Store Buildup Date** (number of days, default 0)
-- **Task Start Date** = Store Buildup Date + From Store Buildup Date
-- **Task End Date** = Task Start Date + Duration Days - 1
-- Users enter the offset and duration; dates are never manually picked
-- Tasks can overlap, run in parallel, or have gaps -- giving full scheduling flexibility
-- The existing sequential chain during assignment (`NewStoreOpening.tsx`) will be updated to use the new offset-based calculation
+## Approach
+Apply a **global mobile compaction pass** through CSS utilities and targeted component updates. No design changes - only tightening spacing for mobile.
 
-## Changes Required
+## Changes
 
-### 1. Database Migration
-Add a new column to the `nso_master_tasks` table:
-```text
-from_buildup_days INTEGER NOT NULL DEFAULT 0
-```
-This stores the number of days from the store buildup (start) date at which this task should begin.
+### 1. Global CSS Compaction (src/index.css)
+- Reduce the `.stat-card` padding on mobile from `p-3` to `p-2` with smaller responsive steps
+- Add a mobile-specific utility class `.card-compact` that reduces CardHeader/CardContent padding on small screens
+- Reduce global Card component padding on mobile via CSS overrides targeting `< 768px`
 
-### 2. NSO Checklist Master -- Task Form (NSOChecklistMaster.tsx)
-- Add `from_buildup_days` to the `taskForm` state (default: 0)
-- Add a new input field in the Task Dialog: "From Store Buildup Date (Days)" with a helper text explaining it
-- Display the new column in the task table (alongside Duration)
-- Include `from_buildup_days` in create, update, and duplicate mutations
-- Update the `MasterTask` interface to include the new field
-- Update `resetTaskForm` to reset the new field
-- Update `handleEditTask` to populate the new field
+### 2. Card Component (src/components/ui/card.tsx)
+- Reduce `CardHeader` default padding from `p-6` to `p-3 sm:p-4 md:p-6`
+- Reduce `CardContent` default padding from `p-6 pt-0` to `p-3 pt-0 sm:p-4 sm:pt-0 md:p-6 md:pt-0`
+- Reduce `CardTitle` default font size from `text-2xl` to `text-lg sm:text-xl md:text-2xl`
+- Reduce `CardHeader` vertical spacing from `space-y-1.5` to `space-y-1 sm:space-y-1.5`
 
-### 3. Store Assignment Logic (NewStoreOpening.tsx)
-Update the task date calculation during checklist assignment:
-- **Before**: Sequential chaining (`currentDate = addDays(previousEndDate, 1)`)
-- **After**: Offset-based (`startDate = addDays(storeBuildupDate, task.from_buildup_days)`, `endDate = addDays(startDate, task.duration_days - 1)`)
-- The `from_buildup_days` value will need to be fetched from master tasks (it is already fetched via `select("*")`)
+### 3. StatCard Component (src/components/dashboard/StatCard.tsx)
+- Already responsive - no changes needed (already has responsive text sizes)
 
-### 4. Sync Logic (NSOChecklistMaster.tsx -- createTaskMutation)
-When a new master task is added and synced to existing store checklists, the date calculation will also use the offset-based approach:
-- Fetch the store checklist's `start_date`
-- Calculate: `startDate = addDays(checklistStartDate, from_buildup_days)`
-- Calculate: `endDate = addDays(startDate, duration_days - 1)`
+### 4. Dashboard (src/pages/Dashboard.tsx)
+- Already has responsive grid and spacing - no changes needed
 
-### 5. Duplicate Logic (NSOChecklistMaster.tsx -- duplicateMasterMutation)
-Include `from_buildup_days` when copying tasks during template duplication.
+### 5. NSO Checklist Details (src/pages/stores/NSOChecklistDetails.tsx)
+- Reduce milestone card date font from `text-2xl` to `text-lg sm:text-xl md:text-2xl` for Start Date, End Date, and Progress cards
+- Reduce CardHeader padding in these cards via existing responsive classes
 
-## Files to Modify
-1. **Database**: Add `from_buildup_days` column via migration to `nso_master_tasks`
-2. **`src/pages/master/NSOChecklistMaster.tsx`**: Update task form, table display, interfaces, and all task-related mutations
-3. **`src/pages/stores/NewStoreOpening.tsx`**: Update assignment date calculation from sequential to offset-based
+### 6. New Store Opening listing (src/pages/stores/NewStoreOpening.tsx)
+- Wrap header as `flex-col` on mobile with `gap-3`
+- Make page padding responsive: `p-3 sm:p-4 md:p-6`
+- Reduce spacing: `space-y-4 md:space-y-6`
 
-## Files NOT Modified
-- `src/pages/stores/NSOChecklistDetails.tsx` -- Store-level task view/edit (works with `start_date`/`end_date` already stored on `nso_store_tasks`)
-- `src/integrations/supabase/types.ts` -- Auto-generated, never edited manually
+### 7. Petty Cash (src/pages/PettyCash.tsx)
+- Make header stack vertically on mobile: `flex-col sm:flex-row` with `gap-3`
+- Button full-width on mobile
+- Reduce collapsible trigger spacing on mobile
+- Stack spent/available info vertically on small screens
 
-## Data Integrity
-- The `from_buildup_days` column defaults to 0, so existing master tasks remain valid (they would all start on Day 0 by default)
-- Existing store tasks already have concrete `start_date`/`end_date` values stored in `nso_store_tasks`, so they are unaffected
-- The Gantt chart and filters in the store checklist details continue to work as before since they read from `nso_store_tasks.start_date`/`end_date`
+### 8. Planograms (src/pages/vm/Planograms.tsx)
+- Ensure "Add Planogram" button doesn't overflow: add `whitespace-nowrap` and responsive text truncation
+- Make header responsive with column stacking
+
+### 9. Global index.css - Additional mobile overrides
+- Add rule to reduce Card component padding globally on mobile (affects all modules consistently):
+  ```css
+  @media (max-width: 767px) {
+    .stat-card { padding: 0.5rem; }
+  }
+  ```
+
+## Technical Details
+
+### Files to modify:
+1. **src/components/ui/card.tsx** - Reduce default padding and font sizes with responsive breakpoints
+2. **src/index.css** - Tighten `.stat-card` mobile padding
+3. **src/pages/stores/NSOChecklistDetails.tsx** - Reduce milestone card date font sizes
+4. **src/pages/stores/NewStoreOpening.tsx** - Responsive header and page padding
+5. **src/pages/PettyCash.tsx** - Responsive header stacking and button layout
+6. **src/pages/vm/Planograms.tsx** - Prevent button overflow
+
+### What stays unchanged:
+- All desktop layouts (>= 1024px)
+- Colors, typography family, component structure
+- No new components or dependencies
+- Existing grid stacking logic from previous responsiveness pass
+
