@@ -509,7 +509,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
   if (isMobile) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="left" className="w-72 p-0 bg-sidebar text-sidebar-foreground border-sidebar-border">
+        <SheetContent side="left" className="w-72 p-0 bg-sidebar text-sidebar-foreground border-sidebar-border [&>button.absolute]:hidden">
           <div className="flex flex-col h-full">
             {sidebarContent}
           </div>
