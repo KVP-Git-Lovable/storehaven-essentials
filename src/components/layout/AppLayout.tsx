@@ -27,7 +27,7 @@ export function AppLayout() {
         isMobile ? "ml-0" : sidebarCollapsed ? "ml-16" : "ml-64"
       )}>
         <AppHeader onMenuClick={() => setSidebarOpen(true)} />
-        <main className="p-3 sm:p-4 md:p-6 overflow-x-hidden">
+        <main className="p-2 sm:p-4 md:p-6 overflow-x-hidden">
           <Outlet />
         </main>
       </div>

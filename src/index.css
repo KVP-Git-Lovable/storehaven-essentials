@@ -115,7 +115,7 @@
   }
 
   .stat-card {
-    @apply bg-card rounded-xl border border-border p-2 sm:p-3 md:p-4 lg:p-6 shadow-sm transition-all duration-200 hover:shadow-md overflow-hidden;
+    @apply bg-card rounded-xl border border-border p-1.5 sm:p-3 md:p-4 lg:p-6 shadow-sm transition-all duration-200 hover:shadow-md overflow-hidden;
   }
 
   /* Responsive text truncation */
