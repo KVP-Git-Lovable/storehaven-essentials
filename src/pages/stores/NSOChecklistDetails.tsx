@@ -783,16 +783,16 @@ export default function NSOChecklistDetails() {
       {/* Tabs for Tasks, Assets, Budget */}
         <Tabs defaultValue="tasks" className="space-y-4">
           <TabsList className="grid w-full grid-cols-3 md:w-auto md:inline-flex">
-          <TabsTrigger value="tasks" className="gap-2">
-            <LayoutList className="h-4 w-4" />
+          <TabsTrigger value="tasks" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+            <LayoutList className="h-4 w-4 hidden sm:block" />
             Tasks
           </TabsTrigger>
-          <TabsTrigger value="assets" className="gap-2">
-            <Package className="h-4 w-4" />
+          <TabsTrigger value="assets" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+            <Package className="h-4 w-4 hidden sm:block" />
             Required Assets
           </TabsTrigger>
-          <TabsTrigger value="budget" className="gap-2">
-            <Wallet className="h-4 w-4" />
+          <TabsTrigger value="budget" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+            <Wallet className="h-4 w-4 hidden sm:block" />
             Budget
           </TabsTrigger>
         </TabsList>
@@ -800,8 +800,8 @@ export default function NSOChecklistDetails() {
         {/* Tasks Tab */}
         <TabsContent value="tasks" className="m-0">
           <Card>
-            <CardHeader className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-3 flex-wrap">
+            <CardHeader className="flex flex-col gap-3 py-3 sm:py-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap w-full md:w-auto">
                 <CardTitle className="text-base md:text-lg">Checklist Tasks</CardTitle>
                 <ToggleGroup
                   type="single"
@@ -819,7 +819,7 @@ export default function NSOChecklistDetails() {
                   </ToggleGroupItem>
                 </ToggleGroup>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                 {/* Filter dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
