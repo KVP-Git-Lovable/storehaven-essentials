@@ -746,7 +746,7 @@ export default function NSOChecklistDetails() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Start Date</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{format(new Date(checklist.start_date), "MMM d, yyyy")}</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-bold">{format(new Date(checklist.start_date), "MMM d, yyyy")}</p>
           </CardContent>
         </Card>
         <Card>
@@ -754,7 +754,7 @@ export default function NSOChecklistDetails() {
             <CardTitle className="text-sm font-medium text-muted-foreground">End Date</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">
+            <p className="text-lg sm:text-xl md:text-2xl font-bold">
               {calculatedEndDate ? format(calculatedEndDate, "MMM d, yyyy") : "-"}
             </p>
             {endDateTaskName && (
@@ -770,7 +770,7 @@ export default function NSOChecklistDetails() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-3">
-              <span className="text-2xl font-bold text-primary">{progress}%</span>
+              <span className="text-lg sm:text-xl md:text-2xl font-bold text-primary">{progress}%</span>
               <span className="text-sm text-muted-foreground">
                 ({completedTasks}/{activeTasks.length} tasks)
               </span>
