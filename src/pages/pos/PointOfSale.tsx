@@ -1108,10 +1108,10 @@ export default function PointOfSale() {
 
       {/* Customer Identification Dialog */}
       <Dialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Phone className="h-5 w-5" />
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Phone className="h-4 w-4" />
               Customer Identification
             </DialogTitle>
           </DialogHeader>

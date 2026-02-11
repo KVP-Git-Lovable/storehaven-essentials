@@ -82,20 +82,20 @@ export function QuickActionsBar({
   ];
 
   return (
-    <div className="flex items-center gap-1 p-2 bg-muted/50 rounded-lg">
-      <Keyboard className="h-4 w-4 text-muted-foreground mr-2" />
+    <div className="flex flex-wrap items-center gap-1 p-1.5 sm:p-2 bg-muted/50 rounded-lg">
+      <Keyboard className="h-4 w-4 text-muted-foreground mr-1 sm:mr-2 hidden sm:block" />
       {actions.map((action) => (
         <Tooltip key={action.key}>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="sm"
-              className="h-9 px-3 gap-2 relative"
+              className="h-7 px-1.5 sm:h-9 sm:px-3 gap-1 sm:gap-2 relative"
               onClick={action.action}
               disabled={action.disabled}
             >
-              <action.icon className={`h-4 w-4 ${action.color}`} />
-              <span className="text-xs font-medium">{action.label}</span>
+              <action.icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${action.color}`} />
+              <span className="text-[10px] sm:text-xs font-medium">{action.label}</span>
               <kbd className="hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100">
                 {action.key}
               </kbd>
