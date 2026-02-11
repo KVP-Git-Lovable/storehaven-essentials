@@ -194,7 +194,7 @@ export default function ShipmentTracking() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Shipment Tracking</h1>
           <p className="text-muted-foreground">Track deliveries from warehouse to stores</p>
