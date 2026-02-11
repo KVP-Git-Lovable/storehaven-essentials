@@ -140,15 +140,21 @@
 }
 
 /* Mobile responsive form overrides - stack multi-col forms */
+/* Exclude TabsList and other inline grids from being forced to 1fr */
 @media (max-width: 767px) {
-  .grid-cols-2,
-  .grid-cols-3,
-  .grid-cols-4,
-  .sm\:grid-cols-2,
-  .sm\:grid-cols-3,
-  .sm\:grid-cols-4 {
+  .grid-cols-2:not([role="tablist"]),
+  .grid-cols-3:not([role="tablist"]),
+  .grid-cols-4:not([role="tablist"]),
+  .sm\:grid-cols-2:not([role="tablist"]),
+  .sm\:grid-cols-3:not([role="tablist"]),
+  .sm\:grid-cols-4:not([role="tablist"]) {
     grid-template-columns: 1fr !important;
   }
+}
+
+/* Global box-sizing */
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
 /* Mobile-first responsive global fixes */
@@ -166,8 +172,8 @@
   /* Ensure tap targets are at least 44px on mobile */
   @media (max-width: 767px) {
     button, a, [role="button"], input[type="checkbox"], input[type="radio"] {
-      min-height: 36px;
-      min-width: 36px;
+      min-height: 28px;
+      min-width: 28px;
     }
 
     /* Mobile form inputs should be full-width */
