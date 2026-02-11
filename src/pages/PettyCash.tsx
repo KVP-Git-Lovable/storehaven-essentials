@@ -254,10 +254,10 @@ export default function PettyCash() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Petty Cash Management</h1>
-          <p className="text-muted-foreground">Track store-level petty cash and expenses</p>
+          <h1 className="text-xl sm:text-2xl font-semibold">Petty Cash Management</h1>
+          <p className="text-sm text-muted-foreground">Track store-level petty cash and expenses</p>
         </div>
         <Dialog open={pcDialogOpen} onOpenChange={setPcDialogOpen}>
           <DialogTrigger asChild>

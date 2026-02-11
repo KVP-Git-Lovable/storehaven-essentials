@@ -513,12 +513,12 @@ export default function Planograms() {
 
   return (
     <div className="space-y-6 animate-fade-in h-full flex flex-col">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Planogram Repository</h1>
-          <p className="text-muted-foreground">Manage master planograms and base photos</p>
+          <h1 className="text-xl sm:text-2xl font-semibold">Planogram Repository</h1>
+          <p className="text-sm text-muted-foreground">Manage master planograms and base photos</p>
         </div>
-        <Button className="gap-2" onClick={openCreateDialog}>
+        <Button className="gap-2 whitespace-nowrap w-full sm:w-auto" onClick={openCreateDialog}>
           <Plus className="h-4 w-4" />
           Add Planogram
         </Button>
