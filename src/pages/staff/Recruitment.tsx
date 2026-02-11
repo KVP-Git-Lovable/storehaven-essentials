@@ -128,7 +128,7 @@ export default function Recruitment() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Recruitment</h1>
           <p className="text-muted-foreground">End-to-end hiring pipeline</p>
@@ -142,7 +142,7 @@ export default function Recruitment() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between flex-wrap gap-2">
           <TabsList>
             <TabsTrigger value="requisitions">Requisitions</TabsTrigger>
             <TabsTrigger value="candidates">Candidates</TabsTrigger>
