@@ -93,7 +93,7 @@ export default function InventoryDashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
+      <div className="grid gap-3 sm:gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
         {[
           { icon: Boxes, label: "Total SKUs", value: stats.totalItems, color: "bg-primary/10 text-primary" },
           { icon: Package, label: "Active Items", value: stats.activeItems, color: "bg-success/10 text-success" },
@@ -101,15 +101,15 @@ export default function InventoryDashboard() {
           { icon: TrendingDown, label: "Low Stock", value: stats.lowStockItems, color: "bg-destructive/10 text-destructive" },
           { icon: AlertTriangle, label: "Expiry Tracked", value: stats.expiringItems, color: "bg-warning/10 text-warning" },
         ].map((item, i) => (
-          <Card key={i} className="min-w-0">
+          <Card key={i}>
             <CardContent className="p-3 sm:p-4">
-              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <div className={`p-1.5 sm:p-2 rounded-lg shrink-0 ${item.color.split(" ")[0]}`}>
                   <item.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${item.color.split(" ")[1]}`} />
                 </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{item.label}</p>
-                  <p className="text-lg sm:text-2xl font-bold truncate">{item.value}</p>
+                <div>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">{item.label}</p>
+                  <p className="text-lg sm:text-2xl font-bold">{item.value}</p>
                 </div>
               </div>
             </CardContent>
