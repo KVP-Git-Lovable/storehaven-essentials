@@ -93,82 +93,38 @@ export default function InventoryDashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-5">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Boxes className="h-5 w-5 text-primary" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
+        {[
+          { icon: Boxes, label: "Total SKUs", value: stats.totalItems, color: "bg-primary/10 text-primary" },
+          { icon: Package, label: "Active Items", value: stats.activeItems, color: "bg-success/10 text-success" },
+          { icon: ShoppingCart, label: "Inventory Value", value: `₹${(stats.totalValue / 1000).toFixed(0)}K`, color: "bg-accent/10 text-accent" },
+          { icon: TrendingDown, label: "Low Stock", value: stats.lowStockItems, color: "bg-destructive/10 text-destructive" },
+          { icon: AlertTriangle, label: "Expiry Tracked", value: stats.expiringItems, color: "bg-warning/10 text-warning" },
+        ].map((item, i) => (
+          <Card key={i} className="min-w-0">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className={`p-1.5 sm:p-2 rounded-lg shrink-0 ${item.color.split(" ")[0]}`}>
+                  <item.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${item.color.split(" ")[1]}`} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{item.label}</p>
+                  <p className="text-lg sm:text-2xl font-bold truncate">{item.value}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total SKUs</p>
-                <p className="text-2xl font-bold">{stats.totalItems}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-success/10">
-                <Package className="h-5 w-5 text-success" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Active Items</p>
-                <p className="text-2xl font-bold">{stats.activeItems}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-accent/10">
-                <ShoppingCart className="h-5 w-5 text-accent" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Inventory Value</p>
-                <p className="text-2xl font-bold">₹{(stats.totalValue / 1000).toFixed(0)}K</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-destructive/10">
-                <TrendingDown className="h-5 w-5 text-destructive" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Low Stock</p>
-                <p className="text-2xl font-bold">{stats.lowStockItems}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-warning/10">
-                <AlertTriangle className="h-5 w-5 text-warning" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Expiry Tracked</p>
-                <p className="text-2xl font-bold">{stats.expiringItems}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Charts Row 1 */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader>
-            <CardTitle className="text-base">Items by Category</CardTitle>
+            <CardTitle className="text-sm sm:text-base">Items by Category</CardTitle>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
+          <CardContent className="px-1 sm:px-6">
+            <ResponsiveContainer width="100%" height={220}>
               <PieChart>
                 <Pie
                   data={categoryData}
@@ -176,7 +132,7 @@ export default function InventoryDashboard() {
                   cy="50%"
                   labelLine={false}
                   label={({ name, value }) => `${name} (${value})`}
-                  outerRadius={80}
+                  outerRadius={70}
                   fill="#8884d8"
                   dataKey="value"
                 >
@@ -190,14 +146,14 @@ export default function InventoryDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader>
-            <CardTitle className="text-base">Requisition Status</CardTitle>
+            <CardTitle className="text-sm sm:text-base">Requisition Status</CardTitle>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
+          <CardContent className="px-1 sm:px-6">
+            <ResponsiveContainer width="100%" height={220}>
               <BarChart data={recentRequisitions}>
-                <XAxis dataKey="status" tick={{ fontSize: 12 }} />
+                <XAxis dataKey="status" tick={{ fontSize: 11 }} />
                 <YAxis />
                 <Tooltip />
                 <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
@@ -208,16 +164,16 @@ export default function InventoryDashboard() {
       </div>
 
       {/* Charts Row 2 */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader>
-            <CardTitle className="text-base">Top Items by Unit Cost</CardTitle>
+            <CardTitle className="text-sm sm:text-base">Top Items by Unit Cost</CardTitle>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
+          <CardContent className="px-1 sm:px-6">
+            <ResponsiveContainer width="100%" height={220}>
               <BarChart data={topItems} layout="vertical">
                 <XAxis type="number" tickFormatter={(v) => `₹${v}`} />
-                <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11 }} />
+                <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 10 }} />
                 <Tooltip formatter={(v: number) => `₹${v}`} />
                 <Legend />
                 <Bar dataKey="cost" name="Cost" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
@@ -227,14 +183,14 @@ export default function InventoryDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader>
-            <CardTitle className="text-base">Category Value Distribution</CardTitle>
+            <CardTitle className="text-sm sm:text-base">Category Value Distribution</CardTitle>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
+          <CardContent className="px-1 sm:px-6">
+            <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={categoryData}>
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                 <YAxis tickFormatter={(v) => `₹${v}`} />
                 <Tooltip formatter={(v: number) => `₹${v}`} />
                 <Area type="monotone" dataKey="cost" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.3} />
