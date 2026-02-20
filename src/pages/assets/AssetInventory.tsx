@@ -143,8 +143,8 @@ export default function AssetInventory() {
       assetMasterId: "",
       storeId: "",
       location: "",
-      condition: "under-warranty",
-      assetStatus: "requisition-raised",
+      condition: "under_warranty",
+      assetStatus: "requisition_raised",
       purchaseDate: "",
       value: 0,
       vendorId: "",
@@ -333,8 +333,8 @@ export default function AssetInventory() {
   // Compute stats from actual asset data
   const stats = useMemo(() => {
     const totalAssets = assets.length;
-    const underWarranty = assets.filter((a) => a.condition === "under-warranty").length;
-    const underAMC = assets.filter((a) => a.condition === "under-amc").length;
+    const underWarranty = assets.filter((a) => a.condition === "under_warranty").length;
+    const underAMC = assets.filter((a) => a.condition === "under_amc").length;
     const nonOperational = assets.filter(
       (a) => a.asset_status === "withdrawn" || a.asset_status === "drop"
     ).length;
@@ -743,9 +743,9 @@ export default function AssetInventory() {
                   <TableCell>
                     <Badge
                       variant={
-                        asset.condition === "under-warranty"
+                        asset.condition === "under_warranty"
                           ? "default"
-                          : asset.condition === "under-amc"
+                          : asset.condition === "under_amc"
                           ? "secondary"
                           : "outline"
                       }
