@@ -102,19 +102,19 @@ type Store = {
 
 
 const conditionOptions = [
-  { value: "under-warranty", label: "Under Warranty" },
-  { value: "under-amc", label: "Under AMC" },
-  { value: "need-based-support", label: "Need Based Support" },
-  { value: "no-service-support", label: "No Service Support" },
+  { value: "under_warranty", label: "Under Warranty" },
+  { value: "under_amc", label: "Under AMC" },
+  { value: "need_based_support", label: "Need Based Support" },
+  { value: "no_service_support", label: "No Service Support" },
 ];
 
 const assetStatusOptions = [
-  { value: "requisition-raised", label: "Requisition Raised" },
-  { value: "procurement-planned", label: "Procurement Planned" },
-  { value: "po-issued", label: "PO Issued" },
-  { value: "product-received", label: "Product Received" },
-  { value: "shipped-to-store", label: "Shipped to Store" },
-  { value: "installation-fixed", label: "Installation Fixed" },
+  { value: "requisition_raised", label: "Requisition Raised" },
+  { value: "procurement_planned", label: "Procurement Planned" },
+  { value: "po_issued", label: "PO Issued" },
+  { value: "product_received", label: "Product Received" },
+  { value: "shipped_to_store", label: "Shipped to Store" },
+  { value: "installation_fixed", label: "Installation Fixed" },
   { value: "installed", label: "Installed" },
   { value: "working", label: "Working" },
   { value: "withdrawn", label: "Withdrawn" },
@@ -200,7 +200,8 @@ export default function AssetInventory() {
     setLoading(false);
   };
 
-  const oemVendors = vendors.filter((v) => v.vendor_type === "oem");
+  // Show all vendors for OEM selection since Asset Master can assign any vendor as OEM
+  const oemVendors = vendors;
 
   const handleEdit = (asset: Asset) => {
     setEditingAsset(asset);
@@ -208,8 +209,8 @@ export default function AssetInventory() {
       assetMasterId: asset.asset_master_id || "",
       storeId: asset.store_id || "",
       location: asset.location || "",
-      condition: asset.condition || "under-warranty",
-      assetStatus: asset.asset_status || "requisition-raised",
+      condition: asset.condition || "under_warranty",
+      assetStatus: asset.asset_status || "requisition_raised",
       purchaseDate: asset.purchase_date || "",
       value: asset.value || 0,
       vendorId: asset.vendor_id || "",
