@@ -14,7 +14,6 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Create admin client with service role key
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: {
         autoRefreshToken: false,
@@ -41,7 +40,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Check if requesting user is admin
     const { data: isAdmin } = await supabaseAdmin.rpc("is_admin", { _user_id: requestingUser.id });
     
     if (!isAdmin) {
@@ -53,7 +51,6 @@ Deno.serve(async (req) => {
 
     const { email, password, username, role_id, reports_to, status } = await req.json();
 
-    // Validate required fields
     if (!email || !password || !username) {
       return new Response(
         JSON.stringify({ error: "Email, password, and username are required" }),
@@ -61,23 +58,68 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Create user using admin API (does not affect current session)
+    // Try to create the user
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
-      email_confirm: true, // Auto-confirm email
+      email_confirm: true,
     });
 
+    let userId: string;
+
     if (createError) {
-      return new Response(
-        JSON.stringify({ error: createError.message }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      // If user already exists in auth, check if they have a profile
+      if (createError.message?.includes("already been registered")) {
+        // Find the existing auth user by email
+        const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+        
+        if (listError) {
+          return new Response(
+            JSON.stringify({ error: "Failed to look up existing user" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const existingUser = users?.find((u) => u.email === email);
+        if (!existingUser) {
+          return new Response(
+            JSON.stringify({ error: "User exists but could not be found" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Check if profile already exists
+        const { data: existingProfile } = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .eq("id", existingUser.id)
+          .single();
+
+        if (existingProfile) {
+          return new Response(
+            JSON.stringify({ error: "A user with this email already exists and has a profile. Please use a different email." }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Auth user exists but no profile — recover by creating the profile
+        userId = existingUser.id;
+
+        // Update the password to the new one provided
+        await supabaseAdmin.auth.admin.updateUserById(userId, { password });
+      } else {
+        return new Response(
+          JSON.stringify({ error: createError.message }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } else {
+      userId = newUser.user.id;
     }
 
-    // Create profile for the new user
+    // Create profile for the user
     const { error: profileError } = await supabaseAdmin.from("profiles").insert({
-      id: newUser.user.id,
+      id: userId,
       username,
       email,
       role_id: role_id || null,
@@ -87,8 +129,10 @@ Deno.serve(async (req) => {
     });
 
     if (profileError) {
-      // Rollback: delete the auth user if profile creation fails
-      await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
+      // Only rollback auth user if we just created it
+      if (!createError) {
+        await supabaseAdmin.auth.admin.deleteUser(userId);
+      }
       return new Response(
         JSON.stringify({ error: profileError.message }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -98,10 +142,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        user: { 
-          id: newUser.user.id, 
-          email: newUser.user.email 
-        } 
+        user: { id: userId, email } 
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
