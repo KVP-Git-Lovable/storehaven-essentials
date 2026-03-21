@@ -416,10 +416,20 @@ export default function TaskAdherence() {
         </div>
         <div className="flex gap-2 flex-wrap">
           {selectedStore && (
-            <Button variant="outline" onClick={() => setRosterOpen(true)}>
-              <Users className="mr-2 h-4 w-4" />
-              Manage Roster
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={() => autoAssignMutation.mutate()}
+                disabled={autoAssignMutation.isPending}
+              >
+                <Wand2 className={`mr-2 h-4 w-4 ${autoAssignMutation.isPending ? 'animate-spin' : ''}`} />
+                Auto-Assign
+              </Button>
+              <Button variant="outline" onClick={() => setRosterOpen(true)}>
+                <Users className="mr-2 h-4 w-4" />
+                Manage Roster
+              </Button>
+            </>
           )}
           {incompleteTasks > 0 && (
             <Button 
