@@ -42,6 +42,7 @@ const defaultForm: TaskMasterForm = {
   requires_barcode_scan: false,
   requires_gps_verification: false,
   qr_code_value: "",
+  baseline_photo_url: "",
 };
 
 const categoryColors: Record<TaskCategory, string> = {
