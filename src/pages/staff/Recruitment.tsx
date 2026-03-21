@@ -73,6 +73,7 @@ export default function Recruitment() {
   const [candidateDialogOpen, setCandidateDialogOpen] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchData();
