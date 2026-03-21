@@ -1,39 +1,78 @@
 
 
-# Fix NSO Checklist Details Mobile Overflow
+# Store Maintenance Task Roster & Day Planner
 
-## Problem
-On the NSO Checklist Details page (`/stores/new-opening/:id`), the tab buttons ("Tasks", "Required Assets", "Budget") and the task controls row ("Checklist Tasks" title, List/Gantt toggle, Filter, Add Section) overflow outside the screen on mobile devices.
+## What We're Building
 
-## Changes
+A **Daily Roster** system for Store Maintenance Tasks that lets managers:
+1. **Assign employees (owners) to task instances** — linking real employees to each task for the day
+2. **View a Day Plan** — a clear, shift-wise timeline showing who does what and when
+3. **Manage the roster** — drag or pick employees into task slots by role/department
 
-### 1. Fix Tabs overflow (src/pages/stores/NSOChecklistDetails.tsx, ~line 785-798)
-- The `TabsList` uses `grid-cols-3` which works, but the tab trigger text + icons may overflow
-- Hide icons on mobile inside TabsTrigger: add `hidden sm:inline` to icon inside each TabsTrigger, or reduce icon size
-- Reduce tab text size on mobile with `text-xs sm:text-sm`
+## Current State
 
-### 2. Fix CardHeader controls row (lines 803-935)
-- The CardHeader currently uses `flex-col` with a nested row for title + toggle and another row for filter + add
-- On mobile, the title "Checklist Tasks" + List/Gantt toggle group + Filter + Add all compete for space
-- Stack the controls: wrap the entire CardHeader content so on mobile, the title row and action buttons row each take full width
-- Make the action buttons (`Filter` and `Add Section`) use smaller sizing on mobile
-- Ensure the ToggleGroup doesn't force overflow by using compact padding
+- `task_instances` has `assigned_to` (text field) and `role_id` (links to `role_master` with shift info)
+- `employees` table has `name`, `department`, `position`, `store_id`, `status`
+- `role_master` has `name`, `shift_type` (morning/afternoon/evening/night)
+- `departments` table exists with `name`, `description`, `status`
+- No formal "roster" or employee-to-task-instance assignment table exists yet
 
-### 3. Specific fixes:
-- **TabsTrigger icons**: Hide on small screens (`<sm:hidden>` on the icon) to save horizontal space
-- **CardHeader**: Ensure `flex-wrap` is applied so controls wrap to next line
-- **Filter button**: Already has responsive text, looks fine
-- **Add Section button**: Already shows "Add" on mobile, looks fine
-- **ToggleGroup**: Reduce padding further on mobile
+## Plan
 
-## Technical Details
+### 1. Database Changes
 
-### File: `src/pages/stores/NSOChecklistDetails.tsx`
+**New table: `daily_rosters`**
+- `id`, `store_id` (FK stores), `roster_date` (date), `employee_id` (FK employees), `role_id` (FK role_master), `shift_type`, `notes`, `created_by`, `created_at`
+- Unique constraint on (store_id, roster_date, employee_id) — one slot per employee per day
+- RLS policies for authenticated users
 
-**Tab triggers (lines 786-798)**: Add `hidden sm:block` to icons inside TabsTrigger to hide them on mobile, keeping only text to fit within viewport.
+**Alter `task_instances`**
+- Add `assigned_employee_id` (uuid, FK employees, nullable) — links a real employee as the task owner instead of free-text `assigned_to`
 
-**CardHeader controls (lines 803-935)**: The current layout already uses `flex-col` with `md:flex-row`. The inner rows need `flex-wrap` to prevent overflow. Add `w-full` to the action buttons container on mobile so it takes full width and wraps properly.
+### 2. Task Adherence Page Enhancements
 
-**ToggleGroup items (lines 812-820)**: Already have responsive sizing `h-7 md:h-8 px-2 md:px-3`. These look OK.
+**Roster Sidebar / Tab**
+- Add a "Roster" tab alongside the existing task list view
+- Shows a **shift-grouped roster panel**: employees assigned to each shift for the selected store + date
+- Manager can add employees to the roster from a dropdown (filtered by store, department, active status)
 
-### No other files need changes - this is isolated to the NSOChecklistDetails page.
+**Day Planner View**
+- New toggle: "Day Plan" view (alongside existing list)
+- Visual **timeline grouped by shift** (Morning → Afternoon → Evening → Night)
+- Each shift block shows: assigned employees, their tasks sorted by scheduled_time, status badges, checklist progress
+- Clear swim-lane layout: Employee name on the left, their tasks as cards on the right with time slots
+
+**Task Owner Assignment**
+- In the task detail dialog and task table, show "Owner" column
+- Click to assign an employee from the day's roster (dropdown of rostered employees for that store/date)
+- Auto-suggest: if a task's `role_id` matches a rostered employee's role, highlight them
+
+### 3. Roster Management UI
+
+- A "Manage Roster" button on the Task Adherence page
+- Opens a dialog/sheet where the manager:
+  - Sees all active employees for the selected store
+  - Assigns each to a shift/role for the day
+  - Can copy previous day's roster as a template
+- Quick filters by department and role
+
+### 4. Files to Create/Modify
+
+| Action | File | Purpose |
+|--------|------|---------|
+| Create | `src/components/operations/DailyRosterPanel.tsx` | Roster management sidebar/dialog |
+| Create | `src/components/operations/DayPlannerView.tsx` | Shift-wise timeline day plan |
+| Create | `src/components/operations/RosterEmployeeCard.tsx` | Employee card within roster |
+| Edit | `src/pages/operations/TaskAdherence.tsx` | Add roster tab, day planner toggle, owner column |
+| Edit | `src/components/operations/TaskInstanceDetailDialog.tsx` | Add owner assignment dropdown |
+| Migration | New migration | Create `daily_rosters` table, add `assigned_employee_id` to `task_instances` |
+
+### 5. How It Works End-to-End
+
+1. Manager opens **Task Adherence**, selects store + date
+2. Clicks **"Manage Roster"** → assigns employees to shifts from the employee list
+3. Switches to **"Day Plan"** view → sees a clean shift-by-shift timeline
+4. Each task shows its assigned owner; clicking a task opens the detail dialog with checklist
+5. Manager can assign/reassign owners from the rostered employees
+6. Employees see only their tasks when they log in (filtered by `assigned_employee_id`)
+
