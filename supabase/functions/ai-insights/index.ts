@@ -382,12 +382,12 @@ Roles: ${JSON.stringify(rosterRoles)}`;
       parsedInsights = { rawResponse: content, parseError: true };
     }
 
-    return new Response(JSON.stringify({ 
-      success: true, 
-      type,
-      insights: parsedInsights,
-      generatedAt: new Date().toISOString()
-    }), {
+    // For roster_rebalance, return suggestions/summary at top level for easy consumption
+    const responseBody = type === "roster_rebalance"
+      ? { success: true, type, suggestions: parsedInsights?.suggestions || [], summary: parsedInsights?.summary || "", generatedAt: new Date().toISOString() }
+      : { success: true, type, insights: parsedInsights, generatedAt: new Date().toISOString() };
+
+    return new Response(JSON.stringify(responseBody), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
