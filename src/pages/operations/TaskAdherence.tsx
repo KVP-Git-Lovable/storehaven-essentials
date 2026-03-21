@@ -46,6 +46,8 @@ export default function TaskAdherence() {
   const [handoverNotes, setHandoverNotes] = useState("");
   const [targetRoleId, setTargetRoleId] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "dayplan">("list");
+  const [rosterOpen, setRosterOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: stores } = useQuery({
