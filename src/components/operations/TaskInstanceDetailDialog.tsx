@@ -304,6 +304,14 @@ export function TaskInstanceDetailDialog({
             </>
           )}
 
+          {/* Photo Compliance Section */}
+          {task.task_master?.baseline_photo_url && (
+            <>
+              <Separator />
+              <TaskComplianceSection task={task} />
+            </>
+          )}
+
           {/* Actions */}
           <Separator />
           <div className="flex gap-2 justify-end">
