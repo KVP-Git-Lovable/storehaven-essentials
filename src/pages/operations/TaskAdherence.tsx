@@ -415,8 +415,10 @@ export default function TaskAdherence() {
                 {taskInstances.map((task) => {
                   const config = statusConfig[task.status as TaskStatus];
                   return (
-                    <TableRow key={task.id}>
-                      <TableCell>
+                    <TableRow key={task.id} className="cursor-pointer hover:bg-muted/50" onClick={() => {
+                      setSelectedTask(task);
+                      setDetailDialogOpen(true);
+                    }}>
                         <div>
                           <div className="font-medium">{task.task_master?.name}</div>
                           <div className="text-xs text-muted-foreground flex items-center gap-2">
