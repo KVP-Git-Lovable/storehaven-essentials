@@ -19,6 +19,7 @@ import {
   AlertCircle, ArrowRight
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { TaskInstanceDetailDialog } from "@/components/operations/TaskInstanceDetailDialog";
 
 type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'overdue' | 'escalated' | 'handed_over';
 
