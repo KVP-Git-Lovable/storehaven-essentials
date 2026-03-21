@@ -354,7 +354,13 @@ export default function TaskAdherence() {
           <h1 className="text-3xl font-bold tracking-tight">Task Adherence</h1>
           <p className="text-muted-foreground">Monitor and complete daily store operations</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {selectedStore && (
+            <Button variant="outline" onClick={() => setRosterOpen(true)}>
+              <Users className="mr-2 h-4 w-4" />
+              Manage Roster
+            </Button>
+          )}
           {incompleteTasks > 0 && (
             <Button 
               variant="outline" 
