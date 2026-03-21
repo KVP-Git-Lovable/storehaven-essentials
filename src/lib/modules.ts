@@ -124,6 +124,7 @@ export const routeToModuleKey: Record<string, string> = {
   "/staff/training": "staff.training",
   "/staff/feedback": "staff.feedback",
   "/staff/offboarding": "staff.offboarding",
+  "/staff/lms": "staff.lms",
   "/staff/attendance": "staff.attendance",
   "/security": "security.dashboard",
   "/security/guards": "security.guards",
