@@ -28,6 +28,7 @@ interface TaskMasterForm {
   requires_barcode_scan: boolean;
   requires_gps_verification: boolean;
   qr_code_value: string;
+  baseline_photo_url: string;
 }
 
 const defaultForm: TaskMasterForm = {
