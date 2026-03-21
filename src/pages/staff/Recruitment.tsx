@@ -215,7 +215,7 @@ export default function Recruitment() {
                   </TableRow>
                 ) : (
                   filteredRequisitions.map((req) => (
-                    <TableRow key={req.id}>
+                    <TableRow key={req.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/staff/recruitment/${req.id}`)}>
                       <TableCell className="font-medium">{req.title}</TableCell>
                       <TableCell>{req.department}</TableCell>
                       <TableCell>{req.position}</TableCell>
