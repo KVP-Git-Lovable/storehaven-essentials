@@ -8573,6 +8573,51 @@ export type Database = {
           },
         ]
       }
+      task_instance_checklist_items: {
+        Row: {
+          checked_at: string | null
+          checked_by: string | null
+          checklist_item_id: string
+          created_at: string
+          id: string
+          is_checked: boolean
+          task_instance_id: string
+        }
+        Insert: {
+          checked_at?: string | null
+          checked_by?: string | null
+          checklist_item_id: string
+          created_at?: string
+          id?: string
+          is_checked?: boolean
+          task_instance_id: string
+        }
+        Update: {
+          checked_at?: string | null
+          checked_by?: string | null
+          checklist_item_id?: string
+          created_at?: string
+          id?: string
+          is_checked?: boolean
+          task_instance_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_instance_checklist_items_checklist_item_id_fkey"
+            columns: ["checklist_item_id"]
+            isOneToOne: false
+            referencedRelation: "task_master_checklist_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_instance_checklist_items_task_instance_id_fkey"
+            columns: ["task_instance_id"]
+            isOneToOne: false
+            referencedRelation: "task_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_instances: {
         Row: {
           assigned_to: string | null
@@ -8718,6 +8763,41 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      task_master_checklist_items: {
+        Row: {
+          created_at: string
+          id: string
+          is_required: boolean
+          sort_order: number
+          task_master_id: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_required?: boolean
+          sort_order?: number
+          task_master_id: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_required?: boolean
+          sort_order?: number
+          task_master_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_master_checklist_items_task_master_id_fkey"
+            columns: ["task_master_id"]
+            isOneToOne: false
+            referencedRelation: "task_master"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       task_template: {
         Row: {

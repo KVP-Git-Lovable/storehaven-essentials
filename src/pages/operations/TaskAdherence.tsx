@@ -19,6 +19,7 @@ import {
   AlertCircle, ArrowRight
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { TaskInstanceDetailDialog } from "@/components/operations/TaskInstanceDetailDialog";
 
 type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'overdue' | 'escalated' | 'handed_over';
 
@@ -36,6 +37,7 @@ export default function TaskAdherence() {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [handoverDialogOpen, setHandoverDialogOpen] = useState(false);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [completionNotes, setCompletionNotes] = useState("");
   const [handoverNotes, setHandoverNotes] = useState("");
@@ -311,6 +313,20 @@ export default function TaskAdherence() {
     onError: (error) => toast.error(error.message),
   });
 
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      const { error } = await supabase.from("task_instances").delete().eq("id", taskId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["task-instances"] });
+      toast.success("Task deleted");
+      setDetailDialogOpen(false);
+      setSelectedTask(null);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   // Calculate stats
   const totalTasks = taskInstances?.length || 0;
   const completedTasks = taskInstances?.filter(t => t.status === 'completed').length || 0;
@@ -413,7 +429,10 @@ export default function TaskAdherence() {
                 {taskInstances.map((task) => {
                   const config = statusConfig[task.status as TaskStatus];
                   return (
-                    <TableRow key={task.id}>
+                    <TableRow key={task.id} className="cursor-pointer hover:bg-muted/50" onClick={() => {
+                      setSelectedTask(task);
+                      setDetailDialogOpen(true);
+                    }}>
                       <TableCell>
                         <div>
                           <div className="font-medium">{task.task_master?.name}</div>
@@ -646,6 +665,26 @@ export default function TaskAdherence() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <TaskInstanceDetailDialog
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
+        task={selectedTask}
+        onEdit={() => {
+          setDetailDialogOpen(false);
+          // For edit, we open the complete dialog to allow updating notes
+          setCompleteDialogOpen(true);
+        }}
+        onDelete={() => {
+          if (selectedTask && confirm("Are you sure you want to delete this task?")) {
+            deleteTaskMutation.mutate(selectedTask.id);
+          }
+        }}
+        onComplete={() => {
+          setDetailDialogOpen(false);
+          setCompleteDialogOpen(true);
+        }}
+      />
     </div>
   );
 }

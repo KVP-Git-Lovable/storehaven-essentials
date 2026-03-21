@@ -12,7 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Search, Edit, Trash2, ClipboardList, Camera, QrCode, MapPin } from "lucide-react";
+import { Plus, Search, Edit, Trash2, ClipboardList, Camera, QrCode, MapPin, ListChecks } from "lucide-react";
+import { TaskChecklistEditor } from "@/components/operations/TaskChecklistEditor";
 
 type TaskCategory = 'cleaning' | 'inventory' | 'security' | 'maintenance' | 'customer_service' | 'admin';
 
@@ -56,6 +57,7 @@ export default function TaskMaster() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<TaskMasterForm>(defaultForm);
+  const [checklistTaskId, setChecklistTaskId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data: tasks, isLoading } = useQuery({
@@ -70,16 +72,35 @@ export default function TaskMaster() {
     },
   });
 
+  // Fetch checklist counts for all tasks
+  const { data: checklistCounts } = useQuery({
+    queryKey: ["task-master-checklist-counts"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("task_master_checklist_items")
+        .select("task_master_id");
+      if (error) throw error;
+      const counts: Record<string, number> = {};
+      data.forEach(item => {
+        counts[item.task_master_id] = (counts[item.task_master_id] || 0) + 1;
+      });
+      return counts;
+    },
+  });
+
   const createMutation = useMutation({
     mutationFn: async (data: TaskMasterForm) => {
-      const { error } = await supabase.from("task_master").insert(data);
+      const { data: result, error } = await supabase.from("task_master").insert(data).select().single();
       if (error) throw error;
+      return result;
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["task-master"] });
       toast.success("Task created successfully");
       setIsDialogOpen(false);
       setForm(defaultForm);
+      // Open checklist editor for the new task
+      setChecklistTaskId(result.id);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -106,6 +127,7 @@ export default function TaskMaster() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["task-master"] });
+      queryClient.invalidateQueries({ queryKey: ["task-master-checklist-counts"] });
       toast.success("Task deleted successfully");
     },
     onError: (error) => toast.error(error.message),
@@ -275,6 +297,11 @@ export default function TaskMaster() {
                 </div>
               </div>
 
+              {/* Checklist editor for existing tasks */}
+              {editingId && (
+                <TaskChecklistEditor taskMasterId={editingId} />
+              )}
+
               <Button onClick={handleSubmit} className="w-full">
                 {editingId ? "Update Task" : "Create Task"}
               </Button>
@@ -282,6 +309,29 @@ export default function TaskMaster() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Checklist editor dialog for newly created tasks */}
+      <Dialog open={!!checklistTaskId} onOpenChange={(open) => {
+        if (!open) {
+          setChecklistTaskId(null);
+          queryClient.invalidateQueries({ queryKey: ["task-master-checklist-counts"] });
+        }
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ListChecks className="h-5 w-5" /> Add Checklist Items
+            </DialogTitle>
+          </DialogHeader>
+          {checklistTaskId && <TaskChecklistEditor taskMasterId={checklistTaskId} />}
+          <Button variant="outline" onClick={() => {
+            setChecklistTaskId(null);
+            queryClient.invalidateQueries({ queryKey: ["task-master-checklist-counts"] });
+          }}>
+            Done
+          </Button>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>
@@ -307,67 +357,93 @@ export default function TaskMaster() {
                   <TableHead>Task Name</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Duration</TableHead>
+                  <TableHead>Checklist</TableHead>
                   <TableHead>Requirements</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTasks?.map((task) => (
-                  <TableRow key={task.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <ClipboardList className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                          <div className="font-medium">{task.name}</div>
-                          {task.description && (
-                            <div className="text-sm text-muted-foreground line-clamp-1">
-                              {task.description}
-                            </div>
+                {filteredTasks?.map((task) => {
+                  const clCount = checklistCounts?.[task.id] || 0;
+                  return (
+                    <TableRow key={task.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <ClipboardList className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <div className="font-medium">{task.name}</div>
+                            {task.description && (
+                              <div className="text-sm text-muted-foreground line-clamp-1">
+                                {task.description}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={categoryColors[task.category as TaskCategory]}>
+                          {task.category}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{task.estimated_duration_mins} mins</TableCell>
+                      <TableCell>
+                        {clCount > 0 ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1 text-primary"
+                            onClick={() => setChecklistTaskId(task.id)}
+                          >
+                            <ListChecks className="h-4 w-4" />
+                            {clCount} items
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1 text-muted-foreground"
+                            onClick={() => setChecklistTaskId(task.id)}
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Add
+                          </Button>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {task.requires_photo_evidence && (
+                            <Camera className="h-4 w-4 text-blue-500" />
+                          )}
+                          {task.requires_barcode_scan && (
+                            <QrCode className="h-4 w-4 text-green-500" />
+                          )}
+                          {task.requires_gps_verification && (
+                            <MapPin className="h-4 w-4 text-red-500" />
                           )}
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={categoryColors[task.category as TaskCategory]}>
-                        {task.category}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{task.estimated_duration_mins} mins</TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        {task.requires_photo_evidence && (
-                          <Camera className="h-4 w-4 text-blue-500" />
-                        )}
-                        {task.requires_barcode_scan && (
-                          <QrCode className="h-4 w-4 text-green-500" />
-                        )}
-                        {task.requires_gps_verification && (
-                          <MapPin className="h-4 w-4 text-red-500" />
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={task.status === "active" ? "default" : "secondary"}>
-                        {task.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => handleEdit(task)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteMutation.mutate(task.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={task.status === "active" ? "default" : "secondary"}>
+                          {task.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => handleEdit(task)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteMutation.mutate(task.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
