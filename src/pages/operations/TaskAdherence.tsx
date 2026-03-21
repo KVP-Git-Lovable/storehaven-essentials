@@ -11,15 +11,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { 
   Search, CheckCircle, Clock, AlertTriangle, XCircle, 
   Camera, MapPin, Play, RefreshCw, Building, TrendingUp,
-  AlertCircle, ArrowRight
+  AlertCircle, ArrowRight, Users, List, CalendarDays, User
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { TaskInstanceDetailDialog } from "@/components/operations/TaskInstanceDetailDialog";
+import { DailyRosterPanel } from "@/components/operations/DailyRosterPanel";
+import { DayPlannerView } from "@/components/operations/DayPlannerView";
 
 type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'overdue' | 'escalated' | 'handed_over';
 
