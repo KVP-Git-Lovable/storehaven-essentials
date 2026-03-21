@@ -106,6 +106,11 @@ export const employeeSchema = z.object({
   department: z.string().trim().min(1, "Department is required").max(50, "Department must be less than 50 characters"),
   position: z.string().trim().min(1, "Position is required").max(50, "Position must be less than 50 characters"),
   joinDate: z.string().min(1, "Join date is required"),
+  storeId: z.string().uuid().optional().nullable(),
+  managerId: z.string().uuid().optional().nullable(),
+  experienceYears: z.coerce.number().min(0).max(50).optional().nullable(),
+  previousExperience: z.string().max(500).optional().nullable(),
+  aspiration: z.string().max(500).optional().nullable(),
 });
 
 export type StoreFormData = z.infer<typeof storeSchema>;
