@@ -190,8 +190,11 @@ const App = () => (
               <Route path="/staff/employees" element={<Employees />} />
               <Route path="/staff/employees/:id" element={<EmployeeDetailsPage />} />
               <Route path="/staff/recruitment" element={<Recruitment />} />
-              <Route path="/staff/performance" element={<PerformanceReviews />} />
+              <Route path="/staff/recruitment/:id" element={<RequisitionDetails />} />
+              <Route path="/staff/performance" element={<PerformanceManagement />} />
+              <Route path="/staff/performance-reviews" element={<PerformanceReviews />} />
               <Route path="/staff/training" element={<TrainingPrograms />} />
+              <Route path="/staff/lms" element={<LearningManagement />} />
               <Route path="/staff/feedback" element={<EmployeeFeedback />} />
               <Route path="/staff/offboarding" element={<EmployeeOffboarding />} />
               <Route path="/staff/attendance" element={<Attendance />} />
