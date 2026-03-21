@@ -37,6 +37,7 @@ export default function TaskAdherence() {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [handoverDialogOpen, setHandoverDialogOpen] = useState(false);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [completionNotes, setCompletionNotes] = useState("");
   const [handoverNotes, setHandoverNotes] = useState("");
