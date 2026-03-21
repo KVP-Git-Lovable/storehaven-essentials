@@ -665,6 +665,26 @@ export default function TaskAdherence() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <TaskInstanceDetailDialog
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
+        task={selectedTask}
+        onEdit={() => {
+          setDetailDialogOpen(false);
+          // For edit, we open the complete dialog to allow updating notes
+          setCompleteDialogOpen(true);
+        }}
+        onDelete={() => {
+          if (selectedTask && confirm("Are you sure you want to delete this task?")) {
+            deleteTaskMutation.mutate(selectedTask.id);
+          }
+        }}
+        onComplete={() => {
+          setDetailDialogOpen(false);
+          setCompleteDialogOpen(true);
+        }}
+      />
     </div>
   );
 }
