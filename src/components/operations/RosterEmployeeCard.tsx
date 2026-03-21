@@ -1,8 +1,10 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { X, User } from "lucide-react";
+import { X, User, GripVertical } from "lucide-react";
+import { useDraggable } from "@dnd-kit/core";
 
 interface RosterEmployeeCardProps {
+  id?: string;
   employee: {
     id: string;
     name: string;
@@ -13,9 +15,19 @@ interface RosterEmployeeCardProps {
   roleName?: string;
   onRemove?: () => void;
   compact?: boolean;
+  draggable?: boolean;
 }
 
-export function RosterEmployeeCard({ employee, shiftType, roleName, onRemove, compact }: RosterEmployeeCardProps) {
+export function RosterEmployeeCard({ id, employee, shiftType, roleName, onRemove, compact, draggable }: RosterEmployeeCardProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: id || employee.id,
+    disabled: !draggable,
+  });
+
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
+
   if (compact) {
     return (
       <div className="flex items-center gap-2 text-sm">
@@ -28,7 +40,18 @@ export function RosterEmployeeCard({ employee, shiftType, roleName, onRemove, co
   }
 
   return (
-    <div className="flex items-center gap-3 p-2.5 rounded-lg border bg-card hover:bg-muted/30 transition-colors group">
+    <div
+      ref={draggable ? setNodeRef : undefined}
+      style={style}
+      className={`flex items-center gap-3 p-2.5 rounded-lg border bg-card hover:bg-muted/30 transition-colors group ${
+        isDragging ? "opacity-50 shadow-lg ring-2 ring-primary/30" : ""
+      }`}
+    >
+      {draggable && (
+        <button {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing touch-none text-muted-foreground hover:text-foreground">
+          <GripVertical className="h-4 w-4" />
+        </button>
+      )}
       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
         <User className="h-4 w-4 text-primary" />
       </div>
