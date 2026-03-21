@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Search, Edit, Trash2, ClipboardList, Camera, QrCode, MapPin, ListChecks } from "lucide-react";
+import { Plus, Search, Edit, Trash2, ClipboardList, Camera, QrCode, MapPin, ListChecks, Upload, Loader2, Image } from "lucide-react";
 import { TaskChecklistEditor } from "@/components/operations/TaskChecklistEditor";
 
 type TaskCategory = 'cleaning' | 'inventory' | 'security' | 'maintenance' | 'customer_service' | 'admin';
