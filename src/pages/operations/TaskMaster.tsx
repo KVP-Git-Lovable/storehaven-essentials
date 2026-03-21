@@ -60,7 +60,27 @@ export default function TaskMaster() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<TaskMasterForm>(defaultForm);
   const [checklistTaskId, setChecklistTaskId] = useState<string | null>(null);
+  const [baselineUploading, setBaselineUploading] = useState(false);
   const queryClient = useQueryClient();
+
+  const handleBaselineUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBaselineUploading(true);
+    try {
+      const fileExt = file.name.split(".").pop();
+      const filePath = `task-baselines/${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from("vm-images").upload(filePath, file);
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage.from("vm-images").getPublicUrl(filePath);
+      setForm({ ...form, baseline_photo_url: publicUrl });
+      toast.success("Baseline photo uploaded");
+    } catch (err: any) {
+      toast.error(err.message || "Upload failed");
+    } finally {
+      setBaselineUploading(false);
+    }
+  };
 
   const { data: tasks, isLoading } = useQuery({
     queryKey: ["task-master"],
