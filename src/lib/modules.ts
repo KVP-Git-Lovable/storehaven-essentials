@@ -53,6 +53,7 @@ export const modules: ModuleDefinition[] = [
   { key: "staff.training", name: "Training Programs", parent: "staff" },
   { key: "staff.feedback", name: "Employee Feedback", parent: "staff" },
   { key: "staff.offboarding", name: "Offboarding", parent: "staff" },
+  { key: "staff.lms", name: "Learning (LMS)", parent: "staff" },
   { key: "staff.attendance", name: "Attendance & Leave", parent: "staff" },
   { key: "security", name: "Security" },
   { key: "security.dashboard", name: "Security Dashboard", parent: "security" },
