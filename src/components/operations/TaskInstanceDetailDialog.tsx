@@ -14,6 +14,7 @@ import {
   Edit, Trash2, CheckCircle, Clock, Camera, MapPin,
   ListChecks, Building, User
 } from "lucide-react";
+import { TaskComplianceSection } from "./TaskComplianceSection";
 
 interface TaskInstanceDetailDialogProps {
   open: boolean;

@@ -344,7 +344,6 @@ export default function TaskMaster() {
                   )}
                 </div>
               </div>
-              </div>
 
               {/* Checklist editor for existing tasks */}
               {editingId && (
