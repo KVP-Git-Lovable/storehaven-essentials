@@ -37,6 +37,7 @@ import Vendors from "./pages/Vendors";
 import PettyCash from "./pages/PettyCash";
 import Utilities from "./pages/Utilities";
 import Employees from "./pages/staff/Employees";
+import EmployeeDetailsPage from "./pages/staff/EmployeeDetails";
 import Recruitment from "./pages/staff/Recruitment";
 import EmployeeFeedback from "./pages/staff/EmployeeFeedback";
 import PerformanceReviews from "./pages/staff/PerformanceReviews";
