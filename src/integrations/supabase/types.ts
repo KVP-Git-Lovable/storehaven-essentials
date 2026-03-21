@@ -1326,6 +1326,47 @@ export type Database = {
         }
         Relationships: []
       }
+      employee_attachments: {
+        Row: {
+          created_at: string
+          description: string | null
+          employee_id: string
+          file_name: string
+          file_type: string | null
+          file_url: string
+          id: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          employee_id: string
+          file_name: string
+          file_type?: string | null
+          file_url: string
+          id?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          employee_id?: string
+          file_name?: string
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_attachments_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employee_competencies: {
         Row: {
           certification_date: string | null
@@ -1557,9 +1598,118 @@ export type Database = {
           },
         ]
       }
+      employee_performance_records: {
+        Row: {
+          created_at: string
+          employee_id: string
+          id: string
+          rating: number
+          review_date: string
+          review_period: string | null
+          review_text: string | null
+          reviewer_name: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          id?: string
+          rating: number
+          review_date?: string
+          review_period?: string | null
+          review_text?: string | null
+          reviewer_name: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          id?: string
+          rating?: number
+          review_date?: string
+          review_period?: string | null
+          review_text?: string | null
+          reviewer_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_performance_records_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_transfer_history: {
+        Row: {
+          created_at: string
+          effective_date: string
+          employee_id: string
+          from_department: string | null
+          from_position: string | null
+          from_store_id: string | null
+          id: string
+          notes: string | null
+          reason: string | null
+          to_department: string | null
+          to_position: string | null
+          to_store_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          effective_date?: string
+          employee_id: string
+          from_department?: string | null
+          from_position?: string | null
+          from_store_id?: string | null
+          id?: string
+          notes?: string | null
+          reason?: string | null
+          to_department?: string | null
+          to_position?: string | null
+          to_store_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          effective_date?: string
+          employee_id?: string
+          from_department?: string | null
+          from_position?: string | null
+          from_store_id?: string | null
+          id?: string
+          notes?: string | null
+          reason?: string | null
+          to_department?: string | null
+          to_position?: string | null
+          to_store_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_transfer_history_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_transfer_history_from_store_id_fkey"
+            columns: ["from_store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_transfer_history_to_store_id_fkey"
+            columns: ["to_store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employees: {
         Row: {
           aadhar_number: string | null
+          aspiration: string | null
           blood_group: string | null
           created_at: string
           current_address: string | null
@@ -1570,6 +1720,7 @@ export type Database = {
           emergency_contact_name: string | null
           emergency_contact_phone: string | null
           emergency_contact_relation: string | null
+          experience_years: number | null
           face_baseline_url: string | null
           gender: string | null
           id: string
@@ -1582,13 +1733,16 @@ export type Database = {
           pan_number: string | null
           permanent_address: string | null
           phone: string
+          photo_url: string | null
           position: string
+          previous_experience: string | null
           status: string
           store_id: string | null
           updated_at: string
         }
         Insert: {
           aadhar_number?: string | null
+          aspiration?: string | null
           blood_group?: string | null
           created_at?: string
           current_address?: string | null
@@ -1599,6 +1753,7 @@ export type Database = {
           emergency_contact_name?: string | null
           emergency_contact_phone?: string | null
           emergency_contact_relation?: string | null
+          experience_years?: number | null
           face_baseline_url?: string | null
           gender?: string | null
           id?: string
@@ -1611,13 +1766,16 @@ export type Database = {
           pan_number?: string | null
           permanent_address?: string | null
           phone: string
+          photo_url?: string | null
           position: string
+          previous_experience?: string | null
           status?: string
           store_id?: string | null
           updated_at?: string
         }
         Update: {
           aadhar_number?: string | null
+          aspiration?: string | null
           blood_group?: string | null
           created_at?: string
           current_address?: string | null
@@ -1628,6 +1786,7 @@ export type Database = {
           emergency_contact_name?: string | null
           emergency_contact_phone?: string | null
           emergency_contact_relation?: string | null
+          experience_years?: number | null
           face_baseline_url?: string | null
           gender?: string | null
           id?: string
@@ -1640,7 +1799,9 @@ export type Database = {
           pan_number?: string | null
           permanent_address?: string | null
           phone?: string
+          photo_url?: string | null
           position?: string
+          previous_experience?: string | null
           status?: string
           store_id?: string | null
           updated_at?: string
