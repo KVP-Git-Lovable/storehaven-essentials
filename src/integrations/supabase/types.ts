@@ -1241,6 +1241,64 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_rosters: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          employee_id: string
+          id: string
+          notes: string | null
+          role_id: string | null
+          roster_date: string
+          shift_type: string
+          store_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          employee_id: string
+          id?: string
+          notes?: string | null
+          role_id?: string | null
+          roster_date: string
+          shift_type?: string
+          store_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          employee_id?: string
+          id?: string
+          notes?: string | null
+          role_id?: string | null
+          roster_date?: string
+          shift_type?: string
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_rosters_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_rosters_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "role_master"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_rosters_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       departments: {
         Row: {
           created_at: string
@@ -8620,6 +8678,7 @@ export type Database = {
       }
       task_instances: {
         Row: {
+          assigned_employee_id: string | null
           assigned_to: string | null
           completed_at: string | null
           created_at: string
@@ -8641,6 +8700,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          assigned_employee_id?: string | null
           assigned_to?: string | null
           completed_at?: string | null
           created_at?: string
@@ -8662,6 +8722,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          assigned_employee_id?: string | null
           assigned_to?: string | null
           completed_at?: string | null
           created_at?: string
@@ -8683,6 +8744,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "task_instances_assigned_employee_id_fkey"
+            columns: ["assigned_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "task_instances_role_id_fkey"
             columns: ["role_id"]
