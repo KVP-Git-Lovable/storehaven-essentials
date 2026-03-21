@@ -11,15 +11,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { 
   Search, CheckCircle, Clock, AlertTriangle, XCircle, 
   Camera, MapPin, Play, RefreshCw, Building, TrendingUp,
-  AlertCircle, ArrowRight
+  AlertCircle, ArrowRight, Users, List, CalendarDays, User
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { TaskInstanceDetailDialog } from "@/components/operations/TaskInstanceDetailDialog";
+import { DailyRosterPanel } from "@/components/operations/DailyRosterPanel";
+import { DayPlannerView } from "@/components/operations/DayPlannerView";
 
 type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'overdue' | 'escalated' | 'handed_over';
 
@@ -43,6 +46,8 @@ export default function TaskAdherence() {
   const [handoverNotes, setHandoverNotes] = useState("");
   const [targetRoleId, setTargetRoleId] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "dayplan">("list");
+  const [rosterOpen, setRosterOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: stores } = useQuery({
@@ -349,7 +354,13 @@ export default function TaskAdherence() {
           <h1 className="text-3xl font-bold tracking-tight">Task Adherence</h1>
           <p className="text-muted-foreground">Monitor and complete daily store operations</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {selectedStore && (
+            <Button variant="outline" onClick={() => setRosterOpen(true)}>
+              <Users className="mr-2 h-4 w-4" />
+              Manage Roster
+            </Button>
+          )}
           {incompleteTasks > 0 && (
             <Button 
               variant="outline" 
@@ -401,6 +412,16 @@ export default function TaskAdherence() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="flex items-end">
+              <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
+                <ToggleGroupItem value="list" aria-label="List view" className="px-3">
+                  <List className="h-4 w-4 mr-1.5" /> List
+                </ToggleGroupItem>
+                <ToggleGroupItem value="dayplan" aria-label="Day plan view" className="px-3">
+                  <CalendarDays className="h-4 w-4 mr-1.5" /> Day Plan
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -412,6 +433,16 @@ export default function TaskAdherence() {
               <p>No tasks scheduled for this date.</p>
               <p className="text-sm">Click "Generate Tasks" to create task instances from templates.</p>
             </div>
+          ) : viewMode === "dayplan" ? (
+            <DayPlannerView
+              storeId={selectedStore}
+              selectedDate={selectedDate}
+              taskInstances={taskInstances}
+              onTaskClick={(task) => {
+                setSelectedTask(task);
+                setDetailDialogOpen(true);
+              }}
+            />
           ) : (
             <Table>
               <TableHeader>
@@ -419,6 +450,7 @@ export default function TaskAdherence() {
                   <TableHead>Task</TableHead>
                   <TableHead>Store</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Owner</TableHead>
                   <TableHead>Scheduled</TableHead>
                   <TableHead>Due</TableHead>
                   <TableHead>Status</TableHead>
@@ -461,6 +493,16 @@ export default function TaskAdherence() {
                           </div>
                         </div>
                       </TableCell>
+                      <TableCell>
+                        {task.assigned_to ? (
+                          <div className="flex items-center gap-1.5 text-sm">
+                            <User className="h-3.5 w-3.5 text-muted-foreground" />
+                            {task.assigned_to}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell>{task.scheduled_time?.slice(0, 5)}</TableCell>
                       <TableCell>{task.due_time?.slice(0, 5)}</TableCell>
                       <TableCell>
@@ -470,7 +512,7 @@ export default function TaskAdherence() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                           {task.status === 'pending' && (
                             <>
                               <Button size="sm" onClick={() => startTaskMutation.mutate(task.id)}>
@@ -670,9 +712,10 @@ export default function TaskAdherence() {
         open={detailDialogOpen}
         onOpenChange={setDetailDialogOpen}
         task={selectedTask}
+        storeId={selectedStore}
+        rosterDate={selectedDate}
         onEdit={() => {
           setDetailDialogOpen(false);
-          // For edit, we open the complete dialog to allow updating notes
           setCompleteDialogOpen(true);
         }}
         onDelete={() => {
@@ -685,6 +728,15 @@ export default function TaskAdherence() {
           setCompleteDialogOpen(true);
         }}
       />
+
+      {selectedStore && (
+        <DailyRosterPanel
+          open={rosterOpen}
+          onOpenChange={setRosterOpen}
+          storeId={selectedStore}
+          rosterDate={selectedDate}
+        />
+      )}
     </div>
   );
 }
