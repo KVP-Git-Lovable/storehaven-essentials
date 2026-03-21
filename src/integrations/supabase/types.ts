@@ -8681,6 +8681,9 @@ export type Database = {
           assigned_employee_id: string | null
           assigned_to: string | null
           completed_at: string | null
+          compliance_reasoning: string | null
+          compliance_score: number | null
+          compliance_status: string | null
           created_at: string
           due_time: string | null
           escalated_at: string | null
@@ -8695,6 +8698,7 @@ export type Database = {
           started_at: string | null
           status: Database["public"]["Enums"]["task_instance_status"]
           store_id: string
+          submitted_photo_url: string | null
           task_id: string
           template_item_id: string
           updated_at: string
@@ -8703,6 +8707,9 @@ export type Database = {
           assigned_employee_id?: string | null
           assigned_to?: string | null
           completed_at?: string | null
+          compliance_reasoning?: string | null
+          compliance_score?: number | null
+          compliance_status?: string | null
           created_at?: string
           due_time?: string | null
           escalated_at?: string | null
@@ -8717,6 +8724,7 @@ export type Database = {
           started_at?: string | null
           status?: Database["public"]["Enums"]["task_instance_status"]
           store_id: string
+          submitted_photo_url?: string | null
           task_id: string
           template_item_id: string
           updated_at?: string
@@ -8725,6 +8733,9 @@ export type Database = {
           assigned_employee_id?: string | null
           assigned_to?: string | null
           completed_at?: string | null
+          compliance_reasoning?: string | null
+          compliance_score?: number | null
+          compliance_status?: string | null
           created_at?: string
           due_time?: string | null
           escalated_at?: string | null
@@ -8739,6 +8750,7 @@ export type Database = {
           started_at?: string | null
           status?: Database["public"]["Enums"]["task_instance_status"]
           store_id?: string
+          submitted_photo_url?: string | null
           task_id?: string
           template_item_id?: string
           updated_at?: string
@@ -8783,6 +8795,7 @@ export type Database = {
       }
       task_master: {
         Row: {
+          baseline_photo_url: string | null
           category: Database["public"]["Enums"]["task_category"]
           created_at: string
           description: string | null
@@ -8799,6 +8812,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          baseline_photo_url?: string | null
           category: Database["public"]["Enums"]["task_category"]
           created_at?: string
           description?: string | null
@@ -8815,6 +8829,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          baseline_photo_url?: string | null
           category?: Database["public"]["Enums"]["task_category"]
           created_at?: string
           description?: string | null
