@@ -412,6 +412,16 @@ export default function TaskAdherence() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="flex items-end">
+              <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
+                <ToggleGroupItem value="list" aria-label="List view" className="px-3">
+                  <List className="h-4 w-4 mr-1.5" /> List
+                </ToggleGroupItem>
+                <ToggleGroupItem value="dayplan" aria-label="Day plan view" className="px-3">
+                  <CalendarDays className="h-4 w-4 mr-1.5" /> Day Plan
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
