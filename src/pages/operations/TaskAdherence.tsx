@@ -313,6 +313,20 @@ export default function TaskAdherence() {
     onError: (error) => toast.error(error.message),
   });
 
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      const { error } = await supabase.from("task_instances").delete().eq("id", taskId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["task-instances"] });
+      toast.success("Task deleted");
+      setDetailDialogOpen(false);
+      setSelectedTask(null);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   // Calculate stats
   const totalTasks = taskInstances?.length || 0;
   const completedTasks = taskInstances?.filter(t => t.status === 'completed').length || 0;
