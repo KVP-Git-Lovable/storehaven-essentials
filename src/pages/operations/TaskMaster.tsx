@@ -320,6 +320,32 @@ export default function TaskMaster() {
                 </div>
               </div>
 
+              {/* Baseline Photo for Compliance */}
+              <div className="space-y-2 pt-4 border-t">
+                <Label className="flex items-center gap-1.5">
+                  <Image className="h-4 w-4" /> Baseline / Reference Photo
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Upload a reference photo. When the task is executed, the user's photo will be AI-compared against this baseline.
+                </p>
+                {form.baseline_photo_url && (
+                  <img src={form.baseline_photo_url} alt="Baseline" className="rounded-lg w-full max-h-40 object-cover border" />
+                )}
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="relative" type="button" disabled={baselineUploading}>
+                    {baselineUploading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                    {form.baseline_photo_url ? "Replace Photo" : "Upload Photo"}
+                    <input type="file" accept="image/*" onChange={handleBaselineUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                  </Button>
+                  {form.baseline_photo_url && (
+                    <Button variant="ghost" size="sm" type="button" onClick={() => setForm({ ...form, baseline_photo_url: "" })}>
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+              </div>
+
               {/* Checklist editor for existing tasks */}
               {editingId && (
                 <TaskChecklistEditor taskMasterId={editingId} />
