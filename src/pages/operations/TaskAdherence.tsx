@@ -420,6 +420,7 @@ export default function TaskAdherence() {
                       setDetailDialogOpen(true);
                     }}>
                       <TableCell>
+                        <div>
                           <div className="font-medium">{task.task_master?.name}</div>
                           <div className="text-xs text-muted-foreground flex items-center gap-2">
                             {task.task_master?.category}
