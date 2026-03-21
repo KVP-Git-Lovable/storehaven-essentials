@@ -712,9 +712,10 @@ export default function TaskAdherence() {
         open={detailDialogOpen}
         onOpenChange={setDetailDialogOpen}
         task={selectedTask}
+        storeId={selectedStore}
+        rosterDate={selectedDate}
         onEdit={() => {
           setDetailDialogOpen(false);
-          // For edit, we open the complete dialog to allow updating notes
           setCompleteDialogOpen(true);
         }}
         onDelete={() => {
@@ -727,6 +728,15 @@ export default function TaskAdherence() {
           setCompleteDialogOpen(true);
         }}
       />
+
+      {selectedStore && (
+        <DailyRosterPanel
+          open={rosterOpen}
+          onOpenChange={setRosterOpen}
+          storeId={selectedStore}
+          rosterDate={selectedDate}
+        />
+      )}
     </div>
   );
 }

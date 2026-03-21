@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -6,17 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import {
   Edit, Trash2, CheckCircle, Clock, Camera, MapPin,
-  ListChecks, Building, AlertTriangle
+  ListChecks, Building, User
 } from "lucide-react";
 
 interface TaskInstanceDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   task: any;
+  storeId?: string;
+  rosterDate?: string;
   onEdit: () => void;
   onDelete: () => void;
   onComplete: () => void;
@@ -26,13 +30,14 @@ export function TaskInstanceDetailDialog({
   open,
   onOpenChange,
   task,
+  storeId,
+  rosterDate,
   onEdit,
   onDelete,
   onComplete,
 }: TaskInstanceDetailDialogProps) {
   const queryClient = useQueryClient();
 
-  // Fetch master checklist items for this task
   const { data: masterChecklistItems } = useQuery({
     queryKey: ["task-master-checklist", task?.task_id],
     queryFn: async () => {
@@ -47,7 +52,6 @@ export function TaskInstanceDetailDialog({
     enabled: !!task?.task_id && open,
   });
 
-  // Fetch instance checklist completion state
   const { data: instanceChecklistItems } = useQuery({
     queryKey: ["task-instance-checklist", task?.id],
     queryFn: async () => {
@@ -61,10 +65,23 @@ export function TaskInstanceDetailDialog({
     enabled: !!task?.id && open,
   });
 
+  const { data: rosterEmployees } = useQuery({
+    queryKey: ["daily-roster", storeId, rosterDate],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("daily_rosters")
+        .select("*, employees(id, name, department, position), role_master(id, name)")
+        .eq("store_id", storeId!)
+        .eq("roster_date", rosterDate!);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!storeId && !!rosterDate && open,
+  });
+
   const toggleCheckMutation = useMutation({
     mutationFn: async ({ checklistItemId, isChecked }: { checklistItemId: string; isChecked: boolean }) => {
       const existing = instanceChecklistItems?.find(i => i.checklist_item_id === checklistItemId);
-
       if (existing) {
         const { error } = await supabase
           .from("task_instance_checklist_items")
@@ -94,6 +111,25 @@ export function TaskInstanceDetailDialog({
     onError: (e) => toast.error(e.message),
   });
 
+  const assignEmployeeMutation = useMutation({
+    mutationFn: async (employeeId: string) => {
+      const employee = rosterEmployees?.find((r: any) => r.employee_id === employeeId)?.employees;
+      const { error } = await supabase
+        .from("task_instances")
+        .update({
+          assigned_employee_id: employeeId,
+          assigned_to: employee?.name || null,
+        })
+        .eq("id", task.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["task-instances"] });
+      toast.success("Owner assigned");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   if (!task) return null;
 
   const isChecked = (checklistItemId: string) =>
@@ -110,6 +146,15 @@ export function TaskInstanceDetailDialog({
     escalated: "bg-orange-100 text-orange-800",
     handed_over: "bg-purple-100 text-purple-800",
   };
+
+  // Highlight employees whose role matches the task role
+  const sortedRoster = rosterEmployees
+    ? [...rosterEmployees].sort((a: any, b: any) => {
+        const aMatch = a.role_id === task.role_id ? -1 : 0;
+        const bMatch = b.role_id === task.role_id ? -1 : 0;
+        return aMatch - bMatch;
+      })
+    : [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -152,11 +197,39 @@ export function TaskInstanceDetailDialog({
                 <div className="font-medium">{format(new Date(task.completed_at), "HH:mm, dd MMM")}</div>
               </div>
             )}
-            {task.assigned_to && (
-              <div>
-                <span className="text-muted-foreground">Assigned To</span>
-                <div className="font-medium">{task.assigned_to}</div>
-              </div>
+          </div>
+
+          {/* Owner Assignment */}
+          <div className="space-y-1.5">
+            <Label className="text-sm flex items-center gap-1.5">
+              <User className="h-3.5 w-3.5" /> Task Owner
+            </Label>
+            {sortedRoster.length > 0 ? (
+              <Select
+                value={task.assigned_employee_id || ""}
+                onValueChange={(v) => assignEmployeeMutation.mutate(v)}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Assign an employee from roster" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sortedRoster.map((entry: any) => (
+                    <SelectItem key={entry.employee_id} value={entry.employee_id}>
+                      <span className="flex items-center gap-2">
+                        {entry.employees?.name}
+                        {entry.role_id === task.role_id && (
+                          <Badge variant="secondary" className="text-[10px] px-1">Suggested</Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">({entry.role_master?.name})</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {task.assigned_to || "No roster available. Use Manage Roster to assign employees."}
+              </p>
             )}
           </div>
 
