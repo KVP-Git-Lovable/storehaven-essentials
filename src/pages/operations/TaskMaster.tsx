@@ -180,6 +180,7 @@ export default function TaskMaster() {
       requires_barcode_scan: task.requires_barcode_scan || false,
       requires_gps_verification: task.requires_gps_verification || false,
       qr_code_value: task.qr_code_value || "",
+      baseline_photo_url: task.baseline_photo_url || "",
     });
     setIsDialogOpen(true);
   };
