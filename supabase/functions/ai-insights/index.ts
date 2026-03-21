@@ -295,6 +295,39 @@ Footfall Patterns: ${JSON.stringify(footfall || [])}`;
         break;
       }
 
+      case "roster_rebalance": {
+        const { currentRoster, availableEmployees, onLeave, shifts, roles: rosterRoles, date } = context;
+
+        systemPrompt = `You are an AI expert in workforce roster management for retail store operations.
+
+Given the current daily roster, employees on leave, and available employees, suggest changes to rebalance the roster.
+Goals:
+- Remove on-leave employees from the roster
+- Fill gaps with available employees matching roles
+- Balance headcount across shifts
+- Prefer employees whose department/position matches the role
+
+Return your response as a JSON object:
+{
+  "suggestions": [
+    {"action": "remove", "rosterId": "...", "employeeName": "...", "description": "Remove X (on leave)"},
+    {"action": "add", "employeeId": "...", "employeeName": "...", "roleId": "...", "shift": "morning", "description": "Add Y to morning shift as Z"},
+    {"action": "move", "rosterId": "...", "employeeName": "...", "toShift": "evening", "roleId": "...", "description": "Move X from morning to evening"}
+  ],
+  "summary": "Brief summary of changes"
+}`;
+
+        userPrompt = `Rebalance this roster for ${date}:
+
+Current Roster: ${JSON.stringify(currentRoster)}
+Employees on Leave: ${JSON.stringify(onLeave)}
+Available Employees (not rostered, not on leave): ${JSON.stringify(availableEmployees)}
+Shifts: ${JSON.stringify(shifts)}
+Roles: ${JSON.stringify(rosterRoles)}`;
+        dataContext = context;
+        break;
+      }
+
       default:
         throw new Error(`Unknown insight type: ${type}`);
     }
@@ -349,12 +382,12 @@ Footfall Patterns: ${JSON.stringify(footfall || [])}`;
       parsedInsights = { rawResponse: content, parseError: true };
     }
 
-    return new Response(JSON.stringify({ 
-      success: true, 
-      type,
-      insights: parsedInsights,
-      generatedAt: new Date().toISOString()
-    }), {
+    // For roster_rebalance, return suggestions/summary at top level for easy consumption
+    const responseBody = type === "roster_rebalance"
+      ? { success: true, type, suggestions: parsedInsights?.suggestions || [], summary: parsedInsights?.summary || "", generatedAt: new Date().toISOString() }
+      : { success: true, type, insights: parsedInsights, generatedAt: new Date().toISOString() };
+
+    return new Response(JSON.stringify(responseBody), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
