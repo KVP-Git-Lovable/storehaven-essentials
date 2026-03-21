@@ -14,6 +14,7 @@ import {
   Edit, Trash2, CheckCircle, Clock, Camera, MapPin,
   ListChecks, Building, User
 } from "lucide-react";
+import { TaskComplianceSection } from "./TaskComplianceSection";
 
 interface TaskInstanceDetailDialogProps {
   open: boolean;
@@ -300,6 +301,14 @@ export function TaskInstanceDetailDialog({
                   })}
                 </div>
               </div>
+            </>
+          )}
+
+          {/* Photo Compliance Section */}
+          {task.task_master?.baseline_photo_url && (
+            <>
+              <Separator />
+              <TaskComplianceSection task={task} />
             </>
           )}
 

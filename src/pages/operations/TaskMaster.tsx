@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Search, Edit, Trash2, ClipboardList, Camera, QrCode, MapPin, ListChecks } from "lucide-react";
+import { Plus, Search, Edit, Trash2, ClipboardList, Camera, QrCode, MapPin, ListChecks, Upload, Loader2, Image } from "lucide-react";
 import { TaskChecklistEditor } from "@/components/operations/TaskChecklistEditor";
 
 type TaskCategory = 'cleaning' | 'inventory' | 'security' | 'maintenance' | 'customer_service' | 'admin';
@@ -28,6 +28,7 @@ interface TaskMasterForm {
   requires_barcode_scan: boolean;
   requires_gps_verification: boolean;
   qr_code_value: string;
+  baseline_photo_url: string;
 }
 
 const defaultForm: TaskMasterForm = {
@@ -41,6 +42,7 @@ const defaultForm: TaskMasterForm = {
   requires_barcode_scan: false,
   requires_gps_verification: false,
   qr_code_value: "",
+  baseline_photo_url: "",
 };
 
 const categoryColors: Record<TaskCategory, string> = {
@@ -58,7 +60,27 @@ export default function TaskMaster() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<TaskMasterForm>(defaultForm);
   const [checklistTaskId, setChecklistTaskId] = useState<string | null>(null);
+  const [baselineUploading, setBaselineUploading] = useState(false);
   const queryClient = useQueryClient();
+
+  const handleBaselineUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBaselineUploading(true);
+    try {
+      const fileExt = file.name.split(".").pop();
+      const filePath = `task-baselines/${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from("vm-images").upload(filePath, file);
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage.from("vm-images").getPublicUrl(filePath);
+      setForm({ ...form, baseline_photo_url: publicUrl });
+      toast.success("Baseline photo uploaded");
+    } catch (err: any) {
+      toast.error(err.message || "Upload failed");
+    } finally {
+      setBaselineUploading(false);
+    }
+  };
 
   const { data: tasks, isLoading } = useQuery({
     queryKey: ["task-master"],
@@ -158,6 +180,7 @@ export default function TaskMaster() {
       requires_barcode_scan: task.requires_barcode_scan || false,
       requires_gps_verification: task.requires_gps_verification || false,
       qr_code_value: task.qr_code_value || "",
+      baseline_photo_url: task.baseline_photo_url || "",
     });
     setIsDialogOpen(true);
   };
@@ -294,6 +317,31 @@ export default function TaskMaster() {
                       <MapPin className="h-4 w-4" /> GPS Verify
                     </Label>
                   </div>
+                </div>
+              </div>
+
+              {/* Baseline Photo for Compliance */}
+              <div className="space-y-2 pt-4 border-t">
+                <Label className="flex items-center gap-1.5">
+                  <Image className="h-4 w-4" /> Baseline / Reference Photo
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Upload a reference photo. When the task is executed, the user's photo will be AI-compared against this baseline.
+                </p>
+                {form.baseline_photo_url && (
+                  <img src={form.baseline_photo_url} alt="Baseline" className="rounded-lg w-full max-h-40 object-cover border" />
+                )}
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="relative" type="button" disabled={baselineUploading}>
+                    {baselineUploading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                    {form.baseline_photo_url ? "Replace Photo" : "Upload Photo"}
+                    <input type="file" accept="image/*" onChange={handleBaselineUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                  </Button>
+                  {form.baseline_photo_url && (
+                    <Button variant="ghost" size="sm" type="button" onClick={() => setForm({ ...form, baseline_photo_url: "" })}>
+                      Remove
+                    </Button>
+                  )}
                 </div>
               </div>
 

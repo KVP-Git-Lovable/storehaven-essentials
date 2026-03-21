@@ -75,7 +75,7 @@ export default function TaskAdherence() {
         .from("task_instances")
         .select(`
           *,
-          task_master(name, category, requires_photo_evidence, requires_gps_verification),
+          task_master(name, category, requires_photo_evidence, requires_gps_verification, baseline_photo_url),
           role_master(name, shift_type),
           stores(name)
         `)
