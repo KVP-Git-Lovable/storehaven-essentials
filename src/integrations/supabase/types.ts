@@ -3264,6 +3264,311 @@ export type Database = {
           },
         ]
       }
+      learning_enrollments: {
+        Row: {
+          completed_at: string | null
+          employee_id: string
+          enrolled_at: string
+          id: string
+          learning_path_id: string
+          progress_percent: number
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          employee_id: string
+          enrolled_at?: string
+          id?: string
+          learning_path_id: string
+          progress_percent?: number
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          employee_id?: string
+          enrolled_at?: string
+          id?: string
+          learning_path_id?: string
+          progress_percent?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_enrollments_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_learning_path_id_fkey"
+            columns: ["learning_path_id"]
+            isOneToOne: false
+            referencedRelation: "learning_paths"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_module_completions: {
+        Row: {
+          completed_at: string
+          enrollment_id: string
+          id: string
+          module_id: string
+        }
+        Insert: {
+          completed_at?: string
+          enrollment_id: string
+          id?: string
+          module_id: string
+        }
+        Update: {
+          completed_at?: string
+          enrollment_id?: string
+          id?: string
+          module_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_module_completions_enrollment_id_fkey"
+            columns: ["enrollment_id"]
+            isOneToOne: false
+            referencedRelation: "learning_enrollments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_module_completions_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "learning_modules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_module_questions: {
+        Row: {
+          correct_answer: number
+          created_at: string
+          id: string
+          module_id: string
+          options: Json
+          question: string
+          sort_order: number
+        }
+        Insert: {
+          correct_answer?: number
+          created_at?: string
+          id?: string
+          module_id: string
+          options?: Json
+          question: string
+          sort_order?: number
+        }
+        Update: {
+          correct_answer?: number
+          created_at?: string
+          id?: string
+          module_id?: string
+          options?: Json
+          question?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_module_questions_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "learning_modules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_modules: {
+        Row: {
+          content_text: string | null
+          content_type: string
+          content_url: string | null
+          created_at: string
+          duration_minutes: number | null
+          id: string
+          sort_order: number
+          title: string
+          trail_id: string
+        }
+        Insert: {
+          content_text?: string | null
+          content_type?: string
+          content_url?: string | null
+          created_at?: string
+          duration_minutes?: number | null
+          id?: string
+          sort_order?: number
+          title: string
+          trail_id: string
+        }
+        Update: {
+          content_text?: string | null
+          content_type?: string
+          content_url?: string | null
+          created_at?: string
+          duration_minutes?: number | null
+          id?: string
+          sort_order?: number
+          title?: string
+          trail_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_modules_trail_id_fkey"
+            columns: ["trail_id"]
+            isOneToOne: false
+            referencedRelation: "learning_path_trails"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_path_roles: {
+        Row: {
+          created_at: string
+          id: string
+          learning_path_id: string
+          role_name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          learning_path_id: string
+          role_name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          learning_path_id?: string
+          role_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_path_roles_learning_path_id_fkey"
+            columns: ["learning_path_id"]
+            isOneToOne: false
+            referencedRelation: "learning_paths"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_path_trails: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          learning_path_id: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          learning_path_id: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          learning_path_id?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_path_trails_learning_path_id_fkey"
+            columns: ["learning_path_id"]
+            isOneToOne: false
+            referencedRelation: "learning_paths"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_paths: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      learning_quiz_attempts: {
+        Row: {
+          answers: Json | null
+          attempted_at: string
+          enrollment_id: string
+          id: string
+          module_id: string
+          passed: boolean
+          score: number
+          total_questions: number
+        }
+        Insert: {
+          answers?: Json | null
+          attempted_at?: string
+          enrollment_id: string
+          id?: string
+          module_id: string
+          passed?: boolean
+          score?: number
+          total_questions?: number
+        }
+        Update: {
+          answers?: Json | null
+          attempted_at?: string
+          enrollment_id?: string
+          id?: string
+          module_id?: string
+          passed?: boolean
+          score?: number
+          total_questions?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_quiz_attempts_enrollment_id_fkey"
+            columns: ["enrollment_id"]
+            isOneToOne: false
+            referencedRelation: "learning_enrollments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_quiz_attempts_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "learning_modules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leave_balances: {
         Row: {
           available: number | null
@@ -3771,6 +4076,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "manager_feedback_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      manager_feedback_entries: {
+        Row: {
+          created_at: string
+          employee_id: string
+          feedback_date: string
+          feedback_text: string | null
+          feedback_type: string
+          given_by: string | null
+          id: string
+          rating: number | null
+          review_cycle: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          feedback_date?: string
+          feedback_text?: string | null
+          feedback_type?: string
+          given_by?: string | null
+          id?: string
+          rating?: number | null
+          review_cycle?: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          feedback_date?: string
+          feedback_text?: string | null
+          feedback_type?: string
+          given_by?: string | null
+          id?: string
+          rating?: number | null
+          review_cycle?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manager_feedback_entries_employee_id_fkey"
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
@@ -4702,6 +5051,68 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      performance_goals: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          employee_id: string
+          goal_title: string
+          id: string
+          manager_comments: string | null
+          manager_rating: number | null
+          review_cycle: string
+          self_comments: string | null
+          self_rating: number | null
+          status: string
+          target_date: string | null
+          updated_at: string
+          weightage: number | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          employee_id: string
+          goal_title: string
+          id?: string
+          manager_comments?: string | null
+          manager_rating?: number | null
+          review_cycle?: string
+          self_comments?: string | null
+          self_rating?: number | null
+          status?: string
+          target_date?: string | null
+          updated_at?: string
+          weightage?: number | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          employee_id?: string
+          goal_title?: string
+          id?: string
+          manager_comments?: string | null
+          manager_rating?: number | null
+          review_cycle?: string
+          self_comments?: string | null
+          self_rating?: number | null
+          status?: string
+          target_date?: string | null
+          updated_at?: string
+          weightage?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_goals_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -5852,6 +6263,48 @@ export type Database = {
             columns: ["requisition_id"]
             isOneToOne: false
             referencedRelation: "requisitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      requisition_store_allocations: {
+        Row: {
+          created_at: string
+          filled_count: number
+          id: string
+          positions_count: number
+          requisition_id: string
+          store_id: string
+        }
+        Insert: {
+          created_at?: string
+          filled_count?: number
+          id?: string
+          positions_count?: number
+          requisition_id: string
+          store_id: string
+        }
+        Update: {
+          created_at?: string
+          filled_count?: number
+          id?: string
+          positions_count?: number
+          requisition_id?: string
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requisition_store_allocations_requisition_id_fkey"
+            columns: ["requisition_id"]
+            isOneToOne: false
+            referencedRelation: "job_requisitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requisition_store_allocations_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
             referencedColumns: ["id"]
           },
         ]

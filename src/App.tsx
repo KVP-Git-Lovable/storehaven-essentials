@@ -39,9 +39,12 @@ import Utilities from "./pages/Utilities";
 import Employees from "./pages/staff/Employees";
 import EmployeeDetailsPage from "./pages/staff/EmployeeDetails";
 import Recruitment from "./pages/staff/Recruitment";
+import RequisitionDetails from "./pages/staff/RequisitionDetails";
 import EmployeeFeedback from "./pages/staff/EmployeeFeedback";
 import PerformanceReviews from "./pages/staff/PerformanceReviews";
+import PerformanceManagement from "./pages/staff/PerformanceManagement";
 import TrainingPrograms from "./pages/staff/TrainingPrograms";
+import LearningManagement from "./pages/staff/LearningManagement";
 import EmployeeOffboarding from "./pages/staff/EmployeeOffboarding";
 import Attendance from "./pages/staff/Attendance";
 import LeaveManagement from "./pages/staff/LeaveManagement";
@@ -187,8 +190,11 @@ const App = () => (
               <Route path="/staff/employees" element={<Employees />} />
               <Route path="/staff/employees/:id" element={<EmployeeDetailsPage />} />
               <Route path="/staff/recruitment" element={<Recruitment />} />
-              <Route path="/staff/performance" element={<PerformanceReviews />} />
+              <Route path="/staff/recruitment/:id" element={<RequisitionDetails />} />
+              <Route path="/staff/performance" element={<PerformanceManagement />} />
+              <Route path="/staff/performance-reviews" element={<PerformanceReviews />} />
               <Route path="/staff/training" element={<TrainingPrograms />} />
+              <Route path="/staff/lms" element={<LearningManagement />} />
               <Route path="/staff/feedback" element={<EmployeeFeedback />} />
               <Route path="/staff/offboarding" element={<EmployeeOffboarding />} />
               <Route path="/staff/attendance" element={<Attendance />} />

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Plus, Search, Loader2, Briefcase, Users, UserCheck, Clock, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,6 +73,7 @@ export default function Recruitment() {
   const [candidateDialogOpen, setCandidateDialogOpen] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchData();
@@ -213,7 +215,7 @@ export default function Recruitment() {
                   </TableRow>
                 ) : (
                   filteredRequisitions.map((req) => (
-                    <TableRow key={req.id}>
+                    <TableRow key={req.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/staff/recruitment/${req.id}`)}>
                       <TableCell className="font-medium">{req.title}</TableCell>
                       <TableCell>{req.department}</TableCell>
                       <TableCell>{req.position}</TableCell>

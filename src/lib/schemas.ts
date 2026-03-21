@@ -106,9 +106,9 @@ export const employeeSchema = z.object({
   department: z.string().trim().min(1, "Department is required").max(50, "Department must be less than 50 characters"),
   position: z.string().trim().min(1, "Position is required").max(50, "Position must be less than 50 characters"),
   joinDate: z.string().min(1, "Join date is required"),
-  storeId: z.string().uuid().optional().nullable(),
-  managerId: z.string().uuid().optional().nullable(),
-  experienceYears: z.coerce.number().min(0).max(50).optional().nullable(),
+  storeId: z.string().transform(v => v === "" ? null : v).pipe(z.string().uuid().nullable()).optional(),
+  managerId: z.string().transform(v => v === "" ? null : v).pipe(z.string().uuid().nullable()).optional(),
+  experienceYears: z.union([z.literal(""), z.coerce.number().min(0).max(50)]).transform(v => v === "" ? null : v).optional().nullable(),
   previousExperience: z.string().max(500).optional().nullable(),
   aspiration: z.string().max(500).optional().nullable(),
 });
