@@ -332,6 +332,66 @@ export default function TaskAdherence() {
     onError: (error) => toast.error(error.message),
   });
 
+  const autoAssignMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedStore || !selectedDate) throw new Error("Select a store and date first");
+
+      // Fetch today's roster for this store
+      const { data: roster, error: rosterError } = await supabase
+        .from("daily_rosters")
+        .select("employee_id, role_id, employees(id, name)")
+        .eq("store_id", selectedStore)
+        .eq("roster_date", selectedDate);
+      if (rosterError) throw rosterError;
+      if (!roster || roster.length === 0) throw new Error("No roster found. Add employees to the roster first.");
+
+      // Get unassigned tasks for this store/date
+      const unassigned = taskInstances?.filter(
+        (t) => !t.assigned_employee_id && t.store_id === selectedStore && t.role_id
+      ) || [];
+      if (unassigned.length === 0) throw new Error("No unassigned tasks to auto-assign.");
+
+      // Build role → employees map (round-robin per role)
+      const roleEmployees: Record<string, { employeeId: string; name: string }[]> = {};
+      for (const entry of roster) {
+        if (!entry.role_id) continue;
+        if (!roleEmployees[entry.role_id]) roleEmployees[entry.role_id] = [];
+        roleEmployees[entry.role_id].push({
+          employeeId: entry.employee_id,
+          name: (entry.employees as any)?.name || "",
+        });
+      }
+
+      // Track round-robin index per role
+      const roleIndex: Record<string, number> = {};
+      let assignedCount = 0;
+
+      for (const task of unassigned) {
+        const candidates = roleEmployees[task.role_id!];
+        if (!candidates || candidates.length === 0) continue;
+
+        if (roleIndex[task.role_id!] === undefined) roleIndex[task.role_id!] = 0;
+        const idx = roleIndex[task.role_id!] % candidates.length;
+        const pick = candidates[idx];
+        roleIndex[task.role_id!] = idx + 1;
+
+        const { error } = await supabase
+          .from("task_instances")
+          .update({ assigned_employee_id: pick.employeeId, assigned_to: pick.name })
+          .eq("id", task.id);
+        if (error) throw error;
+        assignedCount++;
+      }
+
+      return assignedCount;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ["task-instances"] });
+      toast.success(`Auto-assigned ${count} tasks to rostered employees`);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   // Calculate stats
   const totalTasks = taskInstances?.length || 0;
   const completedTasks = taskInstances?.filter(t => t.status === 'completed').length || 0;
