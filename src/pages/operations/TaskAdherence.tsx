@@ -17,7 +17,7 @@ import { format } from "date-fns";
 import { 
   Search, CheckCircle, Clock, AlertTriangle, XCircle, 
   Camera, MapPin, Play, RefreshCw, Building, TrendingUp,
-  AlertCircle, ArrowRight, Users, List, CalendarDays, User
+  AlertCircle, ArrowRight, Users, List, CalendarDays, User, Wand2
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { TaskInstanceDetailDialog } from "@/components/operations/TaskInstanceDetailDialog";
