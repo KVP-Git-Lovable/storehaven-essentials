@@ -122,6 +122,9 @@ const NSODashboard = lazy(() => import("./pages/dashboards/NSODashboard"));
 const AIInsights = lazy(() => import("./pages/AIInsights"));
 const IncidentManagement = lazy(() => import("./pages/services/IncidentManagement"));
 const PhotoSubmission = lazy(() => import("./pages/vm/PhotoSubmission"));
+const WhatsAppTemplates = lazy(() => import("./pages/communication/WhatsAppTemplates"));
+const WhatsAppTemplateDetails = lazy(() => import("./pages/communication/WhatsAppTemplateDetails"));
+const MessageLog = lazy(() => import("./pages/communication/MessageLog"));
 
 const queryClient = new QueryClient();
 
@@ -218,6 +221,9 @@ const App = () => (
                 <Route path="/security/scan" element={<PatrolScan />} />
                 <Route path="/security/feedback" element={<GuardFeedback />} />
                 <Route path="/security/gamification" element={<Gamification />} />
+                <Route path="/communication/templates" element={<WhatsAppTemplates />} />
+                <Route path="/communication/templates/:id" element={<WhatsAppTemplateDetails />} />
+                <Route path="/communication/messages" element={<MessageLog />} />
                 <Route path="/footfall" element={<Footfall />} />
                 <Route path="/master/meter" element={<MeterMaster />} />
                 <Route path="/master/department" element={<DepartmentMaster />} />
