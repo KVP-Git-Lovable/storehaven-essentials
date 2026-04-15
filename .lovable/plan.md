@@ -1,78 +1,53 @@
 
 
-# Store Maintenance Task Roster & Day Planner
+# Plan: Improve Initial Loading Speed
 
-## What We're Building
+## Problem
 
-A **Daily Roster** system for Store Maintenance Tasks that lets managers:
-1. **Assign employees (owners) to task instances** — linking real employees to each task for the day
-2. **View a Day Plan** — a clear, shift-wise timeline showing who does what and when
-3. **Manage the roster** — drag or pick employees into task slots by role/department
+The `App.tsx` file eagerly imports **all 100+ page components** at the top level. When a user visits `/login`, the browser must download, parse, and execute JavaScript for every page in the application before anything renders — even though only the Login component is needed.
 
-## Current State
+## Solution: Lazy Loading with Code Splitting
 
-- `task_instances` has `assigned_to` (text field) and `role_id` (links to `role_master` with shift info)
-- `employees` table has `name`, `department`, `position`, `store_id`, `status`
-- `role_master` has `name`, `shift_type` (morning/afternoon/evening/night)
-- `departments` table exists with `name`, `description`, `status`
-- No formal "roster" or employee-to-task-instance assignment table exists yet
+Convert all page imports to `React.lazy()` with dynamic `import()`. This tells Vite to split each page into its own chunk, so only the code needed for the current route is loaded.
 
-## Plan
+### Changes
 
-### 1. Database Changes
+**1. `src/App.tsx`** — Convert all ~100 static imports to lazy imports with a Suspense wrapper
 
-**New table: `daily_rosters`**
-- `id`, `store_id` (FK stores), `roster_date` (date), `employee_id` (FK employees), `role_id` (FK role_master), `shift_type`, `notes`, `created_by`, `created_at`
-- Unique constraint on (store_id, roster_date, employee_id) — one slot per employee per day
-- RLS policies for authenticated users
+Replace:
+```tsx
+import Dashboard from "./pages/Dashboard";
+import StoresList from "./pages/stores/StoresList";
+// ... 100 more
+```
 
-**Alter `task_instances`**
-- Add `assigned_employee_id` (uuid, FK employees, nullable) — links a real employee as the task owner instead of free-text `assigned_to`
+With:
+```tsx
+import { lazy, Suspense } from "react";
 
-### 2. Task Adherence Page Enhancements
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const StoresList = lazy(() => import("./pages/stores/StoresList"));
+// ... all pages
+```
 
-**Roster Sidebar / Tab**
-- Add a "Roster" tab alongside the existing task list view
-- Shows a **shift-grouped roster panel**: employees assigned to each shift for the selected store + date
-- Manager can add employees to the roster from a dropdown (filtered by store, department, active status)
+Wrap `<Routes>` in `<Suspense fallback={<LoadingSpinner />}>` so users see a brief loading indicator while a chunk loads.
 
-**Day Planner View**
-- New toggle: "Day Plan" view (alongside existing list)
-- Visual **timeline grouped by shift** (Morning → Afternoon → Evening → Night)
-- Each shift block shows: assigned employees, their tasks sorted by scheduled_time, status badges, checklist progress
-- Clear swim-lane layout: Employee name on the left, their tasks as cards on the right with time slots
+Keep `Login` and `LandingPage` as **eager** imports since they are the primary entry points and should render instantly.
 
-**Task Owner Assignment**
-- In the task detail dialog and task table, show "Owner" column
-- Click to assign an employee from the day's roster (dropdown of rostered employees for that store/date)
-- Auto-suggest: if a task's `role_id` matches a rostered employee's role, highlight them
+**2. Create `src/components/shared/PageLoader.tsx`** — A minimal centered spinner used as the Suspense fallback.
 
-### 3. Roster Management UI
+### Expected Impact
 
-- A "Manage Roster" button on the Task Adherence page
-- Opens a dialog/sheet where the manager:
-  - Sees all active employees for the selected store
-  - Assigns each to a shift/role for the day
-  - Can copy previous day's roster as a template
-- Quick filters by department and role
+- `/login` bundle drops from the full app size (~2-3MB+) to just the Login component + shared UI (~100-200KB)
+- Other pages load on-demand when navigated to
+- First Contentful Paint (FCP) improves significantly
+- No functional changes — everything works the same, just loads faster
 
-### 4. Files to Create/Modify
+### Technical Details
 
-| Action | File | Purpose |
-|--------|------|---------|
-| Create | `src/components/operations/DailyRosterPanel.tsx` | Roster management sidebar/dialog |
-| Create | `src/components/operations/DayPlannerView.tsx` | Shift-wise timeline day plan |
-| Create | `src/components/operations/RosterEmployeeCard.tsx` | Employee card within roster |
-| Edit | `src/pages/operations/TaskAdherence.tsx` | Add roster tab, day planner toggle, owner column |
-| Edit | `src/components/operations/TaskInstanceDetailDialog.tsx` | Add owner assignment dropdown |
-| Migration | New migration | Create `daily_rosters` table, add `assigned_employee_id` to `task_instances` |
-
-### 5. How It Works End-to-End
-
-1. Manager opens **Task Adherence**, selects store + date
-2. Clicks **"Manage Roster"** → assigns employees to shifts from the employee list
-3. Switches to **"Day Plan"** view → sees a clean shift-by-shift timeline
-4. Each task shows its assigned owner; clicking a task opens the detail dialog with checklist
-5. Manager can assign/reassign owners from the rostered employees
-6. Employees see only their tasks when they log in (filtered by `assigned_employee_id`)
+| Aspect | Detail |
+|---|---|
+| Files changed | `src/App.tsx`, new `src/components/shared/PageLoader.tsx` |
+| Risk | Very low — lazy loading is a standard React pattern |
+| Breaking changes | None |
 
