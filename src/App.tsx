@@ -125,6 +125,10 @@ const PhotoSubmission = lazy(() => import("./pages/vm/PhotoSubmission"));
 const WhatsAppTemplates = lazy(() => import("./pages/communication/WhatsAppTemplates"));
 const WhatsAppTemplateDetails = lazy(() => import("./pages/communication/WhatsAppTemplateDetails"));
 const MessageLog = lazy(() => import("./pages/communication/MessageLog"));
+const JourneyList = lazy(() => import("./pages/communication/JourneyList"));
+const JourneyBuilder = lazy(() => import("./pages/communication/JourneyBuilder"));
+const JourneyAnalytics = lazy(() => import("./pages/communication/JourneyAnalytics"));
+const ContactsManager = lazy(() => import("./pages/communication/ContactsManager"));
 
 const queryClient = new QueryClient();
 
@@ -224,6 +228,10 @@ const App = () => (
                 <Route path="/communication/templates" element={<WhatsAppTemplates />} />
                 <Route path="/communication/templates/:id" element={<WhatsAppTemplateDetails />} />
                 <Route path="/communication/messages" element={<MessageLog />} />
+                <Route path="/communication/journeys" element={<JourneyList />} />
+                <Route path="/communication/journeys/:id" element={<JourneyBuilder />} />
+                <Route path="/communication/journeys/:id/analytics" element={<JourneyAnalytics />} />
+                <Route path="/communication/contacts" element={<ContactsManager />} />
                 <Route path="/footfall" element={<Footfall />} />
                 <Route path="/master/meter" element={<MeterMaster />} />
                 <Route path="/master/department" element={<DepartmentMaster />} />
