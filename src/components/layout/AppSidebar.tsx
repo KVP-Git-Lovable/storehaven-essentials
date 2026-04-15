@@ -15,6 +15,7 @@ import {
   UserCog,
   BarChart3,
   ShieldCheck,
+  MessageSquare,
   Settings,
   PanelLeftClose,
   PanelLeft,
@@ -171,6 +172,15 @@ const navigation: NavItem[] = [
       { title: "Patrol Scan", href: "/security/scan", moduleKey: "security.scan" },
       { title: "Feedback", href: "/security/feedback", moduleKey: "security.feedback" },
       { title: "Gamification", href: "/security/gamification", moduleKey: "security.gamification" },
+    ],
+  },
+  {
+    title: "Communication Center",
+    icon: MessageSquare,
+    moduleKey: "communication",
+    children: [
+      { title: "WhatsApp Templates", href: "/communication/templates", moduleKey: "communication.templates" },
+      { title: "Message Log", href: "/communication/messages", moduleKey: "communication.messages" },
     ],
   },
   {
