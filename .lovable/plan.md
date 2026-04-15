@@ -1,128 +1,179 @@
 
 
-# Plan: Communication Center — WhatsApp Template Management via Twilio
+# Plan: Journey Builder Module under Communication Center
 
 ## Overview
 
-Add an isolated "Communication Center" module between Security and Inventory in the sidebar. It provides a full WhatsApp template management workflow: create templates, submit to Twilio Content API, track approval status, and send test messages.
+Add a "Journey Builder" submenu item under the existing Communication Center sidebar group. This module provides a visual drag-and-drop canvas for creating automated messaging journeys targeting three audience segments (Customers, Prospective Customers, ESDB). Journeys consist of connected nodes (Entry, Message, Delay, Decision, Exit) stored as JSON, with a background scheduler evaluating conditions and triggering messages.
 
-## Prerequisites
+## Database Schema
 
-**Twilio Connector**: The project needs a Twilio connection linked. I'll use the `standard_connectors--connect` tool to prompt you to connect your Twilio account. This provides secure gateway access without exposing credentials.
+### New Tables
 
-## Database
-
-Create a `whatsapp_templates` table:
+**`journey_contacts`** — Audience database for journey targeting
 
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid PK | |
-| name | text NOT NULL | lowercase_underscore format |
-| category | text NOT NULL | UTILITY, MARKETING, AUTHENTICATION |
-| language | text DEFAULT 'en' | |
-| body | text NOT NULL | Supports {{1}}, {{2}} variables |
-| twilio_content_sid | text | Set after Twilio submission |
-| status | text DEFAULT 'draft' | draft, submitted, approved, rejected |
-| rejection_reason | text | |
+| name | text NOT NULL | |
+| email | text NOT NULL | |
+| phone | text NOT NULL | |
+| city | text | |
+| date_of_birth | date | |
+| last_purchase_date | timestamptz | nullable |
+| segment_type | text NOT NULL | customer, prospect, esdb |
+| opted_out | boolean DEFAULT false | |
 | created_by | uuid FK profiles | |
-| created_at, updated_at | timestamptz | |
+| created_at / updated_at | timestamptz | |
 
-Also create `whatsapp_message_log` for test message history:
+**`journey_contact_events`** — Engagement event tracking
 
-| Column | Type |
-|---|---|
-| id | uuid PK |
-| template_id | uuid FK |
-| to_number | text |
-| twilio_message_sid | text |
-| status | text |
-| sent_at | timestamptz |
-| sent_by | uuid FK |
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| contact_id | uuid FK journey_contacts | |
+| event_type | text NOT NULL | purchase, email_open, link_click, etc. |
+| event_data | jsonb | |
+| occurred_at | timestamptz DEFAULT now() | |
 
-RLS policies will restrict access to authenticated users with the `communication` module permission.
+**`journeys`** — Journey definitions
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| name | text NOT NULL | |
+| description | text | |
+| status | text DEFAULT 'draft' | draft, active, paused |
+| canvas_data | jsonb NOT NULL | Full node/edge graph (React Flow format) |
+| segment_type | text | Filter criteria |
+| filters | jsonb | City, date ranges, etc. |
+| created_by | uuid FK profiles | |
+| created_at / updated_at | timestamptz | |
+
+**`journey_enrollments`** — Contacts currently in a journey
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| journey_id | uuid FK journeys | |
+| contact_id | uuid FK journey_contacts | |
+| current_node_id | text | Node ID within canvas_data |
+| status | text DEFAULT 'active' | active, completed, exited |
+| enrolled_at | timestamptz | |
+| next_action_at | timestamptz | When to evaluate next |
+
+**`journey_message_log`** — Messages sent by journeys
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| journey_id | uuid FK journeys | |
+| enrollment_id | uuid FK journey_enrollments | |
+| contact_id | uuid FK journey_contacts | |
+| channel | text | email, sms, push |
+| template_body | text | Rendered message |
+| status | text | sent, delivered, opened, clicked, failed |
+| sent_at | timestamptz | |
+
+RLS: Authenticated users can read/write all journey tables. Admin-only for delete.
+
+### Realtime
+
+Enable realtime on `journey_enrollments` for live dashboard updates.
 
 ## Edge Functions
 
-**1. `whatsapp-templates`** — CRUD + Twilio Content API integration
-- `POST /` — Create template locally (draft) and submit to Twilio Content API via gateway
-- `GET /` — List all templates with optional status/category filters
-- `GET /:id` — Single template detail
-- `POST /refresh-status` — Fetch status from Twilio and update locally
-- `POST /bulk-sync` — Refresh all non-final statuses
+**`process-journeys`** — Scheduled background processor (pg_cron every 5 min)
+- Queries active journeys with enrollments where `next_action_at <= now()`
+- Evaluates each enrollment's current node:
+  - **Delay Node**: Advances to next node after wait period
+  - **Decision Node**: Checks contact events (opened, clicked, purchased) and routes accordingly
+  - **Message Node**: Sends message via appropriate channel (uses existing `whatsapp-send` for SMS, Lovable AI email for email) and advances
+  - **Exit Node**: Marks enrollment as completed
+- Updates `current_node_id` and `next_action_at`
 
-**2. `whatsapp-send`** — Send test messages
-- Validates template is approved
-- Sends via Twilio Messages API through connector gateway
-- Logs to `whatsapp_message_log`
-
-All functions use the Twilio connector gateway (`https://connector-gateway.lovable.dev/twilio/...`) with `LOVABLE_API_KEY` and `TWILIO_API_KEY` headers.
+**`journey-actions`** — API for journey management
+- `activate`: Evaluates segment filters, enrolls matching contacts, sets initial node
+- `pause`: Suspends processing
+- `enroll-contacts`: Manual enrollment
+- `record-event`: Records contact events (purchase, open, click)
 
 ## Frontend Pages
 
-**1. Template List** (`/communication/templates`)
-- Table with name, category, status badge (color-coded), updated timestamp
-- "Create Template" button opens form dialog
-- Per-row actions: View, Refresh Status, Send Test (if approved)
-- Bulk "Sync All Statuses" button
+### 1. Journey List (`/communication/journeys`)
+- Table: name, status badge (draft/active/paused), segment, contact count, created date
+- Actions: Create, Activate, Pause, Delete
+- Quick stats row: total active journeys, contacts enrolled, messages sent today
 
-**2. Template Detail** (`/communication/templates/:id`)
-- Full body preview with variable highlighting
-- Twilio Content SID display
-- Rejection reason alert (if rejected)
-- Refresh Status and Send Test buttons
+### 2. Journey Builder (`/communication/journeys/:id`)
+- **React Flow** canvas (using `@xyflow/react` library) with custom node types:
+  - **Entry Node**: Segment selector + filters (city, date range, DOB)
+  - **Message Node**: Channel selector (Email/SMS/Push), template editor with `{name}`, `{last_purchase_date}` variables
+  - **Delay Node**: Duration picker (X hours/days)
+  - **Decision Node**: Condition selector (opened, clicked, purchased) with Yes/No branches
+  - **Exit Node**: Terminal marker
+- Toolbar: Add Node buttons, Save Draft, Validate, Activate
+- Right panel: Node property editor (appears on node click)
+- Canvas data stored as JSON in `journeys.canvas_data`
 
-**3. Create/Edit Form Dialog**
-- Template name (validated: lowercase + underscores only)
-- Category dropdown
-- Language selector
-- Body textarea with variable helper (insert {{1}}, {{2}}, etc.)
+### 3. Journey Analytics (`/communication/journeys/:id/analytics`)
+- Cards: Messages Sent, Open Rate, Click Rate, Conversions
+- Funnel visualization showing drop-off at each node
+- Timeline of recent message activity
 
-**4. Send Test Dialog**
-- Phone number input (E.164 format)
-- Variable values form (dynamically generated from template body)
-- Send button with confirmation
+### 4. Contacts Manager (`/communication/contacts`)
+- Table of journey_contacts with segment badges
+- Import CSV, manual add
+- Filter by segment, city, engagement
+- Opt-out toggle per contact
 
 ## Sidebar & Module Registration
 
-Add to `navigation` array in `AppSidebar.tsx` between Security and Inventory:
+Add to Communication Center children in `AppSidebar.tsx`:
 ```
-{
-  title: "Communication Center",
-  icon: MessageSquare,  // from lucide-react
-  moduleKey: "communication",
-  children: [
-    { title: "WhatsApp Templates", href: "/communication/templates", moduleKey: "communication.templates" },
-    { title: "Message Log", href: "/communication/messages", moduleKey: "communication.messages" },
-  ],
-}
+{ title: "Journey Builder", href: "/communication/journeys", moduleKey: "communication.journeys" },
+{ title: "Contacts", href: "/communication/contacts", moduleKey: "communication.contacts" },
 ```
 
 Register in `modules.ts`:
-- `communication` — Communication Center
-- `communication.templates` — WhatsApp Templates
-- `communication.messages` — Message Log
+- `communication.journeys` — Journey Builder
+- `communication.contacts` — Contacts
 
-Add lazy routes in `App.tsx`.
+Add route mappings in `routeToModuleKey`.
+
+## Dependencies
+
+- `@xyflow/react` — React Flow library for the drag-and-drop canvas builder
 
 ## Files to Create/Modify
 
 | File | Action |
 |---|---|
-| `supabase/migrations/...` | New tables + RLS |
-| `supabase/functions/whatsapp-templates/index.ts` | Template CRUD + Twilio sync |
-| `supabase/functions/whatsapp-send/index.ts` | Send test messages |
-| `src/pages/communication/WhatsAppTemplates.tsx` | List page |
-| `src/pages/communication/WhatsAppTemplateDetails.tsx` | Detail page |
-| `src/pages/communication/MessageLog.tsx` | Message history |
-| `src/components/layout/AppSidebar.tsx` | Add nav item |
-| `src/lib/modules.ts` | Register module keys |
+| Migration SQL | New tables + RLS + realtime |
+| `supabase/functions/process-journeys/index.ts` | Background scheduler |
+| `supabase/functions/journey-actions/index.ts` | Journey management API |
+| `src/pages/communication/JourneyList.tsx` | Journey list page |
+| `src/pages/communication/JourneyBuilder.tsx` | Visual canvas builder |
+| `src/pages/communication/JourneyAnalytics.tsx` | Analytics dashboard |
+| `src/pages/communication/ContactsManager.tsx` | Contact management |
+| `src/components/journey/*.tsx` | Custom React Flow nodes (Entry, Message, Delay, Decision, Exit), NodePropertyPanel |
+| `src/lib/modules.ts` | Add module keys |
+| `src/components/layout/AppSidebar.tsx` | Add submenu items |
 | `src/App.tsx` | Add lazy routes |
 
 ## Sequence
 
-1. Connect Twilio connector
-2. Run database migration
-3. Create edge functions
-4. Build frontend pages
-5. Wire sidebar and routes
+1. Install `@xyflow/react` dependency
+2. Run database migration (tables, RLS, realtime)
+3. Create edge functions (process-journeys, journey-actions)
+4. Set up pg_cron for process-journeys
+5. Build Contacts Manager page
+6. Build Journey List page
+7. Build Journey Builder canvas with custom nodes
+8. Build Analytics dashboard
+9. Wire sidebar, modules, and routes
+
+## What Will NOT Change
+
+No modifications to any existing features, pages, components, database tables, or edge functions outside the new Journey Builder module.
 
