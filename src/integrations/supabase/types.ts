@@ -10228,6 +10228,101 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_message_log: {
+        Row: {
+          id: string
+          sent_at: string
+          sent_by: string | null
+          status: string
+          template_id: string
+          to_number: string
+          twilio_message_sid: string | null
+        }
+        Insert: {
+          id?: string
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+          template_id: string
+          to_number: string
+          twilio_message_sid?: string | null
+        }
+        Update: {
+          id?: string
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+          template_id?: string
+          to_number?: string
+          twilio_message_sid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_message_log_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_message_log_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_templates: {
+        Row: {
+          body: string
+          category: string
+          created_at: string
+          created_by: string | null
+          id: string
+          language: string
+          name: string
+          rejection_reason: string | null
+          status: string
+          twilio_content_sid: string | null
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          category: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          language?: string
+          name: string
+          rejection_reason?: string | null
+          status?: string
+          twilio_content_sid?: string | null
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          language?: string
+          name?: string
+          rejection_reason?: string | null
+          status?: string
+          twilio_content_sid?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
