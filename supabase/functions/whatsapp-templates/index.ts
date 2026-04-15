@@ -35,8 +35,14 @@ serve(async (req) => {
     const path = url.pathname.split('/').filter(Boolean);
     const action = path[path.length - 1] || '';
 
-    // POST: Create template
-    if (req.method === 'POST' && (action === 'whatsapp-templates' || action === 'create')) {
+    // For POST requests, parse body once and check for action field
+    let body: any = {};
+    if (req.method === 'POST') {
+      body = await req.json();
+    }
+
+    // POST: Bulk sync
+    if (req.method === 'POST' && (action === 'bulk-sync' || body?.action === 'bulk-sync')) {
       const body = await req.json();
       const { name, category, language, body: templateBody } = body;
 
