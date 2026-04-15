@@ -16,6 +16,7 @@ interface Props {
 }
 
 export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const update = (key: string, value: any) => {
     onUpdate(node.id, { ...node.data, [key]: value });
   };
