@@ -6,7 +6,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const GATEWAY_URL = 'https://connector-gateway.lovable.dev/twilio';
+const CONTENT_API_BASE = 'https://content.twilio.com';
+
+function getTwilioAuth() {
+  const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
+  const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
+  if (!accountSid || !authToken) return null;
+  return {
+    accountSid,
+    authHeader: 'Basic ' + btoa(`${accountSid}:${authToken}`),
+  };
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -101,34 +111,130 @@ serve(async (req) => {
       const body = await req.json();
       const action = body.action || 'create';
 
-      // --- Bulk sync ---
+      // --- Import templates from Twilio ---
+      if (action === 'import-from-twilio') {
+        const twilio = getTwilioAuth();
+        if (!twilio) {
+          return new Response(JSON.stringify({ error: 'Twilio credentials not configured' }), {
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Fetch all content templates from Twilio
+        const resp = await fetch(`${CONTENT_API_BASE}/v1/Content`, {
+          headers: { 'Authorization': twilio.authHeader },
+        });
+
+        if (!resp.ok) {
+          const errText = await resp.text();
+          console.error('Twilio Content API list error:', errText);
+          return new Response(JSON.stringify({ error: `Twilio API error: ${resp.status}` }), {
+            status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const twilioData = await resp.json();
+        const contents = twilioData.contents || [];
+
+        let imported = 0;
+        let skipped = 0;
+
+        for (const content of contents) {
+          // Check if already imported
+          const { data: existing } = await supabase
+            .from('whatsapp_templates')
+            .select('id')
+            .eq('twilio_content_sid', content.sid)
+            .maybeSingle();
+
+          if (existing) {
+            skipped++;
+            continue;
+          }
+
+          // Extract body from content types
+          let templateBody = '';
+          if (content.types?.['twilio/text']?.body) {
+            templateBody = content.types['twilio/text'].body;
+          } else if (content.types?.['twilio/media']?.body) {
+            templateBody = content.types['twilio/media'].body;
+          } else if (content.types?.['twilio/quick-reply']?.body) {
+            templateBody = content.types['twilio/quick-reply'].body;
+          } else {
+            templateBody = JSON.stringify(content.types || {});
+          }
+
+          // Determine status from approval info
+          let status = 'submitted';
+          let rejectionReason = null;
+
+          // Try to fetch approval status
+          try {
+            const approvalResp = await fetch(
+              `${CONTENT_API_BASE}/v1/Content/${content.sid}/ApprovalRequests`,
+              { headers: { 'Authorization': twilio.authHeader } }
+            );
+            if (approvalResp.ok) {
+              const approvalData = await approvalResp.json();
+              const waStatus = approvalData?.whatsapp?.status;
+              if (waStatus === 'approved') status = 'approved';
+              else if (waStatus === 'rejected') {
+                status = 'rejected';
+                rejectionReason = approvalData?.whatsapp?.rejection_reason || 'Unknown';
+              }
+            }
+          } catch (e) {
+            console.error('Error fetching approval for', content.sid, e);
+          }
+
+          const categoryMap: Record<string, string> = {
+            'twilio/text': 'UTILITY',
+            'twilio/media': 'MARKETING',
+            'twilio/quick-reply': 'UTILITY',
+          };
+          const firstType = Object.keys(content.types || {})[0] || '';
+          const category = categoryMap[firstType] || 'UTILITY';
+
+          await supabase.from('whatsapp_templates').insert({
+            name: content.friendly_name || content.sid,
+            category,
+            language: content.language || 'en',
+            body: templateBody,
+            twilio_content_sid: content.sid,
+            status,
+            rejection_reason: rejectionReason,
+            created_by: user.id,
+          });
+
+          imported++;
+        }
+
+        return new Response(JSON.stringify({ imported, skipped, total: contents.length }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // --- Bulk sync statuses ---
       if (action === 'bulk-sync') {
+        const twilio = getTwilioAuth();
+        if (!twilio) {
+          return new Response(JSON.stringify({ error: 'Twilio credentials not configured' }), {
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         const { data: templates } = await supabase
           .from('whatsapp_templates')
           .select('*')
           .in('status', ['submitted'])
           .not('twilio_content_sid', 'is', null);
 
-        const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-        const TWILIO_API_KEY = Deno.env.get('TWILIO_API_KEY');
-
-        if (!LOVABLE_API_KEY || !TWILIO_API_KEY) {
-          return new Response(JSON.stringify({ error: 'Twilio not configured' }), {
-            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-
         const results = [];
         for (const tmpl of templates || []) {
           try {
             const resp = await fetch(
-              `${GATEWAY_URL}/v1/Content/${tmpl.twilio_content_sid}/ApprovalRequests`,
-              {
-                headers: {
-                  'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-                  'X-Connection-Api-Key': TWILIO_API_KEY,
-                },
-              }
+              `${CONTENT_API_BASE}/v1/Content/${tmpl.twilio_content_sid}/ApprovalRequests`,
+              { headers: { 'Authorization': twilio.authHeader } }
             );
             const data = await resp.json();
             const whatsappStatus = data?.whatsapp?.status;
@@ -165,6 +271,13 @@ serve(async (req) => {
           });
         }
 
+        const twilio = getTwilioAuth();
+        if (!twilio) {
+          return new Response(JSON.stringify({ error: 'Twilio credentials not configured' }), {
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         const { data: template } = await supabase
           .from('whatsapp_templates')
           .select('*')
@@ -177,23 +290,9 @@ serve(async (req) => {
           });
         }
 
-        const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-        const TWILIO_API_KEY = Deno.env.get('TWILIO_API_KEY');
-
-        if (!LOVABLE_API_KEY || !TWILIO_API_KEY) {
-          return new Response(JSON.stringify({ error: 'Twilio not configured' }), {
-            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-
         const twilioResponse = await fetch(
-          `${GATEWAY_URL}/v1/Content/${template.twilio_content_sid}/ApprovalRequests`,
-          {
-            headers: {
-              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-              'X-Connection-Api-Key': TWILIO_API_KEY,
-            },
-          }
+          `${CONTENT_API_BASE}/v1/Content/${template.twilio_content_sid}/ApprovalRequests`,
+          { headers: { 'Authorization': twilio.authHeader } }
         );
 
         const approvalData = await twilioResponse.json();
@@ -243,6 +342,7 @@ serve(async (req) => {
         });
       }
 
+      // Insert into DB as draft
       const { data: template, error: insertError } = await supabase
         .from('whatsapp_templates')
         .insert({
@@ -262,17 +362,14 @@ serve(async (req) => {
         });
       }
 
-      // Try to submit to Twilio Content API
-      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-      const TWILIO_API_KEY = Deno.env.get('TWILIO_API_KEY');
-
-      if (LOVABLE_API_KEY && TWILIO_API_KEY) {
+      // Submit to Twilio Content API
+      const twilio = getTwilioAuth();
+      if (twilio) {
         try {
-          const twilioResponse = await fetch(`${GATEWAY_URL}/v1/Content`, {
+          const twilioResponse = await fetch(`${CONTENT_API_BASE}/v1/Content`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-              'X-Connection-Api-Key': TWILIO_API_KEY,
+              'Authorization': twilio.authHeader,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -290,6 +387,23 @@ serve(async (req) => {
           const twilioData = await twilioResponse.json();
 
           if (twilioResponse.ok && twilioData.sid) {
+            // Submit for WhatsApp approval
+            try {
+              await fetch(`${CONTENT_API_BASE}/v1/Content/${twilioData.sid}/ApprovalRequests/whatsapp`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': twilio.authHeader,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  name,
+                  category: category.toLowerCase(),
+                }),
+              });
+            } catch (approvalErr) {
+              console.error('WhatsApp approval submission error:', approvalErr);
+            }
+
             await supabase
               .from('whatsapp_templates')
               .update({
@@ -301,7 +415,7 @@ serve(async (req) => {
             template.twilio_content_sid = twilioData.sid;
             template.status = 'submitted';
           } else {
-            console.error('Twilio Content API error:', twilioData);
+            console.error('Twilio Content API error:', JSON.stringify(twilioData));
           }
         } catch (twilioError) {
           console.error('Twilio submission error:', twilioError);

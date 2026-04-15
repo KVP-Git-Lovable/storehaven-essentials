@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Plus, RefreshCw, Eye, Send, Trash2, MessageSquare } from "lucide-react";
+import { Plus, RefreshCw, Eye, Send, Trash2, MessageSquare, Download } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 
@@ -112,6 +112,33 @@ export default function WhatsAppTemplates() {
     },
   });
 
+  const importMutation = useMutation({
+    mutationFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-templates`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ action: "import-from-twilio" }),
+        }
+      );
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to import");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-templates"] });
+      toast.success(`Imported ${data.imported} templates, ${data.skipped} already existed`);
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (templateId: string) => {
       const { error } = await supabase
@@ -146,6 +173,10 @@ export default function WhatsAppTemplates() {
           <p className="text-muted-foreground">Create and manage WhatsApp message templates via Twilio</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => importMutation.mutate()} disabled={importMutation.isPending}>
+            <Download className={`h-4 w-4 mr-2 ${importMutation.isPending ? "animate-spin" : ""}`} />
+            Import from Twilio
+          </Button>
           <Button variant="outline" onClick={() => bulkSyncMutation.mutate()} disabled={bulkSyncMutation.isPending}>
             <RefreshCw className={`h-4 w-4 mr-2 ${bulkSyncMutation.isPending ? "animate-spin" : ""}`} />
             Sync All
