@@ -181,6 +181,8 @@ const navigation: NavItem[] = [
     children: [
       { title: "WhatsApp Templates", href: "/communication/templates", moduleKey: "communication.templates" },
       { title: "Message Log", href: "/communication/messages", moduleKey: "communication.messages" },
+      { title: "Journey Builder", href: "/communication/journeys", moduleKey: "communication.journeys" },
+      { title: "Contacts", href: "/communication/contacts", moduleKey: "communication.contacts" },
     ],
   },
   {
