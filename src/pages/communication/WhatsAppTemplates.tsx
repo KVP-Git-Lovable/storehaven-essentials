@@ -173,6 +173,10 @@ export default function WhatsAppTemplates() {
           <p className="text-muted-foreground">Create and manage WhatsApp message templates via Twilio</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => importMutation.mutate()} disabled={importMutation.isPending}>
+            <Download className={`h-4 w-4 mr-2 ${importMutation.isPending ? "animate-spin" : ""}`} />
+            Import from Twilio
+          </Button>
           <Button variant="outline" onClick={() => bulkSyncMutation.mutate()} disabled={bulkSyncMutation.isPending}>
             <RefreshCw className={`h-4 w-4 mr-2 ${bulkSyncMutation.isPending ? "animate-spin" : ""}`} />
             Sync All
