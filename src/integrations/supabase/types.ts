@@ -2916,6 +2916,238 @@ export type Database = {
           },
         ]
       }
+      journey_contact_events: {
+        Row: {
+          contact_id: string
+          event_data: Json | null
+          event_type: string
+          id: string
+          occurred_at: string
+        }
+        Insert: {
+          contact_id: string
+          event_data?: Json | null
+          event_type: string
+          id?: string
+          occurred_at?: string
+        }
+        Update: {
+          contact_id?: string
+          event_data?: Json | null
+          event_type?: string
+          id?: string
+          occurred_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journey_contact_events_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "journey_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      journey_contacts: {
+        Row: {
+          city: string | null
+          created_at: string
+          created_by: string | null
+          date_of_birth: string | null
+          email: string
+          id: string
+          last_purchase_date: string | null
+          name: string
+          opted_out: boolean
+          phone: string
+          segment_type: string
+          updated_at: string
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          created_by?: string | null
+          date_of_birth?: string | null
+          email: string
+          id?: string
+          last_purchase_date?: string | null
+          name: string
+          opted_out?: boolean
+          phone: string
+          segment_type?: string
+          updated_at?: string
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          created_by?: string | null
+          date_of_birth?: string | null
+          email?: string
+          id?: string
+          last_purchase_date?: string | null
+          name?: string
+          opted_out?: boolean
+          phone?: string
+          segment_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journey_contacts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      journey_enrollments: {
+        Row: {
+          contact_id: string
+          current_node_id: string | null
+          enrolled_at: string
+          id: string
+          journey_id: string
+          next_action_at: string | null
+          status: string
+        }
+        Insert: {
+          contact_id: string
+          current_node_id?: string | null
+          enrolled_at?: string
+          id?: string
+          journey_id: string
+          next_action_at?: string | null
+          status?: string
+        }
+        Update: {
+          contact_id?: string
+          current_node_id?: string | null
+          enrolled_at?: string
+          id?: string
+          journey_id?: string
+          next_action_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journey_enrollments_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "journey_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journey_enrollments_journey_id_fkey"
+            columns: ["journey_id"]
+            isOneToOne: false
+            referencedRelation: "journeys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      journey_message_log: {
+        Row: {
+          channel: string
+          contact_id: string
+          enrollment_id: string | null
+          id: string
+          journey_id: string
+          sent_at: string
+          status: string
+          template_body: string | null
+        }
+        Insert: {
+          channel: string
+          contact_id: string
+          enrollment_id?: string | null
+          id?: string
+          journey_id: string
+          sent_at?: string
+          status?: string
+          template_body?: string | null
+        }
+        Update: {
+          channel?: string
+          contact_id?: string
+          enrollment_id?: string | null
+          id?: string
+          journey_id?: string
+          sent_at?: string
+          status?: string
+          template_body?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journey_message_log_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "journey_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journey_message_log_enrollment_id_fkey"
+            columns: ["enrollment_id"]
+            isOneToOne: false
+            referencedRelation: "journey_enrollments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journey_message_log_journey_id_fkey"
+            columns: ["journey_id"]
+            isOneToOne: false
+            referencedRelation: "journeys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      journeys: {
+        Row: {
+          canvas_data: Json
+          created_at: string
+          created_by: string | null
+          description: string | null
+          filters: Json | null
+          id: string
+          name: string
+          segment_type: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          canvas_data?: Json
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          filters?: Json | null
+          id?: string
+          name: string
+          segment_type?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          canvas_data?: Json
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          filters?: Json | null
+          id?: string
+          name?: string
+          segment_type?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journeys_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kb_article_assets: {
         Row: {
           article_id: string
