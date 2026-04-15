@@ -112,6 +112,33 @@ export default function WhatsAppTemplates() {
     },
   });
 
+  const importMutation = useMutation({
+    mutationFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-templates`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ action: "import-from-twilio" }),
+        }
+      );
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to import");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-templates"] });
+      toast.success(`Imported ${data.imported} templates, ${data.skipped} already existed`);
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (templateId: string) => {
       const { error } = await supabase
