@@ -117,6 +117,12 @@ export default function JourneyBuilder() {
     if (selectedNode?.id === nodeId) setSelectedNode((prev) => prev ? { ...prev, data } : null);
   };
 
+  const deleteNode = (nodeId: string) => {
+    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+    setSelectedNode(null);
+  };
+
   if (isLoading) return <div className="flex items-center justify-center h-96 text-muted-foreground">Loading...</div>;
 
   return (
@@ -189,6 +195,7 @@ export default function JourneyBuilder() {
           <NodePropertyPanel
             node={selectedNode}
             onUpdate={updateNodeData}
+            onDelete={deleteNode}
             onClose={() => setSelectedNode(null)}
           />
         )}

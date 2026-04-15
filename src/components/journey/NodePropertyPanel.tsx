@@ -1,18 +1,22 @@
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
+import { X, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import type { Node } from "@xyflow/react";
 
 interface Props {
   node: Node;
   onUpdate: (id: string, data: Record<string, any>) => void;
+  onDelete: (id: string) => void;
   onClose: () => void;
 }
 
-export function NodePropertyPanel({ node, onUpdate, onClose }: Props) {
+export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const update = (key: string, value: any) => {
     onUpdate(node.id, { ...node.data, [key]: value });
   };
@@ -86,9 +90,28 @@ export function NodePropertyPanel({ node, onUpdate, onClose }: Props) {
               <SelectItem value="clicked">Link Clicked</SelectItem>
               <SelectItem value="purchased">Purchased</SelectItem>
             </SelectContent>
-          </Select>
+         </Select>
         </div>
       )}
+
+      <div className="pt-4 border-t">
+        <Button variant="destructive" size="sm" className="w-full" onClick={() => setConfirmOpen(true)}>
+          <Trash2 className="h-4 w-4 mr-1" /> Delete Node
+        </Button>
+      </div>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {String(node.type)} node?</AlertDialogTitle>
+            <AlertDialogDescription>This will remove the node and all its connections from the canvas.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { onDelete(node.id); onClose(); }}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
