@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { MessageSquare, Users, Settings } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import whatsappLogo from "@/assets/whatsapp-logo.png";
 
 const cards = [
   {
