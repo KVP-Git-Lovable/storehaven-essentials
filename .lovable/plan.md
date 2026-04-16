@@ -1,25 +1,65 @@
 
 
-# Plan: Fix Login Page Load Performance
+# Plan: Restructure Communication Center — WhatsApp, Voice, Email
 
-## Root Cause
+## Overview
 
-`LandingPage` is **eagerly imported** on line 14 of `App.tsx`. It pulls in 8 child components (`LandingHeader`, `HeroSection`, `FeatureModules`, `FeatureShowcase`, `ComparisonTable`, `IndustrySection`, `CTASection`, `LandingFooter`) plus ~20 lucide icons. All of this is bundled into the **main chunk** and downloaded before the Login page can render, even when the user navigates directly to `/login`.
+Replace the four existing Communication Center sidebar items (WhatsApp Templates, Message Log, Journey Builder, Contacts) with three new items: WhatsApp, Voice, E-mail. WhatsApp becomes a hub page linking to the existing templates page plus new Senders and Config pages. Voice and Email are placeholder pages. Existing routes remain untouched.
 
-This was likely introduced when eager imports were set up — Login is small and fine to keep eager, but LandingPage should not be.
+## Changes
 
-## Fix
+### 1. Sidebar Navigation
+**File:** `src/components/layout/AppSidebar.tsx`
 
-**`src/App.tsx`** — Change LandingPage from eager to lazy import:
+Replace the Communication Center children array with:
+- "WhatsApp" → `/communication/whatsapp` (moduleKey: `communication.whatsapp`)
+- "Voice" → `/communication/voice` (moduleKey: `communication.voice`)
+- "E-mail" → `/communication/email` (moduleKey: `communication.email`)
 
-- Remove line 14: `import LandingPage from "./pages/landing/LandingPage";`
-- Add: `const LandingPage = lazy(() => import("./pages/landing/LandingPage"));`
+Add `Phone` and `Mail` icons from lucide-react alongside the existing `MessageSquare`.
 
-This single change moves the entire landing page and its 8 sub-components out of the critical bundle, significantly reducing the JavaScript that must be parsed before `/login` renders.
+### 2. Module Definitions
+**File:** `src/lib/modules.ts`
+
+Add three new module keys: `communication.whatsapp`, `communication.voice`, `communication.email`. Keep existing keys (`communication.templates`, `communication.messages`, etc.) so existing permissions and routes remain valid.
+
+### 3. New Pages (4 files)
+
+- **`src/pages/communication/WhatsAppCenter.tsx`** — Hub page with title, WhatsApp logo, description, and 3 card-style buttons linking to Templates, Senders, and Configuration.
+
+- **`src/pages/communication/WhatsAppSenders.tsx`** — Fetches senders from a new edge function. Displays table with phone number, display name, status. Loading/error states. Refresh button.
+
+- **`src/pages/communication/WhatsAppConfig.tsx`** — Stub page with title and placeholder description.
+
+- **`src/pages/communication/VoiceCenter.tsx`** — Placeholder with "Voice Center" title and future-phase message.
+
+- **`src/pages/communication/EmailCenter.tsx`** — Placeholder with "Email Center" title and future-phase message.
+
+### 4. Edge Function for WhatsApp Senders
+**File:** `supabase/functions/whatsapp-senders/index.ts`
+
+- `GET` → Calls Twilio API via the connector gateway (`https://connector-gateway.lovable.dev/twilio/IncomingPhoneNumbers.json`) to fetch phone numbers
+- Filters for WhatsApp-capable senders
+- Uses `LOVABLE_API_KEY` and `TWILIO_API_KEY` from env
+- Returns formatted JSON array with phone number, friendly name, status
+- Includes CORS headers
+
+### 5. Routes
+**File:** `src/App.tsx`
+
+Add lazy imports and routes:
+- `/communication/whatsapp` → WhatsAppCenter
+- `/communication/whatsapp/senders` → WhatsAppSenders
+- `/communication/whatsapp/config` → WhatsAppConfig
+- `/communication/voice` → VoiceCenter
+- `/communication/email` → EmailCenter
+
+All existing communication routes (`/communication/templates`, `/communication/messages`, `/communication/journeys/*`, `/communication/contacts`) remain unchanged.
 
 ## What Will NOT Change
 
-- Login stays eagerly imported (it's lightweight)
-- No other files modified
-- No database or backend changes
+- Existing WhatsApp Templates, Message Log, Journey Builder, and Contacts pages and routes
+- Any other sidebar menus or modules
+- Database tables or RLS policies
+- No existing features are modified or removed
 
