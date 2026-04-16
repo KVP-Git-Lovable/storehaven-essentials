@@ -179,10 +179,9 @@ const navigation: NavItem[] = [
     icon: MessageSquare,
     moduleKey: "communication",
     children: [
-      { title: "WhatsApp Templates", href: "/communication/templates", moduleKey: "communication.templates" },
-      { title: "Message Log", href: "/communication/messages", moduleKey: "communication.messages" },
-      { title: "Journey Builder", href: "/communication/journeys", moduleKey: "communication.journeys" },
-      { title: "Contacts", href: "/communication/contacts", moduleKey: "communication.contacts" },
+      { title: "WhatsApp", href: "/communication/whatsapp", moduleKey: "communication.whatsapp" },
+      { title: "Voice", href: "/communication/voice", moduleKey: "communication.voice" },
+      { title: "E-mail", href: "/communication/email", moduleKey: "communication.email" },
     ],
   },
   {
