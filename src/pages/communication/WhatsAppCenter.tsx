@@ -35,8 +35,8 @@ const WhatsAppCenter = () => {
             Manage your WhatsApp communication including templates, senders, and configuration through Twilio integration.
           </p>
         </div>
-        <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center">
-          <MessageSquare className="h-5 w-5 text-green-600" />
+        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+          <MessageSquare className="h-5 w-5 text-primary" />
         </div>
       </div>
 

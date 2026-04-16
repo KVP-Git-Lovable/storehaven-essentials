@@ -170,6 +170,11 @@ export const routeToModuleKey: Record<string, string> = {
   "/master/category": "master.category",
   
   "/master/nso-checklist": "master.nso",
+  "/communication/whatsapp": "communication.whatsapp",
+  "/communication/whatsapp/senders": "communication.whatsapp",
+  "/communication/whatsapp/config": "communication.whatsapp",
+  "/communication/voice": "communication.voice",
+  "/communication/email": "communication.email",
   "/master/pm-checklist": "master.pm",
   "/admin/users": "usermanagement.users",
   "/admin/roles": "usermanagement.roles",
