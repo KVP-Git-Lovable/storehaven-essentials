@@ -11,7 +11,7 @@ import { PWAInstallPrompt } from "./components/pwa/PWAInstallPrompt";
 import { PageLoader } from "./components/shared/PageLoader";
 
 // Eager imports for primary entry points
-import LandingPage from "./pages/landing/LandingPage";
+const LandingPage = lazy(() => import("./pages/landing/LandingPage"));
 import Login from "./pages/auth/Login";
 
 // Lazy imports for all other pages
