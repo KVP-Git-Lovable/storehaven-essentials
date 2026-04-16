@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { MessageSquare, Users, Settings } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import whatsappLogo from "@/assets/whatsapp-logo.png";
 
 const cards = [
   {
@@ -35,9 +36,7 @@ const WhatsAppCenter = () => {
             Manage your WhatsApp communication including templates, senders, and configuration through Twilio integration.
           </p>
         </div>
-        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-          <MessageSquare className="h-5 w-5 text-primary" />
-        </div>
+        <img src={whatsappLogo} alt="WhatsApp" className="h-10 w-10 object-contain" />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
