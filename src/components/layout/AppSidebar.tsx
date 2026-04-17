@@ -182,6 +182,7 @@ const navigation: NavItem[] = [
       { title: "WhatsApp", href: "/communication/whatsapp", moduleKey: "communication.whatsapp" },
       { title: "Voice", href: "/communication/voice", moduleKey: "communication.voice" },
       { title: "E-mail", href: "/communication/email", moduleKey: "communication.email" },
+      { title: "Journey Builder", href: "/communication/journeys", moduleKey: "communication.journeys" },
     ],
   },
   {
