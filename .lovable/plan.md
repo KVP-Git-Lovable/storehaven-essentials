@@ -1,65 +1,91 @@
 
 
-# Plan: Restructure Communication Center — WhatsApp, Voice, Email
+# Plan: Friendly Variable Picker for WhatsApp Templates
 
-## Overview
+## Approach
 
-Replace the four existing Communication Center sidebar items (WhatsApp Templates, Message Log, Journey Builder, Contacts) with three new items: WhatsApp, Voice, E-mail. WhatsApp becomes a hub page linking to the existing templates page plus new Senders and Config pages. Voice and Email are placeholder pages. Existing routes remain untouched.
+Keep storage and Twilio submission in the existing `{{1}}, {{2}}` numeric format (no DB schema changes, full backward compatibility). Layer a friendly variable picker on top of the create dialog that lets users insert named variables like `{{customer_name}}`, then transform to numeric form on submit. Store the friendly→numeric mapping inside the existing `body` field as a hidden marker comment so old templates keep working unchanged.
 
-## Changes
+## 1. New Variable Registry (frontend constant)
 
-### 1. Sidebar Navigation
-**File:** `src/components/layout/AppSidebar.tsx`
+**New file:** `src/lib/whatsappVariables.ts`
 
-Replace the Communication Center children array with:
-- "WhatsApp" → `/communication/whatsapp` (moduleKey: `communication.whatsapp`)
-- "Voice" → `/communication/voice` (moduleKey: `communication.voice`)
-- "E-mail" → `/communication/email` (moduleKey: `communication.email`)
+A single source of truth — grouped variables. No backend API needed (keeps things simple; can later move to DB).
 
-Add `Phone` and `Mail` icons from lucide-react alongside the existing `MessageSquare`.
+```ts
+export const VARIABLE_GROUPS = {
+  Order: ['order_id', 'order_status', 'order_date', 'order_total'],
+  Customer: ['customer_name', 'phone_number', 'email'],
+  Product: ['product_name', 'quantity', 'price'],
+  Store: ['store_name', 'store_address'],
+};
+```
 
-### 2. Module Definitions
-**File:** `src/lib/modules.ts`
+Plus helpers:
+- `transformFriendlyToTwilio(body)` → returns `{ twilioBody, mapping }`
+- `transformTwilioToFriendly(body, mapping)` → reverse for editing
 
-Add three new module keys: `communication.whatsapp`, `communication.voice`, `communication.email`. Keep existing keys (`communication.templates`, `communication.messages`, etc.) so existing permissions and routes remain valid.
+## 2. Update Create Template Dialog
 
-### 3. New Pages (4 files)
+**File:** `src/pages/communication/WhatsAppTemplates.tsx`
 
-- **`src/pages/communication/WhatsAppCenter.tsx`** — Hub page with title, WhatsApp logo, description, and 3 card-style buttons linking to Templates, Senders, and Configuration.
+Replace the current `+ Variable` button with:
+- **Insert Variable dropdown** (grouped DropdownMenu) — categories as labels, variables as items. On select, inserts `{{variable_name}}` at the textarea cursor position.
+- **Live Preview panel** below the textarea with two tabs:
+  - "Friendly view" — shows `Hello {{customer_name}}, your order {{order_id}}...`
+  - "Twilio format" — shows the auto-numbered `Hello {{1}}, your order {{2}}...`
+- **Validation badge** showing detected variables and any malformed/duplicate warnings.
+- Tooltip on the dropdown: "Variables are automatically mapped to WhatsApp format on submission."
 
-- **`src/pages/communication/WhatsAppSenders.tsx`** — Fetches senders from a new edge function. Displays table with phone number, display name, status. Loading/error states. Refresh button.
+On submit: convert friendly body → numeric body and append a hidden mapping marker on a new line:
+```
+Hello {{1}}, your order {{2}} is confirmed
+<!--vars:{"1":"customer_name","2":"order_id"}-->
+```
+The marker is stripped before being sent to Twilio (in the edge function).
 
-- **`src/pages/communication/WhatsAppConfig.tsx`** — Stub page with title and placeholder description.
+## 3. Edge Function — Strip Marker Before Twilio
 
-- **`src/pages/communication/VoiceCenter.tsx`** — Placeholder with "Voice Center" title and future-phase message.
+**File:** `supabase/functions/whatsapp-templates/index.ts`
 
-- **`src/pages/communication/EmailCenter.tsx`** — Placeholder with "Email Center" title and future-phase message.
+In the create action, before calling Twilio Content API:
+- Parse and remove the `<!--vars:...-->` marker line from `templateBody`
+- Send the clean numeric body to Twilio
+- Store the original body (with marker) in the DB so we can reconstruct friendly names
 
-### 4. Edge Function for WhatsApp Senders
-**File:** `supabase/functions/whatsapp-senders/index.ts`
+No DB schema change required. No breaking change for existing templates (no marker = behaves exactly as today).
 
-- `GET` → Calls Twilio API via the connector gateway (`https://connector-gateway.lovable.dev/twilio/IncomingPhoneNumbers.json`) to fetch phone numbers
-- Filters for WhatsApp-capable senders
-- Uses `LOVABLE_API_KEY` and `TWILIO_API_KEY` from env
-- Returns formatted JSON array with phone number, friendly name, status
-- Includes CORS headers
+## 4. Send Test Message — Named Inputs
 
-### 5. Routes
-**File:** `src/App.tsx`
+**File:** `src/pages/communication/WhatsAppTemplateDetails.tsx`
 
-Add lazy imports and routes:
-- `/communication/whatsapp` → WhatsAppCenter
-- `/communication/whatsapp/senders` → WhatsAppSenders
-- `/communication/whatsapp/config` → WhatsAppConfig
-- `/communication/voice` → VoiceCenter
-- `/communication/email` → EmailCenter
+- Parse the body for the `<!--vars:...-->` marker.
+- If present: show inputs labeled with friendly names (e.g., "customer_name") instead of `{{1}}`. Map values back to numeric keys before posting.
+- If absent (legacy templates): keep current `{{1}}, {{2}}` input behavior.
+- Display body with friendly names in the preview when mapping exists.
 
-All existing communication routes (`/communication/templates`, `/communication/messages`, `/communication/journeys/*`, `/communication/contacts`) remain unchanged.
+## 5. Send Endpoint — Already Compatible
 
-## What Will NOT Change
+**File:** `supabase/functions/whatsapp-send/index.ts`
 
-- Existing WhatsApp Templates, Message Log, Journey Builder, and Contacts pages and routes
-- Any other sidebar menus or modules
-- Database tables or RLS policies
-- No existing features are modified or removed
+The frontend will continue to send `variables: { "1": "John", "2": "ORD123" }` (converted client-side from named values). No backend change needed. The marker is harmless even if not stripped here because variable substitution uses numeric keys; we'll strip the marker line before substitution as a safety cleanup.
+
+## Backward Compatibility
+
+| Scenario | Behavior |
+|---|---|
+| Old template (no marker) | Works exactly as today — numeric placeholders shown |
+| New template (with marker) | Friendly names shown in preview & test dialog |
+| Twilio submission | Always receives clean `{{1}}, {{2}}` body |
+| Database | No schema change; mapping stored inline in `body` |
+
+## Files Touched
+
+- `src/lib/whatsappVariables.ts` (new)
+- `src/pages/communication/WhatsAppTemplates.tsx` (create dialog)
+- `src/pages/communication/WhatsAppTemplateDetails.tsx` (test dialog + body preview)
+- `supabase/functions/whatsapp-templates/index.ts` (strip marker before Twilio)
+- `supabase/functions/whatsapp-send/index.ts` (strip marker before substitution)
+
+No changes to: routes, sidebar, navigation, RLS, DB schema, or any other module.
 
