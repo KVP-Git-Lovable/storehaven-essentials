@@ -85,11 +85,14 @@ serve(async (req) => {
       });
     }
 
-    // Build message body with variables replaced
-    let messageBody = template.body;
+    // Strip hidden variable-mapping marker (used by UI for friendly names)
+    const MARKER_RE = /\n?<!--vars:\{[^}]*\}-->/;
+    let messageBody = (template.body || '').replace(MARKER_RE, '').trimEnd();
+
+    // Build message body with numeric variables replaced
     if (variables && typeof variables === 'object') {
       Object.keys(variables).forEach((key) => {
-        messageBody = messageBody.replace(`{{${key}}}`, variables[key]);
+        messageBody = messageBody.replaceAll(`{{${key}}}`, variables[key]);
       });
     }
 
