@@ -41,7 +41,7 @@ export function transformFriendlyToTwilio(body: string): {
   vars.forEach((name, idx) => {
     const num = String(idx + 1);
     mapping[num] = name;
-    twilioBody = twilioBody.replaceAll(`{{${name}}}`, `{{${num}}}`);
+    twilioBody = twilioBody.split(`{{${name}}}`).join(`{{${num}}}`);
   });
   return { twilioBody, mapping };
 }
@@ -55,7 +55,7 @@ export function transformTwilioToFriendly(
 ): string {
   let result = body;
   Object.entries(mapping).forEach(([num, name]) => {
-    result = result.replaceAll(`{{${num}}}`, `{{${name}}}`);
+    result = result.split(`{{${num}}}`).join(`{{${name}}}`);
   });
   return result;
 }
