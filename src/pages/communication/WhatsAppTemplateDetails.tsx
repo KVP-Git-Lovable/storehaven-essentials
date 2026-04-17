@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { toast } from "sonner";
 import { ArrowLeft, RefreshCw, Send, AlertTriangle, Copy, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
+import { parseStoredBody, transformTwilioToFriendly } from "@/lib/whatsappVariables";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -110,15 +111,24 @@ export default function WhatsAppTemplateDetails() {
     return <div className="text-center py-12 text-muted-foreground">Template not found</div>;
   }
 
-  // Extract variables from body
-  const bodyVars = template.body.match(/\{\{(\d+)\}\}/g) || [];
-  const varNumbers = bodyVars.map((v: string) => v.replace(/[{}]/g, ""));
+  // Parse stored body — extract clean Twilio body and friendly mapping (if present)
+  const { twilioBody: cleanBody, mapping } = parseStoredBody(template.body);
 
-  // Highlight variables in body
-  const highlightedBody = template.body.replace(
-    /\{\{(\d+)\}\}/g,
+  // Extract numeric variables from the clean body
+  const bodyVars = cleanBody.match(/\{\{(\d+)\}\}/g) || [];
+  const varNumbers = Array.from(new Set(bodyVars.map((v: string) => v.replace(/[{}]/g, ""))));
+
+  // Display body — friendly names if mapping exists, otherwise numeric
+  const displayBody = mapping ? transformTwilioToFriendly(cleanBody, mapping) : cleanBody;
+
+  // Highlight variables in display body
+  const highlightedBody = displayBody.replace(
+    /\{\{([a-zA-Z0-9_]+)\}\}/g,
     '<span class="bg-primary/20 text-primary px-1 rounded font-mono">{{$1}}</span>'
   );
+
+  // Helper: friendly name for a numeric var (or fallback to number)
+  const labelFor = (num: string) => mapping?.[num] || num;
 
   return (
     <div className="space-y-6">
@@ -212,7 +222,7 @@ export default function WhatsAppTemplateDetails() {
             {varNumbers.length > 0 && (
               <div className="mt-3">
                 <p className="text-xs text-muted-foreground">
-                  Variables: {varNumbers.map((v: string) => `{{${v}}}`).join(", ")}
+                  Variables: {varNumbers.map((v: string) => `{{${labelFor(v)}}}`).join(", ")}
                 </p>
               </div>
             )}
@@ -237,9 +247,9 @@ export default function WhatsAppTemplateDetails() {
             </div>
             {varNumbers.map((v: string) => (
               <div key={v}>
-                <Label>Variable {`{{${v}}}`}</Label>
+                <Label>{mapping?.[v] ? mapping[v] : `Variable {{${v}}}`}</Label>
                 <Input
-                  placeholder={`Value for {{${v}}}`}
+                  placeholder={`Value for ${mapping?.[v] ? `{{${mapping[v]}}}` : `{{${v}}}`}`}
                   value={variables[v] || ""}
                   onChange={(e) => setVariables({ ...variables, [v]: e.target.value })}
                 />

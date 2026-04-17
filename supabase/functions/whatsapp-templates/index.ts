@@ -324,6 +324,13 @@ serve(async (req) => {
       // --- Create template (default action) ---
       const { name, category, language, body: templateBody } = body;
 
+      // Strip the friendly-variable mapping marker before sending to Twilio.
+      // The marker is preserved in DB so the UI can reconstruct friendly names.
+      const MARKER_RE = /\n?<!--vars:\{[^}]*\}-->/;
+      const twilioCleanBody = typeof templateBody === 'string'
+        ? templateBody.replace(MARKER_RE, '').trimEnd()
+        : templateBody;
+
       if (!name || !category || !templateBody) {
         return new Response(JSON.stringify({ error: 'name, category, and body are required' }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -378,7 +385,7 @@ serve(async (req) => {
               variables: {},
               types: {
                 'twilio/text': {
-                  body: templateBody,
+                  body: twilioCleanBody,
                 },
               },
             }),

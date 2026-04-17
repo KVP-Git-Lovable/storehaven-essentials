@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,10 +10,27 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { Plus, RefreshCw, Eye, Send, Trash2, MessageSquare, Download } from "lucide-react";
+import { Plus, RefreshCw, Eye, Trash2, MessageSquare, Download, ChevronDown, Info, AlertTriangle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
+import {
+  VARIABLE_GROUPS,
+  buildStoredBody,
+  transformFriendlyToTwilio,
+  validateFriendlyBody,
+} from "@/lib/whatsappVariables";
 
 interface WhatsAppTemplate {
   id: string;
@@ -43,6 +60,7 @@ export default function WhatsAppTemplates() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [form, setForm] = useState({ name: "", category: "UTILITY", language: "en", body: "" });
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ["whatsapp-templates"],
@@ -59,6 +77,8 @@ export default function WhatsAppTemplates() {
   const createMutation = useMutation({
     mutationFn: async (templateData: typeof form) => {
       const { data: { session } } = await supabase.auth.getSession();
+      // Convert friendly body -> stored body (numeric + hidden mapping marker)
+      const { storedBody } = buildStoredBody(templateData.body);
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-templates`,
         {
@@ -71,7 +91,7 @@ export default function WhatsAppTemplates() {
             name: templateData.name,
             category: templateData.category,
             language: templateData.language,
-            body: templateData.body,
+            body: storedBody,
           }),
         }
       );
@@ -160,10 +180,27 @@ export default function WhatsAppTemplates() {
     return true;
   });
 
-  const insertVariable = () => {
-    const varCount = (form.body.match(/\{\{\d+\}\}/g) || []).length;
-    setForm({ ...form, body: form.body + `{{${varCount + 1}}}` });
+  const insertVariableAtCursor = (varName: string) => {
+    const placeholder = `{{${varName}}}`;
+    const ta = textareaRef.current;
+    if (!ta) {
+      setForm((f) => ({ ...f, body: f.body + placeholder }));
+      return;
+    }
+    const start = ta.selectionStart ?? form.body.length;
+    const end = ta.selectionEnd ?? form.body.length;
+    const newBody = form.body.slice(0, start) + placeholder + form.body.slice(end);
+    setForm({ ...form, body: newBody });
+    // Restore cursor after React update
+    requestAnimationFrame(() => {
+      ta.focus();
+      const pos = start + placeholder.length;
+      ta.setSelectionRange(pos, pos);
+    });
   };
+
+  const validation = validateFriendlyBody(form.body);
+  const { twilioBody } = transformFriendlyToTwilio(form.body);
 
   return (
     <div className="space-y-6">
@@ -284,7 +321,7 @@ export default function WhatsAppTemplates() {
 
       {/* Create Template Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create WhatsApp Template</DialogTitle>
           </DialogHeader>
@@ -326,26 +363,102 @@ export default function WhatsAppTemplates() {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <Label>Message Body</Label>
-                <Button type="button" variant="ghost" size="sm" onClick={insertVariable}>
-                  + Variable
-                </Button>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button type="button" variant="outline" size="sm">
+                            <Plus className="h-3 w-3 mr-1" />
+                            Insert Variable
+                            <ChevronDown className="h-3 w-3 ml-1" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56 max-h-80 overflow-y-auto bg-popover">
+                          {Object.entries(VARIABLE_GROUPS).map(([group, vars], idx) => (
+                            <div key={group}>
+                              {idx > 0 && <DropdownMenuSeparator />}
+                              <DropdownMenuLabel className="text-xs text-muted-foreground">{group}</DropdownMenuLabel>
+                              <DropdownMenuGroup>
+                                {vars.map((v) => (
+                                  <DropdownMenuItem key={v} onClick={() => insertVariableAtCursor(v)}>
+                                    <code className="text-xs">{`{{${v}}}`}</code>
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuGroup>
+                            </div>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TooltipTrigger>
+                    <TooltipContent side="left">
+                      <p className="text-xs">Variables are automatically mapped to WhatsApp format on submission</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
               <Textarea
+                ref={textareaRef}
                 rows={5}
-                placeholder="Hello {{1}}, your order {{2}} has been confirmed."
+                placeholder="Hello {{customer_name}}, your order {{order_id}} has been confirmed."
                 value={form.body}
                 onChange={(e) => setForm({ ...form, body: e.target.value })}
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Use {"{{1}}"}, {"{{2}}"} etc. for dynamic variables
+              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                <Info className="h-3 w-3" />
+                Click "Insert Variable" to add named variables — they get auto-mapped to {"{{1}}, {{2}}"} for Twilio.
               </p>
+
+              {validation.warnings.length > 0 && (
+                <div className="mt-2 rounded-md bg-destructive/10 p-2 space-y-1">
+                  {validation.warnings.map((w, i) => (
+                    <p key={i} className="text-xs text-destructive flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {w}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {validation.variables.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <span className="text-xs text-muted-foreground mr-1">Detected:</span>
+                  {validation.variables.map((v, i) => (
+                    <Badge key={v} variant="secondary" className="text-xs">
+                      {`{{${v}}}`} → {`{{${i + 1}}}`}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
+
+            {form.body && (
+              <div>
+                <Label className="text-sm">Preview</Label>
+                <Tabs defaultValue="friendly" className="mt-1">
+                  <TabsList className="grid w-full grid-cols-2 h-8">
+                    <TabsTrigger value="friendly" className="text-xs">Friendly view</TabsTrigger>
+                    <TabsTrigger value="twilio" className="text-xs">Twilio format</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="friendly">
+                    <div className="bg-muted/50 rounded-md p-3 text-sm whitespace-pre-wrap leading-relaxed border">
+                      {form.body || <span className="text-muted-foreground">Empty</span>}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="twilio">
+                    <div className="bg-muted/50 rounded-md p-3 text-sm whitespace-pre-wrap leading-relaxed border font-mono">
+                      {twilioBody || <span className="text-muted-foreground">Empty</span>}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>Cancel</Button>
             <Button
               onClick={() => createMutation.mutate(form)}
-              disabled={!form.name || !form.body || createMutation.isPending}
+              disabled={!form.name || !form.body || !validation.valid || createMutation.isPending}
             >
               {createMutation.isPending ? "Creating..." : "Create & Submit"}
             </Button>
