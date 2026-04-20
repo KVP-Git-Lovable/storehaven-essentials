@@ -1,115 +1,71 @@
 
+The user wants to add a "next N days" operator for date fields in List View filters. Currently there's only `last_n_days`. Need to add `next_n_days` that filters records where the date falls between today and today+N days.
 
-# Plan: Generic List Views Module + Journey Builder Integration
+Key consideration for `date_of_birth` / `anniversary_date`: these are recurring annual events. A naive `date BETWEEN today AND today+N` won't work because birth years are in the past. Need a recurring-date check (month-day comparison).
 
-## Overview
+Plan:
 
-Build a brand-new **List Views** module (entity-agnostic saved filter system) covering Customers, Orders, Revenue, Products, Items, and Schemes. Replace the static "Target Segment" dropdown in Journey Builder with a "Target Segment (List View)" picker that resolves to a real audience at runtime. Old `segment_type` remains as fallback.
+# Plan: Add "Next N Days" Date Filter (with Recurring Birthday/Anniversary Support)
 
-## 1. Database — `list_views` table (migration)
+## Problem
 
-```sql
-CREATE TABLE public.list_views (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  description text,
-  entity_type text NOT NULL,        -- 'customers' | 'orders' | 'revenue' | 'products' | 'items' | 'schemes'
-  selected_fields jsonb NOT NULL DEFAULT '[]',
-  filters jsonb NOT NULL DEFAULT '[]',  -- [{ field, operator, value }]
-  visibility text NOT NULL DEFAULT 'private',  -- 'private' | 'shared'
-  tags text[] DEFAULT '{}',
-  created_by uuid REFERENCES profiles(id),
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
--- RLS: users see own + 'shared'; admins see all; insert/update/delete by owner or admin
-```
+The current List View filter system supports `last_n_days` for dates but has no forward-looking equivalent. For recurring events like birthdays and anniversaries, even a simple `next_n_days` (today → today+N) fails because the stored year is in the past — we need to compare month/day only.
 
-Add `list_view_id uuid REFERENCES list_views(id)` to `journeys` (nullable; coexists with `segment_type`).
+## Solution — Two new operators
 
-## 2. List View Builder UI (new module)
+Add to `src/lib/listViewSchema.ts` under date operators:
 
-**Route:** `/list-views`, `/list-views/:id`
-**Sidebar:** Add under existing **Communication Center** → "List Views" (so it's discoverable next to Journey Builder).
+1. **`next_n_days`** — "in next N days" — for one-off future dates (e.g., Created Date doesn't make sense here, but useful for End Date, Anniversary as absolute, etc.)
+2. **`upcoming_anniversary_n_days`** — "upcoming in next N days (recurring)" — month/day comparison, ignores year. Shown only for fields flagged as recurring.
 
-**Files:**
-- `src/pages/listviews/ListViewsList.tsx` — Table of saved views (name, entity, owner, tags, audience size, actions: Edit / Duplicate / Delete).
-- `src/pages/listviews/ListViewBuilder.tsx` — Two-pane builder:
-  - **Entity selector** (Customers / Orders / Revenue / Products / Items / Schemes)
-  - **Field picker** (multi-select from entity schema)
-  - **Filter rows** (field → operator → value). Operators auto-adapt to field type: string (equals/contains/starts with), numeric (=, ≠, >, <, between), date (=, before, after, between, last N days), boolean.
-  - **Live preview table** (first 25 rows) + total count badge.
-  - **Save** (name, description, visibility, tags).
-- `src/components/listviews/FilterRow.tsx` — Single filter condition editor.
-- `src/lib/listViewSchema.ts` — Per-entity field metadata (label, key, type, options). Hand-curated for the 6 entities so the UI stays type-safe.
+## Schema changes
 
-## 3. List View Execution Engine
+`src/lib/listViewSchema.ts`:
+- Add an optional `recurring?: boolean` flag on `FieldDef`.
+- Mark `date_of_birth` and `anniversary_date` on the customers entity as `recurring: true`.
+- Extend `OPERATORS_BY_TYPE.date` with the two new operators.
+- (Optionally) filter operators per-field at render time so `upcoming_anniversary_n_days` only appears for recurring fields.
 
-**File:** `src/lib/listViewExecutor.ts` — Client-side helper that takes a list view and returns a Supabase query (`.from(entity).select(...).eq/gt/lt/ilike/...`). Used both in the preview pane and analytics.
+## Executor changes
 
-**File:** `supabase/functions/list-view-resolve/index.ts` — Server-side resolver.
-- Input: `{ list_view_id }` (or inline definition for preview)
-- Output: `{ count, rows? }`
-- Validates entity name against an allow-list, applies filters using the Supabase client. Used by Journey activation.
+`src/lib/listViewExecutor.ts` — add cases:
 
-## 4. Journey Builder Integration
+- **`next_n_days`**: 
+  ```
+  q.gte(field, today).lte(field, today + N days)
+  ```
+- **`upcoming_anniversary_n_days`**: Postgres has no clean way to express "month-day in next N days" via PostgREST filter operators. Two options:
+  - **(a)** Add a SECURITY DEFINER SQL function `customers_with_upcoming_event(field text, days int)` returning matching IDs, then use `q.in('id', ids)`. Cleanest but adds a DB function.
+  - **(b)** Fetch candidate rows (filter by `is not null`), then post-filter client-side by computing this year's occurrence and checking the window. Simpler, no migration; fine for typical customer volumes (<10k). Wraps year-end correctly.
+  - **Recommendation: (b)** for v1 — no schema/migration churn, matches the "no DB changes unless needed" pattern used earlier in this project.
 
-**File:** `src/pages/communication/JourneyList.tsx` (Create modal)
-- Replace static "Target Segment" `<Select>` with **SearchableSelect** of List Views, labelled `"View Name (Entity)"`.
-- Helper text: *"Select a pre-configured list view to define your target audience"*.
-- Quick action button: **+ Create New List View** → opens `/list-views/new` in a new tab (preserves modal state).
-- Show **estimated audience size** badge once a view is selected (calls `list-view-resolve` with `count` only).
-- Saves `list_view_id` on the journey; leaves `segment_type` null for new journeys.
+## FilterRow UI
 
-**File:** `src/pages/communication/JourneyList.tsx` (table)
-- "Segment" column shows the linked list view name when `list_view_id` is set, otherwise falls back to `segment_type` ("legacy").
+`src/components/listviews/FilterRow.tsx`:
+- When `operator === "next_n_days"` or `"upcoming_anniversary_n_days"`, render a numeric input (same pattern as `last_n_days`) with placeholder "Number of days" and label hint "e.g., 7 for next week".
+- Hide `upcoming_anniversary_n_days` from the operator dropdown unless `fieldMeta.recurring === true`.
 
-## 5. Audience Resolution at Activation
+## Server resolver parity
 
-**File:** `supabase/functions/journey-actions/index.ts` (existing)
+`supabase/functions/list-view-resolve/index.ts` — mirror the executor logic so journey activation produces the same audience as the preview. For the recurring case, use the same client-side post-filter approach inside the edge function (it already has the Supabase client).
 
-Update the `activate` action:
-1. If `journey.list_view_id` is set:
-   - Call `list-view-resolve` to get matching rows from the linked entity.
-   - Map entity rows → contacts: for `customers` use phone/email directly; for `orders` resolve via `customer_id`; for other entities (products/items/schemes/revenue) we cannot enroll directly — return a clear error: *"Selected list view's entity isn't an audience source. Use a Customers or Orders view."* (This avoids silent failure for the non-audience entities the user listed.)
-2. Else fall back to existing `segment_type` logic against `journey_contacts` (legacy).
+## Backward compatibility
 
-## 6. Backward Compatibility
-
-| Scenario | Behavior |
-|---|---|
-| Existing journey with only `segment_type` | Works unchanged via fallback path |
-| New journey with `list_view_id` | Uses new resolver |
-| Journey list table | Shows list view name OR legacy segment label |
-| Edit existing journey | Can switch to a List View; segment_type cleared on save |
-
-## 7. Module Registration
-
-`src/lib/modules.ts` — Add `communication.listviews` (parent: `communication`).
-`src/components/layout/AppSidebar.tsx` — Add "List Views" entry under Communication Center.
-`src/App.tsx` — Lazy-load and route `/list-views` and `/list-views/:id`.
+- Existing saved views are unaffected (only new operator values added).
+- Old `last_n_days` continues to work.
+- No DB migration required.
 
 ## Files Touched
 
-**New:**
-- `supabase/migrations/<ts>_list_views.sql`
-- `supabase/functions/list-view-resolve/index.ts`
-- `src/pages/listviews/ListViewsList.tsx`
-- `src/pages/listviews/ListViewBuilder.tsx`
-- `src/components/listviews/FilterRow.tsx`
-- `src/lib/listViewSchema.ts`
-- `src/lib/listViewExecutor.ts`
+- `src/lib/listViewSchema.ts` — new operators + `recurring` flag on date fields
+- `src/lib/listViewExecutor.ts` — handle `next_n_days` + recurring post-filter
+- `src/components/listviews/FilterRow.tsx` — show/hide operator based on field, numeric input for N
+- `supabase/functions/list-view-resolve/index.ts` — parity with executor
 
-**Edited:**
-- `supabase/functions/journey-actions/index.ts` (activation logic)
-- `src/pages/communication/JourneyList.tsx` (create modal + table column)
-- `src/lib/modules.ts`
-- `src/components/layout/AppSidebar.tsx`
-- `src/App.tsx`
+## How the user will use it
 
-## Out of Scope / Notes
-
-- Products/Items/Schemes/Revenue are kept as List View entities (per your selection) but flagged at activation time as non-audience entities — they're useful for analytics/reporting list views, not for enrolling contacts into journeys.
-- No drag-and-drop field reordering in v1 (multi-select only); easy to add later.
-- No changes to existing WhatsApp, templates, analytics, or canvas builder.
+1. Open New List View → Entity = Customers
+2. Add filter → Field = `Date of Birth` → Operator = **"upcoming in next N days"** → Value = `7`
+3. Save view as e.g. "Birthdays This Week"
+4. The view always returns customers whose birthday falls within the next 7 days from today — no need to edit dates ever again.
 
