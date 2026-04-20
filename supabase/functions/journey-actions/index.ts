@@ -107,11 +107,28 @@ Deno.serve(async (req) => {
       let contactIds: string[] = [];
 
       if (journey.list_view_id) {
-        // New path: resolve via list view
+        // Validate the linked list view's entity is an audience source
+        const { data: lv, error: lvErr } = await supabase
+          .from("list_views").select("entity_type, name").eq("id", journey.list_view_id).maybeSingle();
+        if (lvErr) throw lvErr;
+        if (!lv) throw new Error("Linked list view not found");
+        const cfg = ALLOWED_ENTITIES[lv.entity_type];
+        if (!cfg || !cfg.isAudienceSource) {
+          throw new Error(`List view "${lv.name}" uses entity "${lv.entity_type}" which is not an audience source. Use a Customers or Orders list view.`);
+        }
+
+        // Clear stale enrollments so dynamic filters (e.g. "next N days") re-evaluate fresh on every activation.
+        // Strict scoping invariant: audience is rebuilt ONLY from list-view-resolve output below.
+        await supabase
+          .from("journey_enrollments")
+          .delete()
+          .eq("journey_id", journey_id)
+          .in("status", ["active", "paused"]);
+
         const result = await resolveListViewContacts(supabase, journey.list_view_id);
         contactIds = result.contactIds;
       } else {
-        // Legacy fallback: segment_type-based
+        // Legacy fallback: segment_type-based (only when no list_view_id is bound)
         let query = supabase.from("journey_contacts").select("id").eq("opted_out", false);
         if (journey.segment_type) query = query.eq("segment_type", journey.segment_type);
         const filters = journey.filters as any;

@@ -50,13 +50,24 @@ export default function JourneyBuilder() {
   const { data: journey, isLoading } = useQuery({
     queryKey: ["journey", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("journeys").select("*").eq("id", id!).single();
+      const { data, error } = await supabase
+        .from("journeys")
+        .select("*, list_view:list_view_id(id, name, entity_type)")
+        .eq("id", id!)
+        .single();
       if (error) throw error;
+      const lv = (data as any).list_view;
+      const enrichEntry = (n: any) =>
+        n.type === "entry" && lv
+          ? { ...n, data: { ...n.data, list_view_id: lv.id, list_view_name: lv.name, list_view_entity_type: lv.entity_type } }
+          : n;
       if (!initialized.current && data.canvas_data) {
         const canvas = data.canvas_data as any;
-        if (canvas.nodes) setNodes(canvas.nodes);
+        if (canvas.nodes) setNodes(canvas.nodes.map(enrichEntry));
         if (canvas.edges) setEdges(canvas.edges);
         initialized.current = true;
+      } else if (lv) {
+        setNodes((nds) => nds.map(enrichEntry));
       }
       return data;
     },
@@ -68,8 +79,11 @@ export default function JourneyBuilder() {
   }, [setEdges]);
 
   const addNode = (type: string) => {
+    const lv = (journey as any)?.list_view;
     const defaults: Record<string, any> = {
-      entry: { segment_type: "customer" },
+      entry: lv
+        ? { list_view_id: lv.id, list_view_name: lv.name, list_view_entity_type: lv.entity_type }
+        : { segment_type: "customer" },
       message: { channel: "email", template_body: "" },
       delay: { duration: 1, unit: "days" },
       decision: { condition: "opened" },
@@ -132,7 +146,15 @@ export default function JourneyBuilder() {
           <Button variant="ghost" size="icon" onClick={() => navigate("/communication/journeys")}><ArrowLeft className="h-4 w-4" /></Button>
           <div>
             <h1 className="text-lg font-semibold">{journey?.name || "Journey"}</h1>
-            <Badge variant="outline" className="capitalize">{journey?.status}</Badge>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              <Badge variant="outline" className="capitalize">{journey?.status}</Badge>
+              {(journey as any)?.list_view && (
+                <Badge variant="secondary" className="gap-1">
+                  <Users className="h-3 w-3" />
+                  Audience: {(journey as any).list_view.name}
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
