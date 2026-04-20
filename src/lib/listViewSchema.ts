@@ -151,6 +151,8 @@ export const OPERATORS_BY_TYPE: Record<FieldType, { value: string; label: string
     { value: "lt", label: "before", needsValue: true },
     { value: "gt", label: "after", needsValue: true },
     { value: "last_n_days", label: "in last N days", needsValue: true },
+    { value: "next_n_days", label: "in next N days", needsValue: true },
+    { value: "upcoming_anniversary_n_days", label: "upcoming in next N days (recurring)", needsValue: true },
   ],
   boolean: [
     { value: "is_true", label: "is true", needsValue: false },
