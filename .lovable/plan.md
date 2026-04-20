@@ -1,71 +1,91 @@
 
-The user wants to add a "next N days" operator for date fields in List View filters. Currently there's only `last_n_days`. Need to add `next_n_days` that filters records where the date falls between today and today+N days.
 
-Key consideration for `date_of_birth` / `anniversary_date`: these are recurring annual events. A naive `date BETWEEN today AND today+N` won't work because birth years are in the past. Need a recurring-date check (month-day comparison).
+Looking at the existing code:
+- `JourneyList.tsx` already saves `list_view_id` on the journey
+- `journey-actions/index.ts` already resolves `list_view_id` → contacts at activation
+- `process-journeys/index.ts` only operates on already-enrolled contacts (so it's already scoped — good)
+- `EntryNode.tsx` still shows static `segment_type` / city — doesn't reflect the bound List View
+- `JourneyBuilder.tsx` (canvas) likely lets the Entry node be configured independently
 
-Plan:
+The core data-flow scoping is mostly already correct (enrollments are created from list_view at activation, then process-journeys only reads those enrollments). The gaps are:
 
-# Plan: Add "Next N Days" Date Filter (with Recurring Birthday/Anniversary Support)
+1. **Entry node UI** doesn't show the bound List View
+2. **Entry node property panel** still allows segment_type / city edits when a List View is bound
+3. **No re-resolution** at activation if filters are dynamic (e.g. "birthday in next 7 days") — already handled because resolver runs at activation, but **stale enrollments** persist if journey is re-activated
+4. **No audience preview** from canvas
+5. **Validation** that entity matches expected audience source
 
-## Problem
+# Plan: Bind Entry Node to List View + Strict Audience Scoping
 
-The current List View filter system supports `last_n_days` for dates but has no forward-looking equivalent. For recurring events like birthdays and anniversaries, even a simple `next_n_days` (today → today+N) fails because the stored year is in the past — we need to compare month/day only.
+## 1. Entry Node UI (`src/components/journey/EntryNode.tsx`)
 
-## Solution — Two new operators
+When journey has `list_view_id`:
+- Header label: **"Customer (Filtered via List View)"**
+- Show List View name + entity badge: *"From: High Value Birthdays (customers)"*
+- Show live audience count badge (calls `list-view-resolve` with `mode=count`)
+- "Preview Audience" link → opens small dialog with first 10 matching rows
 
-Add to `src/lib/listViewSchema.ts` under date operators:
+When no list_view_id: keep current behavior (legacy segment_type display).
 
-1. **`next_n_days`** — "in next N days" — for one-off future dates (e.g., Created Date doesn't make sense here, but useful for End Date, Anniversary as absolute, etc.)
-2. **`upcoming_anniversary_n_days`** — "upcoming in next N days (recurring)" — month/day comparison, ignores year. Shown only for fields flagged as recurring.
+Pass `list_view_id` + `list_view_name` into the node's `data` from `JourneyBuilder.tsx` when building the canvas.
 
-## Schema changes
+## 2. Node Property Panel (`src/components/journey/NodePropertyPanel.tsx`)
 
-`src/lib/listViewSchema.ts`:
-- Add an optional `recurring?: boolean` flag on `FieldDef`.
-- Mark `date_of_birth` and `anniversary_date` on the customers entity as `recurring: true`.
-- Extend `OPERATORS_BY_TYPE.date` with the two new operators.
-- (Optionally) filter operators per-field at render time so `upcoming_anniversary_n_days` only appears for recurring fields.
+For Entry nodes:
+- If `list_view_id` is bound on the journey: **disable** segment_type and city inputs, show banner *"Audience is controlled by the linked List View. Edit the List View or change it from journey settings."* with a "Open List View" link
+- If no list_view_id: show current segment_type/city editor (legacy)
 
-## Executor changes
+## 3. JourneyBuilder canvas wiring (`src/pages/communication/JourneyBuilder.tsx`)
 
-`src/lib/listViewExecutor.ts` — add cases:
+- On load, fetch journey's `list_view_id` + linked `list_views.name` + `entity_type`
+- Inject these into the Entry node's `data` so EntryNode renders correctly
+- Add a top-bar pill: *"Audience: {list_view_name}"* with a "Change" button → opens a small picker (reuses the SearchableSelect of list views from JourneyList)
 
-- **`next_n_days`**: 
-  ```
-  q.gte(field, today).lte(field, today + N days)
-  ```
-- **`upcoming_anniversary_n_days`**: Postgres has no clean way to express "month-day in next N days" via PostgREST filter operators. Two options:
-  - **(a)** Add a SECURITY DEFINER SQL function `customers_with_upcoming_event(field text, days int)` returning matching IDs, then use `q.in('id', ids)`. Cleanest but adds a DB function.
-  - **(b)** Fetch candidate rows (filter by `is not null`), then post-filter client-side by computing this year's occurrence and checking the window. Simpler, no migration; fine for typical customer volumes (<10k). Wraps year-end correctly.
-  - **Recommendation: (b)** for v1 — no schema/migration churn, matches the "no DB changes unless needed" pattern used earlier in this project.
+## 4. Audience Preview Dialog (new: `src/components/journey/AudiencePreviewDialog.tsx`)
 
-## FilterRow UI
+- Calls `list-view-resolve` with `mode=rows`, displays first 10 records (name, phone, key fields)
+- Shows total count
+- Triggered from Entry node "Preview Audience" button
 
-`src/components/listviews/FilterRow.tsx`:
-- When `operator === "next_n_days"` or `"upcoming_anniversary_n_days"`, render a numeric input (same pattern as `last_n_days`) with placeholder "Number of days" and label hint "e.g., 7 for next week".
-- Hide `upcoming_anniversary_n_days` from the operator dropdown unless `fieldMeta.recurring === true`.
+## 5. Strict scoping at activation (`supabase/functions/journey-actions/index.ts`)
 
-## Server resolver parity
+Already resolves via `list_view_id` → already scoped. Add safety guards:
+- **Re-resolve every activation** (already does — confirm by re-reading)
+- On re-activate: clear stale `active` enrollments for this journey first, so dynamic filters (e.g. birthdays) produce a fresh audience set
+- Validate `entity_type` is an audience source (`customers` or `orders`); reject with clear error otherwise
+- If journey has `list_view_id`, **never** fall back to segment_type (current code already does this correctly via the if/else)
 
-`supabase/functions/list-view-resolve/index.ts` — mirror the executor logic so journey activation produces the same audience as the preview. For the recurring case, use the same client-side post-filter approach inside the edge function (it already has the Supabase client).
+## 6. Process-journeys safety check (`supabase/functions/process-journeys/index.ts`)
 
-## Backward compatibility
+Currently iterates `journey_enrollments` filtered by `journey_id` — already scoped. No fallback to entity tables exists, so data-flow enforcement is already correct. Add a comment block documenting this invariant. No code change required beyond the comment.
 
-- Existing saved views are unaffected (only new operator values added).
-- Old `last_n_days` continues to work.
-- No DB migration required.
+## 7. Validation rule
+
+In `JourneyList.tsx` Create modal (already validates audience source via resolver error). Add the same check when **changing** a list view on an existing journey from the canvas top bar.
 
 ## Files Touched
 
-- `src/lib/listViewSchema.ts` — new operators + `recurring` flag on date fields
-- `src/lib/listViewExecutor.ts` — handle `next_n_days` + recurring post-filter
-- `src/components/listviews/FilterRow.tsx` — show/hide operator based on field, numeric input for N
-- `supabase/functions/list-view-resolve/index.ts` — parity with executor
+**Edited:**
+- `src/components/journey/EntryNode.tsx` — new bound display + audience count + preview button
+- `src/components/journey/NodePropertyPanel.tsx` — disable manual entity edits when bound
+- `src/pages/communication/JourneyBuilder.tsx` — fetch list view metadata, inject into Entry node data, top-bar audience pill
+- `supabase/functions/journey-actions/index.ts` — clear stale enrollments on re-activation; explicit audience-source validation; documenting comment
 
-## How the user will use it
+**New:**
+- `src/components/journey/AudiencePreviewDialog.tsx` — sample rows + count
 
-1. Open New List View → Entity = Customers
-2. Add filter → Field = `Date of Birth` → Operator = **"upcoming in next N days"** → Value = `7`
-3. Save view as e.g. "Birthdays This Week"
-4. The view always returns customers whose birthday falls within the next 7 days from today — no need to edit dates ever again.
+**No DB changes required.** Existing schema already supports this (journeys.list_view_id + list_views table).
+
+## Backward Compatibility
+
+- Journeys with only `segment_type` (no list_view_id): Entry node renders legacy view, property panel allows edits — unchanged
+- Journeys with `list_view_id`: new bound UI, manual entity overrides disabled
+- Activation logic already prefers list_view_id over segment_type (existing code) — preserved
+
+## Why this guarantees strict scoping
+
+1. Audience set is built **only** from `list-view-resolve` output at activation
+2. `journey_enrollments` table is the **only** source `process-journeys` reads
+3. No node type (message/decision/delay/exit) reads the source entity table — they all operate on enrollments + their joined `journey_contacts`
+4. Stale enrollments cleared on re-activation → dynamic filters (next N days, recurring birthdays) re-evaluated fresh
 
