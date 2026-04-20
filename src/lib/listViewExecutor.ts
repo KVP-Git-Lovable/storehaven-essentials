@@ -118,6 +118,12 @@ function applyFilter(q: any, cond: FilterCondition, meta: FieldDef) {
       const since = new Date(Date.now() - days * 86400000).toISOString();
       return q.gte(field, since);
     }
+    case "next_n_days": {
+      const days = Number(value) || 0;
+      const now = new Date();
+      const until = new Date(Date.now() + days * 86400000).toISOString();
+      return q.gte(field, now.toISOString()).lte(field, until);
+    }
     default:
       return q;
   }
