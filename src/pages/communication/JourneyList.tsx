@@ -76,24 +76,15 @@ export default function JourneyList() {
     setForm({ ...form, list_view_id: id });
     setAudienceCount(null);
     if (!id) return;
-    const lv = listViews.find((v) => v.id === id);
-    if (!lv) return;
     try {
-      const res = await executeListView(
-        { entity_type: lv.entity_type as EntityKey, filters: [] },
+      const { data: full } = await supabase.from("list_views" as any).select("*").eq("id", id).maybeSingle();
+      const lv = full as any;
+      if (!lv) return;
+      const result = await executeListView(
+        { entity_type: lv.entity_type, selected_fields: lv.selected_fields, filters: lv.filters },
         { countOnly: true }
       );
-      // Re-execute with stored filters via list_view fetch for accuracy
-      const { data: full } = await supabase.from("list_views" as any).select("*").eq("id", id).maybeSingle();
-      if (full) {
-        const accurate = await executeListView(
-          { entity_type: full.entity_type, selected_fields: full.selected_fields, filters: full.filters },
-          { countOnly: true }
-        );
-        setAudienceCount(accurate.count);
-      } else {
-        setAudienceCount(res.count);
-      }
+      setAudienceCount(result.count);
     } catch {
       setAudienceCount(null);
     }
@@ -288,7 +279,7 @@ export default function JourneyList() {
                 }))}
                 placeholder="Select a list view..."
                 searchPlaceholder="Search list views..."
-                emptyText="No list views yet"
+                emptyMessage="No list views yet"
               />
               <p className="text-xs text-muted-foreground mt-1">Select a pre-configured list view to define your target audience.</p>
               {audienceCount !== null && form.list_view_id && (
