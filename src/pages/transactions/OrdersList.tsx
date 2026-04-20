@@ -6,8 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { format } from "date-fns";
+import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar";
+import { OrderFormDialog } from "@/components/transactions/OrderFormDialog";
+import { executeListView } from "@/lib/listViewExecutor";
+import type { FilterCondition } from "@/lib/listViewSchema";
 
 const PAGE_SIZE = 50;
 const inr = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
@@ -22,10 +26,33 @@ const statusVariant = (s: string): "default" | "secondary" | "destructive" | "ou
 export default function OrdersList() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const [activeFilters, setActiveFilters] = useState<FilterCondition[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const usingListView = activeFilters.length > 0;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["transactions-orders", search, page],
+    queryKey: ["transactions-orders", search, page, activeViewId, activeFilters],
     queryFn: async () => {
+      if (usingListView) {
+        const result = await executeListView({ entity_type: "orders", filters: activeFilters }, { limit: 1000 });
+        let rows = result.rows;
+        if (search.trim()) {
+          const s = search.toLowerCase();
+          rows = rows.filter((o: any) => (o.order_number || "").toLowerCase().includes(s));
+        }
+        // Hydrate customer info
+        const customerIds = Array.from(new Set(rows.map((r: any) => r.customer_id).filter(Boolean)));
+        if (customerIds.length) {
+          const { data: customers } = await supabase.from("customers").select("id, name, phone").in("id", customerIds);
+          const byId = new Map((customers || []).map((c: any) => [c.id, c]));
+          rows = rows.map((r: any) => ({ ...r, customers: byId.get(r.customer_id) || null }));
+        }
+        const count = rows.length;
+        const paged = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+        return { rows: paged, count };
+      }
       let q = supabase
         .from("orders")
         .select("*, customers(name, phone)", { count: "exact" })
@@ -42,10 +69,21 @@ export default function OrdersList() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
-        <p className="text-muted-foreground">All customer orders, most recent first.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
+          <p className="text-muted-foreground">All customer orders, most recent first.</p>
+        </div>
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" /> New Order
+        </Button>
       </div>
+
+      <EntityListViewsBar
+        entity="orders"
+        activeViewId={activeViewId}
+        onApply={(id, filters) => { setActiveViewId(id); setActiveFilters(filters); setPage(0); }}
+      />
 
       <div className="flex items-center gap-2">
         <div className="relative flex-1 max-w-md">
@@ -107,6 +145,8 @@ export default function OrdersList() {
           </Button>
         </div>
       </div>
+
+      <OrderFormDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }

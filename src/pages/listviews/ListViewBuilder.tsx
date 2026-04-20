@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -24,10 +24,12 @@ export default function ListViewBuilder() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const entityFromQuery = searchParams.get("entity") as EntityKey | null;
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [entityType, setEntityType] = useState<EntityKey>("customers");
+  const [entityType, setEntityType] = useState<EntityKey>(entityFromQuery || "customers");
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [filters, setFilters] = useState<FilterCondition[]>([]);
   const [visibility, setVisibility] = useState<"private" | "shared">("private");
@@ -87,8 +89,13 @@ export default function ListViewBuilder() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["list-views"] });
+      queryClient.invalidateQueries({ queryKey: ["list-views-by-entity"] });
       toast.success(isNew ? "List view created" : "List view updated");
-      navigate(`/list-views/${data.id}`, { replace: true });
+      if (entityFromQuery) {
+        navigate(`/transactions/${entityFromQuery}`);
+      } else {
+        navigate(`/list-views/${data.id}`, { replace: true });
+      }
     },
     onError: (e: any) => toast.error(e.message || "Save failed"),
   });
