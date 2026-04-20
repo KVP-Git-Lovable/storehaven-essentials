@@ -86,18 +86,40 @@ Deno.serve(async (req) => {
     const entity = ALLOWED_ENTITIES[def.entity_type];
     if (!entity) throw new Error(`Invalid entity: ${def.entity_type}`);
 
+    const allFilters = def.filters || [];
+    const recurringFilters = allFilters.filter((c: any) => c.operator === "upcoming_anniversary_n_days");
+    const serverFilters = allFilters.filter((c: any) => c.operator !== "upcoming_anniversary_n_days");
+    const hasRecurring = recurringFilters.length > 0;
+
     const fields = def.selected_fields?.length ? def.selected_fields.join(", ") : "*";
-    let q = supabase.from(entity.table).select(fields, { count: "exact", head: mode === "count" });
-    for (const cond of def.filters || []) q = applyFilter(q, cond);
-    if (mode === "rows") q = q.limit(1000);
+    let q = supabase.from(entity.table).select(fields, {
+      count: hasRecurring ? undefined : "exact",
+      head: !hasRecurring && mode === "count",
+    });
+    for (const cond of serverFilters) q = applyFilter(q, cond);
+    for (const cond of recurringFilters) q = q.not(cond.field, "is", null);
+
+    if (hasRecurring) q = q.limit(2000);
+    else if (mode === "rows") q = q.limit(1000);
 
     const { data, error, count } = await q;
     if (error) throw error;
 
+    let finalRows: any[] = data || [];
+    let finalCount = count || 0;
+    if (hasRecurring) {
+      for (const cond of recurringFilters) {
+        const days = Number(cond.value) || 0;
+        finalRows = finalRows.filter((r: any) => isUpcomingRecurring(r[cond.field], days));
+      }
+      finalCount = finalRows.length;
+      if (mode === "rows") finalRows = finalRows.slice(0, 1000);
+    }
+
     return new Response(
       JSON.stringify({
-        count: count || 0,
-        rows: mode === "rows" ? data : undefined,
+        count: finalCount,
+        rows: mode === "rows" ? finalRows : undefined,
         entity_type: def.entity_type,
         is_audience_source: entity.isAudienceSource,
         contact_key: entity.contactKey,
