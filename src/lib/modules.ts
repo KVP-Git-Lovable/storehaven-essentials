@@ -71,6 +71,7 @@ export const modules: ModuleDefinition[] = [
   { key: "communication.messages", name: "Message Log", parent: "communication" },
   { key: "communication.journeys", name: "Journey Builder", parent: "communication" },
   { key: "communication.contacts", name: "Contacts", parent: "communication" },
+  { key: "communication.listviews", name: "List Views", parent: "communication" },
   { key: "inventory", name: "Inventory" },
   { key: "inventory.items", name: "Inventory Items", parent: "inventory" },
   { key: "inventory.requisitions", name: "Requisitions", parent: "inventory" },
@@ -181,4 +182,5 @@ export const routeToModuleKey: Record<string, string> = {
   "/admin/hierarchy": "usermanagement.hierarchy",
   "/admin/permissions": "usermanagement.permissions",
   "/admin/company": "admin.company",
+  "/list-views": "communication.listviews",
 };

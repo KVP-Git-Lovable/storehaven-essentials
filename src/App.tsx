@@ -134,6 +134,8 @@ const WhatsAppSenders = lazy(() => import("./pages/communication/WhatsAppSenders
 const WhatsAppConfig = lazy(() => import("./pages/communication/WhatsAppConfig"));
 const VoiceCenter = lazy(() => import("./pages/communication/VoiceCenter"));
 const EmailCenter = lazy(() => import("./pages/communication/EmailCenter"));
+const ListViewsList = lazy(() => import("./pages/listviews/ListViewsList"));
+const ListViewBuilder = lazy(() => import("./pages/listviews/ListViewBuilder"));
 
 const queryClient = new QueryClient();
 
@@ -242,6 +244,8 @@ const App = () => (
                 <Route path="/communication/whatsapp/config" element={<WhatsAppConfig />} />
                 <Route path="/communication/voice" element={<VoiceCenter />} />
                 <Route path="/communication/email" element={<EmailCenter />} />
+                <Route path="/list-views" element={<ListViewsList />} />
+                <Route path="/list-views/:id" element={<ListViewBuilder />} />
                 <Route path="/footfall" element={<Footfall />} />
                 <Route path="/master/meter" element={<MeterMaster />} />
                 <Route path="/master/department" element={<DepartmentMaster />} />

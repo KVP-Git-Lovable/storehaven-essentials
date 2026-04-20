@@ -5,6 +5,90 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const ALLOWED_ENTITIES: Record<string, { table: string; isAudienceSource: boolean; contactKey?: string }> = {
+  customers: { table: "customers", isAudienceSource: true, contactKey: "phone" },
+  orders: { table: "orders", isAudienceSource: true, contactKey: "customer_id" },
+  revenue: { table: "orders", isAudienceSource: false },
+  products: { table: "products", isAudienceSource: false },
+  items: { table: "inventory_items", isAudienceSource: false },
+  schemes: { table: "pos_schemes", isAudienceSource: false },
+};
+
+function applyFilter(q: any, cond: any) {
+  const { field, operator, value } = cond;
+  switch (operator) {
+    case "eq": return q.eq(field, value);
+    case "neq": return q.neq(field, value);
+    case "gt": return q.gt(field, value);
+    case "gte": return q.gte(field, value);
+    case "lt": return q.lt(field, value);
+    case "lte": return q.lte(field, value);
+    case "ilike": return q.ilike(field, `%${value}%`);
+    case "starts_with": return q.ilike(field, `${value}%`);
+    case "is_null": return q.is(field, null);
+    case "is_not_null": return q.not(field, "is", null);
+    case "is_true": return q.eq(field, true);
+    case "is_false": return q.eq(field, false);
+    case "last_n_days": {
+      const days = Number(value) || 0;
+      return q.gte(field, new Date(Date.now() - days * 86400000).toISOString());
+    }
+    default: return q;
+  }
+}
+
+async function resolveListViewContacts(supabase: any, listViewId: string): Promise<{ contactIds: string[]; warning?: string }> {
+  const { data: lv, error: lvErr } = await supabase
+    .from("list_views")
+    .select("entity_type, selected_fields, filters")
+    .eq("id", listViewId)
+    .maybeSingle();
+  if (lvErr) throw lvErr;
+  if (!lv) throw new Error("List view not found");
+
+  const entity = ALLOWED_ENTITIES[lv.entity_type];
+  if (!entity) throw new Error(`Invalid entity: ${lv.entity_type}`);
+  if (!entity.isAudienceSource) {
+    throw new Error("Selected list view's entity isn't an audience source. Use a Customers or Orders view.");
+  }
+
+  // Fetch matching rows from the entity table
+  let q = supabase.from(entity.table).select("*");
+  for (const cond of lv.filters || []) q = applyFilter(q, cond);
+  q = q.limit(10000);
+  const { data: rows, error } = await q;
+  if (error) throw error;
+
+  // Map rows -> journey_contacts by phone (customers) or customer phone (orders)
+  if (lv.entity_type === "customers") {
+    const phones = (rows || []).map((r: any) => r.phone).filter(Boolean);
+    if (phones.length === 0) return { contactIds: [], warning: "No customers matched" };
+    const { data: contacts } = await supabase
+      .from("journey_contacts")
+      .select("id")
+      .in("phone", phones)
+      .eq("opted_out", false);
+    return { contactIds: (contacts || []).map((c: any) => c.id) };
+  }
+  if (lv.entity_type === "orders") {
+    const customerIds = Array.from(new Set((rows || []).map((r: any) => r.customer_id).filter(Boolean)));
+    if (customerIds.length === 0) return { contactIds: [], warning: "No orders with customers matched" };
+    const { data: customers } = await supabase
+      .from("customers")
+      .select("phone")
+      .in("id", customerIds);
+    const phones = (customers || []).map((c: any) => c.phone).filter(Boolean);
+    if (phones.length === 0) return { contactIds: [] };
+    const { data: contacts } = await supabase
+      .from("journey_contacts")
+      .select("id")
+      .in("phone", phones)
+      .eq("opted_out", false);
+    return { contactIds: (contacts || []).map((c: any) => c.id) };
+  }
+  return { contactIds: [] };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -16,31 +100,36 @@ Deno.serve(async (req) => {
     const { action, journey_id, contact_id, event_type, event_data } = await req.json();
 
     if (action === "activate") {
-      // Get journey
       const { data: journey, error: jErr } = await supabase
         .from("journeys").select("*").eq("id", journey_id).single();
       if (jErr) throw jErr;
 
-      // Find matching contacts
-      let query = supabase.from("journey_contacts").select("id").eq("opted_out", false);
-      if (journey.segment_type) query = query.eq("segment_type", journey.segment_type);
-      
-      const filters = journey.filters as any;
-      if (filters?.city) query = query.eq("city", filters.city);
+      let contactIds: string[] = [];
 
-      const { data: contacts, error: cErr } = await query;
-      if (cErr) throw cErr;
+      if (journey.list_view_id) {
+        // New path: resolve via list view
+        const result = await resolveListViewContacts(supabase, journey.list_view_id);
+        contactIds = result.contactIds;
+      } else {
+        // Legacy fallback: segment_type-based
+        let query = supabase.from("journey_contacts").select("id").eq("opted_out", false);
+        if (journey.segment_type) query = query.eq("segment_type", journey.segment_type);
+        const filters = journey.filters as any;
+        if (filters?.city) query = query.eq("city", filters.city);
+        const { data: contacts, error: cErr } = await query;
+        if (cErr) throw cErr;
+        contactIds = (contacts || []).map((c: any) => c.id);
+      }
 
       // Get first node from canvas
       const canvas = journey.canvas_data as any;
       const entryNode = canvas?.nodes?.find((n: any) => n.type === "entry");
       const firstNodeId = entryNode?.id || canvas?.nodes?.[0]?.id;
 
-      // Enroll contacts
-      if (contacts && contacts.length > 0) {
-        const enrollments = contacts.map((c: any) => ({
+      if (contactIds.length > 0) {
+        const enrollments = contactIds.map((cid) => ({
           journey_id,
-          contact_id: c.id,
+          contact_id: cid,
           current_node_id: firstNodeId,
           status: "active",
           next_action_at: new Date().toISOString(),
@@ -48,10 +137,9 @@ Deno.serve(async (req) => {
         await supabase.from("journey_enrollments").insert(enrollments);
       }
 
-      // Update status
       await supabase.from("journeys").update({ status: "active" }).eq("id", journey_id);
 
-      return new Response(JSON.stringify({ success: true, enrolled: contacts?.length || 0 }), {
+      return new Response(JSON.stringify({ success: true, enrolled: contactIds.length }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
