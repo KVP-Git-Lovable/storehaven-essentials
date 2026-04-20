@@ -6,10 +6,34 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Copy, Trash2, Pencil } from "lucide-react";
+import { Plus, Copy, Trash2, Pencil, Download } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ENTITY_SCHEMAS, type EntityKey } from "@/lib/listViewSchema";
+
+function downloadCustomersTemplate() {
+  const headers = [
+    "name","phone","email","tier","customer_segment",
+    "loyalty_points","store_credit","total_orders","total_spent",
+    "date_of_birth","anniversary_date",
+  ];
+  const sampleRows = [
+    ["Akshay Sharma","+919876543210","akshay.sharma@example.com","gold","regular","1200","500.00","15","45000.00","1990-04-12","2018-11-20"],
+    ["Riya Kumari","+919812345678","riya.kumari@example.com","silver","new","300","0.00","2","3500.00","1995-05-08","2022-02-14"],
+    ["Arjun Patel","+919900112233","arjun.patel@example.com","platinum","vip","8500","2500.00","85","325000.00","1985-06-25","2015-12-05"],
+  ];
+  const escape = (v: string) => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  const csv = [headers, ...sampleRows].map((r) => r.map(escape).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `customers_template_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 export default function ListViewsList() {
   const navigate = useNavigate();
@@ -68,9 +92,14 @@ export default function ListViewsList() {
           <h1 className="text-2xl font-bold tracking-tight">List Views</h1>
           <p className="text-muted-foreground">Reusable saved filter views across entities. Use them as journey audience segments.</p>
         </div>
-        <Button onClick={() => navigate("/list-views/new")}>
-          <Plus className="mr-2 h-4 w-4" /> New List View
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={downloadCustomersTemplate}>
+            <Download className="mr-2 h-4 w-4" /> Customers Template
+          </Button>
+          <Button onClick={() => navigate("/list-views/new")}>
+            <Plus className="mr-2 h-4 w-4" /> New List View
+          </Button>
+        </div>
       </div>
 
       <Card>
