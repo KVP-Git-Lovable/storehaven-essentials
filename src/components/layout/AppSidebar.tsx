@@ -22,6 +22,7 @@ import {
   CalendarCheck,
   Wrench,
   Rocket,
+  Receipt,
 } from "lucide-react";
 import quickappLogo from "@/assets/quickapp-logo.png";
 import { cn } from "@/lib/utils";
@@ -80,6 +81,16 @@ const navigation: NavItem[] = [
       { title: "Schemes", href: "/pos/schemes", moduleKey: "pos.schemes" },
       { title: "Cashier Sessions", href: "/pos/sessions", moduleKey: "pos.quicksale" },
       { title: "Product Master", href: "/pos/products", moduleKey: "pos.products" },
+    ],
+  },
+  {
+    title: "Transactions",
+    icon: Receipt,
+    moduleKey: "transactions",
+    children: [
+      { title: "Customers", href: "/transactions/customers", moduleKey: "transactions.customers" },
+      { title: "Products", href: "/transactions/products", moduleKey: "transactions.products" },
+      { title: "Orders", href: "/transactions/orders", moduleKey: "transactions.orders" },
     ],
   },
   {
