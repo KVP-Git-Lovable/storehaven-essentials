@@ -134,18 +134,22 @@ export default function ListViewBuilder() {
             </div>
             <div>
               <Label>Entity</Label>
-              <Select value={entityType} onValueChange={(v) => { setEntityType(v as EntityKey); setSelectedFields([]); setFilters([]); }}>
+              <Select
+                value={entityType}
+                onValueChange={(v) => { setEntityType(v as EntityKey); setSelectedFields([]); setFilters([]); }}
+                disabled={!!entityFromQuery}
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {ENTITY_LIST.map((e) => (
-                    <SelectItem key={e.key} value={e.key}>
-                      {e.label}{!e.isAudienceSource && " (analytics only)"}
-                    </SelectItem>
-                  ))}
+                  {ENTITY_LIST
+                    .filter((e) => ["customers", "products", "orders"].includes(e.key))
+                    .map((e) => (
+                      <SelectItem key={e.key} value={e.key}>{e.label}</SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
-              {!entity.isAudienceSource && (
-                <p className="text-xs text-muted-foreground mt-1">This entity isn't an audience source — you can use it for reporting but not directly enroll contacts in journeys.</p>
+              {entityFromQuery && (
+                <p className="text-xs text-muted-foreground mt-1">Entity is locked to {entity.label} for this list view.</p>
               )}
             </div>
             <div>
