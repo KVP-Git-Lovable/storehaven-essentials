@@ -33,8 +33,25 @@ function applyFilter(q: any, cond: any) {
       const days = Number(value) || 0;
       return q.gte(field, new Date(Date.now() - days * 86400000).toISOString());
     }
+    case "next_n_days": {
+      const days = Number(value) || 0;
+      return q.gte(field, new Date().toISOString()).lte(field, new Date(Date.now() + days * 86400000).toISOString());
+    }
     default: return q;
   }
+}
+
+function isUpcomingRecurring(dateStr: string | null | undefined, days: number): boolean {
+  if (!dateStr || days < 0) return false;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let occ = new Date(today.getFullYear(), d.getMonth(), d.getDate());
+  if (occ < today) occ = new Date(today.getFullYear() + 1, d.getMonth(), d.getDate());
+  const end = new Date(today);
+  end.setDate(end.getDate() + days);
+  return occ >= today && occ <= end;
 }
 
 Deno.serve(async (req) => {
