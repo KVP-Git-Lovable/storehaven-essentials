@@ -8,6 +8,7 @@ export interface FieldDef {
   label: string;
   type: FieldType;
   options?: string[]; // for enum
+  recurring?: boolean; // date fields representing annual recurring events (birthdays, anniversaries)
 }
 
 export interface EntityDef {
@@ -41,8 +42,8 @@ export const ENTITY_SCHEMAS: Record<EntityKey, EntityDef> = {
       { key: "store_credit", label: "Store Credit", type: "number" },
       { key: "total_orders", label: "Total Orders", type: "number" },
       { key: "total_spent", label: "Total Spent", type: "number" },
-      { key: "date_of_birth", label: "Date of Birth", type: "date" },
-      { key: "anniversary_date", label: "Anniversary", type: "date" },
+      { key: "date_of_birth", label: "Date of Birth", type: "date", recurring: true },
+      { key: "anniversary_date", label: "Anniversary", type: "date", recurring: true },
       { key: "created_at", label: "Created Date", type: "date" },
     ],
   },
@@ -150,6 +151,8 @@ export const OPERATORS_BY_TYPE: Record<FieldType, { value: string; label: string
     { value: "lt", label: "before", needsValue: true },
     { value: "gt", label: "after", needsValue: true },
     { value: "last_n_days", label: "in last N days", needsValue: true },
+    { value: "next_n_days", label: "in next N days", needsValue: true },
+    { value: "upcoming_anniversary_n_days", label: "upcoming in next N days (recurring)", needsValue: true },
   ],
   boolean: [
     { value: "is_true", label: "is true", needsValue: false },

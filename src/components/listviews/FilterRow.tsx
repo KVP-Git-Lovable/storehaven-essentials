@@ -13,8 +13,17 @@ interface Props {
 
 export function FilterRow({ entity, value, onChange, onRemove }: Props) {
   const fieldMeta = entity.fields.find((f) => f.key === value.field) || entity.fields[0];
-  const operators = OPERATORS_BY_TYPE[fieldMeta.type];
+  const allOperators = OPERATORS_BY_TYPE[fieldMeta.type];
+  // Hide recurring operator unless field is flagged as recurring
+  const operators = allOperators.filter(
+    (o) => o.value !== "upcoming_anniversary_n_days" || fieldMeta.recurring
+  );
   const opMeta = operators.find((o) => o.value === value.operator) || operators[0];
+
+  const isNDaysOp =
+    value.operator === "last_n_days" ||
+    value.operator === "next_n_days" ||
+    value.operator === "upcoming_anniversary_n_days";
 
   return (
     <div className="flex items-center gap-2">
@@ -35,7 +44,7 @@ export function FilterRow({ entity, value, onChange, onRemove }: Props) {
       </Select>
 
       <Select value={value.operator} onValueChange={(operator) => onChange({ ...value, operator })}>
-        <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="w-[220px]"><SelectValue /></SelectTrigger>
         <SelectContent>
           {operators.map((o) => (
             <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
@@ -56,10 +65,11 @@ export function FilterRow({ entity, value, onChange, onRemove }: Props) {
         ) : (
           <Input
             className="flex-1"
-            type={fieldMeta.type === "number" || value.operator === "last_n_days" ? "number" : fieldMeta.type === "date" ? "date" : "text"}
+            type={fieldMeta.type === "number" || isNDaysOp ? "number" : fieldMeta.type === "date" ? "date" : "text"}
             value={String(value.value ?? "")}
             onChange={(e) => onChange({ ...value, value: e.target.value })}
-            placeholder="Value"
+            placeholder={isNDaysOp ? "Number of days (e.g. 7)" : "Value"}
+            min={isNDaysOp ? 0 : undefined}
           />
         )
       )}
