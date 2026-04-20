@@ -8,6 +8,7 @@ export interface FieldDef {
   label: string;
   type: FieldType;
   options?: string[]; // for enum
+  recurring?: boolean; // date fields representing annual recurring events (birthdays, anniversaries)
 }
 
 export interface EntityDef {
