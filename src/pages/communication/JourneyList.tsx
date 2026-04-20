@@ -11,10 +11,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Play, Pause, Trash2, BarChart3, GitBranch, Users, MessageSquare } from "lucide-react";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { Plus, Play, Pause, Trash2, BarChart3, GitBranch, Users, MessageSquare, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { ENTITY_SCHEMAS, type EntityKey } from "@/lib/listViewSchema";
+import { executeListView } from "@/lib/listViewExecutor";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -27,17 +29,30 @@ export default function JourneyList() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ name: "", description: "", segment_type: "customer" });
+  const [form, setForm] = useState<{ name: string; description: string; list_view_id: string }>({ name: "", description: "", list_view_id: "" });
+  const [audienceCount, setAudienceCount] = useState<number | null>(null);
 
   const { data: journeys = [], isLoading } = useQuery({
     queryKey: ["journeys"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("journeys")
-        .select("*")
+        .select("*, list_view:list_view_id(id, name, entity_type)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
+    },
+  });
+
+  const { data: listViews = [] } = useQuery({
+    queryKey: ["list-views-for-journey"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("list_views" as any)
+        .select("id, name, entity_type")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as any[];
     },
   });
 
@@ -57,6 +72,33 @@ export default function JourneyList() {
     enabled: journeys.length >= 0,
   });
 
+  const handleListViewChange = async (id: string) => {
+    setForm({ ...form, list_view_id: id });
+    setAudienceCount(null);
+    if (!id) return;
+    const lv = listViews.find((v) => v.id === id);
+    if (!lv) return;
+    try {
+      const res = await executeListView(
+        { entity_type: lv.entity_type as EntityKey, filters: [] },
+        { countOnly: true }
+      );
+      // Re-execute with stored filters via list_view fetch for accuracy
+      const { data: full } = await supabase.from("list_views" as any).select("*").eq("id", id).maybeSingle();
+      if (full) {
+        const accurate = await executeListView(
+          { entity_type: full.entity_type, selected_fields: full.selected_fields, filters: full.filters },
+          { countOnly: true }
+        );
+        setAudienceCount(accurate.count);
+      } else {
+        setAudienceCount(res.count);
+      }
+    } catch {
+      setAudienceCount(null);
+    }
+  };
+
   const createMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase
@@ -64,10 +106,11 @@ export default function JourneyList() {
         .insert({
           name: form.name,
           description: form.description,
-          segment_type: form.segment_type,
+          list_view_id: form.list_view_id || null,
+          segment_type: null,
           canvas_data: { nodes: [], edges: [] },
           created_by: user?.id,
-        })
+        } as any)
         .select()
         .single();
       if (error) throw error;
@@ -76,11 +119,12 @@ export default function JourneyList() {
     onSuccess: (data) => {
       toast.success("Journey created");
       setShowCreate(false);
-      setForm({ name: "", description: "", segment_type: "customer" });
+      setForm({ name: "", description: "", list_view_id: "" });
+      setAudienceCount(null);
       queryClient.invalidateQueries({ queryKey: ["journeys"] });
       navigate(`/communication/journeys/${data.id}`);
     },
-    onError: () => toast.error("Failed to create journey"),
+    onError: (e: any) => toast.error(e.message || "Failed to create journey"),
   });
 
   const updateStatusMutation = useMutation({
@@ -176,7 +220,13 @@ export default function JourneyList() {
                   <TableCell>
                     <Badge className={statusColors[j.status] || ""}>{j.status}</Badge>
                   </TableCell>
-                  <TableCell className="capitalize">{j.segment_type || "—"}</TableCell>
+                  <TableCell>
+                    {j.list_view ? (
+                      <span>{j.list_view.name} <Badge variant="outline" className="ml-1 capitalize">{ENTITY_SCHEMAS[j.list_view.entity_type as EntityKey]?.label || j.list_view.entity_type}</Badge></span>
+                    ) : j.segment_type ? (
+                      <span className="capitalize">{j.segment_type} <Badge variant="outline" className="ml-1">legacy</Badge></span>
+                    ) : "—"}
+                  </TableCell>
                   <TableCell>{format(new Date(j.created_at), "MMM d, yyyy")}</TableCell>
                   <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1">
@@ -223,15 +273,30 @@ export default function JourneyList() {
               <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Describe the journey purpose..." />
             </div>
             <div>
-              <Label>Target Segment</Label>
-              <Select value={form.segment_type} onValueChange={(v) => setForm({ ...form, segment_type: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="customer">Customers</SelectItem>
-                  <SelectItem value="prospect">Prospective Customers</SelectItem>
-                  <SelectItem value="esdb">External Database (ESDB)</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center justify-between mb-1">
+                <Label>Target Segment (List View)</Label>
+                <Button variant="link" size="sm" className="h-auto p-0" onClick={() => window.open("/list-views/new", "_blank")}>
+                  <Plus className="h-3 w-3 mr-1" /> Create New List View
+                </Button>
+              </div>
+              <SearchableSelect
+                value={form.list_view_id}
+                onValueChange={handleListViewChange}
+                options={listViews.map((v) => ({
+                  value: v.id,
+                  label: `${v.name} (${ENTITY_SCHEMAS[v.entity_type as EntityKey]?.label || v.entity_type})`,
+                }))}
+                placeholder="Select a list view..."
+                searchPlaceholder="Search list views..."
+                emptyText="No list views yet"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Select a pre-configured list view to define your target audience.</p>
+              {audienceCount !== null && form.list_view_id && (
+                <Badge variant="secondary" className="mt-2">Estimated audience: {audienceCount}</Badge>
+              )}
+              <a href="/list-views" target="_blank" rel="noreferrer" className="text-xs text-primary inline-flex items-center gap-1 mt-2">
+                Manage list views <ExternalLink className="h-3 w-3" />
+              </a>
             </div>
           </div>
           <DialogFooter>
