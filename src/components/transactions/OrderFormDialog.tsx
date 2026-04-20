@@ -41,6 +41,7 @@ export function OrderFormDialog({ open, onOpenChange }: Props) {
 
   const createMut = useMutation({
     mutationFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
       const product = products.find((p: any) => p.id === productId);
       const qty = Number(quantity) || 1;
       const unit = Number(product?.price) || 0;
@@ -53,18 +54,20 @@ export function OrderFormDialog({ open, onOpenChange }: Props) {
           order_number: orderNumber,
           status,
           payment_status: status === "completed" ? "paid" : "pending",
+          payment_method: "cash",
           subtotal: total,
           total_amount: total,
+          created_by: user?.id,
         } as any)
         .select()
         .single();
       if (error) throw error;
       const { error: itemErr } = await supabase.from("order_items").insert({
         order_id: order.id,
-        product_id: productId,
+        item_id: productId,
         quantity: qty,
         unit_price: unit,
-        total_price: total,
+        total_amount: total,
       } as any);
       if (itemErr) throw itemErr;
     },
