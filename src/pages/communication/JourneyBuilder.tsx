@@ -50,13 +50,24 @@ export default function JourneyBuilder() {
   const { data: journey, isLoading } = useQuery({
     queryKey: ["journey", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("journeys").select("*").eq("id", id!).single();
+      const { data, error } = await supabase
+        .from("journeys")
+        .select("*, list_view:list_view_id(id, name, entity_type)")
+        .eq("id", id!)
+        .single();
       if (error) throw error;
+      const lv = (data as any).list_view;
+      const enrichEntry = (n: any) =>
+        n.type === "entry" && lv
+          ? { ...n, data: { ...n.data, list_view_id: lv.id, list_view_name: lv.name, list_view_entity_type: lv.entity_type } }
+          : n;
       if (!initialized.current && data.canvas_data) {
         const canvas = data.canvas_data as any;
-        if (canvas.nodes) setNodes(canvas.nodes);
+        if (canvas.nodes) setNodes(canvas.nodes.map(enrichEntry));
         if (canvas.edges) setEdges(canvas.edges);
         initialized.current = true;
+      } else if (lv) {
+        setNodes((nds) => nds.map(enrichEntry));
       }
       return data;
     },
@@ -68,8 +79,11 @@ export default function JourneyBuilder() {
   }, [setEdges]);
 
   const addNode = (type: string) => {
+    const lv = (journey as any)?.list_view;
     const defaults: Record<string, any> = {
-      entry: { segment_type: "customer" },
+      entry: lv
+        ? { list_view_id: lv.id, list_view_name: lv.name, list_view_entity_type: lv.entity_type }
+        : { segment_type: "customer" },
       message: { channel: "email", template_body: "" },
       delay: { duration: 1, unit: "days" },
       decision: { condition: "opened" },
@@ -101,13 +115,31 @@ export default function JourneyBuilder() {
 
   const statusMutation = useMutation({
     mutationFn: async (status: string) => {
-      // Save canvas first
-      await supabase.from("journeys").update({ canvas_data: { nodes, edges }, status }).eq("id", id!);
+      // Persist canvas first so the edge function reads the latest entry node
+      await supabase.from("journeys").update({ canvas_data: { nodes, edges } }).eq("id", id!);
+      if (status === "active") {
+        // Use edge function to (re)resolve audience from list view + clear stale enrollments
+        const { data, error } = await supabase.functions.invoke("journey-actions", {
+          body: { action: "activate", journey_id: id },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        return data;
+      }
+      const { error } = await supabase.functions.invoke("journey-actions", {
+        body: { action: "pause", journey_id: id },
+      });
+      if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["journey", id] });
-      toast.success("Journey status updated");
+      if (data?.enrolled !== undefined) {
+        toast.success(`Journey activated — ${data.enrolled} contacts enrolled`);
+      } else {
+        toast.success("Journey status updated");
+      }
     },
+    onError: (e: any) => toast.error(e.message || "Failed to update status"),
   });
 
   const onNodeClick = useCallback((_: any, node: Node) => setSelectedNode(node), []);
@@ -132,7 +164,15 @@ export default function JourneyBuilder() {
           <Button variant="ghost" size="icon" onClick={() => navigate("/communication/journeys")}><ArrowLeft className="h-4 w-4" /></Button>
           <div>
             <h1 className="text-lg font-semibold">{journey?.name || "Journey"}</h1>
-            <Badge variant="outline" className="capitalize">{journey?.status}</Badge>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              <Badge variant="outline" className="capitalize">{journey?.status}</Badge>
+              {(journey as any)?.list_view && (
+                <Badge variant="secondary" className="gap-1">
+                  <Users className="h-3 w-3" />
+                  Audience: {(journey as any).list_view.name}
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
