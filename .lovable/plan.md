@@ -1,91 +1,115 @@
 
 
-# Plan: Friendly Variable Picker for WhatsApp Templates
+# Plan: Generic List Views Module + Journey Builder Integration
 
-## Approach
+## Overview
 
-Keep storage and Twilio submission in the existing `{{1}}, {{2}}` numeric format (no DB schema changes, full backward compatibility). Layer a friendly variable picker on top of the create dialog that lets users insert named variables like `{{customer_name}}`, then transform to numeric form on submit. Store the friendly→numeric mapping inside the existing `body` field as a hidden marker comment so old templates keep working unchanged.
+Build a brand-new **List Views** module (entity-agnostic saved filter system) covering Customers, Orders, Revenue, Products, Items, and Schemes. Replace the static "Target Segment" dropdown in Journey Builder with a "Target Segment (List View)" picker that resolves to a real audience at runtime. Old `segment_type` remains as fallback.
 
-## 1. New Variable Registry (frontend constant)
+## 1. Database — `list_views` table (migration)
 
-**New file:** `src/lib/whatsappVariables.ts`
-
-A single source of truth — grouped variables. No backend API needed (keeps things simple; can later move to DB).
-
-```ts
-export const VARIABLE_GROUPS = {
-  Order: ['order_id', 'order_status', 'order_date', 'order_total'],
-  Customer: ['customer_name', 'phone_number', 'email'],
-  Product: ['product_name', 'quantity', 'price'],
-  Store: ['store_name', 'store_address'],
-};
+```sql
+CREATE TABLE public.list_views (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  description text,
+  entity_type text NOT NULL,        -- 'customers' | 'orders' | 'revenue' | 'products' | 'items' | 'schemes'
+  selected_fields jsonb NOT NULL DEFAULT '[]',
+  filters jsonb NOT NULL DEFAULT '[]',  -- [{ field, operator, value }]
+  visibility text NOT NULL DEFAULT 'private',  -- 'private' | 'shared'
+  tags text[] DEFAULT '{}',
+  created_by uuid REFERENCES profiles(id),
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+-- RLS: users see own + 'shared'; admins see all; insert/update/delete by owner or admin
 ```
 
-Plus helpers:
-- `transformFriendlyToTwilio(body)` → returns `{ twilioBody, mapping }`
-- `transformTwilioToFriendly(body, mapping)` → reverse for editing
+Add `list_view_id uuid REFERENCES list_views(id)` to `journeys` (nullable; coexists with `segment_type`).
 
-## 2. Update Create Template Dialog
+## 2. List View Builder UI (new module)
 
-**File:** `src/pages/communication/WhatsAppTemplates.tsx`
+**Route:** `/list-views`, `/list-views/:id`
+**Sidebar:** Add under existing **Communication Center** → "List Views" (so it's discoverable next to Journey Builder).
 
-Replace the current `+ Variable` button with:
-- **Insert Variable dropdown** (grouped DropdownMenu) — categories as labels, variables as items. On select, inserts `{{variable_name}}` at the textarea cursor position.
-- **Live Preview panel** below the textarea with two tabs:
-  - "Friendly view" — shows `Hello {{customer_name}}, your order {{order_id}}...`
-  - "Twilio format" — shows the auto-numbered `Hello {{1}}, your order {{2}}...`
-- **Validation badge** showing detected variables and any malformed/duplicate warnings.
-- Tooltip on the dropdown: "Variables are automatically mapped to WhatsApp format on submission."
+**Files:**
+- `src/pages/listviews/ListViewsList.tsx` — Table of saved views (name, entity, owner, tags, audience size, actions: Edit / Duplicate / Delete).
+- `src/pages/listviews/ListViewBuilder.tsx` — Two-pane builder:
+  - **Entity selector** (Customers / Orders / Revenue / Products / Items / Schemes)
+  - **Field picker** (multi-select from entity schema)
+  - **Filter rows** (field → operator → value). Operators auto-adapt to field type: string (equals/contains/starts with), numeric (=, ≠, >, <, between), date (=, before, after, between, last N days), boolean.
+  - **Live preview table** (first 25 rows) + total count badge.
+  - **Save** (name, description, visibility, tags).
+- `src/components/listviews/FilterRow.tsx` — Single filter condition editor.
+- `src/lib/listViewSchema.ts` — Per-entity field metadata (label, key, type, options). Hand-curated for the 6 entities so the UI stays type-safe.
 
-On submit: convert friendly body → numeric body and append a hidden mapping marker on a new line:
-```
-Hello {{1}}, your order {{2}} is confirmed
-<!--vars:{"1":"customer_name","2":"order_id"}-->
-```
-The marker is stripped before being sent to Twilio (in the edge function).
+## 3. List View Execution Engine
 
-## 3. Edge Function — Strip Marker Before Twilio
+**File:** `src/lib/listViewExecutor.ts` — Client-side helper that takes a list view and returns a Supabase query (`.from(entity).select(...).eq/gt/lt/ilike/...`). Used both in the preview pane and analytics.
 
-**File:** `supabase/functions/whatsapp-templates/index.ts`
+**File:** `supabase/functions/list-view-resolve/index.ts` — Server-side resolver.
+- Input: `{ list_view_id }` (or inline definition for preview)
+- Output: `{ count, rows? }`
+- Validates entity name against an allow-list, applies filters using the Supabase client. Used by Journey activation.
 
-In the create action, before calling Twilio Content API:
-- Parse and remove the `<!--vars:...-->` marker line from `templateBody`
-- Send the clean numeric body to Twilio
-- Store the original body (with marker) in the DB so we can reconstruct friendly names
+## 4. Journey Builder Integration
 
-No DB schema change required. No breaking change for existing templates (no marker = behaves exactly as today).
+**File:** `src/pages/communication/JourneyList.tsx` (Create modal)
+- Replace static "Target Segment" `<Select>` with **SearchableSelect** of List Views, labelled `"View Name (Entity)"`.
+- Helper text: *"Select a pre-configured list view to define your target audience"*.
+- Quick action button: **+ Create New List View** → opens `/list-views/new` in a new tab (preserves modal state).
+- Show **estimated audience size** badge once a view is selected (calls `list-view-resolve` with `count` only).
+- Saves `list_view_id` on the journey; leaves `segment_type` null for new journeys.
 
-## 4. Send Test Message — Named Inputs
+**File:** `src/pages/communication/JourneyList.tsx` (table)
+- "Segment" column shows the linked list view name when `list_view_id` is set, otherwise falls back to `segment_type` ("legacy").
 
-**File:** `src/pages/communication/WhatsAppTemplateDetails.tsx`
+## 5. Audience Resolution at Activation
 
-- Parse the body for the `<!--vars:...-->` marker.
-- If present: show inputs labeled with friendly names (e.g., "customer_name") instead of `{{1}}`. Map values back to numeric keys before posting.
-- If absent (legacy templates): keep current `{{1}}, {{2}}` input behavior.
-- Display body with friendly names in the preview when mapping exists.
+**File:** `supabase/functions/journey-actions/index.ts` (existing)
 
-## 5. Send Endpoint — Already Compatible
+Update the `activate` action:
+1. If `journey.list_view_id` is set:
+   - Call `list-view-resolve` to get matching rows from the linked entity.
+   - Map entity rows → contacts: for `customers` use phone/email directly; for `orders` resolve via `customer_id`; for other entities (products/items/schemes/revenue) we cannot enroll directly — return a clear error: *"Selected list view's entity isn't an audience source. Use a Customers or Orders view."* (This avoids silent failure for the non-audience entities the user listed.)
+2. Else fall back to existing `segment_type` logic against `journey_contacts` (legacy).
 
-**File:** `supabase/functions/whatsapp-send/index.ts`
-
-The frontend will continue to send `variables: { "1": "John", "2": "ORD123" }` (converted client-side from named values). No backend change needed. The marker is harmless even if not stripped here because variable substitution uses numeric keys; we'll strip the marker line before substitution as a safety cleanup.
-
-## Backward Compatibility
+## 6. Backward Compatibility
 
 | Scenario | Behavior |
 |---|---|
-| Old template (no marker) | Works exactly as today — numeric placeholders shown |
-| New template (with marker) | Friendly names shown in preview & test dialog |
-| Twilio submission | Always receives clean `{{1}}, {{2}}` body |
-| Database | No schema change; mapping stored inline in `body` |
+| Existing journey with only `segment_type` | Works unchanged via fallback path |
+| New journey with `list_view_id` | Uses new resolver |
+| Journey list table | Shows list view name OR legacy segment label |
+| Edit existing journey | Can switch to a List View; segment_type cleared on save |
+
+## 7. Module Registration
+
+`src/lib/modules.ts` — Add `communication.listviews` (parent: `communication`).
+`src/components/layout/AppSidebar.tsx` — Add "List Views" entry under Communication Center.
+`src/App.tsx` — Lazy-load and route `/list-views` and `/list-views/:id`.
 
 ## Files Touched
 
-- `src/lib/whatsappVariables.ts` (new)
-- `src/pages/communication/WhatsAppTemplates.tsx` (create dialog)
-- `src/pages/communication/WhatsAppTemplateDetails.tsx` (test dialog + body preview)
-- `supabase/functions/whatsapp-templates/index.ts` (strip marker before Twilio)
-- `supabase/functions/whatsapp-send/index.ts` (strip marker before substitution)
+**New:**
+- `supabase/migrations/<ts>_list_views.sql`
+- `supabase/functions/list-view-resolve/index.ts`
+- `src/pages/listviews/ListViewsList.tsx`
+- `src/pages/listviews/ListViewBuilder.tsx`
+- `src/components/listviews/FilterRow.tsx`
+- `src/lib/listViewSchema.ts`
+- `src/lib/listViewExecutor.ts`
 
-No changes to: routes, sidebar, navigation, RLS, DB schema, or any other module.
+**Edited:**
+- `supabase/functions/journey-actions/index.ts` (activation logic)
+- `src/pages/communication/JourneyList.tsx` (create modal + table column)
+- `src/lib/modules.ts`
+- `src/components/layout/AppSidebar.tsx`
+- `src/App.tsx`
+
+## Out of Scope / Notes
+
+- Products/Items/Schemes/Revenue are kept as List View entities (per your selection) but flagged at activation time as non-audience entities — they're useful for analytics/reporting list views, not for enrolling contacts into journeys.
+- No drag-and-drop field reordering in v1 (multi-select only); easy to add later.
+- No changes to existing WhatsApp, templates, analytics, or canvas builder.
 
