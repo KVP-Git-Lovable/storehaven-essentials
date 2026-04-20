@@ -3109,6 +3109,7 @@ export type Database = {
           description: string | null
           filters: Json | null
           id: string
+          list_view_id: string | null
           name: string
           segment_type: string | null
           status: string
@@ -3121,6 +3122,7 @@ export type Database = {
           description?: string | null
           filters?: Json | null
           id?: string
+          list_view_id?: string | null
           name: string
           segment_type?: string | null
           status?: string
@@ -3133,6 +3135,7 @@ export type Database = {
           description?: string | null
           filters?: Json | null
           id?: string
+          list_view_id?: string | null
           name?: string
           segment_type?: string | null
           status?: string
@@ -3144,6 +3147,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journeys_list_view_id_fkey"
+            columns: ["list_view_id"]
+            isOneToOne: false
+            referencedRelation: "list_views"
             referencedColumns: ["id"]
           },
         ]
@@ -3974,6 +3984,56 @@ export type Database = {
           status?: string | null
         }
         Relationships: []
+      }
+      list_views: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          entity_type: string
+          filters: Json
+          id: string
+          name: string
+          selected_fields: Json
+          tags: string[] | null
+          updated_at: string
+          visibility: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          entity_type: string
+          filters?: Json
+          id?: string
+          name: string
+          selected_fields?: Json
+          tags?: string[] | null
+          updated_at?: string
+          visibility?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          entity_type?: string
+          filters?: Json
+          id?: string
+          name?: string
+          selected_fields?: Json
+          tags?: string[] | null
+          updated_at?: string
+          visibility?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "list_views_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       loyalty_config: {
         Row: {
