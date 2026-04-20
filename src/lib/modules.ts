@@ -20,6 +20,10 @@ export const modules: ModuleDefinition[] = [
   { key: "pos.products", name: "Product Master", parent: "pos" },
   { key: "pos.orders", name: "Order History", parent: "pos" },
   { key: "pos.schemes", name: "Schemes", parent: "pos" },
+  { key: "transactions", name: "Transactions" },
+  { key: "transactions.customers", name: "Customers", parent: "transactions" },
+  { key: "transactions.products", name: "Products", parent: "transactions" },
+  { key: "transactions.orders", name: "Orders", parent: "transactions" },
   { key: "stores", name: "Store Management" },
   { key: "stores.all", name: "All Stores", parent: "stores" },
   { key: "stores.rentals", name: "Rentals & Leases", parent: "stores" },
@@ -183,4 +187,7 @@ export const routeToModuleKey: Record<string, string> = {
   "/admin/permissions": "usermanagement.permissions",
   "/admin/company": "admin.company",
   "/list-views": "communication.listviews",
+  "/transactions/customers": "transactions.customers",
+  "/transactions/products": "transactions.products",
+  "/transactions/orders": "transactions.orders",
 };
