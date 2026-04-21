@@ -298,12 +298,12 @@ export default function JourneyList() {
     queryKey: ["journey-approvals-inbox", user?.id, inboxTab],
     queryFn: async () => {
       if (!user?.id) return [];
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("journeys")
         .select("*, list_view:list_view_id(id, name, entity_type)")
-        .eq("approval_status" as any, inboxTab)
-        .eq("approver_id" as any, user.id)
-        .order("submitted_at" as any, { ascending: false });
+        .eq("approval_status", inboxTab)
+        .eq("approver_id", user.id)
+        .order("submitted_at", { ascending: false });
       if (error) throw error;
       return data || [];
     },
