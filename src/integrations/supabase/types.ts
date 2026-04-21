@@ -3101,6 +3101,72 @@ export type Database = {
           },
         ]
       }
+      journey_schedules: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          day_of_month: number | null
+          days_of_week: number[] | null
+          execution_date: string | null
+          execution_time: string | null
+          frequency: string | null
+          id: string
+          journey_id: string
+          month_of_quarter: number | null
+          next_run_at: string | null
+          timezone: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          day_of_month?: number | null
+          days_of_week?: number[] | null
+          execution_date?: string | null
+          execution_time?: string | null
+          frequency?: string | null
+          id?: string
+          journey_id: string
+          month_of_quarter?: number | null
+          next_run_at?: string | null
+          timezone?: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          day_of_month?: number | null
+          days_of_week?: number[] | null
+          execution_date?: string | null
+          execution_time?: string | null
+          frequency?: string | null
+          id?: string
+          journey_id?: string
+          month_of_quarter?: number | null
+          next_run_at?: string | null
+          timezone?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journey_schedules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journey_schedules_journey_id_fkey"
+            columns: ["journey_id"]
+            isOneToOne: true
+            referencedRelation: "journeys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       journeys: {
         Row: {
           approval_notes: string | null
