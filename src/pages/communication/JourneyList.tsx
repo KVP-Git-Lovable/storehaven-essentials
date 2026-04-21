@@ -282,11 +282,11 @@ export default function JourneyList() {
     queryKey: ["journey-approvals-count", user?.id],
     queryFn: async () => {
       if (!user?.id) return 0;
-      const { count, error } = await supabase
+      const { count, error } = await (supabase as any)
         .from("journeys")
         .select("id", { count: "exact", head: true })
-        .eq("approval_status" as any, "pending")
-        .eq("approver_id" as any, user.id);
+        .eq("approval_status", "pending")
+        .eq("approver_id", user.id);
       if (error) return 0;
       return count || 0;
     },
