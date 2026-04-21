@@ -51,6 +51,15 @@ export default function JourneyList() {
   const [approvalNotes, setApprovalNotes] = useState<string>("");
   const [submitAudienceCount, setSubmitAudienceCount] = useState<number | null>(null);
 
+  // Approvals inbox state
+  const [showInbox, setShowInbox] = useState(false);
+  const [inboxTab, setInboxTab] = useState<"pending" | "approved" | "rejected">("pending");
+  const [rejectTarget, setRejectTarget] = useState<any | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [filterChannel, setFilterChannel] = useState<string>("all");
+  const [filterFrom, setFilterFrom] = useState<string>("");
+  const [filterTo, setFilterTo] = useState<string>("");
+
   const { data: journeys = [], isLoading } = useQuery({
     queryKey: ["journeys"],
     queryFn: async () => {
