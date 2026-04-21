@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, MoreVertical, Pencil, Copy, Trash2, ListFilter } from "lucide-react";
 import { toast } from "sonner";
 import type { EntityKey, FilterCondition } from "@/lib/listViewSchema";
@@ -65,55 +66,63 @@ export function EntityListViewsBar({ entity, activeViewId, onApply }: Props) {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const selectedView = views.find((view: any) => view.id === activeViewId) || null;
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       <ListFilter className="h-4 w-4 text-muted-foreground" />
-      <Button
-        size="sm"
-        variant={activeViewId === null ? "default" : "outline"}
-        onClick={() => onApply(null, [])}
-      >
-        All records
-      </Button>
+      <div className="flex min-w-[240px] flex-1 items-center gap-2 sm:max-w-md">
+        <Select
+          value={activeViewId ?? "all"}
+          onValueChange={(value) => {
+            if (value === "all") {
+              onApply(null, []);
+              return;
+            }
 
-      {views.map((v: any) => {
-        const isActive = activeViewId === v.id;
-        return (
-          <div key={v.id} className="flex items-center">
-            <Button
-              size="sm"
-              variant={isActive ? "default" : "outline"}
-              className="rounded-r-none"
-              onClick={() => onApply(v.id, (v.filters as FilterCondition[]) || [])}
-            >
-              {v.name}
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant={isActive ? "default" : "outline"} className="rounded-l-none border-l-0 px-2">
-                  <MoreVertical className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => navigate(`/list-views/${v.id}?entity=${entity}`)}>
-                  <Pencil className="mr-2 h-4 w-4" /> Edit
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => duplicateMut.mutate(v)}>
-                  <Copy className="mr-2 h-4 w-4" /> Duplicate
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    if (confirm(`Delete list view "${v.name}"?`)) deleteMut.mutate(v.id);
-                  }}
-                  className="text-destructive"
-                >
-                  <Trash2 className="mr-2 h-4 w-4" /> Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        );
-      })}
+            const nextView = views.find((view: any) => view.id === value);
+            onApply(nextView?.id ?? null, (nextView?.filters as FilterCondition[]) || []);
+          }}
+        >
+          <SelectTrigger className="h-9 min-w-0">
+            <SelectValue placeholder="Choose a list view" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All records</SelectItem>
+            {views.map((view: any) => (
+              <SelectItem key={view.id} value={view.id}>
+                {view.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {selectedView ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="icon" variant="outline" aria-label="Manage selected list view">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => navigate(`/list-views/${selectedView.id}?entity=${entity}`)}>
+                <Pencil className="mr-2 h-4 w-4" /> Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => duplicateMut.mutate(selectedView)}>
+                <Copy className="mr-2 h-4 w-4" /> Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  if (confirm(`Delete list view "${selectedView.name}"?`)) deleteMut.mutate(selectedView.id);
+                }}
+                className="text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
+      </div>
 
       <Button size="sm" variant="ghost" onClick={() => navigate(`/list-views/new?entity=${entity}`)}>
         <Plus className="mr-1 h-3 w-3" /> New List View
