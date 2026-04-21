@@ -17,6 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import BarcodeScanner from "@/components/inventory/BarcodeScanner";
+import { deleteProductSafely } from "@/lib/productDeletion";
 
 const productSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -133,8 +134,7 @@ export default function ProductMaster() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("products").delete().eq("id", id);
-      if (error) throw error;
+      await deleteProductSafely(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pos-products"] });
