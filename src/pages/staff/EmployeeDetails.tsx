@@ -37,11 +37,29 @@ export default function EmployeeDetails() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("employees")
-        .select("*, stores(id, name), manager:employees!employees_manager_id_fkey(id, name)")
+        .select("*")
         .eq("id", id!)
-        .single();
+        .maybeSingle();
       if (error) throw error;
-      return data;
+      if (!data) return null;
+
+      const [storeResult, managerResult] = await Promise.all([
+        data.store_id
+          ? supabase.from("stores").select("id, name").eq("id", data.store_id).maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        data.manager_id
+          ? supabase.from("employees").select("id, name").eq("id", data.manager_id).maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+      ]);
+
+      if (storeResult.error) throw storeResult.error;
+      if (managerResult.error) throw managerResult.error;
+
+      return {
+        ...data,
+        stores: storeResult.data,
+        manager: managerResult.data,
+      };
     },
     enabled: !!id,
   });

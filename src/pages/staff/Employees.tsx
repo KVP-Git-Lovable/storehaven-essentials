@@ -97,14 +97,25 @@ export default function Employees() {
   useEffect(() => { fetchEmployees(); }, []);
 
   const fetchEmployees = async () => {
-    const { data, error } = await supabase
-      .from("employees")
-      .select("*, stores(name), manager:employees!employees_manager_id_fkey(name)")
-      .order("created_at", { ascending: false });
+    const [{ data: employeeRows, error }, { data: storesData }, { data: employeeLookup }] = await Promise.all([
+      supabase.from("employees").select("*").order("created_at", { ascending: false }),
+      supabase.from("stores").select("id, name"),
+      supabase.from("employees").select("id, name"),
+    ]);
+
     if (error) {
       toast({ title: "Error", description: "Failed to load employees", variant: "destructive" });
     } else {
-      setEmployees((data as any) || []);
+      const storeMap = new Map((storesData || []).map((store) => [store.id, store.name]));
+      const managerMap = new Map((employeeLookup || []).map((employee) => [employee.id, employee.name]));
+
+      const mappedEmployees = (employeeRows || []).map((employee) => ({
+        ...employee,
+        stores: employee.store_id ? { name: storeMap.get(employee.store_id) || "—" } : null,
+        manager: employee.manager_id ? { name: managerMap.get(employee.manager_id) || "—" } : null,
+      }));
+
+      setEmployees(mappedEmployees as Employee[]);
     }
     setLoading(false);
   };
