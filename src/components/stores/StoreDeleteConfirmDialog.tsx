@@ -24,6 +24,8 @@ type LinkedData = {
   pettyCash: number;
   deployments: number;
   contacts: number;
+  stockTransfers: number;
+  employeeTransferHistory: number;
 };
 
 type StoreDeleteConfirmDialogProps = {
@@ -65,6 +67,10 @@ export function StoreDeleteConfirmDialog({
         pettyCashRes,
         deploymentsRes,
         contactsRes,
+        transfersFromRes,
+        transfersToRes,
+        employeeTransfersFromRes,
+        employeeTransfersToRes,
       ] = await Promise.all([
         supabase.from("assets").select("id", { count: "exact", head: true }).eq("store_id", storeId),
         supabase.from("employees").select("id", { count: "exact", head: true }).eq("store_id", storeId),
@@ -75,6 +81,10 @@ export function StoreDeleteConfirmDialog({
         supabase.from("petty_cash").select("id", { count: "exact", head: true }).eq("store_id", storeId),
         supabase.from("store_asset_deployments").select("id", { count: "exact", head: true }).eq("store_id", storeId),
         supabase.from("store_contacts").select("id", { count: "exact", head: true }).eq("store_id", storeId),
+        supabase.from("store_transfers").select("id", { count: "exact", head: true }).eq("from_store_id", storeId),
+        supabase.from("store_transfers").select("id", { count: "exact", head: true }).eq("to_store_id", storeId),
+        supabase.from("employee_transfer_history").select("id", { count: "exact", head: true }).eq("from_store_id", storeId),
+        supabase.from("employee_transfer_history").select("id", { count: "exact", head: true }).eq("to_store_id", storeId),
       ]);
 
       setLinkedData({
@@ -87,6 +97,8 @@ export function StoreDeleteConfirmDialog({
         pettyCash: pettyCashRes.count || 0,
         deployments: deploymentsRes.count || 0,
         contacts: contactsRes.count || 0,
+        stockTransfers: (transfersFromRes.count || 0) + (transfersToRes.count || 0),
+        employeeTransferHistory: (employeeTransfersFromRes.count || 0) + (employeeTransfersToRes.count || 0),
       });
     } catch (error) {
       console.error("Error fetching linked data:", error);
@@ -103,6 +115,24 @@ export function StoreDeleteConfirmDialog({
 
       // Unassign employees from this store
       await supabase.from("employees").update({ store_id: null }).eq("store_id", storeId);
+
+      // Preserve employee transfer history while removing store references
+      await Promise.all([
+        supabase.from("employee_transfer_history").update({ from_store_id: null }).eq("from_store_id", storeId),
+        supabase.from("employee_transfer_history").update({ to_store_id: null }).eq("to_store_id", storeId),
+      ]);
+
+      // Remove stock transfer records that still reference this store
+      const { data: transferIds } = await supabase
+        .from("store_transfers")
+        .select("id")
+        .or(`from_store_id.eq.${storeId},to_store_id.eq.${storeId}`);
+
+      if (transferIds?.length) {
+        const ids = transferIds.map((transfer) => transfer.id);
+        await supabase.from("store_transfer_items").delete().in("transfer_id", ids);
+        await supabase.from("store_transfers").delete().in("id", ids);
+      }
 
       // Delete store-related records
       await Promise.all([
@@ -212,9 +242,21 @@ export function StoreDeleteConfirmDialog({
                         <span>Contacts: <Badge variant="secondary">{linkedData.contacts}</Badge></span>
                       </div>
                     )}
+                    {linkedData.stockTransfers > 0 && (
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span>Stock Transfers: <Badge variant="secondary">{linkedData.stockTransfers}</Badge></span>
+                      </div>
+                    )}
+                    {linkedData.employeeTransferHistory > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        <span>Employee Transfers: <Badge variant="secondary">{linkedData.employeeTransferHistory}</Badge></span>
+                      </div>
+                    )}
                   </div>
                   <div className="pt-2 border-t text-xs text-muted-foreground">
-                    <strong>On delete:</strong> Assets and employees will be unassigned. All other records will be permanently deleted.
+                    <strong>On delete:</strong> Assets and employees will be unassigned, employee transfer history will be preserved without store links, and dependent operational records will be deleted.
                   </div>
                 </div>
               ) : (
