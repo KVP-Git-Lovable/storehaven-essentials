@@ -20,12 +20,36 @@ import { ENTITY_SCHEMAS, type EntityKey } from "@/lib/listViewSchema";
 import { executeListView } from "@/lib/listViewExecutor";
 import { JourneyScheduleDialog } from "@/components/journey/JourneyScheduleDialog";
 import { summarizeSchedule, type JourneySchedule } from "@/lib/journeySchedule";
+import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
+import { cn } from "@/lib/utils";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   active: "bg-green-100 text-green-800",
   paused: "bg-yellow-100 text-yellow-800",
+  approved: "border border-green-300 bg-green-50 text-green-800",
 };
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "draft", label: "Draft" },
+  { value: "pending", label: "Pending Approval" },
+  { value: "approved", label: "Approved" },
+  { value: "active", label: "Active" },
+  { value: "rejected", label: "Rejected" },
+];
+
+const FREQUENCY_FILTER_OPTIONS = [
+  { value: "one-time", label: "One-time" },
+  { value: "recurring", label: "Recurring" },
+  { value: "trigger", label: "Trigger-based" },
+];
+
+const CHANNEL_FILTER_OPTIONS = [
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "email", label: "Email" },
+  { value: "sms", label: "SMS" },
+  { value: "voice", label: "Voice" },
+];
 
 const approvalBadgeClass: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
@@ -64,6 +88,14 @@ export default function JourneyList() {
 
   // Schedule dialog state
   const [scheduleJourney, setScheduleJourney] = useState<any | null>(null);
+
+  // List filter state
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [frequencyFilter, setFrequencyFilter] = useState<string[]>([]);
+  const [channelFilter, setChannelFilter] = useState<string[]>([]);
+  const [createdByFilter, setCreatedByFilter] = useState<string>("");
+  const [listDateFrom, setListDateFrom] = useState<string>("");
+  const [listDateTo, setListDateTo] = useState<string>("");
 
   const { data: journeys = [], isLoading } = useQuery({
     queryKey: ["journeys"],
@@ -371,6 +403,95 @@ export default function JourneyList() {
     return Array.from(set);
   }, [inboxJourneys]);
 
+  // Resolve frequency type for filter from schedule or canvas
+  const resolveFrequency = (j: any): string => {
+    if (j.schedule?.type === "one_time") return "one-time";
+    if (j.schedule?.type === "recurring") return "recurring";
+    const canvas = j.canvas_data || {};
+    const nodes: any[] = Array.isArray(canvas.nodes) ? canvas.nodes : [];
+    const entry = nodes.find((n) => n.type === "entry" || n.data?.type === "entry");
+    const ed = entry?.data || {};
+    const f = String(ed.frequency || ed.triggerType || ed.trigger_type || "").toLowerCase();
+    if (f.includes("trigger") || f.includes("event")) return "trigger";
+    if (f.includes("recur")) return "recurring";
+    if (f.includes("one")) return "one-time";
+    return "";
+  };
+
+  const matchesStatusFilter = (j: any, filters: string[]): boolean => {
+    if (filters.length === 0) return true;
+    const a = j.approval_status;
+    return filters.some((f) => {
+      switch (f) {
+        case "draft": return j.status === "draft" && (!a || a === "draft");
+        case "pending": return a === "pending";
+        case "approved": return a === "approved" && j.status !== "active";
+        case "active": return j.status === "active";
+        case "rejected": return a === "rejected";
+        default: return false;
+      }
+    });
+  };
+
+  const creatorIds = useMemo(
+    () => Array.from(new Set((journeys as any[]).map((j) => j.created_by).filter(Boolean))),
+    [journeys]
+  );
+  const { data: creatorMap = {} } = useQuery({
+    queryKey: ["journey-list-creators", creatorIds],
+    queryFn: async () => {
+      if (creatorIds.length === 0) return {};
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, username, email")
+        .in("id", creatorIds as string[]);
+      if (error) return {};
+      const map: Record<string, { username: string | null; email: string | null }> = {};
+      (data || []).forEach((p: any) => { map[p.id] = { username: p.username, email: p.email }; });
+      return map;
+    },
+    enabled: creatorIds.length > 0,
+  });
+
+  const creatorOptions = useMemo(
+    () => creatorIds.map((id) => ({
+      value: id as string,
+      label: (creatorMap as any)[id as string]?.username || (creatorMap as any)[id as string]?.email || "Unknown",
+    })),
+    [creatorIds, creatorMap]
+  );
+
+  const filteredJourneys = useMemo(() => {
+    return (journeys as any[]).filter((j) => {
+      if (!matchesStatusFilter(j, statusFilter)) return false;
+      if (frequencyFilter.length > 0) {
+        const f = resolveFrequency(j);
+        if (!f || !frequencyFilter.includes(f)) return false;
+      }
+      if (channelFilter.length > 0) {
+        const { channels } = deriveJourneyMeta(j);
+        if (!channelFilter.some((c) => channels.includes(c))) return false;
+      }
+      if (createdByFilter && j.created_by !== createdByFilter) return false;
+      if (listDateFrom && new Date(j.created_at) < new Date(listDateFrom)) return false;
+      if (listDateTo && new Date(j.created_at) > new Date(listDateTo + "T23:59:59")) return false;
+      return true;
+    });
+  }, [journeys, statusFilter, frequencyFilter, channelFilter, createdByFilter, listDateFrom, listDateTo]);
+
+  const hasActiveFilters =
+    statusFilter.length > 0 || frequencyFilter.length > 0 || channelFilter.length > 0 ||
+    !!createdByFilter || !!listDateFrom || !!listDateTo;
+
+  const clearListFilters = () => {
+    setStatusFilter([]);
+    setFrequencyFilter([]);
+    setChannelFilter([]);
+    setCreatedByFilter("");
+    setListDateFrom("");
+    setListDateTo("");
+  };
+
   const invalidateApprovalQueries = () => {
     queryClient.invalidateQueries({ queryKey: ["journeys"] });
     queryClient.invalidateQueries({ queryKey: ["journey-approvals-inbox"] });
@@ -463,6 +584,70 @@ export default function JourneyList() {
       </div>
 
       <Card>
+        <div className="p-4 border-b space-y-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-[180px] flex-1">
+              <Label className="text-xs">Status</Label>
+              <MultiSelectCombobox
+                options={STATUS_FILTER_OPTIONS}
+                selected={statusFilter}
+                onChange={setStatusFilter}
+                placeholder="All statuses"
+                maxDisplayedBadges={2}
+              />
+            </div>
+            <div className="min-w-[180px] flex-1">
+              <Label className="text-xs">Frequency</Label>
+              <MultiSelectCombobox
+                options={FREQUENCY_FILTER_OPTIONS}
+                selected={frequencyFilter}
+                onChange={setFrequencyFilter}
+                placeholder="All frequencies"
+                maxDisplayedBadges={2}
+              />
+            </div>
+            <div className="min-w-[180px] flex-1">
+              <Label className="text-xs">Channel</Label>
+              <MultiSelectCombobox
+                options={CHANNEL_FILTER_OPTIONS}
+                selected={channelFilter}
+                onChange={setChannelFilter}
+                placeholder="All channels"
+                maxDisplayedBadges={2}
+              />
+            </div>
+            <div className="min-w-[180px] flex-1">
+              <Label className="text-xs">Created By</Label>
+              <SearchableSelect
+                options={creatorOptions}
+                value={createdByFilter}
+                onValueChange={(v) => setCreatedByFilter(v === "none" ? "" : v)}
+                placeholder="Anyone"
+                searchPlaceholder="Search creator..."
+                allowNone
+                noneLabel="Anyone"
+              />
+            </div>
+            <div className="w-[150px]">
+              <Label className="text-xs">Created From</Label>
+              <Input type="date" value={listDateFrom} onChange={(e) => setListDateFrom(e.target.value)} />
+            </div>
+            <div className="w-[150px]">
+              <Label className="text-xs">Created To</Label>
+              <Input type="date" value={listDateTo} onChange={(e) => setListDateTo(e.target.value)} />
+            </div>
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearListFilters}>
+                <X className="h-4 w-4 mr-1" /> Clear
+              </Button>
+            )}
+          </div>
+          {hasActiveFilters && (
+            <p className="text-xs text-muted-foreground">
+              Showing {filteredJourneys.length} of {journeys.length} journeys
+            </p>
+          )}
+        </div>
         <Table>
           <TableHeader>
             <TableRow>
@@ -478,12 +663,18 @@ export default function JourneyList() {
               <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
             ) : journeys.length === 0 ? (
               <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No journeys yet. Create one to get started.</TableCell></TableRow>
+            ) : filteredJourneys.length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No journeys match the selected filters.</TableCell></TableRow>
             ) : (
-              journeys.map((j: any) => {
+              filteredJourneys.map((j: any) => {
                 const a = j.approval_status;
                 const showApprovalBadge = a && a !== "draft";
                 return (
-                  <TableRow key={j.id} className="cursor-pointer" onClick={() => navigate(`/communication/journeys/${j.id}`)}>
+                  <TableRow
+                    key={j.id}
+                    className={cn("cursor-pointer", j.status === "active" && "bg-green-50 hover:bg-green-100")}
+                    onClick={() => navigate(`/communication/journeys/${j.id}`)}
+                  >
                     <TableCell className="font-medium">{j.name}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1 flex-wrap">
