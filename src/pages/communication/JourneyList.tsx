@@ -98,11 +98,11 @@ export default function JourneyList() {
       if (!submitJourney?.created_by) return null;
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, username, email")
+        .select("id, username")
         .eq("id", submitJourney.created_by)
         .maybeSingle();
       if (error) return null;
-      return data;
+      return data as { id: string; username: string | null } | null;
     },
     enabled: !!submitJourney?.created_by,
   });
@@ -467,7 +467,7 @@ export default function JourneyList() {
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Created By</p>
-                    <p className="font-medium">{createdByProfile?.username || createdByProfile?.email || "—"}</p>
+                    <p className="font-medium">{createdByProfile?.username || "—"}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Last Updated</p>
