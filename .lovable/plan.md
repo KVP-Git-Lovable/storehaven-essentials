@@ -1,64 +1,36 @@
 
 
-## Journey List — Filters & Active Row Highlighting
+## Publish Trayi Jewellery promo image as a public marketing URL
 
-Add a filter bar above the journeys table on `/communication/journeys` and visually highlight active (live) journeys. All changes are additive to `src/pages/communication/JourneyList.tsx` — no DB, no API, no workflow changes.
+Make the uploaded image available as a permanent, hot-linkable URL on `https://storeops.quickapp.ai` so it can be used in WhatsApp/Email campaigns, social posts, and ads.
 
-### 1. Filter bar (above the table, inside the existing `<Card>`)
+### What will be done
 
-A compact, single-row toolbar (wraps on mobile) with:
+1. Copy the uploaded image into the project at:
+   - `public/marketing/trayi-jewellery-10-percent-discount.jpg`
+   
+   Files in `public/` are served as-is at the site root, so after the next publish it will be available at:
+   - **https://storeops.quickapp.ai/marketing/trayi-jewellery-10-percent-discount.jpg**
+   - (Also on the preview: `https://toreops.lovable.app/marketing/trayi-jewellery-10-percent-discount.jpg`)
 
-- **Status** — multi-select (`MultiSelectCombobox`): Draft, Pending Approval, Approved, Active, Rejected.
-  - Maps to: `Draft` → `status='draft' AND approval_status IN (null,'draft')`; `Pending Approval` → `approval_status='pending'`; `Approved` → `approval_status='approved' AND status!='active'`; `Active` → `status='active'`; `Rejected` → `approval_status='rejected'`.
-- **Frequency** — multi-select: One-time, Recurring, Trigger-based.
-  - Source: prefer `journey_schedules.type` (`one_time` → One-time, `recurring` → Recurring); fallback to entry node `data.frequency` / `data.triggerType` in `canvas_data` to detect `trigger`/`event` → Trigger-based.
-- **Channel** — multi-select: WhatsApp, Email, SMS, Voice. Derived from message nodes in `canvas_data` (same `deriveJourneyMeta` helper already in file, extended to return all channels).
-- **Created By** — `SearchableSelect` populated from the `profiles` of `created_by` ids present in the loaded journeys (no extra query — we already join names elsewhere; we'll add a small lookup map mirroring `submitterMap`).
-- **Created date range** — two `<Input type="date">` (From / To) applied to `created_at`.
-- **Clear filters** button on the right when any filter is active.
+2. File naming chosen for marketing best practice:
+   - lowercase, hyphenated, descriptive (good for SEO + readable in WhatsApp/email previews)
+   - `.jpg` extension (smaller payload than PNG; ideal for photographic banners and for WhatsApp template media which prefers JPG/PNG ≤ 5 MB)
 
-All filters combine with **AND** logic and run **client-side** over the existing `journeys` query (dataset is small; no new API). React's `useMemo` produces `filteredJourneys` rendered by the table.
+3. No app code, routes, or components are touched — purely a static asset drop in `public/`.
 
-### 2. Active row highlighting
+### Activation
 
-In the `journeys.map(...)` row render, add a conditional class on `<TableRow>` when `j.status === 'active'`:
-
-```
-className={cn("cursor-pointer", j.status === 'active' && "bg-green-50 hover:bg-green-100")}
-```
-
-Uses Tailwind tokens already used elsewhere in the file (`bg-green-100`, `text-green-800`) so it stays inside the existing palette — no new colors. Text remains the default foreground for full readability. Highlight persists regardless of active filters and works with sorting/pagination (none added here; existing order is preserved).
-
-### 3. Status badges (already present, lightly extended)
-
-The existing badges (`statusColors`, `approvalBadgeClass`) already render green/yellow/red for Active/Pending/Rejected. We'll just ensure:
-- `active` → green (already `bg-green-100 text-green-800`).
-- `pending` → yellow (already).
-- `rejected` → red (already).
-- Add `approved` to `statusColors` mapping rendering as green outline so an "Approved (not yet active)" journey is also visually distinct.
-
-No new badge components introduced.
-
-### 4. Empty / count state
-
-Below the filter bar, show a small muted line: `Showing {filteredJourneys.length} of {journeys.length} journeys` when any filter is active. The "No journeys yet" empty state is replaced with "No journeys match the selected filters" when filters are active and the result is empty.
-
-### 5. Constraints honored
-
-- No changes to Journey Builder canvas, approval workflow, scheduling, mutations, or backend.
-- No new tables, edge functions, or RLS changes.
-- No layout restructure — filter bar slots above the existing table inside the same `<Card>`.
-- No new color tokens; reuses existing Tailwind green/yellow/red shades already in the file.
+Static assets in `public/` are part of the frontend bundle, so the URL goes live on the custom domain only **after you click "Publish → Update"** in the editor. The preview URL works immediately.
 
 ### Files
 
-- **Edit only:** `src/pages/communication/JourneyList.tsx`
-  - Add filter state (`statusFilter`, `frequencyFilter`, `channelFilter`, `createdByFilter`, `dateFrom`, `dateTo`).
-  - Add `filteredJourneys` `useMemo` applying AND-combined filters.
-  - Add filter toolbar JSX above the `<Table>` using existing `MultiSelectCombobox`, `SearchableSelect`, and `Input` components.
-  - Extend `deriveJourneyMeta` to also expose channels for list rows (already does for inbox).
-  - Add green row class for `status === 'active'`.
-  - Add `approved` entry to `statusColors`.
+- **New:** `public/marketing/trayi-jewellery-10-percent-discount.jpg` (copied from the uploaded screenshot)
 
-No other files modified.
+No other files modified. No DB, no edge functions, no UI changes.
+
+### After approval, you'll get
+
+- Final marketing URL: `https://storeops.quickapp.ai/marketing/trayi-jewellery-10-percent-discount.jpg`
+- Ready to paste into WhatsApp template media, email banners, or campaign links.
 
