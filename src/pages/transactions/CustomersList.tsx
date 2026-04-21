@@ -1,27 +1,42 @@
-import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Search, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Plus, Eye, Pencil, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar";
 import { CustomerFormDialog } from "@/components/transactions/CustomerFormDialog";
 import { executeListView } from "@/lib/listViewExecutor";
 import type { FilterCondition } from "@/lib/listViewSchema";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 const PAGE_SIZE = 50;
 const inr = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
 
 export default function CustomersList() {
+  const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<FilterCondition[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
+  const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("create");
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
 
   const usingListView = activeFilters.length > 0;
 
@@ -55,6 +70,19 @@ export default function CustomersList() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (customerId: string) => {
+      const { error } = await supabase.from("customers").delete().eq("id", customerId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Customer deleted");
+      qc.invalidateQueries({ queryKey: ["transactions-customers"] });
+      setDeleteTarget(null);
+    },
+    onError: (error: any) => toast.error(error.message || "Failed to delete customer"),
+  });
+
   const totalPages = Math.ceil((data?.count || 0) / PAGE_SIZE);
 
   return (
@@ -64,7 +92,7 @@ export default function CustomersList() {
           <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
           <p className="text-muted-foreground">All registered customers, sortable by spend.</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
+        <Button onClick={() => { setSelectedCustomer(null); setDialogMode("create"); setCreateOpen(true); }}>
           <Plus className="mr-2 h-4 w-4" /> New Customer
         </Button>
       </div>
@@ -98,15 +126,17 @@ export default function CustomersList() {
               <TableHead>Tier</TableHead>
               <TableHead className="text-right">Orders</TableHead>
               <TableHead className="text-right">Total Spent</TableHead>
+              <TableHead>Created Date</TableHead>
               <TableHead>DOB</TableHead>
               <TableHead>Anniversary</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
             ) : (data?.rows || []).length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No customers found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No customers found.</TableCell></TableRow>
             ) : (
               data!.rows.map((c: any) => (
                 <TableRow key={c.id}>
@@ -116,8 +146,22 @@ export default function CustomersList() {
                   <TableCell><Badge variant="outline" className="capitalize">{c.tier || "—"}</Badge></TableCell>
                   <TableCell className="text-right">{c.total_orders || 0}</TableCell>
                   <TableCell className="text-right font-medium">{inr(Number(c.total_spent) || 0)}</TableCell>
+                  <TableCell className="text-xs">{c.created_at ? format(new Date(c.created_at), "dd MMM yyyy") : "—"}</TableCell>
                   <TableCell>{c.date_of_birth ? format(new Date(c.date_of_birth), "dd MMM yyyy") : "—"}</TableCell>
                   <TableCell>{c.anniversary_date ? format(new Date(c.anniversary_date), "dd MMM yyyy") : "—"}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="outline" size="icon" onClick={() => { setSelectedCustomer(c); setDialogMode("view"); setCreateOpen(true); }}>
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="icon" onClick={() => { setSelectedCustomer(c); setDialogMode("edit"); setCreateOpen(true); }}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="icon" onClick={() => setDeleteTarget(c)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -137,7 +181,24 @@ export default function CustomersList() {
         </div>
       </div>
 
-      <CustomerFormDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <CustomerFormDialog open={createOpen} onOpenChange={setCreateOpen} customer={selectedCustomer} mode={dialogMode} />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete customer?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove {deleteTarget?.name || deleteTarget?.phone || "this customer"}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}>
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
