@@ -70,22 +70,22 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
 
   useEffect(() => {
     if (!open) return;
-
     if (!order) {
       setCustomerId("");
       setStatus("completed");
       setLineItems([{ productId: "", quantity: "1" }]);
       return;
     }
-
     setCustomerId(order.customer_id || "");
     setStatus(order.status || "completed");
-    setLineItems(
-      existingOrderItems.length
-        ? existingOrderItems.map((item: any) => ({ productId: item.item_id, quantity: String(item.quantity || 1) }))
-        : [{ productId: "", quantity: "1" }]
-    );
-  }, [open, order, existingOrderItems]);
+  }, [open, order]);
+
+  useEffect(() => {
+    if (!open || !order?.id) return;
+    if (existingOrderItems.length) {
+      setLineItems(existingOrderItems.map((item: any) => ({ productId: item.item_id, quantity: String(item.quantity || 1) })));
+    }
+  }, [open, order?.id, existingOrderItems]);
 
   const createMut = useMutation({
     mutationFn: async () => {
