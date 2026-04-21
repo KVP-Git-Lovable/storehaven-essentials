@@ -1,110 +1,101 @@
 
-Implement the order flow in two coordinated parts so the Orders page becomes the source of truth for what is shown in Customers.
+Use the existing Stores module as the single source of truth, and make it easier to discover from Employee creation.
 
-## 1. Upgrade “New Order” to support multiple products
-Update `src/components/transactions/OrderFormDialog.tsx` from a single-product form to a line-item order form.
+## What already exists today
 
-### UI changes
-- Keep one customer selector and one order status selector.
-- Replace the single `productId` + `quantity` inputs with a repeatable line-items section:
-  - Product selector
-  - Quantity
-  - Unit price preview
-  - Line total
-  - Remove row
-- Add:
-  - “Add Product” button
-  - Order subtotal / tax / grand total summary
-- Keep the existing modal pattern and sticky action footer.
+A store management area is already present in the app:
 
-### Save logic
-On Create:
-1. Validate customer is selected and at least one valid line item exists.
-2. Calculate:
-   - `subtotal` = sum of line totals
-   - `tax_amount` = consistent value based on product tax if already stored, otherwise preserve existing simplified logic
-   - `total_amount`
-3. Insert one row in `orders`
-4. Insert multiple rows in `order_items` for that order
-5. Invalidate `transactions-orders` so `/transactions/orders` refreshes immediately
+- **Route:** `/stores`
+- **Sidebar location:** **Finance Overview → All Stores**
+- **Create store:** available in `src/pages/stores/StoresList.tsx` via the **Add Store** dialog
+- **Edit store:** available in `src/pages/stores/StoreDetails.tsx`
+- **Delete store:** available through `StoreDeleteConfirmDialog` from the Stores list row actions
+- **Employee “Deployed Store” source:** the employee form in `src/pages/staff/Employees.tsx` already reads from the `stores` table
 
-### Non-breaking detail
-- Keep using `products` and `order_items` tables already in place
-- Do not change schema
-- Preserve current statuses (`completed`, `pending`, `cancelled`)
+So this is not missing backend logic; the main issue is **discoverability and clarity**.
 
-## 2. Make `/transactions/orders` reflect meaningful customer purchase data
-Right now the table mixes:
-- unwanted manual/system rows
-- seed rows linked to only a few customers
-- customer aggregate values (`total_orders`, `total_spent`) that do not match actual order rows
+## Plan
 
-To fix this, rebuild the order dataset so it aligns with Customers.
+### 1. Make Stores clearly visible as the master page
+Improve navigation wording so users can easily find where stores are managed.
 
-### Data cleanup
-Remove unwanted rows from `orders` and matching `order_items` for:
-- rows with `created_by = 'System'`
-- old seed rows that do not match the intended customer-based model
-- any rows not meant for the Transactions module view
+Recommended change:
+- Rename the sidebar section/item presentation so it is more obvious that `/stores` is the store master.
+- Keep the same route, but make the label clearer, e.g.:
+  - Section: **Store Management**
+  - Child: **Stores**
+  instead of only showing it under **Finance Overview → All Stores**
 
-This is a data operation, not a schema change.
+This avoids duplicate store modules and keeps one clean source of truth.
 
-## 3. Reseed orders from customer purchase aggregates
-Generate fresh `orders` + `order_items` records based on existing customer data.
+### 2. Add a direct “Manage Stores” entry point from Employee creation
+In the **Add New Employee** dialog (`src/pages/staff/Employees.tsx`), add a small inline action near **Deployed Store**:
 
-### Rule
-For each customer:
-- create approximately `customers.total_orders` order rows
-- distribute those rows so the sum of completed order totals is close to `customers.total_spent`
-- spread dates realistically over recent months
-- assign products from the existing `products` table
-- create 1–N order items per order so totals look believable
-- ensure no orphaned rows
+- **Manage Stores** button/link
+- Opens `/stores`
+- Optional helper text: “Stores listed here come from the Stores master”
 
-### Recommended seeding model
-For every customer with `total_orders > 0` and `total_spent > 0`:
-- derive an average order value from `total_spent / total_orders`
-- create multiple orders with randomized variation around that average
-- distribute totals across selected products and quantities
-- make most rows `completed`
-- allow a small share of `pending` / `cancelled` only if they do not distort the customer totals shown in Customers
+This makes it obvious where the dropdown values come from and gives users a direct path to add/edit/delete stores.
 
-### Important consistency rule
-After reseeding:
-- `orders` page should reflect the customer purchase story
-- `customers.total_orders` and `customers.total_spent` should match the rebuilt order history closely
-- if needed, recompute customer aggregates from the new completed orders so Customers and Orders stay aligned
+### 3. Make the employee dropdown intentionally source from store master
+Keep the **Deployed Store** dropdown bound to the `stores` table, but tighten the behavior:
 
-## 4. Improve `/transactions/orders` display
-Update `src/pages/transactions/OrdersList.tsx` so the list remains clean and useful after reseeding.
+- Show only valid store records from `stores`
+- Preferably restrict to `status = "active"` for deployment selection
+- Keep selected store IDs tied to store master records only
 
-### UI improvements
-- Continue to read from `orders`
-- Optionally add a compact item-count column using `order_items`
-- Keep search, pagination, and list-view filtering intact
-- Ensure newly created multi-product orders show up immediately after save
+This ensures the employee form always reflects the current managed store list.
 
-## 5. Files to update
+### 4. Keep store CRUD centralized in `/stores`
+Do not create a second store-maintenance screen inside Employees.
+
+Instead, continue using:
+- `StoresList.tsx` for create + browse
+- `StoreDetails.tsx` for edit
+- `StoreDeleteConfirmDialog.tsx` for delete
+
+This prevents data duplication and keeps the store table as the single source for:
+- Employee deployed store
+- POS store selectors
+- service/store dropdowns elsewhere in the app
+
+### 5. Optional usability enhancement
+If the user’s permissions hide the Stores page, add a graceful cue in Employee creation:
+
+- If store-management permission exists: show **Manage Stores**
+- If not: show muted helper text like “Stores are managed from the Stores master”
+
+This avoids confusion if the navigation is hidden by role permissions.
+
+## Files to update
+
 ### Edit
-- `src/components/transactions/OrderFormDialog.tsx`
-- `src/pages/transactions/OrdersList.tsx`
+- `src/components/layout/AppSidebar.tsx`
+  - make the Stores navigation easier to find / rename labels for discoverability
+- `src/pages/staff/Employees.tsx`
+  - add “Manage Stores” shortcut and helper text near the Deployed Store field
+  - optionally limit the dropdown query to active stores
 
-### Likely read/verify during implementation
-- `src/pages/transactions/CustomersList.tsx`
-- `src/integrations/supabase/types.ts`
-- `src/lib/listViewExecutor.ts`
+### Keep using as-is / verify
+- `src/pages/stores/StoresList.tsx`
+- `src/pages/stores/StoreDetails.tsx`
+- `src/components/stores/StoreDeleteConfirmDialog.tsx`
 
-## 6. Data work required
-Because this request includes deleting and rebuilding existing order records, implementation will include backend data operations:
-- delete unwanted order/order_item rows
-- insert rebuilt `orders`
-- insert rebuilt `order_items`
-- optionally update customer aggregates to match the rebuilt order history
+## Outcome
 
-## 7. Outcome
-After implementation:
-- “New Order” supports multiple products in one order
-- clicking Create immediately adds the order to `/transactions/orders`
-- unwanted legacy rows are removed
-- Orders page becomes a believable transaction history derived from customer purchase totals
-- Customers and Orders stay aligned instead of showing contradictory numbers
+After this:
+- You will have one clear place to **add, edit, delete, and manage stores**
+- The **Deployed Store** dropdown in Employee creation will clearly be sourced from that store master
+- Users will be able to navigate to store management directly from the employee workflow
+- No duplicate store-maintenance pages will be introduced
+
+## Technical details
+
+Current implementation already confirms:
+- Employee form loads stores from `supabase.from("stores").select("id, name")`
+- Store creation exists in `StoresList.tsx`
+- Store editing exists in `StoreDetails.tsx`
+- Store deletion exists in `StoreDeleteConfirmDialog.tsx`
+- `/stores` route is already registered in `src/App.tsx`
+
+Implementation will therefore be a **UI discoverability and source-of-truth cleanup**, not a new backend module.
