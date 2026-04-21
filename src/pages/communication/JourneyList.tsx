@@ -80,8 +80,8 @@ export default function JourneyList() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, full_name, email, role:role_id(id, name)")
-        .order("full_name", { ascending: true });
+        .select("id, username, email, role:role_id(id, name)")
+        .order("username", { ascending: true });
       if (error) throw error;
       const managerRoles = ["store manager", "super admin", "admin", "manager"];
       return (data || []).filter((p: any) => {
@@ -98,7 +98,7 @@ export default function JourneyList() {
       if (!submitJourney?.created_by) return null;
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, full_name, email")
+        .select("id, username, email")
         .eq("id", submitJourney.created_by)
         .maybeSingle();
       if (error) return null;
@@ -467,7 +467,7 @@ export default function JourneyList() {
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Created By</p>
-                    <p className="font-medium">{createdByProfile?.full_name || createdByProfile?.email || "—"}</p>
+                    <p className="font-medium">{createdByProfile?.username || createdByProfile?.email || "—"}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Last Updated</p>
@@ -537,7 +537,7 @@ export default function JourneyList() {
                   onValueChange={setApproverId}
                   options={approvers.map((p: any) => ({
                     value: p.id,
-                    label: p.full_name || p.email || "Unnamed",
+                    label: p.username || p.email || "Unnamed",
                     subtitle: p.role?.name || undefined,
                   }))}
                   placeholder="Select an approver..."
