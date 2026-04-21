@@ -1,97 +1,110 @@
 
+Implement the order flow in two coordinated parts so the Orders page becomes the source of truth for what is shown in Customers.
 
-# Plan: Hide Segment, Fix Orders Counts, Move List Views into Each Page
+## 1. Upgrade “New Order” to support multiple products
+Update `src/components/transactions/OrderFormDialog.tsx` from a single-product form to a line-item order form.
 
-## 1. Hide "Segment" column
+### UI changes
+- Keep one customer selector and one order status selector.
+- Replace the single `productId` + `quantity` inputs with a repeatable line-items section:
+  - Product selector
+  - Quantity
+  - Unit price preview
+  - Line total
+  - Remove row
+- Add:
+  - “Add Product” button
+  - Order subtotal / tax / grand total summary
+- Keep the existing modal pattern and sticky action footer.
 
-**`src/pages/transactions/CustomersList.tsx`** — remove the `Segment` `<TableHead>` and its `<TableCell>`, and update the `colSpan` from 9 → 8.
+### Save logic
+On Create:
+1. Validate customer is selected and at least one valid line item exists.
+2. Calculate:
+   - `subtotal` = sum of line totals
+   - `tax_amount` = consistent value based on product tax if already stored, otherwise preserve existing simplified logic
+   - `total_amount`
+3. Insert one row in `orders`
+4. Insert multiple rows in `order_items` for that order
+5. Invalidate `transactions-orders` so `/transactions/orders` refreshes immediately
 
-(Optional: also drop "Segment" from the CSV template in `ListViewsList.tsx` — keeping it for backward compat is fine; will leave as-is unless you want it removed.)
+### Non-breaking detail
+- Keep using `products` and `order_items` tables already in place
+- Do not change schema
+- Preserve current statuses (`completed`, `pending`, `cancelled`)
 
-## 2. Fix unrealistic Orders counts
+## 2. Make `/transactions/orders` reflect meaningful customer purchase data
+Right now the table mixes:
+- unwanted manual/system rows
+- seed rows linked to only a few customers
+- customer aggregate values (`total_orders`, `total_spent`) that do not match actual order rows
 
-Current data has e.g. 93,792 orders for ₹4.96L spent — clearly a seeding bug.
+To fix this, rebuild the order dataset so it aligns with Customers.
 
-**Fix via data update (insert tool, no schema change):**
-For every customer, derive a realistic order count from `total_spent` using an average order value of **₹3,500** (typical jewellery store basket), with ±25% randomness, and clamped to a sensible range:
+### Data cleanup
+Remove unwanted rows from `orders` and matching `order_items` for:
+- rows with `created_by = 'System'`
+- old seed rows that do not match the intended customer-based model
+- any rows not meant for the Transactions module view
 
-```sql
-UPDATE customers
-SET total_orders = GREATEST(
-  1,
-  LEAST(
-    200,
-    ROUND( (total_spent / (2800 + random() * 1400))::numeric )::int
-  )
-);
-```
+This is a data operation, not a schema change.
 
-Result: a customer who spent ₹4.96L will show ~120–180 orders; a customer who spent ₹3,500 will show ~1 order. Proportional and believable.
+## 3. Reseed orders from customer purchase aggregates
+Generate fresh `orders` + `order_items` records based on existing customer data.
 
-Note: the 80 real `orders` rows we seeded earlier remain intact — only the aggregate `total_orders` column is corrected. The `update_customer_stats` trigger only fires on new orders, so this manual recompute is safe.
+### Rule
+For each customer:
+- create approximately `customers.total_orders` order rows
+- distribute those rows so the sum of completed order totals is close to `customers.total_spent`
+- spread dates realistically over recent months
+- assign products from the existing `products` table
+- create 1–N order items per order so totals look believable
+- ensure no orphaned rows
 
-## 3. Move "List Views" into each Transactions page; remove from Communication Center
+### Recommended seeding model
+For every customer with `total_orders > 0` and `total_spent > 0`:
+- derive an average order value from `total_spent / total_orders`
+- create multiple orders with randomized variation around that average
+- distribute totals across selected products and quantities
+- make most rows `completed`
+- allow a small share of `pending` / `cancelled` only if they do not distort the customer totals shown in Customers
 
-### 3a. Sidebar
-**`src/components/layout/AppSidebar.tsx`** — delete the `{ title: "List Views", href: "/list-views", … }` child from the **Communication Center** group. Routes (`/list-views`, `/list-views/new`, `/list-views/:id`) stay registered so existing journey deep-links still work.
+### Important consistency rule
+After reseeding:
+- `orders` page should reflect the customer purchase story
+- `customers.total_orders` and `customers.total_spent` should match the rebuilt order history closely
+- if needed, recompute customer aggregates from the new completed orders so Customers and Orders stay aligned
 
-### 3b. New shared component
-**New: `src/components/transactions/EntityListViewsBar.tsx`** — a compact toolbar that, given an `entity` (`"customers" | "products" | "orders"`):
-- Fetches `list_views` filtered by `entity_type = entity`
-- Renders each as a clickable chip/button. Clicking applies the saved filters to the page's table (passes filters back via callback) and highlights the active one.
-- "All records" chip resets filters.
-- Dropdown menu next to each chip: **Edit** → `/list-views/{id}`, **Duplicate**, **Delete**.
-- Trailing **+ New List View** button → `/list-views/new?entity={entity}` (pre-selects entity in the builder).
+## 4. Improve `/transactions/orders` display
+Update `src/pages/transactions/OrdersList.tsx` so the list remains clean and useful after reseeding.
 
-### 3c. List View Builder pre-select
-**`src/pages/listviews/ListViewBuilder.tsx`** — when `isNew` and the URL has `?entity=customers|products|orders`, initialise `entityType` from the query param and lock the Entity dropdown (still editable but defaulted). After save, navigate back to `/transactions/{entity}` instead of `/list-views/{id}` when arrived via `?entity=`.
+### UI improvements
+- Continue to read from `orders`
+- Optionally add a compact item-count column using `order_items`
+- Keep search, pagination, and list-view filtering intact
+- Ensure newly created multi-product orders show up immediately after save
 
-### 3d. Wire toolbar + "New record" button into each page
-
-Each of the three transactions pages gets the same header layout:
-
-```
-[Search input]   [List View chips: All | High Value | Birthdays… | + New List View]   [+ New {Entity}]
-```
-
-**`src/pages/transactions/CustomersList.tsx`**
-- Add `<EntityListViewsBar entity="customers" onApply={setActiveFilters} />`
-- Add **"+ New Customer"** button → opens a `CustomerFormDialog` (new) that inserts into `customers` (fields: name, phone, email, tier, DOB, anniversary). Refetches on success.
-- When `activeFilters` is set, query merges those filters using existing `executeListView` from `src/lib/listViewExecutor.ts` (already supports all operator types incl. `upcoming_anniversary_n_days`).
-
-**`src/pages/transactions/ProductsList.tsx`**
-- Add `<EntityListViewsBar entity="products" />`
-- Add **"+ New Product"** button → `ProductFormDialog` (new): name, sku, category, brand, price, stock_qty, model, warranty (nullable defaults).
-
-**`src/pages/transactions/OrdersList.tsx`**
-- Add `<EntityListViewsBar entity="orders" />`
-- Add **"+ New Order"** button → `OrderFormDialog` (new): customer (SearchableSelect), product (SearchableSelect), quantity, status. Auto-computes `total_amount = price × qty`, generates `order_number`, inserts both `orders` + `order_items`. The existing `update_customer_stats` trigger updates customer aggregates automatically.
-
-### 3e. Cleanup `ListViewsList.tsx` (now unreachable from sidebar)
-Leave the file in place (route still works for direct links) but no nav entry. No code change required.
-
-## Files Touched
-
-**Edited:**
-- `src/components/layout/AppSidebar.tsx` — remove List Views from Communication Center
-- `src/pages/transactions/CustomersList.tsx` — hide Segment, add list-view bar + New Customer
-- `src/pages/transactions/ProductsList.tsx` — add list-view bar + New Product
-- `src/pages/transactions/OrdersList.tsx` — add list-view bar + New Order
-- `src/pages/listviews/ListViewBuilder.tsx` — accept `?entity=` query param + redirect back
-
-**New:**
-- `src/components/transactions/EntityListViewsBar.tsx`
-- `src/components/transactions/CustomerFormDialog.tsx`
-- `src/components/transactions/ProductFormDialog.tsx`
+## 5. Files to update
+### Edit
 - `src/components/transactions/OrderFormDialog.tsx`
+- `src/pages/transactions/OrdersList.tsx`
 
-**Data updates (insert tool):**
-- Recompute `customers.total_orders` proportional to `total_spent`
+### Likely read/verify during implementation
+- `src/pages/transactions/CustomersList.tsx`
+- `src/integrations/supabase/types.ts`
+- `src/lib/listViewExecutor.ts`
 
-## Non-breaking guarantees
+## 6. Data work required
+Because this request includes deleting and rebuilding existing order records, implementation will include backend data operations:
+- delete unwanted order/order_item rows
+- insert rebuilt `orders`
+- insert rebuilt `order_items`
+- optionally update customer aggregates to match the rebuilt order history
 
-- `/list-views/*` routes remain functional (Journey Builder still uses them)
-- POS pages, schemas untouched
-- Existing seeded orders/customers/products data preserved
-- `customer_segment` column kept in DB (only hidden in UI) — Journey Builder segmentation still works
-
+## 7. Outcome
+After implementation:
+- “New Order” supports multiple products in one order
+- clicking Create immediately adds the order to `/transactions/orders`
+- unwanted legacy rows are removed
+- Orders page becomes a believable transaction history derived from customer purchase totals
+- Customers and Orders stay aligned instead of showing contradictory numbers
