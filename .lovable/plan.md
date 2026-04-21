@@ -1,68 +1,58 @@
 
 
-## Approval Workflow for Journeys
+## Approval Inbox for Journey Builder
 
-Add a "Submit for Approval" workflow to `/communication/journeys` without altering existing layout or behavior.
+Add a "View Approvals" button (with pending count badge) and an inbox modal to `/communication/journeys` so approvers can act on pending journey approvals from one place.
 
-### 1. Database (migration)
+### 1. Frontend — `src/pages/communication/JourneyList.tsx` (additive only)
 
-Add nullable columns to `journeys` (additive, non-breaking):
+**Header action bar (next to "Create Journey")**
+- New secondary `Button` (variant `outline`): label "View Approvals". 
+- When `pendingCount > 0`, show inline count badge: "View Approvals (N)".
+- Always visible to all users (per spec). If user has no assigned approvals, the inbox shows an empty state: "No approvals assigned".
 
-- `approval_status` text — values: `draft`, `pending`, `approved`, `rejected` (default `draft`)
-- `approver_id` uuid — references `profiles(id)`
-- `submitted_at` timestamptz
-- `approved_at` timestamptz
-- `rejection_reason` text
-- `approval_notes` text
+**Pending count query**
+- `useQuery(["journey-approvals-count", user.id])`: counts journeys where `approval_status = 'pending'` AND `approver_id = current user`.
+- Re-fetched on inbox open and after every approve/reject (invalidation).
 
-Existing `status` column remains untouched. Existing rows get `approval_status = 'draft'` by default.
+**View Approvals modal** (new `<Dialog>`, large width)
+- Tabs: **Pending** (default) · **Approved** · **Rejected**.
+- Each tab is a table fed by a query filtered by `approval_status` and `approver_id = current user`.
+- Columns: Journey Name, Submitted By (lookup `profiles.username` from `created_by`), Submitted Date (`submitted_at`), Schedule (derived from `canvas_data` entry node, same helper already used for the submit modal), Channels (derived from `canvas_data` message nodes), Audience (`list_view.name`), Actions.
+- **Pending tab actions per row:**
+  - **Approve** — mutation: update `approval_status = 'approved'`, `approved_at = now()`, clear `rejection_reason`. Toast + invalidate inbox + count.
+  - **Reject** — opens a small inline prompt requiring `rejection_reason` (textarea, required). Mutation: update `approval_status = 'rejected'`, `rejection_reason`. Toast + invalidate.
+- **Approved / Rejected tabs:** read-only history (no actions). Rejected tab also shows the `rejection_reason`.
+- Optional filter inputs above the table: by channel (multi-select derived from current rows) and by submission date range. Implemented as simple client-side filters over the fetched list.
 
-### 2. Frontend — `src/pages/communication/JourneyList.tsx`
+**Backward compatibility**
+- All existing `journeys` rows have `approval_status` defaulted to `'draft'` by the migration already applied.
+- Any journey that was previously submitted (i.e. has `approval_status = 'pending'` and a non-null `approver_id`) will appear in the Pending tab automatically — no data migration needed.
+- Rows with `approval_status` null/missing are treated as Draft and excluded from the inbox; rendering elsewhere is unchanged.
 
-**New "Submit" action button** in each row's actions cell:
-- Icon: `Send` (lucide-react)
-- Visible only when `journey.status === 'draft'` AND `approval_status` is `null`/`'draft'`/`'rejected'`
-- Placed alongside existing Play/Pause/Analytics/Delete buttons (no layout change)
+**Access control**
+- Inbox queries always filter by `approver_id = current user`, so non-approvers see an empty list (and a 0 badge).
+- The button itself stays visible to everyone — the modal handles the empty state.
 
-**Status column enhancement:** when `approval_status === 'pending'`, show an additional small badge "Pending Approval" next to the existing status badge. Approved/Rejected get matching badges. Existing badges and colors untouched.
+### 2. Backend / Database
 
-**Submit for Approval Modal** (new `<Dialog>`), opens on Submit click. Sections:
+No schema changes required. The columns added in the previous step (`approval_status`, `approver_id`, `submitted_at`, `approved_at`, `rejection_reason`, `approval_notes`) cover the entire workflow.
 
-- **A. Journey Summary**
-  - Name, Status, Created By (from `profiles` lookup), Last Updated (`updated_at`)
-- **B. Schedule Details**
-  - Start Date / End Date / Frequency (derived from canvas Entry node config when available; show "—" if not set; read-only)
-- **C. Channel Summary**
-  - Scan `canvas_data.nodes` for `message` nodes, list channels in use (Email / SMS / WhatsApp / WhatsApp Template) with template names where applicable
-- **D. Audience Summary**
-  - List View name (already joined) + estimated audience size (reuse `executeListView({ countOnly: true })` — same pattern already used in this file)
-- **E. Approver Selection** (required)
-  - `SearchableSelect` populated from `profiles` joined to `user_roles_master`, filtered to roles `Store Manager` and `Super Admin` (these are the manager-level roles in this project)
-- **F. Notes** (optional textarea: "Add notes for approver")
+All approve/reject/list/count operations use direct `supabase.from("journeys")` queries with filters — no new edge functions or RPCs.
 
-**Submit action** updates the journey row:
-```
-approval_status = 'pending'
-approver_id = <selected>
-submitted_at = now()
-approval_notes = <notes>
-```
-On success: toast, close modal, invalidate `journeys` query.
+### 3. Real-time refresh
 
-**Post-submit UI behavior:**
-- Submit button hidden (already covered by the visibility rule above)
-- Pending Approval badge shown
-- Existing Play action remains — but for governance we will additionally disable the Play (activate) button while `approval_status === 'pending'` so a draft cannot be activated until approved (small additive guard, no removal of existing logic)
+After each Approve/Reject the relevant queries are invalidated (`journeys`, `journey-approvals-pending`, `journey-approvals-count`), so the badge count and the row list update immediately. No polling/realtime channel added (keeps it lightweight); the count refetches on window focus per react-query defaults.
 
-### 3. Out of scope (future-ready, as noted)
+### 4. Constraints honored
 
-Approve/Reject screens for the approver are not built in this round — only the schema fields and submission flow are added so the future approval UI can plug in directly.
+- Journey Builder canvas, node panels, analytics, list-view sourcing, existing Submit-for-Approval modal, and existing row actions are untouched.
+- No theme/color changes; reuses existing badge classes (`approvalBadgeClass`) and `Button` variants.
+- No existing data is altered or deleted.
 
 ### Files
 
-**Migration (new):** add the six columns to `public.journeys`.
+**Edit only:** `src/pages/communication/JourneyList.tsx` — add the View Approvals button, count query, inbox `Dialog` with three tabs, approve/reject mutations, and a small reject-reason sub-dialog.
 
-**Edit:** `src/pages/communication/JourneyList.tsx` — add Submit button, modal, helper queries (created-by profile, manager-eligible approvers), mutation, and pending/approved/rejected badges.
-
-No other files need changes. Existing Journey Builder canvas, node panels, analytics, and list view sourcing remain intact.
+No other files, no new migrations, no new edge functions.
 
