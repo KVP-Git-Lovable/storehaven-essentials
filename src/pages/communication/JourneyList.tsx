@@ -277,6 +277,129 @@ export default function JourneyList() {
     return j.status === "draft" && (!a || a === "draft" || a === "rejected");
   };
 
+  // Pending approvals count for current user
+  const { data: pendingCount = 0 } = useQuery({
+    queryKey: ["journey-approvals-count", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return 0;
+      const { count, error } = await supabase
+        .from("journeys")
+        .select("id", { count: "exact", head: true })
+        .eq("approval_status" as any, "pending")
+        .eq("approver_id" as any, user.id);
+      if (error) return 0;
+      return count || 0;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Inbox journeys (pending/approved/rejected) assigned to current user
+  const { data: inboxJourneys = [] } = useQuery({
+    queryKey: ["journey-approvals-inbox", user?.id, inboxTab],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from("journeys")
+        .select("*, list_view:list_view_id(id, name, entity_type)")
+        .eq("approval_status" as any, inboxTab)
+        .eq("approver_id" as any, user.id)
+        .order("submitted_at" as any, { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id && showInbox,
+  });
+
+  // Submitter username lookup for inbox rows
+  const submitterIds = useMemo(
+    () => Array.from(new Set((inboxJourneys as any[]).map((j) => j.created_by).filter(Boolean))),
+    [inboxJourneys]
+  );
+  const { data: submitterMap = {} } = useQuery({
+    queryKey: ["journey-inbox-submitters", submitterIds],
+    queryFn: async () => {
+      if (submitterIds.length === 0) return {};
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, username")
+        .in("id", submitterIds as string[]);
+      if (error) return {};
+      const map: Record<string, string> = {};
+      (data || []).forEach((p: any) => { map[p.id] = p.username || ""; });
+      return map;
+    },
+    enabled: submitterIds.length > 0,
+  });
+
+  const deriveJourneyMeta = (j: any) => {
+    const canvas = j.canvas_data || {};
+    const nodes: any[] = Array.isArray(canvas.nodes) ? canvas.nodes : [];
+    const entry = nodes.find((n) => n.type === "entry" || n.data?.type === "entry");
+    const ed = entry?.data || {};
+    const messageNodes = nodes.filter((n) => n.type === "message" || n.data?.type === "message");
+    const channels = Array.from(new Set(messageNodes.map((n) => (n.data?.channel || n.data?.messageChannel || "").toLowerCase()).filter(Boolean)));
+    return {
+      schedule: [
+        ed.frequency || ed.triggerType || ed.trigger_type,
+        ed.startDate || ed.start_date ? `from ${format(new Date(ed.startDate || ed.start_date), "MMM d")}` : null,
+      ].filter(Boolean).join(" · ") || "—",
+      channels,
+    };
+  };
+
+  const filteredInbox = useMemo(() => {
+    return (inboxJourneys as any[]).filter((j) => {
+      const { channels } = deriveJourneyMeta(j);
+      if (filterChannel !== "all" && !channels.includes(filterChannel)) return false;
+      if (filterFrom && j.submitted_at && new Date(j.submitted_at) < new Date(filterFrom)) return false;
+      if (filterTo && j.submitted_at && new Date(j.submitted_at) > new Date(filterTo + "T23:59:59")) return false;
+      return true;
+    });
+  }, [inboxJourneys, filterChannel, filterFrom, filterTo]);
+
+  const allChannels = useMemo(() => {
+    const set = new Set<string>();
+    (inboxJourneys as any[]).forEach((j) => deriveJourneyMeta(j).channels.forEach((c) => set.add(c)));
+    return Array.from(set);
+  }, [inboxJourneys]);
+
+  const invalidateApprovalQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["journeys"] });
+    queryClient.invalidateQueries({ queryKey: ["journey-approvals-inbox"] });
+    queryClient.invalidateQueries({ queryKey: ["journey-approvals-count"] });
+  };
+
+  const approveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("journeys")
+        .update({ approval_status: "approved", approved_at: new Date().toISOString(), rejection_reason: null } as any)
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("Journey approved"); invalidateApprovalQueries(); },
+    onError: (e: any) => toast.error(e.message || "Failed to approve"),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async () => {
+      if (!rejectTarget) throw new Error("No journey selected");
+      if (!rejectReason.trim()) throw new Error("Rejection reason is required");
+      const { error } = await supabase
+        .from("journeys")
+        .update({ approval_status: "rejected", rejection_reason: rejectReason } as any)
+        .eq("id", rejectTarget.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Journey rejected");
+      setRejectTarget(null);
+      setRejectReason("");
+      invalidateApprovalQueries();
+    },
+    onError: (e: any) => toast.error(e.message || "Failed to reject"),
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
