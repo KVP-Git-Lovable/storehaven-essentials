@@ -89,6 +89,14 @@ export default function JourneyList() {
   // Schedule dialog state
   const [scheduleJourney, setScheduleJourney] = useState<any | null>(null);
 
+  // List filter state
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [frequencyFilter, setFrequencyFilter] = useState<string[]>([]);
+  const [channelFilter, setChannelFilter] = useState<string[]>([]);
+  const [createdByFilter, setCreatedByFilter] = useState<string>("");
+  const [listDateFrom, setListDateFrom] = useState<string>("");
+  const [listDateTo, setListDateTo] = useState<string>("");
+
   const { data: journeys = [], isLoading } = useQuery({
     queryKey: ["journeys"],
     queryFn: async () => {
