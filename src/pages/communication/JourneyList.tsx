@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Plus, Play, Pause, Trash2, BarChart3, GitBranch, Users, MessageSquare, ExternalLink, Send } from "lucide-react";
+import { Plus, Play, Pause, Trash2, BarChart3, GitBranch, Users, MessageSquare, ExternalLink, Send, Inbox, Check, X } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ENTITY_SCHEMAS, type EntityKey } from "@/lib/listViewSchema";
@@ -49,6 +50,15 @@ export default function JourneyList() {
   const [approverId, setApproverId] = useState<string>("");
   const [approvalNotes, setApprovalNotes] = useState<string>("");
   const [submitAudienceCount, setSubmitAudienceCount] = useState<number | null>(null);
+
+  // Approvals inbox state
+  const [showInbox, setShowInbox] = useState(false);
+  const [inboxTab, setInboxTab] = useState<"pending" | "approved" | "rejected">("pending");
+  const [rejectTarget, setRejectTarget] = useState<any | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [filterChannel, setFilterChannel] = useState<string>("all");
+  const [filterFrom, setFilterFrom] = useState<string>("");
+  const [filterTo, setFilterTo] = useState<string>("");
 
   const { data: journeys = [], isLoading } = useQuery({
     queryKey: ["journeys"],
@@ -267,6 +277,129 @@ export default function JourneyList() {
     return j.status === "draft" && (!a || a === "draft" || a === "rejected");
   };
 
+  // Pending approvals count for current user
+  const { data: pendingCount = 0 } = useQuery({
+    queryKey: ["journey-approvals-count", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return 0;
+      const { count, error } = await (supabase as any)
+        .from("journeys")
+        .select("id", { count: "exact", head: true })
+        .eq("approval_status", "pending")
+        .eq("approver_id", user.id);
+      if (error) return 0;
+      return count || 0;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Inbox journeys (pending/approved/rejected) assigned to current user
+  const { data: inboxJourneys = [] } = useQuery({
+    queryKey: ["journey-approvals-inbox", user?.id, inboxTab],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await (supabase as any)
+        .from("journeys")
+        .select("*, list_view:list_view_id(id, name, entity_type)")
+        .eq("approval_status", inboxTab)
+        .eq("approver_id", user.id)
+        .order("submitted_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id && showInbox,
+  });
+
+  // Submitter username lookup for inbox rows
+  const submitterIds = useMemo(
+    () => Array.from(new Set((inboxJourneys as any[]).map((j) => j.created_by).filter(Boolean))),
+    [inboxJourneys]
+  );
+  const { data: submitterMap = {} } = useQuery({
+    queryKey: ["journey-inbox-submitters", submitterIds],
+    queryFn: async () => {
+      if (submitterIds.length === 0) return {};
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, username")
+        .in("id", submitterIds as string[]);
+      if (error) return {};
+      const map: Record<string, string> = {};
+      (data || []).forEach((p: any) => { map[p.id] = p.username || ""; });
+      return map;
+    },
+    enabled: submitterIds.length > 0,
+  });
+
+  const deriveJourneyMeta = (j: any) => {
+    const canvas = j.canvas_data || {};
+    const nodes: any[] = Array.isArray(canvas.nodes) ? canvas.nodes : [];
+    const entry = nodes.find((n) => n.type === "entry" || n.data?.type === "entry");
+    const ed = entry?.data || {};
+    const messageNodes = nodes.filter((n) => n.type === "message" || n.data?.type === "message");
+    const channels = Array.from(new Set(messageNodes.map((n) => (n.data?.channel || n.data?.messageChannel || "").toLowerCase()).filter(Boolean)));
+    return {
+      schedule: [
+        ed.frequency || ed.triggerType || ed.trigger_type,
+        ed.startDate || ed.start_date ? `from ${format(new Date(ed.startDate || ed.start_date), "MMM d")}` : null,
+      ].filter(Boolean).join(" · ") || "—",
+      channels,
+    };
+  };
+
+  const filteredInbox = useMemo(() => {
+    return (inboxJourneys as any[]).filter((j) => {
+      const { channels } = deriveJourneyMeta(j);
+      if (filterChannel !== "all" && !channels.includes(filterChannel)) return false;
+      if (filterFrom && j.submitted_at && new Date(j.submitted_at) < new Date(filterFrom)) return false;
+      if (filterTo && j.submitted_at && new Date(j.submitted_at) > new Date(filterTo + "T23:59:59")) return false;
+      return true;
+    });
+  }, [inboxJourneys, filterChannel, filterFrom, filterTo]);
+
+  const allChannels = useMemo(() => {
+    const set = new Set<string>();
+    (inboxJourneys as any[]).forEach((j) => deriveJourneyMeta(j).channels.forEach((c) => set.add(c)));
+    return Array.from(set);
+  }, [inboxJourneys]);
+
+  const invalidateApprovalQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["journeys"] });
+    queryClient.invalidateQueries({ queryKey: ["journey-approvals-inbox"] });
+    queryClient.invalidateQueries({ queryKey: ["journey-approvals-count"] });
+  };
+
+  const approveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("journeys")
+        .update({ approval_status: "approved", approved_at: new Date().toISOString(), rejection_reason: null } as any)
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("Journey approved"); invalidateApprovalQueries(); },
+    onError: (e: any) => toast.error(e.message || "Failed to approve"),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async () => {
+      if (!rejectTarget) throw new Error("No journey selected");
+      if (!rejectReason.trim()) throw new Error("Rejection reason is required");
+      const { error } = await supabase
+        .from("journeys")
+        .update({ approval_status: "rejected", rejection_reason: rejectReason } as any)
+        .eq("id", rejectTarget.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Journey rejected");
+      setRejectTarget(null);
+      setRejectReason("");
+      invalidateApprovalQueries();
+    },
+    onError: (e: any) => toast.error(e.message || "Failed to reject"),
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -274,9 +407,15 @@ export default function JourneyList() {
           <h1 className="text-2xl font-bold tracking-tight">Journey Builder</h1>
           <p className="text-muted-foreground">Create automated messaging journeys for your audience segments</p>
         </div>
-        <Button onClick={() => setShowCreate(true)}>
-          <Plus className="mr-2 h-4 w-4" /> Create Journey
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setShowInbox(true)}>
+            <Inbox className="mr-2 h-4 w-4" />
+            View Approvals{pendingCount > 0 ? ` (${pendingCount})` : ""}
+          </Button>
+          <Button onClick={() => setShowCreate(true)}>
+            <Plus className="mr-2 h-4 w-4" /> Create Journey
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -566,6 +705,158 @@ export default function JourneyList() {
               disabled={!approverId || submitForApprovalMutation.isPending}
             >
               {submitForApprovalMutation.isPending ? "Submitting..." : "Submit for Approval"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Approvals Inbox Dialog */}
+      <Dialog open={showInbox} onOpenChange={setShowInbox}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader><DialogTitle>Journey Approvals</DialogTitle></DialogHeader>
+          <Tabs value={inboxTab} onValueChange={(v) => setInboxTab(v as any)}>
+            <TabsList>
+              <TabsTrigger value="pending">Pending{pendingCount > 0 ? ` (${pendingCount})` : ""}</TabsTrigger>
+              <TabsTrigger value="approved">Approved</TabsTrigger>
+              <TabsTrigger value="rejected">Rejected</TabsTrigger>
+            </TabsList>
+
+            {/* Filters */}
+            <div className="flex flex-wrap items-end gap-3 mt-4 mb-2">
+              <div>
+                <Label className="text-xs">Channel</Label>
+                <select
+                  className="block h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  value={filterChannel}
+                  onChange={(e) => setFilterChannel(e.target.value)}
+                >
+                  <option value="all">All</option>
+                  {allChannels.map((c) => (
+                    <option key={c} value={c} className="capitalize">{c}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label className="text-xs">From</Label>
+                <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="h-9 w-40" />
+              </div>
+              <div>
+                <Label className="text-xs">To</Label>
+                <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="h-9 w-40" />
+              </div>
+              {(filterChannel !== "all" || filterFrom || filterTo) && (
+                <Button variant="ghost" size="sm" onClick={() => { setFilterChannel("all"); setFilterFrom(""); setFilterTo(""); }}>
+                  Clear
+                </Button>
+              )}
+            </div>
+
+            {(["pending", "approved", "rejected"] as const).map((tab) => (
+              <TabsContent key={tab} value={tab} className="mt-2">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Journey</TableHead>
+                      <TableHead>Submitted By</TableHead>
+                      <TableHead>Submitted</TableHead>
+                      <TableHead>Schedule</TableHead>
+                      <TableHead>Channels</TableHead>
+                      <TableHead>Audience</TableHead>
+                      {tab === "rejected" && <TableHead>Reason</TableHead>}
+                      {tab === "pending" && <TableHead className="text-right">Actions</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredInbox.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={tab === "pending" || tab === "rejected" ? 7 : 6} className="text-center py-8 text-muted-foreground">
+                          {inboxJourneys.length === 0 ? "No approvals assigned" : "No items match the filters"}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredInbox.map((j: any) => {
+                        const meta = deriveJourneyMeta(j);
+                        return (
+                          <TableRow key={j.id}>
+                            <TableCell className="font-medium">{j.name}</TableCell>
+                            <TableCell>{(submitterMap as Record<string, string>)[j.created_by] || "—"}</TableCell>
+                            <TableCell>{j.submitted_at ? format(new Date(j.submitted_at), "MMM d, yyyy") : "—"}</TableCell>
+                            <TableCell className="text-sm">{meta.schedule}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap gap-1">
+                                {meta.channels.length === 0 ? "—" : meta.channels.map((c) => (
+                                  <Badge key={c} variant="outline" className="capitalize">{c}</Badge>
+                                ))}
+                              </div>
+                            </TableCell>
+                            <TableCell>{j.list_view?.name || "—"}</TableCell>
+                            {tab === "rejected" && (
+                              <TableCell className="text-sm text-muted-foreground max-w-xs truncate" title={j.rejection_reason || ""}>
+                                {j.rejection_reason || "—"}
+                              </TableCell>
+                            )}
+                            {tab === "pending" && (
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    title="Approve"
+                                    onClick={() => approveMutation.mutate(j.id)}
+                                    disabled={approveMutation.isPending}
+                                  >
+                                    <Check className="h-4 w-4 text-green-600" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    title="Reject"
+                                    className="text-destructive"
+                                    onClick={() => { setRejectTarget(j); setRejectReason(""); }}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </TabsContent>
+            ))}
+          </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Reason Dialog */}
+      <Dialog open={!!rejectTarget} onOpenChange={(open) => { if (!open) { setRejectTarget(null); setRejectReason(""); } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Reject Journey</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Provide a reason for rejecting <span className="font-medium text-foreground">{rejectTarget?.name}</span>.
+            </p>
+            <div>
+              <Label>Rejection Reason <span className="text-destructive">*</span></Label>
+              <Textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="e.g., Incorrect audience filter"
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRejectTarget(null); setRejectReason(""); }}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => rejectMutation.mutate()}
+              disabled={!rejectReason.trim() || rejectMutation.isPending}
+            >
+              {rejectMutation.isPending ? "Rejecting..." : "Reject"}
             </Button>
           </DialogFooter>
         </DialogContent>
