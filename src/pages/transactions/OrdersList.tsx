@@ -49,6 +49,16 @@ export default function OrdersList() {
           const byId = new Map((customers || []).map((c: any) => [c.id, c]));
           rows = rows.map((r: any) => ({ ...r, customers: byId.get(r.customer_id) || null }));
         }
+        const orderIds = rows.map((r: any) => r.id);
+        if (orderIds.length) {
+          const { data: itemCounts } = await supabase
+            .from("order_items")
+            .select("order_id")
+            .in("order_id", orderIds);
+          const counts = new Map<string, number>();
+          (itemCounts || []).forEach((item: any) => counts.set(item.order_id, (counts.get(item.order_id) || 0) + 1));
+          rows = rows.map((r: any) => ({ ...r, item_count: counts.get(r.id) || 0 }));
+        }
         const count = rows.length;
         const paged = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
         return { rows: paged, count };
@@ -61,7 +71,13 @@ export default function OrdersList() {
       q = q.range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
       const { data, error, count } = await q;
       if (error) throw error;
-      return { rows: data || [], count: count || 0 };
+      const orderIds = (data || []).map((row: any) => row.id);
+      if (!orderIds.length) return { rows: data || [], count: count || 0 };
+      const { data: itemCounts, error: itemErr } = await supabase.from("order_items").select("order_id").in("order_id", orderIds);
+      if (itemErr) throw itemErr;
+      const counts = new Map<string, number>();
+      (itemCounts || []).forEach((item: any) => counts.set(item.order_id, (counts.get(item.order_id) || 0) + 1));
+      return { rows: (data || []).map((row: any) => ({ ...row, item_count: counts.get(row.id) || 0 })), count: count || 0 };
     },
   });
 
@@ -105,6 +121,7 @@ export default function OrdersList() {
               <TableHead>Order #</TableHead>
               <TableHead>Customer</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="text-right">Items</TableHead>
               <TableHead>Payment</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead>Date</TableHead>
@@ -112,9 +129,9 @@ export default function OrdersList() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
             ) : (data?.rows || []).length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No orders found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No orders found.</TableCell></TableRow>
             ) : (
               data!.rows.map((o: any) => (
                 <TableRow key={o.id}>
@@ -124,6 +141,7 @@ export default function OrdersList() {
                     <div className="text-xs text-muted-foreground">{o.customers?.phone || ""}</div>
                   </TableCell>
                   <TableCell><Badge variant={statusVariant(o.status)} className="capitalize">{o.status}</Badge></TableCell>
+                  <TableCell className="text-right">{o.item_count || 0}</TableCell>
                   <TableCell><Badge variant="outline" className="capitalize">{o.payment_status || "—"}</Badge></TableCell>
                   <TableCell className="text-right font-medium">{inr(Number(o.total_amount))}</TableCell>
                   <TableCell className="text-xs">{format(new Date(o.created_at), "dd MMM yyyy, HH:mm")}</TableCell>
