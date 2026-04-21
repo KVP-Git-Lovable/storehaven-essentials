@@ -878,6 +878,16 @@ export default function JourneyList() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Schedule Dialog */}
+      {scheduleJourney && (
+        <JourneyScheduleDialog
+          open={!!scheduleJourney}
+          onOpenChange={(o) => { if (!o) setScheduleJourney(null); }}
+          journeyId={scheduleJourney.id}
+          journeyName={scheduleJourney.name}
+          existing={scheduleJourney.schedule || null}
+        />
+      )}
     </div>
   );
 }
