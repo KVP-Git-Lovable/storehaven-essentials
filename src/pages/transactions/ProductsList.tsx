@@ -11,6 +11,7 @@ import { format } from "date-fns";
 import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar";
 import { ProductFormDialog } from "@/components/transactions/ProductFormDialog";
 import { executeListView } from "@/lib/listViewExecutor";
+import { deleteProductSafely } from "@/lib/productDeletion";
 import type { FilterCondition } from "@/lib/listViewSchema";
 import {
   AlertDialog,
@@ -64,8 +65,7 @@ export default function ProductsList() {
 
   const deleteMutation = useMutation({
     mutationFn: async (productId: string) => {
-      const { error } = await supabase.from("products").delete().eq("id", productId);
-      if (error) throw error;
+      await deleteProductSafely(productId);
     },
     onSuccess: () => {
       toast.success("Product deleted");
