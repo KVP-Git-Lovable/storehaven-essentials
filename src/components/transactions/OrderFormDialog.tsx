@@ -15,13 +15,27 @@ import { toast } from "sonner";
 interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  order?: {
+    id: string;
+    customer_id: string | null;
+    status: string;
+    payment_status: string;
+    payment_method: string;
+    order_number: string;
+    subtotal: number;
+    tax_amount: number | null;
+    total_amount: number;
+  } | null;
+  mode?: "create" | "edit" | "view";
 }
 
-export function OrderFormDialog({ open, onOpenChange }: Props) {
+export function OrderFormDialog({ open, onOpenChange, order = null, mode = "create" }: Props) {
   const qc = useQueryClient();
   const [customerId, setCustomerId] = useState("");
   const [status, setStatus] = useState("completed");
   const [lineItems, setLineItems] = useState([{ productId: "", quantity: "1" }]);
+  const isView = mode === "view";
+  const isEdit = mode === "edit";
 
   const { data: customers = [] } = useQuery({
     queryKey: ["order-form-customers"],
@@ -40,6 +54,29 @@ export function OrderFormDialog({ open, onOpenChange }: Props) {
       return data || [];
     },
   });
+
+  const { data: existingOrderItems = [] } = useQuery({
+    queryKey: ["order-form-items", order?.id],
+    enabled: open && !!order?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("order_items")
+        .select("item_id, quantity")
+        .eq("order_id", order!.id);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  useMemo(() => {
+    if (!open) return null;
+    if (!order) return null;
+    return null;
+  }, [open, order]);
+
+  useState(() => undefined);
+
+  React.useEffect?.(() => {});
 
   const createMut = useMutation({
     mutationFn: async () => {
