@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Plus, Play, Pause, Trash2, BarChart3, GitBranch, Users, MessageSquare, ExternalLink } from "lucide-react";
+import { Plus, Play, Pause, Trash2, BarChart3, GitBranch, Users, MessageSquare, ExternalLink, Send } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ENTITY_SCHEMAS, type EntityKey } from "@/lib/listViewSchema";
@@ -24,6 +24,18 @@ const statusColors: Record<string, string> = {
   paused: "bg-yellow-100 text-yellow-800",
 };
 
+const approvalBadgeClass: Record<string, string> = {
+  pending: "bg-yellow-100 text-yellow-800",
+  approved: "bg-green-100 text-green-800",
+  rejected: "bg-red-100 text-red-800",
+};
+
+const approvalLabel: Record<string, string> = {
+  pending: "Pending Approval",
+  approved: "Approved",
+  rejected: "Rejected",
+};
+
 export default function JourneyList() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -32,12 +44,18 @@ export default function JourneyList() {
   const [form, setForm] = useState<{ name: string; description: string; list_view_id: string }>({ name: "", description: "", list_view_id: "" });
   const [audienceCount, setAudienceCount] = useState<number | null>(null);
 
+  // Submit-for-approval modal state
+  const [submitJourney, setSubmitJourney] = useState<any | null>(null);
+  const [approverId, setApproverId] = useState<string>("");
+  const [approvalNotes, setApprovalNotes] = useState<string>("");
+  const [submitAudienceCount, setSubmitAudienceCount] = useState<number | null>(null);
+
   const { data: journeys = [], isLoading } = useQuery({
     queryKey: ["journeys"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("journeys")
-        .select("*, list_view:list_view_id(id, name, entity_type)")
+        .select("*, list_view:list_view_id(id, name, entity_type, selected_fields, filters)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -54,6 +72,39 @@ export default function JourneyList() {
       if (error) throw error;
       return data as any[];
     },
+  });
+
+  // Approver-eligible profiles: managers and above
+  const { data: approvers = [] } = useQuery({
+    queryKey: ["approver-eligible-profiles"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, email, role:role_id(id, name)")
+        .order("full_name", { ascending: true });
+      if (error) throw error;
+      const managerRoles = ["store manager", "super admin", "admin", "manager"];
+      return (data || []).filter((p: any) => {
+        const roleName = (p.role?.name || "").toLowerCase();
+        return managerRoles.some((r) => roleName.includes(r));
+      });
+    },
+  });
+
+  // Created-by lookup for the journey being submitted
+  const { data: createdByProfile } = useQuery({
+    queryKey: ["journey-created-by", submitJourney?.created_by],
+    queryFn: async () => {
+      if (!submitJourney?.created_by) return null;
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .eq("id", submitJourney.created_by)
+        .maybeSingle();
+      if (error) return null;
+      return data;
+    },
+    enabled: !!submitJourney?.created_by,
   });
 
   const { data: stats } = useQuery({
@@ -89,6 +140,51 @@ export default function JourneyList() {
       setAudienceCount(null);
     }
   };
+
+  const openSubmitDialog = async (journey: any) => {
+    setSubmitJourney(journey);
+    setApproverId("");
+    setApprovalNotes("");
+    setSubmitAudienceCount(null);
+    if (journey.list_view) {
+      try {
+        const result = await executeListView(
+          {
+            entity_type: journey.list_view.entity_type,
+            selected_fields: journey.list_view.selected_fields,
+            filters: journey.list_view.filters,
+          },
+          { countOnly: true }
+        );
+        setSubmitAudienceCount(result.count);
+      } catch {
+        setSubmitAudienceCount(null);
+      }
+    }
+  };
+
+  // Derive schedule/channels from canvas_data
+  const submitDerived = useMemo(() => {
+    if (!submitJourney) return { startDate: null, endDate: null, frequency: null, channels: [] as { channel: string; templateName?: string }[] };
+    const canvas = submitJourney.canvas_data || {};
+    const nodes: any[] = Array.isArray(canvas.nodes) ? canvas.nodes : [];
+    const entry = nodes.find((n) => n.type === "entry" || n.data?.type === "entry");
+    const entryData = entry?.data || {};
+    const messageNodes = nodes.filter((n) => n.type === "message" || n.data?.type === "message");
+    const channels = messageNodes.map((n) => {
+      const d = n.data || {};
+      return {
+        channel: d.channel || d.messageChannel || "—",
+        templateName: d.templateName || d.template_name || d.template?.name,
+      };
+    });
+    return {
+      startDate: entryData.startDate || entryData.start_date || null,
+      endDate: entryData.endDate || entryData.end_date || null,
+      frequency: entryData.frequency || entryData.triggerType || entryData.trigger_type || null,
+      channels,
+    };
+  }, [submitJourney]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -139,6 +235,37 @@ export default function JourneyList() {
       toast.success("Journey deleted");
     },
   });
+
+  const submitForApprovalMutation = useMutation({
+    mutationFn: async () => {
+      if (!submitJourney) throw new Error("No journey selected");
+      if (!approverId) throw new Error("Please select an approver");
+      const { error } = await supabase
+        .from("journeys")
+        .update({
+          approval_status: "pending",
+          approver_id: approverId,
+          submitted_at: new Date().toISOString(),
+          approval_notes: approvalNotes || null,
+          rejection_reason: null,
+        } as any)
+        .eq("id", submitJourney.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Submitted for approval");
+      setSubmitJourney(null);
+      setApproverId("");
+      setApprovalNotes("");
+      queryClient.invalidateQueries({ queryKey: ["journeys"] });
+    },
+    onError: (e: any) => toast.error(e.message || "Failed to submit for approval"),
+  });
+
+  const canSubmit = (j: any) => {
+    const a = j.approval_status;
+    return j.status === "draft" && (!a || a === "draft" || a === "rejected");
+  };
 
   return (
     <div className="space-y-6">
@@ -205,52 +332,73 @@ export default function JourneyList() {
             ) : journeys.length === 0 ? (
               <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No journeys yet. Create one to get started.</TableCell></TableRow>
             ) : (
-              journeys.map((j: any) => (
-                <TableRow key={j.id} className="cursor-pointer" onClick={() => navigate(`/communication/journeys/${j.id}`)}>
-                  <TableCell className="font-medium">{j.name}</TableCell>
-                  <TableCell>
-                    <Badge className={statusColors[j.status] || ""}>{j.status}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {j.list_view ? (
-                      <span>{j.list_view.name} <Badge variant="outline" className="ml-1 capitalize">{ENTITY_SCHEMAS[j.list_view.entity_type as EntityKey]?.label || j.list_view.entity_type}</Badge></span>
-                    ) : j.segment_type ? (
-                      <span className="capitalize">{j.segment_type} <Badge variant="outline" className="ml-1">legacy</Badge></span>
-                    ) : "—"}
-                  </TableCell>
-                  <TableCell>{format(new Date(j.created_at), "MMM d, yyyy")}</TableCell>
-                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-1">
-                      {j.status === "draft" && (
-                        <Button size="sm" variant="ghost" onClick={() => updateStatusMutation.mutate({ id: j.id, status: "active" })}>
-                          <Play className="h-4 w-4" />
+              journeys.map((j: any) => {
+                const a = j.approval_status;
+                const showApprovalBadge = a && a !== "draft";
+                return (
+                  <TableRow key={j.id} className="cursor-pointer" onClick={() => navigate(`/communication/journeys/${j.id}`)}>
+                    <TableCell className="font-medium">{j.name}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <Badge className={statusColors[j.status] || ""}>{j.status}</Badge>
+                        {showApprovalBadge && (
+                          <Badge className={approvalBadgeClass[a] || ""}>{approvalLabel[a] || a}</Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {j.list_view ? (
+                        <span>{j.list_view.name} <Badge variant="outline" className="ml-1 capitalize">{ENTITY_SCHEMAS[j.list_view.entity_type as EntityKey]?.label || j.list_view.entity_type}</Badge></span>
+                      ) : j.segment_type ? (
+                        <span className="capitalize">{j.segment_type} <Badge variant="outline" className="ml-1">legacy</Badge></span>
+                      ) : "—"}
+                    </TableCell>
+                    <TableCell>{format(new Date(j.created_at), "MMM d, yyyy")}</TableCell>
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        {canSubmit(j) && (
+                          <Button size="sm" variant="ghost" title="Submit for Approval" onClick={() => openSubmitDialog(j)}>
+                            <Send className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {j.status === "draft" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            title={a === "pending" ? "Awaiting approval" : "Activate"}
+                            disabled={a === "pending"}
+                            onClick={() => updateStatusMutation.mutate({ id: j.id, status: "active" })}
+                          >
+                            <Play className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {j.status === "active" && (
+                          <Button size="sm" variant="ghost" onClick={() => updateStatusMutation.mutate({ id: j.id, status: "paused" })}>
+                            <Pause className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {j.status === "paused" && (
+                          <Button size="sm" variant="ghost" onClick={() => updateStatusMutation.mutate({ id: j.id, status: "active" })}>
+                            <Play className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" onClick={() => navigate(`/communication/journeys/${j.id}/analytics`)}>
+                          <BarChart3 className="h-4 w-4" />
                         </Button>
-                      )}
-                      {j.status === "active" && (
-                        <Button size="sm" variant="ghost" onClick={() => updateStatusMutation.mutate({ id: j.id, status: "paused" })}>
-                          <Pause className="h-4 w-4" />
+                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(j.id)}>
+                          <Trash2 className="h-4 w-4" />
                         </Button>
-                      )}
-                      {j.status === "paused" && (
-                        <Button size="sm" variant="ghost" onClick={() => updateStatusMutation.mutate({ id: j.id, status: "active" })}>
-                          <Play className="h-4 w-4" />
-                        </Button>
-                      )}
-                      <Button size="sm" variant="ghost" onClick={() => navigate(`/communication/journeys/${j.id}/analytics`)}>
-                        <BarChart3 className="h-4 w-4" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(j.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
       </Card>
 
+      {/* Create Journey Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent>
           <DialogHeader><DialogTitle>Create Journey</DialogTitle></DialogHeader>
@@ -294,6 +442,130 @@ export default function JourneyList() {
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button onClick={() => createMutation.mutate()} disabled={!form.name || createMutation.isPending}>
               {createMutation.isPending ? "Creating..." : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Submit for Approval Dialog */}
+      <Dialog open={!!submitJourney} onOpenChange={(open) => !open && setSubmitJourney(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader><DialogTitle>Submit for Approval</DialogTitle></DialogHeader>
+          {submitJourney && (
+            <div className="space-y-5 px-1">
+              {/* A. Journey Summary */}
+              <section>
+                <h3 className="text-sm font-semibold mb-2">Journey Summary</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-muted-foreground text-xs">Name</p>
+                    <p className="font-medium">{submitJourney.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Status</p>
+                    <Badge className={statusColors[submitJourney.status] || ""}>{submitJourney.status}</Badge>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Created By</p>
+                    <p className="font-medium">{createdByProfile?.full_name || createdByProfile?.email || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Last Updated</p>
+                    <p className="font-medium">{submitJourney.updated_at ? format(new Date(submitJourney.updated_at), "MMM d, yyyy h:mm a") : "—"}</p>
+                  </div>
+                </div>
+              </section>
+
+              {/* B. Schedule */}
+              <section>
+                <h3 className="text-sm font-semibold mb-2">Schedule Details</h3>
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <p className="text-muted-foreground text-xs">Start Date</p>
+                    <p className="font-medium">{submitDerived.startDate ? format(new Date(submitDerived.startDate), "MMM d, yyyy") : "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">End Date</p>
+                    <p className="font-medium">{submitDerived.endDate ? format(new Date(submitDerived.endDate), "MMM d, yyyy") : "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Frequency</p>
+                    <p className="font-medium capitalize">{submitDerived.frequency || "—"}</p>
+                  </div>
+                </div>
+              </section>
+
+              {/* C. Channels */}
+              <section>
+                <h3 className="text-sm font-semibold mb-2">Channel Summary</h3>
+                {submitDerived.channels.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No message nodes configured yet.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {submitDerived.channels.map((c, i) => (
+                      <Badge key={i} variant="outline" className="capitalize">
+                        {c.channel}{c.templateName ? ` · ${c.templateName}` : ""}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* D. Audience */}
+              <section>
+                <h3 className="text-sm font-semibold mb-2">Audience Summary</h3>
+                {submitJourney.list_view ? (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="font-medium">{submitJourney.list_view.name}</span>
+                    <Badge variant="outline" className="capitalize">
+                      {ENTITY_SCHEMAS[submitJourney.list_view.entity_type as EntityKey]?.label || submitJourney.list_view.entity_type}
+                    </Badge>
+                    {submitAudienceCount !== null && (
+                      <Badge variant="secondary">Est. {submitAudienceCount} contacts</Badge>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No list view linked.</p>
+                )}
+              </section>
+
+              {/* E. Approver */}
+              <section>
+                <Label>Select Approver <span className="text-destructive">*</span></Label>
+                <SearchableSelect
+                  value={approverId}
+                  onValueChange={setApproverId}
+                  options={approvers.map((p: any) => ({
+                    value: p.id,
+                    label: p.full_name || p.email || "Unnamed",
+                    subtitle: p.role?.name || undefined,
+                  }))}
+                  placeholder="Select an approver..."
+                  searchPlaceholder="Search managers..."
+                  emptyMessage="No eligible approvers found"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Showing manager-level users (Store Manager, Admin, Super Admin).</p>
+              </section>
+
+              {/* F. Notes */}
+              <section>
+                <Label>Notes for Approver (optional)</Label>
+                <Textarea
+                  value={approvalNotes}
+                  onChange={(e) => setApprovalNotes(e.target.value)}
+                  placeholder="Add context for the approver..."
+                  rows={3}
+                />
+              </section>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSubmitJourney(null)}>Cancel</Button>
+            <Button
+              onClick={() => submitForApprovalMutation.mutate()}
+              disabled={!approverId || submitForApprovalMutation.isPending}
+            >
+              {submitForApprovalMutation.isPending ? "Submitting..." : "Submit for Approval"}
             </Button>
           </DialogFooter>
         </DialogContent>

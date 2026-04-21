@@ -3103,6 +3103,10 @@ export type Database = {
       }
       journeys: {
         Row: {
+          approval_notes: string | null
+          approval_status: string
+          approved_at: string | null
+          approver_id: string | null
           canvas_data: Json
           created_at: string
           created_by: string | null
@@ -3111,11 +3115,17 @@ export type Database = {
           id: string
           list_view_id: string | null
           name: string
+          rejection_reason: string | null
           segment_type: string | null
           status: string
+          submitted_at: string | null
           updated_at: string
         }
         Insert: {
+          approval_notes?: string | null
+          approval_status?: string
+          approved_at?: string | null
+          approver_id?: string | null
           canvas_data?: Json
           created_at?: string
           created_by?: string | null
@@ -3124,11 +3134,17 @@ export type Database = {
           id?: string
           list_view_id?: string | null
           name: string
+          rejection_reason?: string | null
           segment_type?: string | null
           status?: string
+          submitted_at?: string | null
           updated_at?: string
         }
         Update: {
+          approval_notes?: string | null
+          approval_status?: string
+          approved_at?: string | null
+          approver_id?: string | null
           canvas_data?: Json
           created_at?: string
           created_by?: string | null
@@ -3137,11 +3153,20 @@ export type Database = {
           id?: string
           list_view_id?: string | null
           name?: string
+          rejection_reason?: string | null
           segment_type?: string | null
           status?: string
+          submitted_at?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "journeys_approver_id_fkey"
+            columns: ["approver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "journeys_created_by_fkey"
             columns: ["created_by"]
