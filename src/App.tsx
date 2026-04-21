@@ -126,6 +126,7 @@ const WhatsAppTemplates = lazy(() => import("./pages/communication/WhatsAppTempl
 const WhatsAppTemplateDetails = lazy(() => import("./pages/communication/WhatsAppTemplateDetails"));
 const MessageLog = lazy(() => import("./pages/communication/MessageLog"));
 const JourneyList = lazy(() => import("./pages/communication/JourneyList"));
+const CommunicationCalendar = lazy(() => import("./pages/communication/CommunicationCalendar"));
 const JourneyBuilder = lazy(() => import("./pages/communication/JourneyBuilder"));
 const JourneyAnalytics = lazy(() => import("./pages/communication/JourneyAnalytics"));
 const ContactsManager = lazy(() => import("./pages/communication/ContactsManager"));
@@ -241,6 +242,7 @@ const App = () => (
                 <Route path="/communication/journeys" element={<JourneyList />} />
                 <Route path="/communication/journeys/:id" element={<JourneyBuilder />} />
                 <Route path="/communication/journeys/:id/analytics" element={<JourneyAnalytics />} />
+                <Route path="/communication/calendar" element={<CommunicationCalendar />} />
                 <Route path="/communication/contacts" element={<ContactsManager />} />
                 <Route path="/communication/whatsapp" element={<WhatsAppCenter />} />
                 <Route path="/communication/whatsapp/senders" element={<WhatsAppSenders />} />

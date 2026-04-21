@@ -194,6 +194,7 @@ const navigation: NavItem[] = [
       { title: "Voice", href: "/communication/voice", moduleKey: "communication.voice" },
       { title: "E-mail", href: "/communication/email", moduleKey: "communication.email" },
       { title: "Journey Builder", href: "/communication/journeys", moduleKey: "communication.journeys" },
+      { title: "Calendar", href: "/communication/calendar", moduleKey: "communication.journeys" },
     ],
   },
   {
