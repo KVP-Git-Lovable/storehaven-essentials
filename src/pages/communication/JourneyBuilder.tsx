@@ -24,7 +24,7 @@ import { ExitNode } from "@/components/journey/ExitNode";
 import { NodePropertyPanel } from "@/components/journey/NodePropertyPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Save, Play, Pause, Users, Mail, Clock, GitBranch, LogOut, BarChart3 } from "lucide-react";
+import { ArrowLeft, Save, Play, Pause, Users, Mail, Clock, GitBranch, LogOut, BarChart3, MessageCircleMore } from "lucide-react";
 import { toast } from "sonner";
 
 const nodeTypes = {
@@ -84,7 +84,7 @@ export default function JourneyBuilder() {
       entry: lv
         ? { list_view_id: lv.id, list_view_name: lv.name, list_view_entity_type: lv.entity_type }
         : { segment_type: "customer" },
-      message: { channel: "email", template_body: "" },
+      message: { channel: "email", template_body: "", whatsapp_template_id: null, whatsapp_template_name: "", template_variables: {} },
       delay: { duration: 1, unit: "days" },
       decision: { condition: "opened" },
       exit: {},
@@ -215,7 +215,7 @@ export default function JourneyBuilder() {
                   <Users className="h-4 w-4 mr-1" /> Entry
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => addNode("message")} title="Message Node">
-                  <Mail className="h-4 w-4 mr-1" /> Message
+                  <MessageCircleMore className="h-4 w-4 mr-1" /> Message
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => addNode("delay")} title="Delay Node">
                   <Clock className="h-4 w-4 mr-1" /> Delay
