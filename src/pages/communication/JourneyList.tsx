@@ -407,9 +407,15 @@ export default function JourneyList() {
           <h1 className="text-2xl font-bold tracking-tight">Journey Builder</h1>
           <p className="text-muted-foreground">Create automated messaging journeys for your audience segments</p>
         </div>
-        <Button onClick={() => setShowCreate(true)}>
-          <Plus className="mr-2 h-4 w-4" /> Create Journey
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setShowInbox(true)}>
+            <Inbox className="mr-2 h-4 w-4" />
+            View Approvals{pendingCount > 0 ? ` (${pendingCount})` : ""}
+          </Button>
+          <Button onClick={() => setShowCreate(true)}>
+            <Plus className="mr-2 h-4 w-4" /> Create Journey
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
