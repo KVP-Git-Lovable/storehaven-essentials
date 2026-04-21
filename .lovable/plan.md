@@ -1,58 +1,85 @@
 
 
-## Approval Inbox for Journey Builder
+## Journey Scheduling
 
-Add a "View Approvals" button (with pending count badge) and an inbox modal to `/communication/journeys` so approvers can act on pending journey approvals from one place.
+Add scheduling (one-time + recurring) to journeys, persisted in a new table, editable from the journey list with a human-readable summary and next-run calculation. All times stored/treated as IST (`Asia/Kolkata`).
 
-### 1. Frontend — `src/pages/communication/JourneyList.tsx` (additive only)
+### 1. Database — new migration
 
-**Header action bar (next to "Create Journey")**
-- New secondary `Button` (variant `outline`): label "View Approvals". 
-- When `pendingCount > 0`, show inline count badge: "View Approvals (N)".
-- Always visible to all users (per spec). If user has no assigned approvals, the inbox shows an empty state: "No approvals assigned".
+**Table `public.journey_schedules`** (one schedule per journey, enforced by unique constraint):
 
-**Pending count query**
-- `useQuery(["journey-approvals-count", user.id])`: counts journeys where `approval_status = 'pending'` AND `approver_id = current user`.
-- Re-fetched on inbox open and after every approve/reject (invalidation).
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` |
+| `journey_id` | uuid FK → `journeys(id)` ON DELETE CASCADE, **UNIQUE** | one active schedule per journey |
+| `type` | text | `one_time` \| `recurring` |
+| `frequency` | text NULL | `daily` \| `weekly` \| `monthly` \| `quarterly` (null when `type='one_time'`) |
+| `execution_date` | date NULL | required when `one_time` |
+| `execution_time` | time NULL | HH:MM (IST) — required for all schedules |
+| `days_of_week` | int[] NULL | 0=Sun … 6=Sat — required for `weekly` |
+| `day_of_month` | int NULL (1–31) | required for `monthly`, `quarterly` |
+| `month_of_quarter` | int NULL (1–3) | optional for `quarterly` (1 = first month of each quarter → Jan/Apr/Jul/Oct) |
+| `timezone` | text default `'Asia/Kolkata'` | |
+| `next_run_at` | timestamptz NULL | computed on insert/update for calendar + scheduler |
+| `created_by` | uuid → `profiles(id)` | |
+| `created_at` / `updated_at` | timestamptz | trigger updates `updated_at` |
 
-**View Approvals modal** (new `<Dialog>`, large width)
-- Tabs: **Pending** (default) · **Approved** · **Rejected**.
-- Each tab is a table fed by a query filtered by `approval_status` and `approver_id = current user`.
-- Columns: Journey Name, Submitted By (lookup `profiles.username` from `created_by`), Submitted Date (`submitted_at`), Schedule (derived from `canvas_data` entry node, same helper already used for the submit modal), Channels (derived from `canvas_data` message nodes), Audience (`list_view.name`), Actions.
-- **Pending tab actions per row:**
-  - **Approve** — mutation: update `approval_status = 'approved'`, `approved_at = now()`, clear `rejection_reason`. Toast + invalidate inbox + count.
-  - **Reject** — opens a small inline prompt requiring `rejection_reason` (textarea, required). Mutation: update `approval_status = 'rejected'`, `rejection_reason`. Toast + invalidate.
-- **Approved / Rejected tabs:** read-only history (no actions). Rejected tab also shows the `rejection_reason`.
-- Optional filter inputs above the table: by channel (multi-select derived from current rows) and by submission date range. Implemented as simple client-side filters over the fetched list.
+**Validation trigger** (BEFORE INSERT/UPDATE) enforces:
+- `one_time` → `execution_date` and `execution_time` not null; `frequency` null.
+- `recurring` → `frequency` not null; `execution_time` not null.
+- `weekly` → `array_length(days_of_week,1) >= 1`.
+- `monthly` / `quarterly` → `day_of_month BETWEEN 1 AND 31`.
 
-**Backward compatibility**
-- All existing `journeys` rows have `approval_status` defaulted to `'draft'` by the migration already applied.
-- Any journey that was previously submitted (i.e. has `approval_status = 'pending'` and a non-null `approver_id`) will appear in the Pending tab automatically — no data migration needed.
-- Rows with `approval_status` null/missing are treated as Draft and excluded from the inbox; rendering elsewhere is unchanged.
+**RLS**: enable RLS; policies mirror `journeys` (users with permission on `communication-journeys` can SELECT/INSERT/UPDATE/DELETE their own org records). Read access for hierarchy via existing helpers used elsewhere.
 
-**Access control**
-- Inbox queries always filter by `approver_id = current user`, so non-approvers see an empty list (and a 0 badge).
-- The button itself stays visible to everyone — the modal handles the empty state.
+**Indexes**: `journey_id`, `next_run_at`, `(type, frequency)`.
 
-### 2. Backend / Database
+### 2. Frontend — Journey List schedule dialog
 
-No schema changes required. The columns added in the previous step (`approval_status`, `approver_id`, `submitted_at`, `approved_at`, `rejection_reason`, `approval_notes`) cover the entire workflow.
+**Edit:** `src/pages/communication/JourneyList.tsx`
 
-All approve/reject/list/count operations use direct `supabase.from("journeys")` queries with filters — no new edge functions or RPCs.
+- New row action **"Schedule"** (Calendar icon) on every journey row, alongside existing Submit / Play / Pause / Analytics / Delete. (Additive — no existing action removed.)
+- Status column: small `Badge` showing the human-readable summary if a schedule exists (e.g. *"Every Mon at 5:30 PM IST"*), fed by a joined query.
+- Journey list query extended with `schedule:journey_schedules(*)` so the badge and Edit dialog prefill work in one round-trip.
 
-### 3. Real-time refresh
+**New component:** `src/components/journey/JourneyScheduleDialog.tsx`
 
-After each Approve/Reject the relevant queries are invalidated (`journeys`, `journey-approvals-pending`, `journey-approvals-count`), so the badge count and the row list update immediately. No polling/realtime channel added (keeps it lightweight); the count refetches on window focus per react-query defaults.
+UI inside the dialog:
+- **Type** segmented control: *One-time* / *Recurring*.
+- **One-time fields**: Date (shadcn `Calendar` inside `Popover`, with `pointer-events-auto`) + Time (`<Input type="time">`).
+- **Recurring fields**:
+  - Frequency `Select`: Daily / Weekly / Monthly / Quarterly.
+  - Daily → Time only.
+  - Weekly → 7 toggle chips (Mon…Sun, multi-select) + Time.
+  - Monthly → Day of month `Select` (1–31, with hint *"If month has fewer days, runs on last day."*) + Time.
+  - Quarterly → "Month within quarter" `Select` (1st / 2nd / 3rd month — auto resolves to Jan-Apr-Jul-Oct etc.) + Day of month + Time.
+- **Live summary line** at the bottom (e.g. *"Runs on the 15th of every month at 10:00 AM IST"*, *"Next run: 15 May 2026, 10:00 AM IST"*).
+- Footer: **Save**, **Delete schedule** (if existing), **Cancel**.
 
-### 4. Constraints honored
+Form is validated client-side (mirrors trigger rules) before saving via `supabase.from("journey_schedules").upsert(...)` keyed on `journey_id`.
 
-- Journey Builder canvas, node panels, analytics, list-view sourcing, existing Submit-for-Approval modal, and existing row actions are untouched.
-- No theme/color changes; reuses existing badge classes (`approvalBadgeClass`) and `Button` variants.
-- No existing data is altered or deleted.
+### 3. Shared helpers — `src/lib/journeySchedule.ts` (new)
+
+Pure utilities (no UI, no DB) so the future scheduler/calendar can reuse:
+- `summarizeSchedule(schedule)` → human-readable string.
+- `computeNextRun(schedule, fromDate = now)` → `Date` in IST.
+- `expandToCalendarEvents(schedule, rangeStart, rangeEnd)` → array of `{ journey_id, title, start, end }` ready for any future Calendar view.
+- IST handling via `date-fns-tz` (already commonly used) with fixed `Asia/Kolkata`.
+
+`next_run_at` is computed in the dialog using `computeNextRun` and written alongside the row so a future cron/scheduler edge function can simply `SELECT … WHERE next_run_at <= now()`.
+
+### 4. Out of scope (kept clean for future work)
+
+- No execution engine / cron job is added — only data + `next_run_at`. The existing journey activation logic is untouched.
+- No Calendar view UI is built yet; `expandToCalendarEvents` is provided so the future Calendar can plug in directly.
+- Existing Journey Builder canvas, nodes, approval workflow, and activation flow are untouched.
 
 ### Files
 
-**Edit only:** `src/pages/communication/JourneyList.tsx` — add the View Approvals button, count query, inbox `Dialog` with three tabs, approve/reject mutations, and a small reject-reason sub-dialog.
+- **New migration** — create `journey_schedules` table + validation trigger + RLS + indexes.
+- **New** `src/components/journey/JourneyScheduleDialog.tsx`
+- **New** `src/lib/journeySchedule.ts`
+- **Edit** `src/pages/communication/JourneyList.tsx` — add Schedule action button, schedule badge in status column, dialog wiring, and join the schedule into the journeys query.
 
-No other files, no new migrations, no new edge functions.
+No other files, no edge functions, no changes to existing journey logic.
 
