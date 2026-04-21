@@ -20,12 +20,36 @@ import { ENTITY_SCHEMAS, type EntityKey } from "@/lib/listViewSchema";
 import { executeListView } from "@/lib/listViewExecutor";
 import { JourneyScheduleDialog } from "@/components/journey/JourneyScheduleDialog";
 import { summarizeSchedule, type JourneySchedule } from "@/lib/journeySchedule";
+import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
+import { cn } from "@/lib/utils";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   active: "bg-green-100 text-green-800",
   paused: "bg-yellow-100 text-yellow-800",
+  approved: "border border-green-300 bg-green-50 text-green-800",
 };
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "draft", label: "Draft" },
+  { value: "pending", label: "Pending Approval" },
+  { value: "approved", label: "Approved" },
+  { value: "active", label: "Active" },
+  { value: "rejected", label: "Rejected" },
+];
+
+const FREQUENCY_FILTER_OPTIONS = [
+  { value: "one-time", label: "One-time" },
+  { value: "recurring", label: "Recurring" },
+  { value: "trigger", label: "Trigger-based" },
+];
+
+const CHANNEL_FILTER_OPTIONS = [
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "email", label: "Email" },
+  { value: "sms", label: "SMS" },
+  { value: "voice", label: "Voice" },
+];
 
 const approvalBadgeClass: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
