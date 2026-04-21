@@ -584,6 +584,70 @@ export default function JourneyList() {
       </div>
 
       <Card>
+        <div className="p-4 border-b space-y-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-[180px] flex-1">
+              <Label className="text-xs">Status</Label>
+              <MultiSelectCombobox
+                options={STATUS_FILTER_OPTIONS}
+                selected={statusFilter}
+                onChange={setStatusFilter}
+                placeholder="All statuses"
+                maxDisplayedBadges={2}
+              />
+            </div>
+            <div className="min-w-[180px] flex-1">
+              <Label className="text-xs">Frequency</Label>
+              <MultiSelectCombobox
+                options={FREQUENCY_FILTER_OPTIONS}
+                selected={frequencyFilter}
+                onChange={setFrequencyFilter}
+                placeholder="All frequencies"
+                maxDisplayedBadges={2}
+              />
+            </div>
+            <div className="min-w-[180px] flex-1">
+              <Label className="text-xs">Channel</Label>
+              <MultiSelectCombobox
+                options={CHANNEL_FILTER_OPTIONS}
+                selected={channelFilter}
+                onChange={setChannelFilter}
+                placeholder="All channels"
+                maxDisplayedBadges={2}
+              />
+            </div>
+            <div className="min-w-[180px] flex-1">
+              <Label className="text-xs">Created By</Label>
+              <SearchableSelect
+                options={creatorOptions}
+                value={createdByFilter}
+                onValueChange={(v) => setCreatedByFilter(v === "none" ? "" : v)}
+                placeholder="Anyone"
+                searchPlaceholder="Search creator..."
+                allowNone
+                noneLabel="Anyone"
+              />
+            </div>
+            <div className="w-[150px]">
+              <Label className="text-xs">Created From</Label>
+              <Input type="date" value={listDateFrom} onChange={(e) => setListDateFrom(e.target.value)} />
+            </div>
+            <div className="w-[150px]">
+              <Label className="text-xs">Created To</Label>
+              <Input type="date" value={listDateTo} onChange={(e) => setListDateTo(e.target.value)} />
+            </div>
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearListFilters}>
+                <X className="h-4 w-4 mr-1" /> Clear
+              </Button>
+            )}
+          </div>
+          {hasActiveFilters && (
+            <p className="text-xs text-muted-foreground">
+              Showing {filteredJourneys.length} of {journeys.length} journeys
+            </p>
+          )}
+        </div>
         <Table>
           <TableHeader>
             <TableRow>
@@ -599,12 +663,18 @@ export default function JourneyList() {
               <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
             ) : journeys.length === 0 ? (
               <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No journeys yet. Create one to get started.</TableCell></TableRow>
+            ) : filteredJourneys.length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No journeys match the selected filters.</TableCell></TableRow>
             ) : (
-              journeys.map((j: any) => {
+              filteredJourneys.map((j: any) => {
                 const a = j.approval_status;
                 const showApprovalBadge = a && a !== "draft";
                 return (
-                  <TableRow key={j.id} className="cursor-pointer" onClick={() => navigate(`/communication/journeys/${j.id}`)}>
+                  <TableRow
+                    key={j.id}
+                    className={cn("cursor-pointer", j.status === "active" && "bg-green-50 hover:bg-green-100")}
+                    onClick={() => navigate(`/communication/journeys/${j.id}`)}
+                  >
                     <TableCell className="font-medium">{j.name}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1 flex-wrap">
