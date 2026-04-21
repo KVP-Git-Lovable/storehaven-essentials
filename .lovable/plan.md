@@ -1,85 +1,64 @@
 
 
-## Journey Scheduling
+## Journey List — Filters & Active Row Highlighting
 
-Add scheduling (one-time + recurring) to journeys, persisted in a new table, editable from the journey list with a human-readable summary and next-run calculation. All times stored/treated as IST (`Asia/Kolkata`).
+Add a filter bar above the journeys table on `/communication/journeys` and visually highlight active (live) journeys. All changes are additive to `src/pages/communication/JourneyList.tsx` — no DB, no API, no workflow changes.
 
-### 1. Database — new migration
+### 1. Filter bar (above the table, inside the existing `<Card>`)
 
-**Table `public.journey_schedules`** (one schedule per journey, enforced by unique constraint):
+A compact, single-row toolbar (wraps on mobile) with:
 
-| Column | Type | Notes |
-|---|---|---|
-| `id` | uuid PK | `gen_random_uuid()` |
-| `journey_id` | uuid FK → `journeys(id)` ON DELETE CASCADE, **UNIQUE** | one active schedule per journey |
-| `type` | text | `one_time` \| `recurring` |
-| `frequency` | text NULL | `daily` \| `weekly` \| `monthly` \| `quarterly` (null when `type='one_time'`) |
-| `execution_date` | date NULL | required when `one_time` |
-| `execution_time` | time NULL | HH:MM (IST) — required for all schedules |
-| `days_of_week` | int[] NULL | 0=Sun … 6=Sat — required for `weekly` |
-| `day_of_month` | int NULL (1–31) | required for `monthly`, `quarterly` |
-| `month_of_quarter` | int NULL (1–3) | optional for `quarterly` (1 = first month of each quarter → Jan/Apr/Jul/Oct) |
-| `timezone` | text default `'Asia/Kolkata'` | |
-| `next_run_at` | timestamptz NULL | computed on insert/update for calendar + scheduler |
-| `created_by` | uuid → `profiles(id)` | |
-| `created_at` / `updated_at` | timestamptz | trigger updates `updated_at` |
+- **Status** — multi-select (`MultiSelectCombobox`): Draft, Pending Approval, Approved, Active, Rejected.
+  - Maps to: `Draft` → `status='draft' AND approval_status IN (null,'draft')`; `Pending Approval` → `approval_status='pending'`; `Approved` → `approval_status='approved' AND status!='active'`; `Active` → `status='active'`; `Rejected` → `approval_status='rejected'`.
+- **Frequency** — multi-select: One-time, Recurring, Trigger-based.
+  - Source: prefer `journey_schedules.type` (`one_time` → One-time, `recurring` → Recurring); fallback to entry node `data.frequency` / `data.triggerType` in `canvas_data` to detect `trigger`/`event` → Trigger-based.
+- **Channel** — multi-select: WhatsApp, Email, SMS, Voice. Derived from message nodes in `canvas_data` (same `deriveJourneyMeta` helper already in file, extended to return all channels).
+- **Created By** — `SearchableSelect` populated from the `profiles` of `created_by` ids present in the loaded journeys (no extra query — we already join names elsewhere; we'll add a small lookup map mirroring `submitterMap`).
+- **Created date range** — two `<Input type="date">` (From / To) applied to `created_at`.
+- **Clear filters** button on the right when any filter is active.
 
-**Validation trigger** (BEFORE INSERT/UPDATE) enforces:
-- `one_time` → `execution_date` and `execution_time` not null; `frequency` null.
-- `recurring` → `frequency` not null; `execution_time` not null.
-- `weekly` → `array_length(days_of_week,1) >= 1`.
-- `monthly` / `quarterly` → `day_of_month BETWEEN 1 AND 31`.
+All filters combine with **AND** logic and run **client-side** over the existing `journeys` query (dataset is small; no new API). React's `useMemo` produces `filteredJourneys` rendered by the table.
 
-**RLS**: enable RLS; policies mirror `journeys` (users with permission on `communication-journeys` can SELECT/INSERT/UPDATE/DELETE their own org records). Read access for hierarchy via existing helpers used elsewhere.
+### 2. Active row highlighting
 
-**Indexes**: `journey_id`, `next_run_at`, `(type, frequency)`.
+In the `journeys.map(...)` row render, add a conditional class on `<TableRow>` when `j.status === 'active'`:
 
-### 2. Frontend — Journey List schedule dialog
+```
+className={cn("cursor-pointer", j.status === 'active' && "bg-green-50 hover:bg-green-100")}
+```
 
-**Edit:** `src/pages/communication/JourneyList.tsx`
+Uses Tailwind tokens already used elsewhere in the file (`bg-green-100`, `text-green-800`) so it stays inside the existing palette — no new colors. Text remains the default foreground for full readability. Highlight persists regardless of active filters and works with sorting/pagination (none added here; existing order is preserved).
 
-- New row action **"Schedule"** (Calendar icon) on every journey row, alongside existing Submit / Play / Pause / Analytics / Delete. (Additive — no existing action removed.)
-- Status column: small `Badge` showing the human-readable summary if a schedule exists (e.g. *"Every Mon at 5:30 PM IST"*), fed by a joined query.
-- Journey list query extended with `schedule:journey_schedules(*)` so the badge and Edit dialog prefill work in one round-trip.
+### 3. Status badges (already present, lightly extended)
 
-**New component:** `src/components/journey/JourneyScheduleDialog.tsx`
+The existing badges (`statusColors`, `approvalBadgeClass`) already render green/yellow/red for Active/Pending/Rejected. We'll just ensure:
+- `active` → green (already `bg-green-100 text-green-800`).
+- `pending` → yellow (already).
+- `rejected` → red (already).
+- Add `approved` to `statusColors` mapping rendering as green outline so an "Approved (not yet active)" journey is also visually distinct.
 
-UI inside the dialog:
-- **Type** segmented control: *One-time* / *Recurring*.
-- **One-time fields**: Date (shadcn `Calendar` inside `Popover`, with `pointer-events-auto`) + Time (`<Input type="time">`).
-- **Recurring fields**:
-  - Frequency `Select`: Daily / Weekly / Monthly / Quarterly.
-  - Daily → Time only.
-  - Weekly → 7 toggle chips (Mon…Sun, multi-select) + Time.
-  - Monthly → Day of month `Select` (1–31, with hint *"If month has fewer days, runs on last day."*) + Time.
-  - Quarterly → "Month within quarter" `Select` (1st / 2nd / 3rd month — auto resolves to Jan-Apr-Jul-Oct etc.) + Day of month + Time.
-- **Live summary line** at the bottom (e.g. *"Runs on the 15th of every month at 10:00 AM IST"*, *"Next run: 15 May 2026, 10:00 AM IST"*).
-- Footer: **Save**, **Delete schedule** (if existing), **Cancel**.
+No new badge components introduced.
 
-Form is validated client-side (mirrors trigger rules) before saving via `supabase.from("journey_schedules").upsert(...)` keyed on `journey_id`.
+### 4. Empty / count state
 
-### 3. Shared helpers — `src/lib/journeySchedule.ts` (new)
+Below the filter bar, show a small muted line: `Showing {filteredJourneys.length} of {journeys.length} journeys` when any filter is active. The "No journeys yet" empty state is replaced with "No journeys match the selected filters" when filters are active and the result is empty.
 
-Pure utilities (no UI, no DB) so the future scheduler/calendar can reuse:
-- `summarizeSchedule(schedule)` → human-readable string.
-- `computeNextRun(schedule, fromDate = now)` → `Date` in IST.
-- `expandToCalendarEvents(schedule, rangeStart, rangeEnd)` → array of `{ journey_id, title, start, end }` ready for any future Calendar view.
-- IST handling via `date-fns-tz` (already commonly used) with fixed `Asia/Kolkata`.
+### 5. Constraints honored
 
-`next_run_at` is computed in the dialog using `computeNextRun` and written alongside the row so a future cron/scheduler edge function can simply `SELECT … WHERE next_run_at <= now()`.
-
-### 4. Out of scope (kept clean for future work)
-
-- No execution engine / cron job is added — only data + `next_run_at`. The existing journey activation logic is untouched.
-- No Calendar view UI is built yet; `expandToCalendarEvents` is provided so the future Calendar can plug in directly.
-- Existing Journey Builder canvas, nodes, approval workflow, and activation flow are untouched.
+- No changes to Journey Builder canvas, approval workflow, scheduling, mutations, or backend.
+- No new tables, edge functions, or RLS changes.
+- No layout restructure — filter bar slots above the existing table inside the same `<Card>`.
+- No new color tokens; reuses existing Tailwind green/yellow/red shades already in the file.
 
 ### Files
 
-- **New migration** — create `journey_schedules` table + validation trigger + RLS + indexes.
-- **New** `src/components/journey/JourneyScheduleDialog.tsx`
-- **New** `src/lib/journeySchedule.ts`
-- **Edit** `src/pages/communication/JourneyList.tsx` — add Schedule action button, schedule badge in status column, dialog wiring, and join the schedule into the journeys query.
+- **Edit only:** `src/pages/communication/JourneyList.tsx`
+  - Add filter state (`statusFilter`, `frequencyFilter`, `channelFilter`, `createdByFilter`, `dateFrom`, `dateTo`).
+  - Add `filteredJourneys` `useMemo` applying AND-combined filters.
+  - Add filter toolbar JSX above the `<Table>` using existing `MultiSelectCombobox`, `SearchableSelect`, and `Input` components.
+  - Extend `deriveJourneyMeta` to also expose channels for list rows (already does for inbox).
+  - Add green row class for `status === 'active'`.
+  - Add `approved` entry to `statusColors`.
 
-No other files, no edge functions, no changes to existing journey logic.
+No other files modified.
 
