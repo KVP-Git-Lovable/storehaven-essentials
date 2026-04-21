@@ -104,11 +104,11 @@ const navigation: NavItem[] = [
     ],
   },
   {
-    title: "Finance Overview",
+    title: "Store Management",
     icon: Store,
     moduleKey: "stores",
     children: [
-      { title: "All Stores", href: "/stores", moduleKey: "stores.all" },
+      { title: "Stores", href: "/stores", moduleKey: "stores.all" },
       { title: "Rentals & Leases", href: "/stores/rentals", moduleKey: "stores.rentals" },
       { title: "Store Targets", href: "/stores/targets", moduleKey: "stores.all" },
       { title: "Store Budget", href: "/stores/budget", moduleKey: "stores.budget" },
