@@ -12,12 +12,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Plus, Play, Pause, Trash2, BarChart3, GitBranch, Users, MessageSquare, ExternalLink, Send, Inbox, Check, X } from "lucide-react";
+import { Plus, Play, Pause, Trash2, BarChart3, GitBranch, Users, MessageSquare, ExternalLink, Send, Inbox, Check, X, Calendar as CalendarIcon } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ENTITY_SCHEMAS, type EntityKey } from "@/lib/listViewSchema";
 import { executeListView } from "@/lib/listViewExecutor";
+import { JourneyScheduleDialog } from "@/components/journey/JourneyScheduleDialog";
+import { summarizeSchedule, type JourneySchedule } from "@/lib/journeySchedule";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -60,15 +62,21 @@ export default function JourneyList() {
   const [filterFrom, setFilterFrom] = useState<string>("");
   const [filterTo, setFilterTo] = useState<string>("");
 
+  // Schedule dialog state
+  const [scheduleJourney, setScheduleJourney] = useState<any | null>(null);
+
   const { data: journeys = [], isLoading } = useQuery({
     queryKey: ["journeys"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("journeys")
-        .select("*, list_view:list_view_id(id, name, entity_type, selected_fields, filters)")
+        .select("*, list_view:list_view_id(id, name, entity_type, selected_fields, filters), schedule:journey_schedules(*)")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      return (data || []).map((row: any) => ({
+        ...row,
+        schedule: Array.isArray(row.schedule) ? (row.schedule[0] || null) : (row.schedule || null),
+      }));
     },
   });
 
@@ -483,6 +491,12 @@ export default function JourneyList() {
                         {showApprovalBadge && (
                           <Badge className={approvalBadgeClass[a] || ""}>{approvalLabel[a] || a}</Badge>
                         )}
+                        {j.schedule && (
+                          <Badge variant="outline" className="text-xs" title={summarizeSchedule(j.schedule as JourneySchedule)}>
+                            <CalendarIcon className="h-3 w-3 mr-1" />
+                            {summarizeSchedule(j.schedule as JourneySchedule)}
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -521,6 +535,9 @@ export default function JourneyList() {
                             <Play className="h-4 w-4" />
                           </Button>
                         )}
+                        <Button size="sm" variant="ghost" title="Schedule" onClick={() => setScheduleJourney(j)}>
+                          <CalendarIcon className="h-4 w-4" />
+                        </Button>
                         <Button size="sm" variant="ghost" onClick={() => navigate(`/communication/journeys/${j.id}/analytics`)}>
                           <BarChart3 className="h-4 w-4" />
                         </Button>
@@ -861,6 +878,16 @@ export default function JourneyList() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Schedule Dialog */}
+      {scheduleJourney && (
+        <JourneyScheduleDialog
+          open={!!scheduleJourney}
+          onOpenChange={(o) => { if (!o) setScheduleJourney(null); }}
+          journeyId={scheduleJourney.id}
+          journeyName={scheduleJourney.name}
+          existing={scheduleJourney.schedule || null}
+        />
+      )}
     </div>
   );
 }
