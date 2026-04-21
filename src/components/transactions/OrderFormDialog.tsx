@@ -77,7 +77,7 @@ export function OrderFormDialog({ open, onOpenChange }: Props) {
           subtotal,
           tax_amount: taxAmount,
           total_amount: total,
-          created_by: user?.id,
+          created_by: user?.id || "manual-entry",
         } as any)
         .select()
         .single();
