@@ -403,6 +403,95 @@ export default function JourneyList() {
     return Array.from(set);
   }, [inboxJourneys]);
 
+  // Resolve frequency type for filter from schedule or canvas
+  const resolveFrequency = (j: any): string => {
+    if (j.schedule?.type === "one_time") return "one-time";
+    if (j.schedule?.type === "recurring") return "recurring";
+    const canvas = j.canvas_data || {};
+    const nodes: any[] = Array.isArray(canvas.nodes) ? canvas.nodes : [];
+    const entry = nodes.find((n) => n.type === "entry" || n.data?.type === "entry");
+    const ed = entry?.data || {};
+    const f = String(ed.frequency || ed.triggerType || ed.trigger_type || "").toLowerCase();
+    if (f.includes("trigger") || f.includes("event")) return "trigger";
+    if (f.includes("recur")) return "recurring";
+    if (f.includes("one")) return "one-time";
+    return "";
+  };
+
+  const matchesStatusFilter = (j: any, filters: string[]): boolean => {
+    if (filters.length === 0) return true;
+    const a = j.approval_status;
+    return filters.some((f) => {
+      switch (f) {
+        case "draft": return j.status === "draft" && (!a || a === "draft");
+        case "pending": return a === "pending";
+        case "approved": return a === "approved" && j.status !== "active";
+        case "active": return j.status === "active";
+        case "rejected": return a === "rejected";
+        default: return false;
+      }
+    });
+  };
+
+  const creatorIds = useMemo(
+    () => Array.from(new Set((journeys as any[]).map((j) => j.created_by).filter(Boolean))),
+    [journeys]
+  );
+  const { data: creatorMap = {} } = useQuery({
+    queryKey: ["journey-list-creators", creatorIds],
+    queryFn: async () => {
+      if (creatorIds.length === 0) return {};
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, username, email")
+        .in("id", creatorIds as string[]);
+      if (error) return {};
+      const map: Record<string, { username: string | null; email: string | null }> = {};
+      (data || []).forEach((p: any) => { map[p.id] = { username: p.username, email: p.email }; });
+      return map;
+    },
+    enabled: creatorIds.length > 0,
+  });
+
+  const creatorOptions = useMemo(
+    () => creatorIds.map((id) => ({
+      value: id as string,
+      label: (creatorMap as any)[id as string]?.username || (creatorMap as any)[id as string]?.email || "Unknown",
+    })),
+    [creatorIds, creatorMap]
+  );
+
+  const filteredJourneys = useMemo(() => {
+    return (journeys as any[]).filter((j) => {
+      if (!matchesStatusFilter(j, statusFilter)) return false;
+      if (frequencyFilter.length > 0) {
+        const f = resolveFrequency(j);
+        if (!f || !frequencyFilter.includes(f)) return false;
+      }
+      if (channelFilter.length > 0) {
+        const { channels } = deriveJourneyMeta(j);
+        if (!channelFilter.some((c) => channels.includes(c))) return false;
+      }
+      if (createdByFilter && j.created_by !== createdByFilter) return false;
+      if (listDateFrom && new Date(j.created_at) < new Date(listDateFrom)) return false;
+      if (listDateTo && new Date(j.created_at) > new Date(listDateTo + "T23:59:59")) return false;
+      return true;
+    });
+  }, [journeys, statusFilter, frequencyFilter, channelFilter, createdByFilter, listDateFrom, listDateTo]);
+
+  const hasActiveFilters =
+    statusFilter.length > 0 || frequencyFilter.length > 0 || channelFilter.length > 0 ||
+    !!createdByFilter || !!listDateFrom || !!listDateTo;
+
+  const clearListFilters = () => {
+    setStatusFilter([]);
+    setFrequencyFilter([]);
+    setChannelFilter([]);
+    setCreatedByFilter("");
+    setListDateFrom("");
+    setListDateTo("");
+  };
+
   const invalidateApprovalQueries = () => {
     queryClient.invalidateQueries({ queryKey: ["journeys"] });
     queryClient.invalidateQueries({ queryKey: ["journey-approvals-inbox"] });
