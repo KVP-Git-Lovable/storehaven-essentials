@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { X, Trash2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import type { Node } from "@xyflow/react";
+import { parseStoredBody, transformTwilioToFriendly } from "@/lib/whatsappVariables";
 
 interface Props {
   node: Node;
@@ -15,10 +19,115 @@ interface Props {
   onClose: () => void;
 }
 
+interface WhatsAppTemplateOption {
+  id: string;
+  name: string;
+  body: string;
+  category: string;
+  language: string;
+}
+
 export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const { data: approvedWhatsAppTemplates = [], isLoading: loadingWhatsAppTemplates } = useQuery({
+    queryKey: ["journey-whatsapp-templates"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("whatsapp_templates")
+        .select("id, name, body, category, language")
+        .eq("status", "approved")
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+      return (data ?? []) as WhatsAppTemplateOption[];
+    },
+  });
+
   const update = (key: string, value: any) => {
     onUpdate(node.id, { ...node.data, [key]: value });
+  };
+
+  const selectedWhatsAppTemplate = useMemo(
+    () => approvedWhatsAppTemplates.find((template) => template.id === node.data.whatsapp_template_id),
+    [approvedWhatsAppTemplates, node.data.whatsapp_template_id]
+  );
+
+  const whatsappTemplateBody = useMemo(() => {
+    if (!selectedWhatsAppTemplate) return "";
+    const { twilioBody, mapping } = parseStoredBody(selectedWhatsAppTemplate.body);
+    return mapping ? transformTwilioToFriendly(twilioBody, mapping) : twilioBody;
+  }, [selectedWhatsAppTemplate]);
+
+  const whatsappVariables = useMemo(() => {
+    const matches = whatsappTemplateBody.matchAll(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g);
+    return Array.from(new Set(Array.from(matches, (match) => match[1])));
+  }, [whatsappTemplateBody]);
+
+  const updateWhatsAppVariable = (name: string, value: string) => {
+    const existing = (node.data.template_variables as Record<string, string> | undefined) ?? {};
+    onUpdate(node.id, {
+      ...node.data,
+      template_variables: {
+        ...existing,
+        [name]: value,
+      },
+    });
+  };
+
+  const handleChannelChange = (value: string) => {
+    if (value !== "whatsapp_template") {
+      update("channel", value);
+      return;
+    }
+
+    const firstTemplate = approvedWhatsAppTemplates[0];
+    if (!firstTemplate) {
+      onUpdate(node.id, {
+        ...node.data,
+        channel: value,
+        whatsapp_template_id: undefined,
+        whatsapp_template_name: undefined,
+        template_body: "",
+        template_variables: {},
+      });
+      return;
+    }
+
+    const { twilioBody, mapping } = parseStoredBody(firstTemplate.body);
+    const displayBody = mapping ? transformTwilioToFriendly(twilioBody, mapping) : twilioBody;
+    const initialVariables = Object.fromEntries(
+      Array.from(displayBody.matchAll(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g), (match) => [match[1], `{{${match[1]}}}`])
+    );
+
+    onUpdate(node.id, {
+      ...node.data,
+      channel: value,
+      whatsapp_template_id: firstTemplate.id,
+      whatsapp_template_name: firstTemplate.name,
+      template_body: displayBody,
+      template_variables: initialVariables,
+    });
+  };
+
+  const handleWhatsAppTemplateChange = (templateId: string) => {
+    const template = approvedWhatsAppTemplates.find((item) => item.id === templateId);
+    if (!template) return;
+
+    const { twilioBody, mapping } = parseStoredBody(template.body);
+    const displayBody = mapping ? transformTwilioToFriendly(twilioBody, mapping) : twilioBody;
+    const initialVariables = Object.fromEntries(
+      Array.from(displayBody.matchAll(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g), (match) => [match[1], `{{${match[1]}}}`])
+    );
+
+    onUpdate(node.id, {
+      ...node.data,
+      channel: "whatsapp_template",
+      whatsapp_template_id: template.id,
+      whatsapp_template_name: template.name,
+      template_body: displayBody,
+      template_variables: initialVariables,
+    });
   };
 
   return (
@@ -69,18 +178,75 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
       {node.type === "message" && (
         <>
           <div><Label>Channel</Label>
-            <Select value={String(node.data.channel || "email")} onValueChange={(v) => update("channel", v)}>
+            <Select value={String(node.data.channel || "email")} onValueChange={handleChannelChange}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="email">Email</SelectItem>
                 <SelectItem value="sms">SMS</SelectItem>
                 <SelectItem value="push">Push Notification</SelectItem>
+                <SelectItem value="whatsapp_template">WhatsApp Template</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div><Label>Message Body</Label>
-            <Textarea value={String(node.data.template_body || "")} onChange={(e) => update("template_body", e.target.value)} placeholder="Use {name}, {last_purchase_date}..." rows={4} />
-          </div>
+
+          {node.data.channel === "whatsapp_template" ? (
+            <>
+              <div className="space-y-2">
+                <Label>Approved Template</Label>
+                <Select
+                  value={String(node.data.whatsapp_template_id || "")}
+                  onValueChange={handleWhatsAppTemplateChange}
+                  disabled={loadingWhatsAppTemplates || approvedWhatsAppTemplates.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingWhatsAppTemplates ? "Loading templates..." : "Select approved template"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {approvedWhatsAppTemplates.map((template) => (
+                      <SelectItem key={template.id} value={template.id}>
+                        {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Only approved templates are available in journeys.</p>
+              </div>
+
+              {selectedWhatsAppTemplate && (
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline">{selectedWhatsAppTemplate.category}</Badge>
+                  <Badge variant="secondary">{selectedWhatsAppTemplate.language}</Badge>
+                </div>
+              )}
+
+              <div><Label>Message Body</Label>
+                <Textarea value={String(node.data.template_body || whatsappTemplateBody || "")} readOnly placeholder="Select an approved WhatsApp template" rows={4} />
+              </div>
+
+              {whatsappVariables.length > 0 && (
+                <div className="space-y-3">
+                  <div>
+                    <Label>Template Variables</Label>
+                    <p className="text-xs text-muted-foreground mt-1">Map each placeholder to a contact field token or fixed value.</p>
+                  </div>
+                  {whatsappVariables.map((variable) => (
+                    <div key={variable} className="space-y-1">
+                      <Label className="text-xs">{`{{${variable}}}`}</Label>
+                      <Input
+                        value={String(node.data.template_variables?.[variable] || `{{${variable}}}`)}
+                        onChange={(e) => updateWhatsAppVariable(variable, e.target.value)}
+                        placeholder={`{{${variable}}}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div><Label>Message Body</Label>
+              <Textarea value={String(node.data.template_body || "")} onChange={(e) => update("template_body", e.target.value)} placeholder="Use {name}, {last_purchase_date}..." rows={4} />
+            </div>
+          )}
         </>
       )}
 
