@@ -491,6 +491,12 @@ export default function JourneyList() {
                         {showApprovalBadge && (
                           <Badge className={approvalBadgeClass[a] || ""}>{approvalLabel[a] || a}</Badge>
                         )}
+                        {j.schedule && (
+                          <Badge variant="outline" className="text-xs" title={summarizeSchedule(j.schedule as JourneySchedule)}>
+                            <CalendarIcon className="h-3 w-3 mr-1" />
+                            {summarizeSchedule(j.schedule as JourneySchedule)}
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -529,6 +535,9 @@ export default function JourneyList() {
                             <Play className="h-4 w-4" />
                           </Button>
                         )}
+                        <Button size="sm" variant="ghost" title="Schedule" onClick={() => setScheduleJourney(j)}>
+                          <CalendarIcon className="h-4 w-4" />
+                        </Button>
                         <Button size="sm" variant="ghost" onClick={() => navigate(`/communication/journeys/${j.id}/analytics`)}>
                           <BarChart3 className="h-4 w-4" />
                         </Button>
