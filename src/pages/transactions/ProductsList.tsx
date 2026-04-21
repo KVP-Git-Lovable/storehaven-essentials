@@ -1,25 +1,40 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Plus } from "lucide-react";
+import { Search, Plus, Eye, Pencil, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar";
 import { ProductFormDialog } from "@/components/transactions/ProductFormDialog";
 import { executeListView } from "@/lib/listViewExecutor";
 import type { FilterCondition } from "@/lib/listViewSchema";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 const inr = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
 
 export default function ProductsList() {
+  const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<FilterCondition[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
+  const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("create");
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
 
   const usingListView = activeFilters.length > 0;
 
@@ -47,6 +62,19 @@ export default function ProductsList() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const { error } = await supabase.from("products").delete().eq("id", productId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Product deleted");
+      qc.invalidateQueries({ queryKey: ["transactions-products"] });
+      setDeleteTarget(null);
+    },
+    onError: (error: any) => toast.error(error.message || "Failed to delete product"),
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
@@ -54,7 +82,7 @@ export default function ProductsList() {
           <h1 className="text-2xl font-bold tracking-tight">Products</h1>
           <p className="text-muted-foreground">Catalogue of available products.</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
+        <Button onClick={() => { setSelectedProduct(null); setDialogMode("create"); setCreateOpen(true); }}>
           <Plus className="mr-2 h-4 w-4" /> New Product
         </Button>
       </div>
@@ -84,13 +112,14 @@ export default function ProductsList() {
               <TableHead className="text-right">Price</TableHead>
               <TableHead className="text-right">Stock</TableHead>
               <TableHead>Created</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
             ) : rows.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No products found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No products found.</TableCell></TableRow>
             ) : (
               rows.map((p: any) => (
                 <TableRow key={p.id}>
@@ -101,6 +130,19 @@ export default function ProductsList() {
                   <TableCell className="text-right font-medium">{inr(Number(p.price))}</TableCell>
                   <TableCell className="text-right">{p.stock_qty ?? 0}</TableCell>
                   <TableCell className="text-xs">{p.created_at ? format(new Date(p.created_at), "dd MMM yyyy") : "—"}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="outline" size="icon" onClick={() => { setSelectedProduct(p); setDialogMode("view"); setCreateOpen(true); }}>
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="icon" onClick={() => { setSelectedProduct(p); setDialogMode("edit"); setCreateOpen(true); }}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="icon" onClick={() => setDeleteTarget(p)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -108,7 +150,24 @@ export default function ProductsList() {
         </Table>
       </Card>
 
-      <ProductFormDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <ProductFormDialog open={createOpen} onOpenChange={setCreateOpen} product={selectedProduct} mode={dialogMode} />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete product?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove {deleteTarget?.name || "this product"}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}>
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

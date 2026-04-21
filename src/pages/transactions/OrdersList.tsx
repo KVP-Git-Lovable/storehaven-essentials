@@ -1,17 +1,28 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Search, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Plus, Eye, Pencil, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar";
 import { OrderFormDialog } from "@/components/transactions/OrderFormDialog";
 import { executeListView } from "@/lib/listViewExecutor";
 import type { FilterCondition } from "@/lib/listViewSchema";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 const PAGE_SIZE = 50;
 const inr = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
@@ -24,11 +35,15 @@ const statusVariant = (s: string): "default" | "secondary" | "destructive" | "ou
 };
 
 export default function OrdersList() {
+  const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<FilterCondition[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("create");
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
 
   const usingListView = activeFilters.length > 0;
 
@@ -81,6 +96,22 @@ export default function OrdersList() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const { error: itemError } = await supabase.from("order_items").delete().eq("order_id", orderId);
+      if (itemError) throw itemError;
+      const { error } = await supabase.from("orders").delete().eq("id", orderId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Order deleted");
+      qc.invalidateQueries({ queryKey: ["transactions-orders"] });
+      qc.invalidateQueries({ queryKey: ["transactions-customers"] });
+      setDeleteTarget(null);
+    },
+    onError: (error: any) => toast.error(error.message || "Failed to delete order"),
+  });
+
   const totalPages = Math.ceil((data?.count || 0) / PAGE_SIZE);
 
   return (
@@ -90,7 +121,7 @@ export default function OrdersList() {
           <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
           <p className="text-muted-foreground">All customer orders, most recent first.</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
+        <Button onClick={() => { setSelectedOrder(null); setDialogMode("create"); setCreateOpen(true); }}>
           <Plus className="mr-2 h-4 w-4" /> New Order
         </Button>
       </div>
@@ -125,13 +156,14 @@ export default function OrdersList() {
               <TableHead>Payment</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead>Date</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
             ) : (data?.rows || []).length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No orders found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No orders found.</TableCell></TableRow>
             ) : (
               data!.rows.map((o: any) => (
                 <TableRow key={o.id}>
@@ -145,6 +177,19 @@ export default function OrdersList() {
                   <TableCell><Badge variant="outline" className="capitalize">{o.payment_status || "—"}</Badge></TableCell>
                   <TableCell className="text-right font-medium">{inr(Number(o.total_amount))}</TableCell>
                   <TableCell className="text-xs">{format(new Date(o.created_at), "dd MMM yyyy, HH:mm")}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="outline" size="icon" onClick={() => { setSelectedOrder(o); setDialogMode("view"); setCreateOpen(true); }}>
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="icon" onClick={() => { setSelectedOrder(o); setDialogMode("edit"); setCreateOpen(true); }}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="icon" onClick={() => setDeleteTarget(o)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -164,7 +209,24 @@ export default function OrdersList() {
         </div>
       </div>
 
-      <OrderFormDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <OrderFormDialog open={createOpen} onOpenChange={setCreateOpen} order={selectedOrder} mode={dialogMode} />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete order?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove order {deleteTarget?.order_number || ""} and its line items.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}>
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

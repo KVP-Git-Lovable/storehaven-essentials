@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -15,13 +15,27 @@ import { toast } from "sonner";
 interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  order?: {
+    id: string;
+    customer_id: string | null;
+    status: string;
+    payment_status: string;
+    payment_method: string;
+    order_number: string;
+    subtotal: number;
+    tax_amount: number | null;
+    total_amount: number;
+  } | null;
+  mode?: "create" | "edit" | "view";
 }
 
-export function OrderFormDialog({ open, onOpenChange }: Props) {
+export function OrderFormDialog({ open, onOpenChange, order = null, mode = "create" }: Props) {
   const qc = useQueryClient();
   const [customerId, setCustomerId] = useState("");
   const [status, setStatus] = useState("completed");
   const [lineItems, setLineItems] = useState([{ productId: "", quantity: "1" }]);
+  const isView = mode === "view";
+  const isEdit = mode === "edit";
 
   const { data: customers = [] } = useQuery({
     queryKey: ["order-form-customers"],
@@ -40,6 +54,38 @@ export function OrderFormDialog({ open, onOpenChange }: Props) {
       return data || [];
     },
   });
+
+  const { data: existingOrderItems = [] } = useQuery({
+    queryKey: ["order-form-items", order?.id],
+    enabled: open && !!order?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("order_items")
+        .select("item_id, quantity")
+        .eq("order_id", order!.id);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  useEffect(() => {
+    if (!open) return;
+
+    if (!order) {
+      setCustomerId("");
+      setStatus("completed");
+      setLineItems([{ productId: "", quantity: "1" }]);
+      return;
+    }
+
+    setCustomerId(order.customer_id || "");
+    setStatus(order.status || "completed");
+    setLineItems(
+      existingOrderItems.length
+        ? existingOrderItems.map((item: any) => ({ productId: item.item_id, quantity: String(item.quantity || 1) }))
+        : [{ productId: "", quantity: "1" }]
+    );
+  }, [open, order, existingOrderItems]);
 
   const createMut = useMutation({
     mutationFn: async () => {
@@ -64,15 +110,47 @@ export function OrderFormDialog({ open, onOpenChange }: Props) {
       const subtotal = validItems.reduce((sum, item) => sum + item.lineTotal, 0);
       const taxAmount = 0;
       const total = subtotal + taxAmount;
-      const orderNumber = `ORD-${Date.now().toString().slice(-8)}`;
+      const paymentStatus = status === "completed" ? "paid" : status === "cancelled" ? "cancelled" : "pending";
 
-      const { data: order, error } = await supabase
+      if (isEdit && order) {
+        const { error: updateError } = await supabase
+          .from("orders")
+          .update({
+            customer_id: customerId,
+            status,
+            payment_status: paymentStatus,
+            subtotal,
+            tax_amount: taxAmount,
+            total_amount: total,
+          } as any)
+          .eq("id", order.id);
+        if (updateError) throw updateError;
+
+        const { error: deleteItemsError } = await supabase.from("order_items").delete().eq("order_id", order.id);
+        if (deleteItemsError) throw deleteItemsError;
+
+        const { error: itemErr } = await supabase.from("order_items").insert(
+          validItems.map((item) => ({
+            order_id: order.id,
+            item_id: item.productId,
+            quantity: item.quantity,
+            unit_price: item.unitPrice,
+            total_amount: item.lineTotal,
+            tax_amount: 0,
+          })) as any
+        );
+        if (itemErr) throw itemErr;
+        return;
+      }
+
+      const orderNumber = `ORD-${Date.now().toString().slice(-8)}`;
+      const { data: createdOrder, error } = await supabase
         .from("orders")
         .insert({
           customer_id: customerId,
           order_number: orderNumber,
           status,
-          payment_status: status === "completed" ? "paid" : "pending",
+          payment_status: paymentStatus,
           payment_method: "cash",
           subtotal,
           tax_amount: taxAmount,
@@ -85,7 +163,7 @@ export function OrderFormDialog({ open, onOpenChange }: Props) {
 
       const { error: itemErr } = await supabase.from("order_items").insert(
         validItems.map((item) => ({
-          order_id: order.id,
+          order_id: createdOrder.id,
           item_id: item.productId,
           quantity: item.quantity,
           unit_price: item.unitPrice,
@@ -94,29 +172,9 @@ export function OrderFormDialog({ open, onOpenChange }: Props) {
         })) as any
       );
       if (itemErr) throw itemErr;
-
-      if (status === "completed") {
-        const { data: customer, error: customerErr } = await supabase
-          .from("customers")
-          .select("total_orders, total_spent")
-          .eq("id", customerId)
-          .maybeSingle();
-
-        if (customerErr) throw customerErr;
-
-        const { error: updateCustomerErr } = await supabase
-          .from("customers")
-          .update({
-            total_orders: (customer?.total_orders || 0) + 1,
-            total_spent: Number(customer?.total_spent || 0) + total,
-          } as any)
-          .eq("id", customerId);
-
-        if (updateCustomerErr) throw updateCustomerErr;
-      }
     },
     onSuccess: () => {
-      toast.success("Order created");
+      toast.success(isEdit ? "Order updated" : "Order created");
       qc.invalidateQueries({ queryKey: ["transactions-orders"] });
       qc.invalidateQueries({ queryKey: ["transactions-customers"] });
       onOpenChange(false);
@@ -145,6 +203,7 @@ export function OrderFormDialog({ open, onOpenChange }: Props) {
 
   const subtotal = enrichedItems.reduce((sum, item) => sum + item.lineTotal, 0);
   const total = subtotal;
+  const title = isView ? "View Order" : isEdit ? "Edit Order" : "New Order";
 
   const updateLineItem = (index: number, patch: Partial<{ productId: string; quantity: string }>) => {
     setLineItems((current) => current.map((item, i) => (i === index ? { ...item, ...patch } : item)));
@@ -160,9 +219,15 @@ export function OrderFormDialog({ open, onOpenChange }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>New Order</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          {order?.order_number && (
+            <div>
+              <Label>Order #</Label>
+              <Input value={order.order_number} disabled />
+            </div>
+          )}
           <div>
             <Label>Customer *</Label>
             <SearchableSelect
@@ -170,12 +235,13 @@ export function OrderFormDialog({ open, onOpenChange }: Props) {
               onValueChange={setCustomerId}
               options={customers.map((c: any) => ({ value: c.id, label: `${c.name || "—"} (${c.phone})` }))}
               placeholder="Select customer..."
+              disabled={isView}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Status</Label>
-              <Select value={status} onValueChange={setStatus}>
+              <Select value={status} onValueChange={setStatus} disabled={isView}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="completed">Completed</SelectItem>
@@ -185,7 +251,7 @@ export function OrderFormDialog({ open, onOpenChange }: Props) {
               </Select>
             </div>
             <div className="flex items-end justify-end">
-              <Button type="button" variant="outline" onClick={addLineItem}>
+              <Button type="button" variant="outline" onClick={addLineItem} disabled={isView}>
                 <Plus className="mr-2 h-4 w-4" /> Add Product
               </Button>
             </div>
@@ -206,22 +272,24 @@ export function OrderFormDialog({ open, onOpenChange }: Props) {
                         onValueChange={(value) => updateLineItem(index, { productId: value })}
                         options={products.map((p: any) => ({ value: p.id, label: `${p.name} — ₹${Number(p.price).toLocaleString("en-IN")}` }))}
                         placeholder="Select product..."
+                        disabled={isView}
                       />
                     </div>
                     <div>
                       <Label>Quantity</Label>
                       <div className="flex items-center gap-2">
-                        <Button type="button" variant="outline" size="icon" onClick={() => updateLineItem(index, { quantity: String(Math.max(1, (Number(item.quantity) || 1) - 1)) })}>
+                        <Button type="button" variant="outline" size="icon" disabled={isView} onClick={() => updateLineItem(index, { quantity: String(Math.max(1, (Number(item.quantity) || 1) - 1)) })}>
                           <Minus className="h-4 w-4" />
                         </Button>
                         <Input
                           type="number"
                           min="1"
                           value={item.quantity}
+                          disabled={isView}
                           onChange={(e) => updateLineItem(index, { quantity: e.target.value })}
                           className="text-center"
                         />
-                        <Button type="button" variant="outline" size="icon" onClick={() => updateLineItem(index, { quantity: String((Number(item.quantity) || 1) + 1) })}>
+                        <Button type="button" variant="outline" size="icon" disabled={isView} onClick={() => updateLineItem(index, { quantity: String((Number(item.quantity) || 1) + 1) })}>
                           <Plus className="h-4 w-4" />
                         </Button>
                       </div>
@@ -237,7 +305,7 @@ export function OrderFormDialog({ open, onOpenChange }: Props) {
                       </div>
                     </div>
                     <div className="flex justify-end">
-                      <Button type="button" variant="outline" size="icon" onClick={() => removeLineItem(index)} disabled={lineItems.length === 1}>
+                      <Button type="button" variant="outline" size="icon" onClick={() => removeLineItem(index)} disabled={isView || lineItems.length === 1}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -266,10 +334,12 @@ export function OrderFormDialog({ open, onOpenChange }: Props) {
           </Card>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={() => createMut.mutate()} disabled={!customerId || createMut.isPending || subtotal <= 0}>
-            {createMut.isPending ? "Saving..." : "Create"}
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{isView ? "Close" : "Cancel"}</Button>
+          {!isView && (
+            <Button onClick={() => createMut.mutate()} disabled={!customerId || createMut.isPending || subtotal <= 0}>
+              {createMut.isPending ? "Saving..." : isEdit ? "Save" : "Create"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
