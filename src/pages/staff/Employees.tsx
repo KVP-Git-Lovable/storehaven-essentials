@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Plus, Search, Users, UserCheck, UserX, Loader2, CalendarPlus, User } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { employeeSchema, type EmployeeFormData } from "@/lib/schemas";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const departments = ["Operations", "Sales", "Security", "Housekeeping", "IT", "Management"];
 const positions = ["Store Manager", "Assistant Manager", "Sales Associate", "Cashier", "Security Guard", "Housekeeper"];
@@ -52,11 +53,13 @@ export default function Employees() {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { hasPermission } = usePermissions();
+  const canViewStores = hasPermission("stores", "view") || hasPermission("stores.all", "view");
 
   const { data: stores } = useQuery({
     queryKey: ["stores-lookup"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("stores").select("id, name").order("name");
+      const { data, error } = await supabase.from("stores").select("id, name").eq("status", "active").order("name");
       if (error) throw error;
       return data;
     },
@@ -202,7 +205,15 @@ export default function Employees() {
                 <div className="grid grid-cols-2 gap-4">
                   <FormField control={form.control} name="storeId" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Deployed Store</FormLabel>
+                      <div className="flex items-center justify-between gap-3">
+                        <FormLabel>Deployed Store</FormLabel>
+                        {canViewStores ? (
+                          <Button asChild type="button" variant="link" className="h-auto p-0 text-xs">
+                            <Link to="/stores">Manage Stores</Link>
+                          </Button>
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Stores listed here come from the Stores master.</p>
                       <Select onValueChange={field.onChange} value={field.value || ""}>
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Select store" /></SelectTrigger>
