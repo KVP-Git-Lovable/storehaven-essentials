@@ -59,31 +59,65 @@ export default function CustomersList() {
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("create");
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
 
+  const [searchColumn, setSearchColumn] = useState<string>("all");
+  const activeColumn = SEARCH_COLUMNS.find((c) => c.key === searchColumn) || SEARCH_COLUMNS[0];
+
   const usingListView = activeFilters.length > 0;
 
+  const applyClientSearch = (rows: any[]) => {
+    if (!search.trim()) return rows;
+    const s = search.toLowerCase();
+    if (searchColumn === "all") {
+      return rows.filter((r: any) =>
+        (r.name || "").toLowerCase().includes(s) ||
+        (r.phone || "").toLowerCase().includes(s) ||
+        (r.email || "").toLowerCase().includes(s)
+      );
+    }
+    if (activeColumn.type === "date") {
+      return rows.filter((r: any) => {
+        const v = r[searchColumn];
+        if (!v) return false;
+        return format(new Date(v), "yyyy-MM-dd") === search;
+      });
+    }
+    if (activeColumn.type === "number") {
+      const num = Number(search);
+      if (Number.isNaN(num)) return rows;
+      return rows.filter((r: any) => Number(r[searchColumn]) === num);
+    }
+    return rows.filter((r: any) => String(r[searchColumn] ?? "").toLowerCase().includes(s));
+  };
+
   const { data, isLoading } = useQuery({
-    queryKey: ["transactions-customers", search, page, activeViewId, activeFilters],
+    queryKey: ["transactions-customers", search, searchColumn, page, activeViewId, activeFilters],
     queryFn: async () => {
       if (usingListView) {
         const result = await executeListView(
           { entity_type: "customers", filters: activeFilters },
           { limit: 1000 }
         );
-        let rows = result.rows;
-        if (search.trim()) {
-          const s = search.toLowerCase();
-          rows = rows.filter((r: any) =>
-            (r.name || "").toLowerCase().includes(s) ||
-            (r.phone || "").toLowerCase().includes(s) ||
-            (r.email || "").toLowerCase().includes(s)
-          );
-        }
+        const rows = applyClientSearch(result.rows);
         const count = rows.length;
         const paged = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
         return { rows: paged, count };
       }
       let q = supabase.from("customers").select("*", { count: "exact" }).order("total_spent", { ascending: false });
-      if (search.trim()) q = q.or(`name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`);
+      if (search.trim()) {
+        if (searchColumn === "all") {
+          q = q.or(`name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`);
+        } else if (activeColumn.type === "date") {
+          // exact day match
+          q = q.eq(searchColumn, search);
+        } else if (activeColumn.type === "number") {
+          const num = Number(search);
+          if (!Number.isNaN(num)) q = q.eq(searchColumn, num);
+        } else if (activeColumn.type === "enum") {
+          q = q.eq(searchColumn, search);
+        } else {
+          q = q.ilike(searchColumn, `%${search}%`);
+        }
+      }
       q = q.range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
       const { data, error, count } = await q;
       if (error) throw error;
