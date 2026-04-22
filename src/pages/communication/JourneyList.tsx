@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Plus, Play, Pause, Trash2, BarChart3, GitBranch, Users, MessageSquare, ExternalLink, Send, Inbox, Check, X, Calendar as CalendarIcon } from "lucide-react";
+import { BackButton } from "@/components/shared/BackButton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -531,6 +532,7 @@ export default function JourneyList() {
 
   return (
     <div className="space-y-6">
+      <BackButton />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Journey Builder</h1>

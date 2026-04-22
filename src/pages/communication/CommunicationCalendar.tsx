@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { BackButton } from "@/components/shared/BackButton";
 import {
   expandToCalendarEvents,
   formatIst,
@@ -247,6 +248,7 @@ export default function CommunicationCalendar() {
 
   return (
     <div className="space-y-4 p-4 md:p-6">
+      <BackButton />
       <div>
         <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
           <CalendarIcon className="h-6 w-6" />

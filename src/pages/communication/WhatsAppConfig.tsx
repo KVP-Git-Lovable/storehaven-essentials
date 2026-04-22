@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { RefreshCw, Copy, Check } from "lucide-react";
+import { BackButton } from "@/components/shared/BackButton";
 import { useState } from "react";
 import { toast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
@@ -53,6 +54,7 @@ const WhatsAppConfig = () => {
 
   return (
     <div className="space-y-6">
+      <BackButton />
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold">WhatsApp Configuration</h1>

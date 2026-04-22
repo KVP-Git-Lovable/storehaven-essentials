@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Search } from "lucide-react";
+import { BackButton } from "@/components/shared/BackButton";
 import { toast } from "sonner";
 
 const segmentColors: Record<string, string> = {
@@ -77,6 +78,7 @@ export default function ContactsManager() {
 
   return (
     <div className="space-y-6">
+      <BackButton />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Contacts</h1>

@@ -1,8 +1,10 @@
 import { Mail } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BackButton } from "@/components/shared/BackButton";
 
 const EmailCenter = () => (
   <div className="space-y-6">
+    <BackButton />
     <div>
       <h1 className="text-2xl md:text-3xl font-semibold">Email Center</h1>
       <p className="text-muted-foreground mt-1">Manage email communication channels.</p>

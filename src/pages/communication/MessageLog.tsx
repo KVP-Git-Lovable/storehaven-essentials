@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MessageSquare } from "lucide-react";
+import { BackButton } from "@/components/shared/BackButton";
 import { format } from "date-fns";
 
 export default function MessageLog() {
@@ -30,6 +31,7 @@ export default function MessageLog() {
 
   return (
     <div className="space-y-6">
+      <BackButton />
       <div>
         <h1 className="text-2xl font-bold">Message Log</h1>
         <p className="text-muted-foreground">History of WhatsApp messages sent via templates</p>
