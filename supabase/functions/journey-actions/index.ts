@@ -155,7 +155,7 @@ async function upsertContactsFromCustomers(supabase: any, customers: any[]): Pro
   };
 }
 
-async function resolveListViewContacts(supabase: any, listViewId: string): Promise<{ contactIds: string[]; warning?: string }> {
+async function resolveListViewContacts(supabase: any, listViewId: string): Promise<{ contactIds: string[]; matched: number; skipped: number; firstError?: string; warning?: string }> {
   const { data: lv, error: lvErr } = await supabase
     .from("list_views")
     .select("entity_type, selected_fields, filters")
@@ -177,22 +177,34 @@ async function resolveListViewContacts(supabase: any, listViewId: string): Promi
   if (error) throw error;
 
   if (lv.entity_type === "customers") {
-    const ids = await upsertContactsFromCustomers(supabase, rows || []);
-    return { contactIds: ids, warning: ids.length === 0 ? "No customers matched" : undefined };
+    const res = await upsertContactsFromCustomers(supabase, rows || []);
+    return {
+      contactIds: res.contactIds,
+      matched: res.matched,
+      skipped: res.skipped,
+      firstError: res.firstError,
+      warning: res.contactIds.length === 0 ? "No customers enrolled" : undefined,
+    };
   }
 
   if (lv.entity_type === "orders") {
     const customerIds = Array.from(new Set((rows || []).map((r: any) => r.customer_id).filter(Boolean)));
-    if (customerIds.length === 0) return { contactIds: [], warning: "No orders with customers matched" };
-    const { data: customers } = await supabase
+    if (customerIds.length === 0) return { contactIds: [], matched: 0, skipped: 0, warning: "No orders with customers matched" };
+    const { data: customers, error: cErr } = await supabase
       .from("customers")
       .select("*")
       .in("id", customerIds);
-    const ids = await upsertContactsFromCustomers(supabase, customers || []);
-    return { contactIds: ids };
+    if (cErr) throw cErr;
+    const res = await upsertContactsFromCustomers(supabase, customers || []);
+    return {
+      contactIds: res.contactIds,
+      matched: res.matched,
+      skipped: res.skipped,
+      firstError: res.firstError,
+    };
   }
 
-  return { contactIds: [] };
+  return { contactIds: [], matched: 0, skipped: 0 };
 }
 
 Deno.serve(async (req) => {
@@ -211,6 +223,9 @@ Deno.serve(async (req) => {
       if (jErr) throw jErr;
 
       let contactIds: string[] = [];
+      let matched = 0;
+      let skipped = 0;
+      let firstError: string | undefined;
 
       if (journey.list_view_id) {
         const { data: lv, error: lvErr } = await supabase
@@ -231,6 +246,9 @@ Deno.serve(async (req) => {
 
         const result = await resolveListViewContacts(supabase, journey.list_view_id);
         contactIds = result.contactIds;
+        matched = result.matched;
+        skipped = result.skipped;
+        firstError = result.firstError;
       } else {
         let query = supabase.from("journey_contacts").select("id").eq("opted_out", false);
         if (journey.segment_type) query = query.eq("segment_type", journey.segment_type);
@@ -239,6 +257,7 @@ Deno.serve(async (req) => {
         const { data: contacts, error: cErr } = await query;
         if (cErr) throw cErr;
         contactIds = (contacts || []).map((c: any) => c.id);
+        matched = contactIds.length;
       }
 
       const canvas = journey.canvas_data as any;
@@ -253,12 +272,22 @@ Deno.serve(async (req) => {
           status: "active",
           next_action_at: new Date().toISOString(),
         }));
-        await supabase.from("journey_enrollments").insert(enrollments);
+        const { error: enrErr } = await supabase.from("journey_enrollments").insert(enrollments);
+        if (enrErr) {
+          console.error("[journey-actions] insert journey_enrollments failed:", enrErr);
+          throw new Error(`Failed to enroll contacts: ${enrErr.message}`);
+        }
       }
 
       await supabase.from("journeys").update({ status: "active" }).eq("id", journey_id);
 
-      return new Response(JSON.stringify({ success: true, enrolled: contactIds.length }), {
+      return new Response(JSON.stringify({
+        success: true,
+        enrolled: contactIds.length,
+        matched,
+        skipped,
+        reason: firstError,
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
