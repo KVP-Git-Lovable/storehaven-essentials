@@ -1,34 +1,62 @@
 
 
-## Fix: WhatsApp template variable shows `{{contact.name}}` literally
+## Inline expandable date details in Communication Calendar
 
-### Problem
+Enhance `src/pages/communication/CommunicationCalendar.tsx` so clicking any date cell expands a full-width panel directly beneath that week row, showing per-journey details for that day. Existing month grid, filters, schedule expansion, and chip rendering stay untouched.
 
-The journey message node maps template variable `{{1}}` → `{{contact.name}}`, but `process-journeys` doesn't understand that token format. It currently only resolves single-brace tokens like `{customer_name}` against direct fields on the contact row. So the literal string `{{contact.name}}` is forwarded to Twilio and the recipient receives it verbatim.
+### UI behavior
 
-### Fix
+- Clicking a date cell sets it as the selected day. Clicking it again (or another cell in the same week) collapses/replaces the selection.
+- Only one day expanded at a time.
+- Expanded panel is rendered as its own grid item with `col-span-7` immediately after the week row (rows 1–6) that contains the selected date — no modals, no navigation.
+- Selected cell gets a stronger ring + subtle bg to make the active selection obvious.
+- Smooth expand/collapse via `Collapsible` from `@/components/ui/collapsible` (already in project).
+- Mobile (≤640px): panel cards stack vertically; chips wrap; thumbnail shrinks to 64×64.
 
-Update `resolveVariables` in `supabase/functions/process-journeys/index.ts` to support the `{{contact.<field>}}` token format produced by the journey builder UI, with sensible aliases and a graceful fallback.
+### Panel content (per journey, as a Card)
 
-Resolution rules (in order, per mapped value):
-1. If value is a `{{contact.<path>}}` token → look up `<path>` on the contact row.
-   - Aliases: `contact.name` → `name` (fallback: `first_name + ' ' + last_name`); `contact.first_name`, `contact.last_name`, `contact.email`, `contact.phone` → matching column on `journey_contacts`.
-   - Also support nested paths into `journey_contacts.metadata` JSON (e.g. `{{contact.metadata.city}}` or `{{contact.city}}` falls through to `metadata.city`).
-2. If value contains one or more `{{...}}` or `{...}` tokens mixed with literal text → replace each token with its resolved value (so things like `Hi {{contact.first_name}} 👋` work).
-3. If value is a plain field name (no braces) → direct lookup as today.
-4. If the resolved value is empty/null → fall back to `'Customer'` for variable `{{1}}`, empty string for others (matches existing safety net for Twilio error 63019).
+For each journey scheduled on the selected IST day:
+- **Journey name** (clickable → `/communication/journeys/:id`)
+- **Channel** badge (WhatsApp / Email / SMS / Voice — reuses `CHANNEL_STYLES`)
+- **Scheduled time** (IST, 12-hour) — from the in-memory expanded events
+- **Last run at** — most recent `sent_at` from `journey_message_log` for that journey
+- **Execution status** — derived from latest log row:
+  - `delivered` / `read` → green "Completed"
+  - `queued` / `pending_delivery` / `sent` → amber "Pending"
+  - `failed` / `undelivered` → red "Failed"
+  - none yet → muted "Not yet run"
+- **Audience count** — count of `journey_enrollments` where `journey_id = X` (all-time enrolled). Shown as "N contacts".
+- **Media preview** — if the journey's first message node has a `media_url` / `mediaUrl` / template `twilio_media_url`, render a 96×96 rounded thumbnail (image). If none, hide the section entirely.
 
-Also keep the existing default: if mapping doesn't supply `1` at all, still default to contact name.
+### Data fetching (no new API route — uses existing Supabase client)
 
-### Verification
+The user spec mentions `GET /api/journeys/by-date`, but the project doesn't have a REST layer; data already comes from Supabase. We fetch the same shape directly:
 
-- Re-trigger the affected enrollments for the `highvalue_8lakh` template.
-- The recipient should see "Hi Suyog Hegde Kundapura" (or the actual name from `journey_contacts.name`) instead of the literal token.
-- Journey logs should record the rendered variables JSON with the resolved name.
+- `useQuery` keyed `["calendar-day-details", dayKey, journeyIds]`, enabled only when a date is selected.
+- Query runs **once per opened date** and is cached by react-query (satisfies "lazy load + cache previously opened dates"). `staleTime: 5 * 60_000`.
+- Inputs: the journey IDs already scheduled for that day (derived from `eventsByDay.get(dayKey)`).
+- Two parallel queries scoped to those IDs:
+  1. `journey_message_log`: `select('journey_id, sent_at, status, delivery_status').in('journey_id', ids).order('sent_at', { ascending: false })` — reduce client-side to latest per journey.
+  2. `journey_enrollments`: `select('journey_id', { count: 'exact', head: false }).in('journey_id', ids)` — group client-side for audience count.
+- Media URL resolved from `canvas_data` (already loaded) — no extra fetch.
 
-### Files changed
+### Implementation outline
 
-- `supabase/functions/process-journeys/index.ts` — rewrite `resolveVariables` with the rules above.
+1. Add state: `selectedDayKey: string | null`.
+2. In the 42-cell grid loop, make each cell a `<button>` with `onClick={() => setSelectedDayKey(prev => prev === cell.key ? null : cell.key)}`. Preserve existing chip click handlers via `e.stopPropagation()` (already used for chips).
+3. After every 7 cells (week row), if `selectedDayKey`'s cell falls within that week, render `<div className="col-span-7">…panel…</div>` so it appears under the correct row.
+4. New child component `CalendarDayDetails` ({ dayKey, events }): runs the react-query call, renders skeletons → cards → empty state.
+5. New helper `getJourneyMediaUrl(canvas_data)` mirrors the existing `deriveFirstMessagePreview` pattern.
 
-No DB migration, no UI change needed — the binding chips users already inserted (`{{contact.name}}`, `{{contact.first_name}}`, etc.) will start resolving correctly.
+### Files to change
+
+- `src/pages/communication/CommunicationCalendar.tsx` — add selection state, week-row injection, render `<CalendarDayDetails>` panel.
+- `src/components/communication/CalendarDayDetails.tsx` (new) — encapsulates the per-day panel with its own `useQuery` for logs + audience count.
+
+### Constraints respected
+
+- Existing calendar layout, filters, schedule expansion, chip rendering, and IST handling are unchanged.
+- No DB migration. No edge function. No new route.
+- Mobile-friendly (stacked cards, wrapping chips, 16px input font rules untouched).
+- Status colors: green / amber / red as specified.
 
