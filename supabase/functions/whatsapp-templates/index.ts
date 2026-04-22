@@ -8,6 +8,63 @@ const corsHeaders = {
 
 const CONTENT_API_BASE = 'https://content.twilio.com';
 
+// Inspect a Twilio Content `types` map and derive normalized template metadata
+// (template type, media URL, whether the media URL is variable-driven, and the
+// full set of required {{N}} or {{name}} variables across body + media).
+function deriveTwilioMetadata(types: Record<string, any> | null | undefined) {
+  const t = types && typeof types === 'object' ? types : {};
+  const knownTypes = Object.keys(t);
+  // Prefer media when present so the UI surfaces the asset clearly.
+  const templateType = knownTypes.find((k) => k === 'twilio/media')
+    || knownTypes.find((k) => k === 'twilio/text')
+    || knownTypes[0]
+    || null;
+
+  let mediaUrl: string | null = null;
+  let mediaIsVariable = false;
+  const media = t['twilio/media'];
+  if (media && typeof media === 'object') {
+    const candidate = Array.isArray(media.media) ? media.media[0] : media.media;
+    if (typeof candidate === 'string' && candidate.length > 0) {
+      mediaUrl = candidate;
+      mediaIsVariable = /\{\{[^}]+\}\}/.test(candidate);
+    }
+  }
+
+  // Collect every placeholder referenced anywhere in the content definition
+  const required = new Set<string>();
+  const collect = (s: unknown) => {
+    if (typeof s !== 'string') return;
+    const re = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(s)) !== null) required.add(m[1]);
+  };
+  for (const v of Object.values(t)) {
+    if (!v || typeof v !== 'object') continue;
+    const obj = v as Record<string, unknown>;
+    collect(obj.body);
+    collect((obj as any).media);
+    if (Array.isArray((obj as any).media)) (obj as any).media.forEach(collect);
+    // CTA / list templates also have headers, footers, actions, items
+    collect((obj as any).header);
+    collect((obj as any).footer);
+    if (Array.isArray((obj as any).actions)) {
+      for (const a of (obj as any).actions) {
+        if (a && typeof a === 'object') {
+          collect(a.title); collect(a.url); collect(a.phone);
+        }
+      }
+    }
+  }
+
+  return {
+    templateType,
+    mediaUrl,
+    mediaIsVariable,
+    requiredVariables: Array.from(required),
+  };
+}
+
 function getTwilioAuth() {
   const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
   const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
