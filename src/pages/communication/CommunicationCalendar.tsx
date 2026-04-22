@@ -107,6 +107,7 @@ export default function CommunicationCalendar() {
   const [viewYear, setViewYear] = useState(todayIst.year);
   const [viewMonth, setViewMonth] = useState(todayIst.month0); // 0-indexed
   const [channelFilter, setChannelFilter] = useState<string[]>([]);
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
 
   const { data: journeys = [], isLoading } = useQuery({
     queryKey: ["communication-calendar-journeys"],
