@@ -1,67 +1,89 @@
 
 
-## WhatsApp Inbound Webhook with Greeting Auto-Reply
+## WhatsApp Configuration — Backend + Frontend
 
-Create a new public Twilio webhook edge function that receives inbound WhatsApp messages, auto-replies to greetings ("hi", "hello", "hey", "start") with the Trayi Jewellery welcome line, and leaves room for future intent handling (orders, products, etc.).
+Replace the current placeholder at `/communication/whatsapp/config` with a real, server-fetched view of the Twilio WhatsApp sender configuration. All Twilio credentials remain server-side; the existing inbound webhook and messaging flows are untouched.
 
-### 1. New edge function — `supabase/functions/whatsapp-inbound/index.ts`
+### 1. Database — store webhook URL (optional but recommended)
 
-- **Public** (no JWT) — Twilio calls it directly. Add a config block in `supabase/config.toml`:
-  ```toml
-  [functions.whatsapp-inbound]
-  verify_jwt = false
-  ```
-- Accepts Twilio's `application/x-www-form-urlencoded` POST. Parses `Body`, `From`, `To`, `MessageSid`, `ProfileName`.
-- Returns **TwiML XML** (`Content-Type: text/xml`) — Twilio's standard reply mechanism, no outbound API call needed.
+New table `public.whatsapp_config` (single-row config table):
 
-### 2. Greeting detection (runs FIRST, before any other intent logic)
+| column | type | notes |
+|---|---|---|
+| `id` | uuid PK default `gen_random_uuid()` | |
+| `sender_number` | text | E.164, nullable |
+| `business_name` | text default `'QuickApp'` | |
+| `webhook_url` | text | inbound webhook URL |
+| `throughput` | text default `'80 messages per second'` | |
+| `last_synced_at` | timestamptz | updated on each sync |
+| `created_at` / `updated_at` | timestamptz default `now()` | |
 
-```ts
-const GREETING_RE = /^\s*(hi|hello|hey|start)[\s!.?,]*$/i;
-const WELCOME = "Welcome to Trayi Jewellery. ✨ I am your StoreOps assistant. How may I assist you today?";
+- RLS: enabled. Policies:
+  - `SELECT`: any authenticated user with `communication.journeys` view permission (mirrors existing pattern) — simplest: `authenticated` role can `SELECT`.
+  - `INSERT/UPDATE`: admin only (`public.is_admin(auth.uid())`).
+- Seed one row with `webhook_url = 'https://fukkurwmuxcyoyqwchdb.supabase.co/functions/v1/whatsapp-inbound'` (the public webhook just deployed).
 
-if (GREETING_RE.test(body)) {
-  return twiml(WELCOME);
-}
-```
+### 2. New edge function — `supabase/functions/whatsapp-config/index.ts`
 
-- **Case-insensitive** via `i` flag.
-- Matches the word optionally followed by punctuation/whitespace, so `"Hi!"`, `"HELLO"`, `"  hey  "`, `"start."` all trigger.
-- Whole-message match avoids false positives on phrases like "this is a high-priority order".
+Public-auth (verify_jwt = true via in-code `getClaims`), GET only.
 
-### 3. Fallback for non-greetings
+Logic:
+1. Validate caller JWT (`getClaims`) — reject unauthenticated.
+2. Read row from `whatsapp_config` (service role) for `webhook_url`, `business_name`, `throughput`.
+3. Call Twilio Messaging API via the **connector gateway** (no raw creds in code):
+   ```
+   GET https://connector-gateway.lovable.dev/twilio/v1/Channels/Senders
+   Authorization: Bearer ${LOVABLE_API_KEY}
+   X-Connection-Api-Key: ${TWILIO_API_KEY}
+   ```
+   Note: Twilio's Messaging Senders endpoint lives under `messaging.twilio.com/v1` (not `/2010-04-01/Accounts/...`). Will use the gateway path `/twilio/v1/Channels/Senders`; if the gateway only proxies the Account-scoped REST API, fall back to `/IncomingPhoneNumbers.json` (already proven to work in `whatsapp-senders`) and filter for WhatsApp-capable numbers. The function will try Senders first and gracefully fall back.
+4. Filter to WhatsApp senders only (`sender_id` starts with `whatsapp:` or `properties.address` includes `whatsapp:`).
+5. Pick the primary sender (first WhatsApp sender, or one matching `whatsapp_config.sender_number` if set).
+6. Update `whatsapp_config.sender_number` and `last_synced_at`.
+7. Return:
+   ```json
+   {
+     "phone_number": "+14155238886",
+     "status": "ONLINE",
+     "sender_sid": "XEXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+     "business_name": "QuickApp",
+     "webhook_url": "https://.../functions/v1/whatsapp-inbound",
+     "throughput": "80 messages per second",
+     "last_synced_at": "2026-04-22T..."
+   }
+   ```
 
-If no greeting match, return an **empty TwiML response** (`<Response/>`) — Twilio sends nothing back, leaving the conversation open for existing/future intent handlers (orders, products, etc.) to be added later as additional `if` blocks before the empty fallback. Existing flows (`whatsapp-send`, `whatsapp-templates`, `whatsapp-senders`) are untouched.
+Status normalization: Twilio statuses (`ONLINE`, `OFFLINE`, `CREATING`, etc.) returned as-is; UI treats `ONLINE` / `in-use` as healthy.
 
-### 4. TwiML helper
+`supabase/config.toml`: no entry needed — defaults to `verify_jwt = false`, but the function validates JWT in code (consistent with project patterns). No new secrets required (`TWILIO_API_KEY` and `LOVABLE_API_KEY` already configured).
 
-```ts
-function twiml(message: string) {
-  const xml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escapeXml(message)}</Message></Response>`;
-  return new Response(xml, { status: 200, headers: { "Content-Type": "text/xml" } });
-}
-```
+### 3. Frontend — rewrite `src/pages/communication/WhatsAppConfig.tsx`
 
-Plus a small `escapeXml` for `& < > " '`.
+Single-page card layout, no theme/color additions, uses existing primitives only.
 
-### 5. Twilio configuration (one-time, manual by user)
+- React Query: `["whatsapp-config"]` → `supabase.functions.invoke("whatsapp-config", { method: "GET" })`.
+- Header: title "WhatsApp Configuration", subtitle, **Refresh** button (`RefreshCw`, spins while refetching).
+- Single `Card` "Sender Configuration" with read-only field rows (label left, value right, monospace where appropriate):
+  - **WhatsApp Sender Number** — `whatsapp:{phone_number}`
+  - **Status** — `Badge` with green dot (`bg-green-500`) when `ONLINE`, muted otherwise; existing `bg-green-100 text-green-800` token (already in palette).
+  - **Business Display Name** — `business_name`
+  - **Throughput** — `throughput`
+  - **Webhook URL** — `webhook_url` in monospace `Input` (read-only) + small "Copy" icon button using `navigator.clipboard`.
+  - **Last Synced** — relative timestamp (muted).
+- Loading: `Skeleton` rows. Error: muted destructive message + retry hint.
+- All fields read-only (no edit UI in this iteration).
 
-After deploy, the webhook URL will be:
-`https://fukkurwmuxcyoyqwchdb.supabase.co/functions/v1/whatsapp-inbound`
+### 4. Constraints honored
 
-The user pastes that into the Twilio Console → WhatsApp Sender → "When a message comes in" (HTTP POST). I'll include the URL in the post-deploy chat message.
-
-### 6. Constraints honored
-
-- No DB lookups, no schema changes, no RLS edits.
-- No changes to existing WhatsApp functions or any other module.
-- Greeting check executes before any other intent logic.
-- Empty fallback preserves room for orders/products/etc. flows without interfering.
+- Inbound webhook (`whatsapp-inbound`), `whatsapp-send`, `whatsapp-senders`, `whatsapp-templates` are not modified.
+- No Twilio credentials in client code; gateway pattern keeps secrets server-side.
+- No design-token changes.
 
 ### Files
 
-- **New:** `supabase/functions/whatsapp-inbound/index.ts`
-- **Edit:** `supabase/config.toml` — add `[functions.whatsapp-inbound]` with `verify_jwt = false`.
+- **DB migration:** create `whatsapp_config` table + RLS + seed row.
+- **New:** `supabase/functions/whatsapp-config/index.ts`
+- **Edit:** `src/pages/communication/WhatsAppConfig.tsx` — replace placeholder with real config page.
 
 No other files modified.
 
