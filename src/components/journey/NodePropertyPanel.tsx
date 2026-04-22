@@ -115,8 +115,10 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
 
     const { twilioBody, mapping } = parseStoredBody(firstTemplate.body);
     const displayBody = mapping ? transformTwilioToFriendly(twilioBody, mapping) : twilioBody;
+    const bodyVars = Array.from(displayBody.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g), (m) => m[1]);
+    const syncVars = Array.isArray(firstTemplate.twilio_required_variables) ? firstTemplate.twilio_required_variables : [];
     const initialVariables = Object.fromEntries(
-      Array.from(displayBody.matchAll(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g), (match) => [match[1], `{{${match[1]}}}`])
+      Array.from(new Set([...bodyVars, ...syncVars])).map((v) => [v, `{{${v}}}`])
     );
 
     onUpdate(node.id, {
