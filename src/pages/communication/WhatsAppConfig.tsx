@@ -102,10 +102,10 @@ const WhatsAppConfig = () => {
                 {isOnline ? (
                   <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-transparent gap-1.5">
                     <span className="h-2 w-2 rounded-full bg-green-500" />
-                    {data.status}
+                    {displayStatus}
                   </Badge>
                 ) : (
-                  <Badge variant="secondary">{data.status || "UNKNOWN"}</Badge>
+                  <Badge variant="secondary">{displayStatus}</Badge>
                 )}
               </Row>
               <Row label="Business Display Name">{data.business_name}</Row>
