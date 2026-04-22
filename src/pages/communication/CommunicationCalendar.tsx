@@ -17,6 +17,7 @@ import {
   formatIst,
   type JourneySchedule,
 } from "@/lib/journeySchedule";
+import { CalendarDayDetails, type DayEvent } from "@/components/communication/CalendarDayDetails";
 
 const IST_OFFSET_MIN = 330;
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
