@@ -268,6 +268,12 @@ serve(async (req) => {
             rejection_reason: rejectionReason,
             user_initiated_approved: userInitiatedApproved,
             created_by: user.id,
+            twilio_content_types: content.types || null,
+            twilio_template_type: deriveTwilioMetadata(content.types).templateType,
+            twilio_media_url: deriveTwilioMetadata(content.types).mediaUrl,
+            twilio_media_is_variable: deriveTwilioMetadata(content.types).mediaIsVariable,
+            twilio_required_variables: deriveTwilioMetadata(content.types).requiredVariables,
+            twilio_synced_at: new Date().toISOString(),
           });
 
           imported++;
