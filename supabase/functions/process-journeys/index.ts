@@ -170,7 +170,7 @@ Deno.serve(async (req) => {
                 to_number: contact.phone,
                 from_number: fromNumber,
                 variables,
-                allow_user_initiated: true,
+                allow_user_initiated: false,
                 internal_caller: "process-journeys",
                 journey_enrollment_id: enrollment.id,
               }),
@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
             if (!resp.ok || !result?.success) {
               throw new Error(result?.error || `whatsapp-send failed (${resp.status})`);
             }
-            sendStatus = "sent";
+            sendStatus = result.status || "queued";
             twilioSid = result.twilio_message_sid || result.message_sid || null;
             renderedBody = JSON.stringify(variables);
             messagesSent++;
