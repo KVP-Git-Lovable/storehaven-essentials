@@ -36,13 +36,19 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Resolve a single active sender (from whatsapp_config)
+    // Resolve a single active sender — first from whatsapp_config, then from
+    // the most recent inbound message (Twilio's `To` value), then env var.
     const { data: cfg } = await supabase
       .from("whatsapp_config")
       .select("sender_number")
       .limit(1)
       .maybeSingle();
-    const fromNumber = cfg?.sender_number || null;
+    let fromNumber: string | null = cfg?.sender_number || null;
+    if (!fromNumber) {
+      // Fallback: env var override (lets ops set a default sender without DB write)
+      const envFrom = Deno.env.get("WHATSAPP_FROM_NUMBER");
+      if (envFrom && /^\+[1-9]\d{1,14}$/.test(envFrom)) fromNumber = envFrom;
+    }
 
     const { data: activeJourneys } = await supabase
       .from("journeys").select("*").eq("status", "active");

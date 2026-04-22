@@ -1,13 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { RefreshCw, Copy, Check } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { RefreshCw, Copy, Check, Save } from "lucide-react";
 import { BackButton } from "@/components/shared/BackButton";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 
@@ -29,7 +30,9 @@ const Row = ({ label, children }: { label: string; children: React.ReactNode }) 
 );
 
 const WhatsAppConfig = () => {
+  const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
+  const [senderInput, setSenderInput] = useState("");
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["whatsapp-config"],
@@ -39,6 +42,40 @@ const WhatsAppConfig = () => {
       });
       if (error) throw error;
       return data as WhatsAppConfigData;
+    },
+  });
+
+  // Keep input in sync with whatever the backend reports
+  useEffect(() => {
+    if (data?.phone_number) setSenderInput(data.phone_number);
+  }, [data?.phone_number]);
+
+  const saveSenderMutation = useMutation({
+    mutationFn: async (sender: string) => {
+      const trimmed = sender.trim();
+      if (!/^\+[1-9]\d{1,14}$/.test(trimmed)) {
+        throw new Error("Sender number must be in E.164 format (e.g. +14155238886)");
+      }
+      const { data: cfg, error: selErr } = await supabase
+        .from("whatsapp_config")
+        .select("id")
+        .limit(1)
+        .maybeSingle();
+      if (selErr) throw selErr;
+      if (!cfg?.id) throw new Error("WhatsApp config row not found");
+      const { error: updErr } = await supabase
+        .from("whatsapp_config")
+        .update({ sender_number: trimmed })
+        .eq("id", cfg.id);
+      if (updErr) throw updErr;
+      return trimmed;
+    },
+    onSuccess: (saved) => {
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-config"] });
+      toast({ title: "Sender number saved", description: `Outbound messages will use ${saved}.` });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Could not save sender number", description: e.message, variant: "destructive" });
     },
   });
 
@@ -94,9 +131,24 @@ const WhatsAppConfig = () => {
           ) : data ? (
             <div className="space-y-0">
               <Row label="WhatsApp Sender Number">
-                <span className="font-mono">
-                  {data.phone_number ? `whatsapp:${data.phone_number}` : "—"}
-                </span>
+                <div className="flex items-center gap-2 w-full sm:w-[28rem]">
+                  <Input
+                    placeholder="+14155238886"
+                    value={senderInput}
+                    onChange={(e) => setSenderInput(e.target.value)}
+                    className="font-mono text-sm h-9"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 shrink-0"
+                    onClick={() => saveSenderMutation.mutate(senderInput)}
+                    disabled={saveSenderMutation.isPending || !senderInput || senderInput === data.phone_number}
+                  >
+                    <Save className="h-4 w-4 mr-1.5" />
+                    Save
+                  </Button>
+                </div>
               </Row>
               <Row label="Status">
                 {isOnline ? (
