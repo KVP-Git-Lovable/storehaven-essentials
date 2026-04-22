@@ -131,9 +131,24 @@ const WhatsAppConfig = () => {
           ) : data ? (
             <div className="space-y-0">
               <Row label="WhatsApp Sender Number">
-                <span className="font-mono">
-                  {data.phone_number ? `whatsapp:${data.phone_number}` : "—"}
-                </span>
+                <div className="flex items-center gap-2 w-full sm:w-[28rem]">
+                  <Input
+                    placeholder="+14155238886"
+                    value={senderInput}
+                    onChange={(e) => setSenderInput(e.target.value)}
+                    className="font-mono text-sm h-9"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 shrink-0"
+                    onClick={() => saveSenderMutation.mutate(senderInput)}
+                    disabled={saveSenderMutation.isPending || !senderInput || senderInput === data.phone_number}
+                  >
+                    <Save className="h-4 w-4 mr-1.5" />
+                    Save
+                  </Button>
+                </div>
               </Row>
               <Row label="Status">
                 {isOnline ? (
