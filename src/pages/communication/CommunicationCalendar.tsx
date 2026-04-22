@@ -89,6 +89,7 @@ interface CalEvent {
   channel: string;
   start: Date;
   preview: string | null;
+  canvas_data?: any;
 }
 
 function startOfMonthIst(year: number, month0: number): Date {
