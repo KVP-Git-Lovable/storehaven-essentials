@@ -48,7 +48,7 @@ export function MessageNode({ data, selected }: NodeProps) {
         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{(data as any).template_body}</p>
       )}
       {showApprovalWarning && (
-        <div className="mt-2 flex items-start gap-1.5 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-2 text-[11px] text-yellow-700 dark:text-yellow-300">
+        <div className="mt-2 flex items-start gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive">
           <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
           <span>Template pending Meta approval — messages will fail until approved.</span>
         </div>
