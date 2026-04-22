@@ -389,7 +389,7 @@ export default function CommunicationCalendar() {
                         <CalendarDayDetails dayKey={selectedCell.key} events={selectedEvents} />
                       </div>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </div>
