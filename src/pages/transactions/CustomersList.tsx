@@ -12,6 +12,27 @@ import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar
 import { CustomerFormDialog } from "@/components/transactions/CustomerFormDialog";
 import { executeListView } from "@/lib/listViewExecutor";
 import type { FilterCondition } from "@/lib/listViewSchema";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+type SearchColumn = {
+  key: string;
+  label: string;
+  type: "text" | "date" | "number" | "enum";
+  options?: string[];
+};
+
+const SEARCH_COLUMNS: SearchColumn[] = [
+  { key: "all", label: "All fields", type: "text" },
+  { key: "name", label: "Name", type: "text" },
+  { key: "phone", label: "Phone", type: "text" },
+  { key: "email", label: "Email", type: "text" },
+  { key: "tier", label: "Tier", type: "enum", options: ["bronze", "silver", "gold", "platinum"] },
+  { key: "total_orders", label: "Total Orders", type: "number" },
+  { key: "total_spent", label: "Total Spent", type: "number" },
+  { key: "created_at", label: "Created Date", type: "date" },
+  { key: "date_of_birth", label: "DOB", type: "date" },
+  { key: "anniversary_date", label: "Anniversary", type: "date" },
+];
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,31 +59,65 @@ export default function CustomersList() {
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("create");
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
 
+  const [searchColumn, setSearchColumn] = useState<string>("all");
+  const activeColumn = SEARCH_COLUMNS.find((c) => c.key === searchColumn) || SEARCH_COLUMNS[0];
+
   const usingListView = activeFilters.length > 0;
 
+  const applyClientSearch = (rows: any[]) => {
+    if (!search.trim()) return rows;
+    const s = search.toLowerCase();
+    if (searchColumn === "all") {
+      return rows.filter((r: any) =>
+        (r.name || "").toLowerCase().includes(s) ||
+        (r.phone || "").toLowerCase().includes(s) ||
+        (r.email || "").toLowerCase().includes(s)
+      );
+    }
+    if (activeColumn.type === "date") {
+      return rows.filter((r: any) => {
+        const v = r[searchColumn];
+        if (!v) return false;
+        return format(new Date(v), "yyyy-MM-dd") === search;
+      });
+    }
+    if (activeColumn.type === "number") {
+      const num = Number(search);
+      if (Number.isNaN(num)) return rows;
+      return rows.filter((r: any) => Number(r[searchColumn]) === num);
+    }
+    return rows.filter((r: any) => String(r[searchColumn] ?? "").toLowerCase().includes(s));
+  };
+
   const { data, isLoading } = useQuery({
-    queryKey: ["transactions-customers", search, page, activeViewId, activeFilters],
+    queryKey: ["transactions-customers", search, searchColumn, page, activeViewId, activeFilters],
     queryFn: async () => {
       if (usingListView) {
         const result = await executeListView(
           { entity_type: "customers", filters: activeFilters },
           { limit: 1000 }
         );
-        let rows = result.rows;
-        if (search.trim()) {
-          const s = search.toLowerCase();
-          rows = rows.filter((r: any) =>
-            (r.name || "").toLowerCase().includes(s) ||
-            (r.phone || "").toLowerCase().includes(s) ||
-            (r.email || "").toLowerCase().includes(s)
-          );
-        }
+        const rows = applyClientSearch(result.rows);
         const count = rows.length;
         const paged = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
         return { rows: paged, count };
       }
-      let q = supabase.from("customers").select("*", { count: "exact" }).order("total_spent", { ascending: false });
-      if (search.trim()) q = q.or(`name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`);
+      let q: any = supabase.from("customers").select("*", { count: "exact" }).order("total_spent", { ascending: false });
+      if (search.trim()) {
+        if (searchColumn === "all") {
+          q = q.or(`name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`);
+        } else if (activeColumn.type === "date") {
+          // exact day match
+          q = q.eq(searchColumn, search);
+        } else if (activeColumn.type === "number") {
+          const num = Number(search);
+          if (!Number.isNaN(num)) q = q.eq(searchColumn, num);
+        } else if (activeColumn.type === "enum") {
+          q = q.eq(searchColumn, search);
+        } else {
+          q = q.ilike(searchColumn, `%${search}%`);
+        }
+      }
       q = q.range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
       const { data, error, count } = await q;
       if (error) throw error;
@@ -103,15 +158,35 @@ export default function CustomersList() {
         onApply={(id, filters) => { setActiveViewId(id); setActiveFilters(filters); setPage(0); }}
       />
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Select value={searchColumn} onValueChange={(v) => { setSearchColumn(v); setSearch(""); setPage(0); }}>
+          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {SEARCH_COLUMNS.map((c) => (
+              <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search name, phone, email..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-            className="pl-9"
-          />
+          {activeColumn.type === "enum" && activeColumn.options ? (
+            <Select value={search} onValueChange={(v) => { setSearch(v); setPage(0); }}>
+              <SelectTrigger className="pl-9"><SelectValue placeholder={`Select ${activeColumn.label}...`} /></SelectTrigger>
+              <SelectContent>
+                {activeColumn.options.map((opt) => (
+                  <SelectItem key={opt} value={opt} className="capitalize">{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              type={activeColumn.type === "date" ? "date" : activeColumn.type === "number" ? "number" : "text"}
+              placeholder={searchColumn === "all" ? "Search name, phone, email..." : `Search by ${activeColumn.label}...`}
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+              className="pl-9"
+            />
+          )}
         </div>
         <Badge variant="secondary">{data?.count ?? 0} total</Badge>
       </div>
