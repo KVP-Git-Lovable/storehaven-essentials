@@ -5,25 +5,92 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function getNested(obj: any, path: string): any {
+  if (!obj || !path) return undefined;
+  const parts = path.split(".");
+  let cur: any = obj;
+  for (const p of parts) {
+    if (cur == null) return undefined;
+    cur = cur[p];
+  }
+  return cur;
+}
+
+function resolveContactPath(contact: any, rawPath: string): string {
+  if (!contact) return "";
+  // Strip leading "contact." if present
+  let path = rawPath.startsWith("contact.") ? rawPath.slice("contact.".length) : rawPath;
+
+  // Aliases for common fields
+  if (path === "name") {
+    const n = contact.name;
+    if (n != null && String(n).trim()) return String(n);
+    const fn = contact.first_name ?? "";
+    const ln = contact.last_name ?? "";
+    const combined = `${fn} ${ln}`.trim();
+    if (combined) return combined;
+    // fallthrough to metadata.name
+    const meta = getNested(contact.metadata, "name");
+    return meta == null ? "" : String(meta);
+  }
+
+  // Direct column lookup
+  const direct = getNested(contact, path);
+  if (direct != null && direct !== "") return String(direct);
+
+  // Fallback into metadata JSON
+  // e.g. "city" -> metadata.city, "metadata.city" -> metadata.city
+  if (path.startsWith("metadata.")) {
+    const v = getNested(contact, path);
+    return v == null ? "" : String(v);
+  }
+  const metaVal = getNested(contact.metadata, path);
+  return metaVal == null ? "" : String(metaVal);
+}
+
+function resolveSingleToken(token: string, contact: any): string {
+  // token is the inner content of {{...}} or {...}
+  const trimmed = token.trim();
+  return resolveContactPath(contact, trimmed);
+}
+
 function resolveVariables(
   mapping: Record<string, string> | undefined,
   contact: any,
 ): Record<string, string> {
   const out: Record<string, string> = {};
   if (!mapping || typeof mapping !== "object") return out;
+
   for (const [key, source] of Object.entries(mapping)) {
     if (source == null) continue;
     if (typeof source !== "string") {
       out[key] = String(source);
       continue;
     }
-    // Replace tokens like {customer_name}, {phone}, etc. against the contact row
-    const resolved = source.replace(/\{(\w+)\}/g, (_m, field) => {
-      const v = contact?.[field];
-      return v == null ? "" : String(v);
-    });
-    // If literal token without braces, also try direct field lookup
-    out[key] = resolved || (contact?.[source] != null ? String(contact[source]) : "");
+
+    let resolved: string;
+    const hasDoubleBrace = /\{\{[^}]+\}\}/.test(source);
+    const hasSingleBrace = /\{[^{}]+\}/.test(source);
+
+    if (hasDoubleBrace || hasSingleBrace) {
+      // Replace all {{...}} first, then any remaining {...}
+      resolved = source.replace(/\{\{([^}]+)\}\}/g, (_m, inner) =>
+        resolveSingleToken(inner, contact),
+      );
+      resolved = resolved.replace(/\{([^{}]+)\}/g, (_m, inner) =>
+        resolveSingleToken(inner, contact),
+      );
+    } else {
+      // Plain field name: direct lookup (with contact.* alias support)
+      resolved = resolveContactPath(contact, source);
+    }
+
+    if (!resolved || !resolved.trim()) {
+      // Safety fallback for variable {{1}} (Twilio rejects empty placeholders)
+      out[key] = key === "1" ? "Customer" : "";
+    } else {
+      out[key] = resolved;
+    }
   }
   return out;
 }
