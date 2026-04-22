@@ -37,6 +37,75 @@ function applyFilter(q: any, cond: any) {
   }
 }
 
+function normalizeE164(raw: string | null | undefined, defaultCc = "91"): string | null {
+  if (!raw) return null;
+  let s = String(raw).trim();
+  if (s.startsWith("+")) {
+    const digits = s.slice(1).replace(/\D/g, "");
+    return digits ? `+${digits}` : null;
+  }
+  const digits = s.replace(/\D/g, "");
+  if (!digits) return null;
+  // Heuristic: if length > 10 assume already includes country code
+  if (digits.length > 10) return `+${digits}`;
+  return `+${defaultCc}${digits}`;
+}
+
+async function upsertContactsFromCustomers(supabase: any, customers: any[]): Promise<string[]> {
+  // Deduplicate by normalized phone
+  const byPhone = new Map<string, any>();
+  for (const c of customers) {
+    const phone = normalizeE164(c.phone);
+    if (!phone) continue;
+    if (!byPhone.has(phone)) byPhone.set(phone, { ...c, _phone: phone });
+  }
+  if (byPhone.size === 0) return [];
+
+  const phones = Array.from(byPhone.keys());
+
+  // Fetch existing
+  const { data: existing } = await supabase
+    .from("journey_contacts")
+    .select("id, phone")
+    .in("phone", phones);
+  const existingByPhone = new Map<string, string>();
+  for (const e of existing || []) existingByPhone.set(e.phone, e.id);
+
+  // Insert any missing
+  const toInsert = phones
+    .filter((p) => !existingByPhone.has(p))
+    .map((p) => {
+      const c = byPhone.get(p)!;
+      return {
+        phone: p,
+        name: c.name || "Customer",
+        email: c.email || `${p.replace(/\D/g, "")}@noemail.local`,
+        city: c.city || null,
+        date_of_birth: c.date_of_birth || null,
+        segment_type: c.customer_segment || "customer",
+        opted_out: false,
+      };
+    });
+
+  if (toInsert.length > 0) {
+    const { data: inserted } = await supabase
+      .from("journey_contacts")
+      .insert(toInsert)
+      .select("id, phone");
+    for (const r of inserted || []) existingByPhone.set(r.phone, r.id);
+  }
+
+  // Filter out opted-out
+  const allIds = phones.map((p) => existingByPhone.get(p)).filter(Boolean) as string[];
+  if (allIds.length === 0) return [];
+  const { data: active } = await supabase
+    .from("journey_contacts")
+    .select("id")
+    .in("id", allIds)
+    .eq("opted_out", false);
+  return (active || []).map((r: any) => r.id);
+}
+
 async function resolveListViewContacts(supabase: any, listViewId: string): Promise<{ contactIds: string[]; warning?: string }> {
   const { data: lv, error: lvErr } = await supabase
     .from("list_views")
@@ -52,40 +121,28 @@ async function resolveListViewContacts(supabase: any, listViewId: string): Promi
     throw new Error("Selected list view's entity isn't an audience source. Use a Customers or Orders view.");
   }
 
-  // Fetch matching rows from the entity table
   let q = supabase.from(entity.table).select("*");
   for (const cond of lv.filters || []) q = applyFilter(q, cond);
   q = q.limit(10000);
   const { data: rows, error } = await q;
   if (error) throw error;
 
-  // Map rows -> journey_contacts by phone (customers) or customer phone (orders)
   if (lv.entity_type === "customers") {
-    const phones = (rows || []).map((r: any) => r.phone).filter(Boolean);
-    if (phones.length === 0) return { contactIds: [], warning: "No customers matched" };
-    const { data: contacts } = await supabase
-      .from("journey_contacts")
-      .select("id")
-      .in("phone", phones)
-      .eq("opted_out", false);
-    return { contactIds: (contacts || []).map((c: any) => c.id) };
+    const ids = await upsertContactsFromCustomers(supabase, rows || []);
+    return { contactIds: ids, warning: ids.length === 0 ? "No customers matched" : undefined };
   }
+
   if (lv.entity_type === "orders") {
     const customerIds = Array.from(new Set((rows || []).map((r: any) => r.customer_id).filter(Boolean)));
     if (customerIds.length === 0) return { contactIds: [], warning: "No orders with customers matched" };
     const { data: customers } = await supabase
       .from("customers")
-      .select("phone")
+      .select("*")
       .in("id", customerIds);
-    const phones = (customers || []).map((c: any) => c.phone).filter(Boolean);
-    if (phones.length === 0) return { contactIds: [] };
-    const { data: contacts } = await supabase
-      .from("journey_contacts")
-      .select("id")
-      .in("phone", phones)
-      .eq("opted_out", false);
-    return { contactIds: (contacts || []).map((c: any) => c.id) };
+    const ids = await upsertContactsFromCustomers(supabase, customers || []);
+    return { contactIds: ids };
   }
+
   return { contactIds: [] };
 }
 
@@ -107,7 +164,6 @@ Deno.serve(async (req) => {
       let contactIds: string[] = [];
 
       if (journey.list_view_id) {
-        // Validate the linked list view's entity is an audience source
         const { data: lv, error: lvErr } = await supabase
           .from("list_views").select("entity_type, name").eq("id", journey.list_view_id).maybeSingle();
         if (lvErr) throw lvErr;
@@ -117,18 +173,16 @@ Deno.serve(async (req) => {
           throw new Error(`List view "${lv.name}" uses entity "${lv.entity_type}" which is not an audience source. Use a Customers or Orders list view.`);
         }
 
-        // Clear stale enrollments so dynamic filters (e.g. "next N days") re-evaluate fresh on every activation.
-        // Strict scoping invariant: audience is rebuilt ONLY from list-view-resolve output below.
+        // Clear stale enrollments so dynamic filters re-evaluate fresh.
         await supabase
           .from("journey_enrollments")
           .delete()
           .eq("journey_id", journey_id)
-          .in("status", ["active", "paused"]);
+          .in("status", ["active", "paused", "failed"]);
 
         const result = await resolveListViewContacts(supabase, journey.list_view_id);
         contactIds = result.contactIds;
       } else {
-        // Legacy fallback: segment_type-based (only when no list_view_id is bound)
         let query = supabase.from("journey_contacts").select("id").eq("opted_out", false);
         if (journey.segment_type) query = query.eq("segment_type", journey.segment_type);
         const filters = journey.filters as any;
@@ -138,7 +192,6 @@ Deno.serve(async (req) => {
         contactIds = (contacts || []).map((c: any) => c.id);
       }
 
-      // Get first node from canvas
       const canvas = journey.canvas_data as any;
       const entryNode = canvas?.nodes?.find((n: any) => n.type === "entry");
       const firstNodeId = entryNode?.id || canvas?.nodes?.[0]?.id;
