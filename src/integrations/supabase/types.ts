@@ -10611,6 +10611,39 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_config: {
+        Row: {
+          business_name: string
+          created_at: string
+          id: string
+          last_synced_at: string | null
+          sender_number: string | null
+          throughput: string
+          updated_at: string
+          webhook_url: string | null
+        }
+        Insert: {
+          business_name?: string
+          created_at?: string
+          id?: string
+          last_synced_at?: string | null
+          sender_number?: string | null
+          throughput?: string
+          updated_at?: string
+          webhook_url?: string | null
+        }
+        Update: {
+          business_name?: string
+          created_at?: string
+          id?: string
+          last_synced_at?: string | null
+          sender_number?: string | null
+          throughput?: string
+          updated_at?: string
+          webhook_url?: string | null
+        }
+        Relationships: []
+      }
       whatsapp_message_log: {
         Row: {
           id: string
