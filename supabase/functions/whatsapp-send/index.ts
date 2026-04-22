@@ -20,24 +20,36 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     const body = await req.json();
-    const { template_id, to_number, from_number, variables, order_id } = body;
+    const {
+      template_id, to_number, from_number, variables, order_id,
+      allow_user_initiated, internal_caller, journey_enrollment_id,
+    } = body;
+
+    // Auth: either a user JWT, OR an internal call from another edge function using the service role key
+    let userId: string | null = null;
+    const authHeader = req.headers.get('Authorization');
+    const internalKey = req.headers.get('X-Internal-Service-Key');
+
+    if (internal_caller && internalKey && internalKey === supabaseServiceKey) {
+      // Internal service-to-service call (e.g. process-journeys)
+      userId = null;
+    } else {
+      if (!authHeader) {
+        return new Response(JSON.stringify({ error: 'Missing authorization' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { data: { user }, error: authError } = await supabase.auth.getUser(
+        authHeader.replace('Bearer ', '')
+      );
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      userId = user.id;
+    }
 
     if (!template_id || !to_number || !from_number) {
       return new Response(JSON.stringify({ error: 'template_id, to_number, and from_number are required' }), {
@@ -45,14 +57,12 @@ serve(async (req) => {
       });
     }
 
-    // Validate E.164 format
     if (!/^\+[1-9]\d{1,14}$/.test(to_number) || !/^\+[1-9]\d{1,14}$/.test(from_number)) {
       return new Response(JSON.stringify({ error: 'Phone numbers must be in E.164 format' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Get template
     const { data: template, error: tmplError } = await supabase
       .from('whatsapp_templates')
       .select('*')
@@ -65,7 +75,10 @@ serve(async (req) => {
       });
     }
 
-    if (template.status !== 'approved') {
+    const isApproved = template.status === 'approved';
+    const isUserInitiated = !!template.user_initiated_approved;
+    const eligible = isApproved || (allow_user_initiated && isUserInitiated);
+    if (!eligible) {
       return new Response(JSON.stringify({ error: 'Template must be approved before sending' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -77,7 +90,6 @@ serve(async (req) => {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
     const TWILIO_API_KEY = Deno.env.get('TWILIO_API_KEY');
     if (!TWILIO_API_KEY) {
       return new Response(JSON.stringify({ error: 'TWILIO_API_KEY is not configured' }), {
@@ -85,18 +97,15 @@ serve(async (req) => {
       });
     }
 
-    // Strip hidden variable-mapping marker (used by UI for friendly names)
     const MARKER_RE = /\n?<!--vars:\{[^}]*\}-->/;
     let messageBody = (template.body || '').replace(MARKER_RE, '').trimEnd();
 
-    // Build message body with numeric variables replaced
     if (variables && typeof variables === 'object') {
       Object.keys(variables).forEach((key) => {
         messageBody = messageBody.replaceAll(`{{${key}}}`, variables[key]);
       });
     }
 
-    // Send via Twilio
     const params = new URLSearchParams({
       To: `whatsapp:${to_number}`,
       From: `whatsapp:${from_number}`,
@@ -105,6 +114,9 @@ serve(async (req) => {
 
     if (template.twilio_content_sid) {
       params.set('ContentSid', template.twilio_content_sid);
+      if (variables && typeof variables === 'object' && Object.keys(variables).length > 0) {
+        params.set('ContentVariables', JSON.stringify(variables));
+      }
     }
 
     const twilioResponse = await fetch(`${GATEWAY_URL}/Messages.json`, {
@@ -120,21 +132,19 @@ serve(async (req) => {
     const twilioData = await twilioResponse.json();
 
     if (!twilioResponse.ok) {
-      return new Response(JSON.stringify({ error: `Twilio error [${twilioResponse.status}]: ${JSON.stringify(twilioData)}` }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      return new Response(JSON.stringify({ error: `Twilio error [${twilioResponse.status}]: ${JSON.stringify(twilioData)}`, twilio: twilioData }), {
+        status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Log the message (legacy log)
     await supabase.from('whatsapp_message_log').insert({
       template_id,
       to_number,
       twilio_message_sid: twilioData.sid,
       status: twilioData.status || 'queued',
-      sent_by: user.id,
+      sent_by: userId,
     });
 
-    // Also log to whatsapp_messages (conversations dashboard)
     try {
       const last10 = to_number.replace(/\D/g, '').slice(-10);
       const { data: cust } = await supabase
@@ -159,7 +169,12 @@ serve(async (req) => {
       console.error('whatsapp_messages insert failed:', e);
     }
 
-    return new Response(JSON.stringify({ success: true, message_sid: twilioData.sid }), {
+    return new Response(JSON.stringify({
+      success: true,
+      message_sid: twilioData.sid,
+      twilio_message_sid: twilioData.sid,
+      status: twilioData.status || 'sent',
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
