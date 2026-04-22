@@ -152,6 +152,11 @@ Deno.serve(async (req) => {
             if (!contact?.phone) throw new Error("Contact phone missing");
 
             const variables = resolveVariables(variablesMap as Record<string, string>, contact);
+            // Default {{1}} to contact name if the journey didn't map any variables.
+            // WhatsApp templates with missing placeholders are silently rejected by Meta (Twilio error 63019).
+            if (!variables["1"]) {
+              variables["1"] = (contact?.name && String(contact.name).trim()) || "Customer";
+            }
 
             const resp = await fetch(`${supabaseUrl}/functions/v1/whatsapp-send`, {
               method: "POST",
