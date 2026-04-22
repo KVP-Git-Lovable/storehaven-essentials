@@ -48,7 +48,7 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
     queryFn: async () => {
       const { data, error } = await supabase
         .from("whatsapp_templates")
-        .select("id, name, body, category, language, status, user_initiated_approved")
+        .select("id, name, body, category, language, status, user_initiated_approved, twilio_template_type, twilio_media_url, twilio_required_variables")
         .or("status.eq.approved,user_initiated_approved.eq.true")
         .order("name", { ascending: true });
 
