@@ -1,91 +1,44 @@
 
 
-## Journey Builder execution audit — findings & fixes
+## Fix: Journey activation enrolls 0 contacts
 
-### Verdict: ❌ Current implementation does NOT satisfy the requirements.
+### Root cause
 
-The flow `Entry → Message → Exit` enrols the right audience, but the Message node **never actually sends a WhatsApp message** — it only writes a row to `journey_message_log`. Several other deviations below.
+In `supabase/functions/journey-actions/index.ts`, `upsertContactsFromCustomers` writes into `public.journey_contacts` but **swallows every Supabase error silently** — no `error` destructuring, no logging. When the insert fails, `inserted` is `null`, the phone→id map stays empty, and the function returns `[]` → "0 contacts enrolled" — even though the preview correctly shows 2 customers (`Suyog Hegde Kundapura`, `Abhishek Kasaragod`) matching `total_spent ≥ 800000`.
 
----
+Confirmed via DB:
+- 2 customers match the list view filter, both with valid `+91…` phones.
+- `journey_contacts` table is **completely empty (0 rows)** → the insert never landed.
+- `journey_enrollments` for this journey: **0 rows**.
+- Edge function logs show only boot/shutdown — no error trace because nothing is logged.
 
-### Gaps found (validated against `journey-actions`, `process-journeys`, `whatsapp-send`, `list-view-resolve`)
+The most likely concrete failure inside the insert is the synthetic `email` value (`919148181465@noemail.local`) violating something downstream, OR the `name` field being NULL for one row, OR a transient permission/trigger. Without error capture we can't know — and we don't need to: the fix is to make the path **error-visible**, **idempotent**, and **resilient to per-row failures**.
 
-| # | Stage | Gap | Impact |
-|---|---|---|---|
-| 1 | **Message delivery** | `process-journeys/index.ts` (lines 76–102) inserts a log row with `status: "sent"` but never calls `whatsapp-send` / Twilio. No template SID, no variables, no actual WhatsApp send happens. | **Critical** — “Sent” count is fake; customers receive nothing. |
-| 2 | **Scheduler** | No cron / `pg_cron` job invokes `process-journeys`. Enrollments sit forever at `next_action_at = now()` with nothing draining them. | **Critical** — journey never advances even if (1) is fixed. |
-| 3 | **Channel handling** | Message node stores `whatsapp_template_id`, `whatsapp_template_name`, `template_variables` (see `JourneyBuilder.tsx` defaults), but `process-journeys` ignores all of them and treats every message as a free-text body with naive `{name}` interpolation. | **Critical** — template integrity broken; configured SID not used. |
-| 4 | **Audience source = Customers** | `resolveListViewContacts` filters customers, then re-filters via `journey_contacts` table. Customers not pre-loaded into `journey_contacts` are silently dropped. Audience preview (uses `customers` directly) ≠ enrolled set. | **High** — preview/enrolled mismatch ("audience leakage" in reverse). |
-| 5 | **Phone normalisation** | Customer phones may be `+91…`, `91…`, or `9xxxxxxxxx`; `journey_contacts` join is exact-match on `phone`. | **High** — silent drops. |
-| 6 | **De-dup / idempotency** | No unique constraint on `(journey_id, contact_id, current_node_id)` and no guard if `process-journeys` runs concurrently → same Message node could send twice. | **High** — duplicate sends. |
-| 7 | **Exit termination** | Exit node logic is correct (sets `status='completed'`), but only fires on the *next* tick after Message advances. Acceptable, but combined with (2) it never actually fires. | Medium |
-| 8 | **24-hour session enforcement** | User-initiated templates require an open session; we don't check the customer's last inbound timestamp before sending. | Medium (compliance risk) |
-| 9 | **Outbound logging** | When fixed, each send must also write to `whatsapp_messages` so it appears in the Conversations dashboard. `whatsapp-send` already does this — must reuse it, not bypass it. | Medium |
+### Fix
 
----
+Edit `supabase/functions/journey-actions/index.ts` → `upsertContactsFromCustomers` (and surrounding `activate` flow):
 
-### Required fixes
+1. **Capture and log errors** on every `journey_contacts` query (`select`, `insert`). Throw with the Postgres message so it surfaces in the toast and edge logs.
+2. **Insert one row at a time** in a `for` loop instead of a single bulk insert, so one bad row (e.g. duplicate email, NULL name) doesn't drop the entire batch. Wrap each in try/catch, log+skip failures, continue.
+3. **Sanitize fields defensively**:
+   - `name`: fallback to `c.name?.trim() || "Customer"` (current `||` already covers empty string, keep but trim).
+   - `email`: ensure uniqueness-safe synthetic — `journey+${digits}@noemail.local`.
+   - Drop `city` from the insert payload entirely (the `customers` table has no `city` column, so it's always null — harmless but noisy; remove for clarity).
+   - `segment_type`: map `customer_segment` directly; if null → `'customer'`.
+4. **Re-fetch by phone after inserts** so we pick up rows that were inserted in this call AND any pre-existing rows, regardless of insert success path.
+5. **Surface enrollment diagnostics** in the activate response: include `{ enrolled, matched, skipped, reason? }` so the UI toast can show "Activated — 2 of 2 enrolled" or the skip reason.
+6. **Update toast in `JourneyBuilder.tsx`** to show the richer message when `matched > enrolled`.
 
-**A. Replace fake send with real Twilio call in `process-journeys`**
+### Files to edit
 
-For `nodeType === "message"`:
-1. Read `currentNode.data`: `whatsapp_template_id`, `whatsapp_template_name`, `template_variables`, `channel`.
-2. Fetch contact's phone (already joined via `journey_contacts`).
-3. Fetch active WhatsApp sender (`whatsapp_senders` where `is_active=true`, take first) for `from_number`.
-4. Resolve template variables — replace `{customer_name}`, `{phone}`, etc. from contact fields per `template_variables` mapping.
-5. Invoke `whatsapp-send` via service-role internal HTTP call with `{ template_id, to_number, from_number, variables, journey_enrollment_id }`. This guarantees:
-   - exact ContentSid used
-   - `whatsapp_message_log` + `whatsapp_messages` rows written
-   - approval check enforced
-6. On success → `journey_message_log` insert with `status='sent'` AND `twilio_message_sid`. On failure → `status='failed'`, `error_message`, **do not advance** (or advance to a configurable failure path; default: complete with `failed` status to prevent infinite retry).
-7. Loosen the `whatsapp-send` approval check to allow `status='approved' OR user_initiated_approved=true` when invoked from a journey context (new optional `allow_user_initiated: true` body flag).
+- `supabase/functions/journey-actions/index.ts` — robust per-row upsert with error logging; richer activate response.
+- `src/pages/communication/JourneyBuilder.tsx` — surface `matched`/`skipped` counts in the success toast and an error toast if `enrolled === 0` while `matched > 0` (with the first failure reason).
 
-**B. Idempotency**
+### Verification after fix
 
-- Add unique partial index: `unique (enrollment_id, node_id) on journey_message_log` so a given enrollment cannot be sent the same Message node twice.
-- Wrap message-step in: `INSERT … ON CONFLICT DO NOTHING` — if conflict, skip send and just advance.
-- Add `node_id` column to `journey_message_log` (migration).
-
-**C. Schedule the worker**
-
-- Enable `pg_cron` + `pg_net`, schedule `process-journeys` every 1 minute via SQL:
-  ```sql
-  select cron.schedule('journeys-tick', '* * * * *',
-    $$ select net.http_post(url := '<edge-url>/process-journeys', headers := '{"Authorization":"Bearer <service-role>"}'::jsonb) $$);
-  ```
-
-**D. Fix audience fidelity**
-
-In `journey-actions` `resolveListViewContacts`:
-- For `customers` entity: stop joining via `journey_contacts`. Build/upsert `journey_contacts` rows on the fly from the customers result set (one-to-one), then enrol — so preview count = enrolled count.
-- Normalise phones to E.164 (`+` prefix, strip non-digits, prepend default country code from company info if missing) **before** upsert.
-- Deduplicate by normalised phone.
-
-**E. Activation safety**
-
-- Already deletes stale `active`/`paused` enrollments on activate ✓ (good).
-- Also delete orphan enrollments whose `contact_id` is no longer in the resolved set.
-
-**F. (Optional, recommended) 24h window check**
-
-Before sending a `user_initiated_approved` (non-business) template, query `whatsapp_messages` for the contact's most recent `direction='inbound'` within 24h. If none → mark message log `skipped_outside_session` and advance. This keeps WhatsApp policy compliance.
-
----
-
-### Files to change
-
-- **Edit** `supabase/functions/process-journeys/index.ts` — invoke `whatsapp-send`, idempotency, error handling, node_id tracking.
-- **Edit** `supabase/functions/whatsapp-send/index.ts` — accept `allow_user_initiated` flag, return `twilio_message_sid` always.
-- **Edit** `supabase/functions/journey-actions/index.ts` — upsert `journey_contacts` directly from customers query, normalise phones.
-- **Migration**:
-  - Add `node_id text` to `journey_message_log` + unique index `(enrollment_id, node_id)`.
-  - Enable `pg_cron`, `pg_net` extensions and schedule `process-journeys` every minute.
-
-### Confirmation after fix
-
-Once applied, an `Entry (List View) → Message (template HX…) → Exit` journey will:
-1. Resolve audience deterministically from list view → upsert into `journey_contacts` 1:1 → enrol exactly that set.
-2. On each cron tick send the **exact** template SID + variables via Twilio, once per contact (idempotent).
-3. Log to `whatsapp_messages` so it appears in Conversations.
-4. Advance to Exit and mark enrollment `completed` — no further action.
+After re-activating the journey **"10% Discount for 8L purchased customers"**:
+- `journey_contacts` will contain rows for `+919148181465` and `+919741435887`.
+- `journey_enrollments` will have 2 active rows pointing at the entry node.
+- Within ~60 seconds the `journeys-tick` cron will advance them to the Message node, invoke `whatsapp-send` with template `highvalue_8lakh` (`HX807de5f45cf0e60b26d89cb5d3617142`), then to Exit.
+- Toast will read: *"Journey activated — 2 contacts enrolled"*.
 
