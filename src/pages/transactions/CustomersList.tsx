@@ -12,6 +12,27 @@ import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar
 import { CustomerFormDialog } from "@/components/transactions/CustomerFormDialog";
 import { executeListView } from "@/lib/listViewExecutor";
 import type { FilterCondition } from "@/lib/listViewSchema";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+type SearchColumn = {
+  key: string;
+  label: string;
+  type: "text" | "date" | "number" | "enum";
+  options?: string[];
+};
+
+const SEARCH_COLUMNS: SearchColumn[] = [
+  { key: "all", label: "All fields", type: "text" },
+  { key: "name", label: "Name", type: "text" },
+  { key: "phone", label: "Phone", type: "text" },
+  { key: "email", label: "Email", type: "text" },
+  { key: "tier", label: "Tier", type: "enum", options: ["bronze", "silver", "gold", "platinum"] },
+  { key: "total_orders", label: "Total Orders", type: "number" },
+  { key: "total_spent", label: "Total Spent", type: "number" },
+  { key: "created_at", label: "Created Date", type: "date" },
+  { key: "date_of_birth", label: "DOB", type: "date" },
+  { key: "anniversary_date", label: "Anniversary", type: "date" },
+];
 import {
   AlertDialog,
   AlertDialogAction,
