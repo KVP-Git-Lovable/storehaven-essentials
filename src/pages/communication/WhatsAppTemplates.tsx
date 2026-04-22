@@ -42,6 +42,7 @@ interface WhatsAppTemplate {
   twilio_content_sid: string | null;
   status: string;
   rejection_reason: string | null;
+  user_initiated_approved: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -285,7 +286,12 @@ export default function WhatsAppTemplates() {
                       <Badge variant="outline">{template.category}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className={statusColors[template.status]}>{template.status}</Badge>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge className={statusColors[template.status]}>{template.status}</Badge>
+                        {template.user_initiated_approved && template.status !== "approved" && (
+                          <Badge variant="outline" className="text-xs">User-initiated</Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {format(new Date(template.updated_at), "MMM d, yyyy HH:mm")}
