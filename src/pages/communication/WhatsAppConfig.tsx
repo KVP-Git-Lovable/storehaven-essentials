@@ -42,7 +42,11 @@ const WhatsAppConfig = () => {
     },
   });
 
-  const isOnline = data?.status === "ONLINE" || data?.status === "IN-USE";
+  const isOnline =
+    data?.status === "ONLINE" ||
+    data?.status === "IN-USE" ||
+    (!!data?.throughput && data.status !== "OFFLINE");
+  const displayStatus = isOnline ? "Active" : data?.status || "UNKNOWN";
 
   const handleCopy = async () => {
     if (!data?.webhook_url) return;
@@ -98,10 +102,10 @@ const WhatsAppConfig = () => {
                 {isOnline ? (
                   <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-transparent gap-1.5">
                     <span className="h-2 w-2 rounded-full bg-green-500" />
-                    {data.status}
+                    {displayStatus}
                   </Badge>
                 ) : (
-                  <Badge variant="secondary">{data.status || "UNKNOWN"}</Badge>
+                  <Badge variant="secondary">{displayStatus}</Badge>
                 )}
               </Row>
               <Row label="Business Display Name">{data.business_name}</Row>
