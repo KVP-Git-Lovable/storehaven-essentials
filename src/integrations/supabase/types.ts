@@ -3051,31 +3051,40 @@ export type Database = {
           channel: string
           contact_id: string
           enrollment_id: string | null
+          error_message: string | null
           id: string
           journey_id: string
+          node_id: string | null
           sent_at: string
           status: string
           template_body: string | null
+          twilio_message_sid: string | null
         }
         Insert: {
           channel: string
           contact_id: string
           enrollment_id?: string | null
+          error_message?: string | null
           id?: string
           journey_id: string
+          node_id?: string | null
           sent_at?: string
           status?: string
           template_body?: string | null
+          twilio_message_sid?: string | null
         }
         Update: {
           channel?: string
           contact_id?: string
           enrollment_id?: string | null
+          error_message?: string | null
           id?: string
           journey_id?: string
+          node_id?: string | null
           sent_at?: string
           status?: string
           template_body?: string | null
+          twilio_message_sid?: string | null
         }
         Relationships: [
           {
