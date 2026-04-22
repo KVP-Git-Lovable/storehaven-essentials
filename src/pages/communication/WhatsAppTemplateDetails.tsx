@@ -282,6 +282,52 @@ export default function WhatsAppTemplateDetails() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-lg">Twilio Content Definition</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {twilioSyncedAt ? (
+            <>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Template type</span>
+                <Badge variant="outline">{twilioType || "unknown"}</Badge>
+              </div>
+              {twilioType === "twilio/media" && (
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Media URL</span>
+                    <Badge variant="outline">{twilioMediaIsVar ? "variable" : "static"}</Badge>
+                  </div>
+                  {twilioMediaUrl ? (
+                    <code className="block w-full break-all rounded bg-muted px-2 py-1 text-xs">
+                      {twilioMediaUrl}
+                    </code>
+                  ) : (
+                    <p className="text-xs text-destructive">
+                      No media URL is bound on this template in Twilio. WhatsApp will reject sends with error 63019.
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Required variables</span>
+                <span className="font-mono text-xs">
+                  {twilioRequired.length > 0 ? twilioRequired.map((v) => `{{${v}}}`).join(", ") : "none"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Last synced from Twilio: {format(new Date(twilioSyncedAt), "MMM d, yyyy HH:mm")}
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Twilio Content metadata not yet synced. Click <strong>Refresh Status</strong> above to pull the live definition (template type, media URL, required variables) from Twilio.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-lg">Media URL Reachability Test</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
