@@ -3050,11 +3050,14 @@ export type Database = {
         Row: {
           channel: string
           contact_id: string
+          delivery_status: string | null
           enrollment_id: string | null
+          error_code: string | null
           error_message: string | null
           id: string
           journey_id: string
           node_id: string | null
+          provider_metadata: Json | null
           sent_at: string
           status: string
           template_body: string | null
@@ -3063,11 +3066,14 @@ export type Database = {
         Insert: {
           channel: string
           contact_id: string
+          delivery_status?: string | null
           enrollment_id?: string | null
+          error_code?: string | null
           error_message?: string | null
           id?: string
           journey_id: string
           node_id?: string | null
+          provider_metadata?: Json | null
           sent_at?: string
           status?: string
           template_body?: string | null
@@ -3076,11 +3082,14 @@ export type Database = {
         Update: {
           channel?: string
           contact_id?: string
+          delivery_status?: string | null
           enrollment_id?: string | null
+          error_code?: string | null
           error_message?: string | null
           id?: string
           journey_id?: string
           node_id?: string | null
+          provider_metadata?: Json | null
           sent_at?: string
           status?: string
           template_body?: string | null
@@ -10770,6 +10779,12 @@ export type Database = {
           rejection_reason: string | null
           status: string
           twilio_content_sid: string | null
+          twilio_content_types: Json | null
+          twilio_media_is_variable: boolean | null
+          twilio_media_url: string | null
+          twilio_required_variables: Json | null
+          twilio_synced_at: string | null
+          twilio_template_type: string | null
           updated_at: string
           user_initiated_approved: boolean
         }
@@ -10784,6 +10799,12 @@ export type Database = {
           rejection_reason?: string | null
           status?: string
           twilio_content_sid?: string | null
+          twilio_content_types?: Json | null
+          twilio_media_is_variable?: boolean | null
+          twilio_media_url?: string | null
+          twilio_required_variables?: Json | null
+          twilio_synced_at?: string | null
+          twilio_template_type?: string | null
           updated_at?: string
           user_initiated_approved?: boolean
         }
@@ -10798,6 +10819,12 @@ export type Database = {
           rejection_reason?: string | null
           status?: string
           twilio_content_sid?: string | null
+          twilio_content_types?: Json | null
+          twilio_media_is_variable?: boolean | null
+          twilio_media_url?: string | null
+          twilio_required_variables?: Json | null
+          twilio_synced_at?: string | null
+          twilio_template_type?: string | null
           updated_at?: string
           user_initiated_approved?: boolean
         }

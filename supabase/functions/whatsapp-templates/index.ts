@@ -8,6 +8,63 @@ const corsHeaders = {
 
 const CONTENT_API_BASE = 'https://content.twilio.com';
 
+// Inspect a Twilio Content `types` map and derive normalized template metadata
+// (template type, media URL, whether the media URL is variable-driven, and the
+// full set of required {{N}} or {{name}} variables across body + media).
+function deriveTwilioMetadata(types: Record<string, any> | null | undefined) {
+  const t = types && typeof types === 'object' ? types : {};
+  const knownTypes = Object.keys(t);
+  // Prefer media when present so the UI surfaces the asset clearly.
+  const templateType = knownTypes.find((k) => k === 'twilio/media')
+    || knownTypes.find((k) => k === 'twilio/text')
+    || knownTypes[0]
+    || null;
+
+  let mediaUrl: string | null = null;
+  let mediaIsVariable = false;
+  const media = t['twilio/media'];
+  if (media && typeof media === 'object') {
+    const candidate = Array.isArray(media.media) ? media.media[0] : media.media;
+    if (typeof candidate === 'string' && candidate.length > 0) {
+      mediaUrl = candidate;
+      mediaIsVariable = /\{\{[^}]+\}\}/.test(candidate);
+    }
+  }
+
+  // Collect every placeholder referenced anywhere in the content definition
+  const required = new Set<string>();
+  const collect = (s: unknown) => {
+    if (typeof s !== 'string') return;
+    const re = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(s)) !== null) required.add(m[1]);
+  };
+  for (const v of Object.values(t)) {
+    if (!v || typeof v !== 'object') continue;
+    const obj = v as Record<string, unknown>;
+    collect(obj.body);
+    collect((obj as any).media);
+    if (Array.isArray((obj as any).media)) (obj as any).media.forEach(collect);
+    // CTA / list templates also have headers, footers, actions, items
+    collect((obj as any).header);
+    collect((obj as any).footer);
+    if (Array.isArray((obj as any).actions)) {
+      for (const a of (obj as any).actions) {
+        if (a && typeof a === 'object') {
+          collect(a.title); collect(a.url); collect(a.phone);
+        }
+      }
+    }
+  }
+
+  return {
+    templateType,
+    mediaUrl,
+    mediaIsVariable,
+    requiredVariables: Array.from(required),
+  };
+}
+
 function getTwilioAuth() {
   const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
   const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
@@ -211,6 +268,12 @@ serve(async (req) => {
             rejection_reason: rejectionReason,
             user_initiated_approved: userInitiatedApproved,
             created_by: user.id,
+            twilio_content_types: content.types || null,
+            twilio_template_type: deriveTwilioMetadata(content.types).templateType,
+            twilio_media_url: deriveTwilioMetadata(content.types).mediaUrl,
+            twilio_media_is_variable: deriveTwilioMetadata(content.types).mediaIsVariable,
+            twilio_required_variables: deriveTwilioMetadata(content.types).requiredVariables,
+            twilio_synced_at: new Date().toISOString(),
           });
 
           imported++;
@@ -239,11 +302,19 @@ serve(async (req) => {
         const results = [];
         for (const tmpl of templates || []) {
           try {
-            const resp = await fetch(
-              `${CONTENT_API_BASE}/v1/Content/${tmpl.twilio_content_sid}/ApprovalRequests`,
-              { headers: { 'Authorization': twilio.authHeader } }
-            );
-            const data = await resp.json();
+            // Fetch BOTH the approval state and the live Content definition
+            // so the local row stays a faithful mirror of Twilio's record.
+            const [approvalResp, contentResp] = await Promise.all([
+              fetch(
+                `${CONTENT_API_BASE}/v1/Content/${tmpl.twilio_content_sid}/ApprovalRequests`,
+                { headers: { 'Authorization': twilio.authHeader } },
+              ),
+              fetch(
+                `${CONTENT_API_BASE}/v1/Content/${tmpl.twilio_content_sid}`,
+                { headers: { 'Authorization': twilio.authHeader } },
+              ),
+            ]);
+            const data = await approvalResp.json();
             const whatsappStatus = data?.whatsapp?.status;
 
             const userInitiatedApproved = whatsappStatus === 'approved';
@@ -256,6 +327,17 @@ serve(async (req) => {
               updates.rejection_reason = whatsappStatus === 'rejected'
                 ? (data?.whatsapp?.rejection_reason || 'Unknown')
                 : null;
+            }
+
+            if (contentResp.ok) {
+              const contentJson = await contentResp.json();
+              const meta = deriveTwilioMetadata(contentJson?.types);
+              updates.twilio_content_types = contentJson?.types ?? null;
+              updates.twilio_template_type = meta.templateType;
+              updates.twilio_media_url = meta.mediaUrl;
+              updates.twilio_media_is_variable = meta.mediaIsVariable;
+              updates.twilio_required_variables = meta.requiredVariables;
+              updates.twilio_synced_at = new Date().toISOString();
             }
 
             await supabase
@@ -332,10 +414,16 @@ serve(async (req) => {
           });
         }
 
-        const twilioResponse = await fetch(
-          `${CONTENT_API_BASE}/v1/Content/${template.twilio_content_sid}/ApprovalRequests`,
-          { headers: { 'Authorization': twilio.authHeader } }
-        );
+        const [twilioResponse, contentResp] = await Promise.all([
+          fetch(
+            `${CONTENT_API_BASE}/v1/Content/${template.twilio_content_sid}/ApprovalRequests`,
+            { headers: { 'Authorization': twilio.authHeader } },
+          ),
+          fetch(
+            `${CONTENT_API_BASE}/v1/Content/${template.twilio_content_sid}`,
+            { headers: { 'Authorization': twilio.authHeader } },
+          ),
+        ]);
 
         const approvalData = await twilioResponse.json();
         let newStatus = template.status;
@@ -356,13 +444,26 @@ serve(async (req) => {
           }
         }
 
+        const updates: Record<string, unknown> = {
+          status: newStatus,
+          rejection_reason: rejectionReason,
+          user_initiated_approved: userInitiatedApproved,
+        };
+
+        if (contentResp.ok) {
+          const contentJson = await contentResp.json();
+          const meta = deriveTwilioMetadata(contentJson?.types);
+          updates.twilio_content_types = contentJson?.types ?? null;
+          updates.twilio_template_type = meta.templateType;
+          updates.twilio_media_url = meta.mediaUrl;
+          updates.twilio_media_is_variable = meta.mediaIsVariable;
+          updates.twilio_required_variables = meta.requiredVariables;
+          updates.twilio_synced_at = new Date().toISOString();
+        }
+
         const { data: updated } = await supabase
           .from('whatsapp_templates')
-          .update({
-            status: newStatus,
-            rejection_reason: rejectionReason,
-            user_initiated_approved: userInitiatedApproved,
-          })
+          .update(updates)
           .eq('id', template_id)
           .select()
           .single();

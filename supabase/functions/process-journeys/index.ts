@@ -193,6 +193,7 @@ Deno.serve(async (req) => {
           await supabase.from("journey_message_log")
             .update({
               status: sendStatus,
+              delivery_status: sendAccepted ? "pending" : "failed",
               twilio_message_sid: twilioSid,
               error_message: errorMessage,
               template_body: renderedBody,
@@ -201,12 +202,17 @@ Deno.serve(async (req) => {
             .eq("node_id", currentNode.id);
 
           if (sendAccepted) {
-            const nextEdge = canvas.edges.find((e: any) => e.source === currentNode.id);
-            if (nextEdge) {
-              await supabase.from("journey_enrollments")
-                .update({ current_node_id: nextEdge.target, next_action_at: new Date().toISOString() })
-                .eq("id", enrollment.id);
-            }
+            // Provider accepted the request — but WhatsApp delivery can still
+            // fail downstream (e.g. media fetch error 63019). Hold the
+            // enrollment at this node until the status webhook reports a
+            // terminal state. We push next_action_at into the future so the
+            // cron does not re-process this row in the meantime.
+            await supabase.from("journey_enrollments")
+              .update({
+                status: "pending_delivery",
+                next_action_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+              })
+              .eq("id", enrollment.id);
           } else {
             // Mark enrollment failed to prevent infinite retry loops on the same node
             await supabase.from("journey_enrollments")

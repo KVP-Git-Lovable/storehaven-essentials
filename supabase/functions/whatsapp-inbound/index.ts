@@ -102,18 +102,81 @@ Deno.serve(async (req) => {
         const supabase = createClient(supabaseUrl, serviceKey);
         const status = (messageStatus || "unknown").toLowerCase();
         const errorMessage = [errorCode, channelStatusMessage].filter(Boolean).join(": ") || null;
+
         await supabase
           .from("whatsapp_message_log")
           .update({ status })
           .eq("twilio_message_sid", messageSid);
-        await supabase
-          .from("journey_message_log")
-          .update({ status, error_message: errorMessage })
-          .eq("twilio_message_sid", messageSid);
+
         await supabase
           .from("whatsapp_messages")
           .update({ status })
           .eq("twilio_message_sid", messageSid);
+
+        // Journey delivery state machine: queued/sent/delivered/read = success path,
+        // failed/undelivered = terminal failure. Anything else is intermediate.
+        const SUCCESS = new Set(["sent", "delivered", "read"]);
+        const FAILURE = new Set(["failed", "undelivered"]);
+        const terminalSuccess = SUCCESS.has(status);
+        const terminalFailure = FAILURE.has(status);
+
+        const deliveryStatus = terminalSuccess
+          ? "delivered"
+          : terminalFailure
+          ? "failed"
+          : "pending";
+
+        // Find the journey_message_log row for this provider SID so we can
+        // also advance the matching enrollment.
+        const { data: jmlRows } = await supabase
+          .from("journey_message_log")
+          .select("id, journey_id, enrollment_id, node_id, delivery_status")
+          .eq("twilio_message_sid", messageSid);
+
+        await supabase
+          .from("journey_message_log")
+          .update({
+            status,
+            delivery_status: deliveryStatus,
+            error_message: errorMessage,
+            error_code: errorCode || null,
+          })
+          .eq("twilio_message_sid", messageSid);
+
+        for (const jml of jmlRows || []) {
+          // Idempotency: skip if we already advanced/failed this enrollment
+          if (jml.delivery_status === "delivered" || jml.delivery_status === "failed") continue;
+
+          if (terminalSuccess) {
+            const { data: journey } = await supabase
+              .from("journeys")
+              .select("canvas_data")
+              .eq("id", jml.journey_id)
+              .maybeSingle();
+            const canvas = (journey?.canvas_data as any) || {};
+            const nextEdge = (canvas.edges || []).find((e: any) => e.source === jml.node_id);
+            if (nextEdge) {
+              await supabase
+                .from("journey_enrollments")
+                .update({
+                  status: "active",
+                  current_node_id: nextEdge.target,
+                  next_action_at: new Date().toISOString(),
+                })
+                .eq("id", jml.enrollment_id);
+            } else {
+              await supabase
+                .from("journey_enrollments")
+                .update({ status: "completed" })
+                .eq("id", jml.enrollment_id);
+            }
+          } else if (terminalFailure) {
+            await supabase
+              .from("journey_enrollments")
+              .update({ status: "failed" })
+              .eq("id", jml.enrollment_id);
+          }
+        }
       }
       return twiml();
     }
