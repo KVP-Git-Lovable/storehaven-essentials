@@ -263,16 +263,30 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
                 <div className="space-y-3">
                   <div>
                     <Label>Template Variables</Label>
-                    <p className="text-xs text-muted-foreground mt-1">Map each placeholder to a contact field token or fixed value.</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Bind each placeholder to a contact field token (e.g. <code>{"{{contact.name}}"}</code>) or type a fixed value.
+                    </p>
                   </div>
                   {whatsappVariables.map((variable) => (
-                    <div key={variable} className="space-y-1">
-                      <Label className="text-xs">{`{{${variable}}}`}</Label>
+                    <div key={variable} className="space-y-1.5">
+                      <Label className="text-xs font-mono">{`{{${variable}}}`}</Label>
                       <Input
-                        value={String(node.data.template_variables?.[variable] || `{{${variable}}}`)}
+                        value={String(node.data.template_variables?.[variable] ?? "")}
                         onChange={(e) => updateWhatsAppVariable(variable, e.target.value)}
-                        placeholder={`{{${variable}}}`}
+                        placeholder="e.g. {{contact.name}} or a fixed value"
                       />
+                      <div className="flex flex-wrap gap-1">
+                        {CONTACT_FIELD_SUGGESTIONS.map((s) => (
+                          <button
+                            key={s.token}
+                            type="button"
+                            onClick={() => updateWhatsAppVariable(variable, s.token)}
+                            className="text-[10px] px-1.5 py-0.5 rounded border bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
