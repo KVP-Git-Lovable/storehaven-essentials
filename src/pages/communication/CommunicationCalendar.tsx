@@ -335,9 +335,8 @@ export default function CommunicationCalendar() {
                   : [];
 
                 return (
-                  <>
+                  <Fragment key={cell.key}>
                     <button
-                      key={cell.key}
                       type="button"
                       onClick={() => setSelectedDayKey((prev) => (prev === cell.key ? null : cell.key))}
                       className={cn(
