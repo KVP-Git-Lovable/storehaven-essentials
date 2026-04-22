@@ -29,6 +29,41 @@ export default function WhatsAppTemplateDetails() {
   const [toNumber, setToNumber] = useState("");
   const [fromNumber, setFromNumber] = useState("");
   const [variables, setVariables] = useState<Record<string, string>>({});
+  const [mediaUrlInput, setMediaUrlInput] = useState("");
+  const [mediaCheck, setMediaCheck] = useState<{ ok: boolean; status: number; content_type?: string | null; content_length?: number | null; error?: string } | null>(null);
+  const [mediaChecking, setMediaChecking] = useState(false);
+
+  const verifyMediaUrl = async (url: string) => {
+    if (!url.trim()) {
+      toast.error("Enter a media URL first");
+      return;
+    }
+    setMediaChecking(true);
+    setMediaCheck(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-templates`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ action: "verify-media-url", url: url.trim() }),
+        }
+      );
+      const data = await response.json();
+      setMediaCheck(data);
+      if (data.ok) toast.success(`Reachable · ${data.status} ${data.content_type ?? ""}`.trim());
+      else toast.error(data.error || `Unreachable (HTTP ${data.status})`);
+    } catch (e: any) {
+      setMediaCheck({ ok: false, status: 0, error: e?.message || "Request failed" });
+      toast.error(e?.message || "Request failed");
+    } finally {
+      setMediaChecking(false);
+    }
+  };
 
   const { data: template, isLoading } = useQuery({
     queryKey: ["whatsapp-template", id],
@@ -229,6 +264,52 @@ export default function WhatsAppTemplateDetails() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Media URL Reachability Test</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Verify that any media URL referenced by this template is publicly downloadable by Twilio/Meta. A 403 here is the most common cause of media-template delivery failures.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              placeholder="https://your-domain.com/path/image.jpg"
+              value={mediaUrlInput}
+              onChange={(e) => setMediaUrlInput(e.target.value)}
+            />
+            <Button onClick={() => verifyMediaUrl(mediaUrlInput)} disabled={mediaChecking}>
+              {mediaChecking ? "Testing..." : "Test media URL"}
+            </Button>
+          </div>
+          {mediaCheck && (
+            <div
+              className={`flex items-start gap-2 rounded-md border p-3 text-sm ${
+                mediaCheck.ok
+                  ? "border-primary/30 bg-primary/5 text-primary"
+                  : "border-destructive/40 bg-destructive/5 text-destructive"
+              }`}
+            >
+              {mediaCheck.ok ? <CheckCircle className="h-4 w-4 mt-0.5" /> : <AlertTriangle className="h-4 w-4 mt-0.5" />}
+              <div className="space-y-0.5">
+                <p className="font-medium">
+                  {mediaCheck.ok ? "Reachable" : "Unreachable"} · HTTP {mediaCheck.status}
+                </p>
+                {mediaCheck.content_type && (
+                  <p className="text-xs opacity-90">Content-Type: {mediaCheck.content_type}</p>
+                )}
+                {typeof mediaCheck.content_length === "number" && (
+                  <p className="text-xs opacity-90">
+                    Size: {(mediaCheck.content_length / 1024).toFixed(1)} KB
+                  </p>
+                )}
+                {mediaCheck.error && <p className="text-xs opacity-90">{mediaCheck.error}</p>}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Send Test Dialog */}
       <Dialog open={showSendDialog} onOpenChange={setShowSendDialog}>

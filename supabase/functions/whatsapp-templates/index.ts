@@ -274,6 +274,35 @@ serve(async (req) => {
         });
       }
 
+      // --- Verify media URL is publicly reachable ---
+      if (action === 'verify-media-url') {
+        const { url } = body;
+        if (!url || typeof url !== 'string') {
+          return new Response(JSON.stringify({ ok: false, error: 'url is required' }), {
+            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        try {
+          // HEAD first; some CDNs reject HEAD so fall back to ranged GET
+          let resp = await fetch(url, { method: 'HEAD', redirect: 'follow' });
+          if (!resp.ok || !resp.headers.get('content-type')) {
+            resp = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' }, redirect: 'follow' });
+          }
+          const contentType = resp.headers.get('content-type') || null;
+          const contentLength = resp.headers.get('content-length');
+          return new Response(JSON.stringify({
+            ok: resp.ok || resp.status === 206,
+            status: resp.status,
+            content_type: contentType,
+            content_length: contentLength ? Number(contentLength) : null,
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        } catch (e) {
+          return new Response(JSON.stringify({
+            ok: false, status: 0, error: e instanceof Error ? e.message : String(e),
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+      }
+
       // --- Refresh status ---
       if (action === 'refresh-status') {
         const { template_id } = body;
