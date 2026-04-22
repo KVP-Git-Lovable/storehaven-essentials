@@ -459,14 +459,25 @@ serve(async (req) => {
           updates.twilio_media_is_variable = meta.mediaIsVariable;
           updates.twilio_required_variables = meta.requiredVariables;
           updates.twilio_synced_at = new Date().toISOString();
+          console.log('[refresh-status] synced metadata for', template.twilio_content_sid, 'type=', meta.templateType, 'mediaUrl=', meta.mediaUrl, 'vars=', meta.requiredVariables);
+        } else {
+          const errText = await contentResp.text().catch(() => '');
+          console.error('[refresh-status] content fetch failed', contentResp.status, errText);
         }
 
-        const { data: updated } = await supabase
+        const { data: updated, error: updateError } = await supabase
           .from('whatsapp_templates')
           .update(updates)
           .eq('id', template_id)
           .select()
           .single();
+
+        if (updateError) {
+          console.error('[refresh-status] DB update error:', updateError);
+          return new Response(JSON.stringify({ error: updateError.message }), {
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
 
         return new Response(JSON.stringify(updated), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
