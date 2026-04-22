@@ -102,7 +102,7 @@ export default function CustomersList() {
         const paged = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
         return { rows: paged, count };
       }
-      let q = supabase.from("customers").select("*", { count: "exact" }).order("total_spent", { ascending: false });
+      let q: any = supabase.from("customers").select("*", { count: "exact" }).order("total_spent", { ascending: false });
       if (search.trim()) {
         if (searchColumn === "all") {
           q = q.or(`name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`);
