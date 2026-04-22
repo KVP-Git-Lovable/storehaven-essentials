@@ -148,6 +148,29 @@ Deno.serve(async (req) => {
           console.log("[whatsapp-inbound] inbound saved", insIn?.id);
         }
 
+        // Self-heal: capture our own WhatsApp sender number from the `To` field
+        // so outbound flows (journeys, campaigns) have a from_number even when
+        // Twilio's senders API returns empty.
+        try {
+          const normalizedTo = (to || "").replace(/^whatsapp:/i, "").trim();
+          if (normalizedTo && /^\+[1-9]\d{1,14}$/.test(normalizedTo)) {
+            const { data: cfg } = await supabase
+              .from("whatsapp_config")
+              .select("id, sender_number")
+              .limit(1)
+              .maybeSingle();
+            if (cfg && !cfg.sender_number) {
+              await supabase
+                .from("whatsapp_config")
+                .update({ sender_number: normalizedTo })
+                .eq("id", cfg.id);
+              console.log("[whatsapp-inbound] auto-set sender_number to", normalizedTo);
+            }
+          }
+        } catch (e) {
+          console.error("[whatsapp-inbound] sender_number self-heal error:", e);
+        }
+
         if (isGreeting) {
           const { data: insOut, error: insOutErr } = await supabase
             .from("whatsapp_messages")
