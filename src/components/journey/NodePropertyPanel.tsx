@@ -73,9 +73,15 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
   }, [selectedWhatsAppTemplate]);
 
   const whatsappVariables = useMemo(() => {
-    const matches = whatsappTemplateBody.matchAll(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g);
-    return Array.from(new Set(Array.from(matches, (match) => match[1])));
-  }, [whatsappTemplateBody]);
+    // Accept both Twilio numeric ({{1}}) and friendly ({{name}}) placeholders
+    const matches = whatsappTemplateBody.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g);
+    const fromBody = Array.from(matches, (m) => m[1]);
+    // Merge with the canonical list synced from Twilio so media/header variables are surfaced too
+    const fromSync = Array.isArray(selectedWhatsAppTemplate?.twilio_required_variables)
+      ? (selectedWhatsAppTemplate!.twilio_required_variables as string[])
+      : [];
+    return Array.from(new Set([...fromBody, ...fromSync]));
+  }, [whatsappTemplateBody, selectedWhatsAppTemplate]);
 
   const updateWhatsAppVariable = (name: string, value: string) => {
     const existing = (node.data.template_variables as Record<string, string> | undefined) ?? {};
