@@ -134,7 +134,15 @@ export default function JourneyBuilder() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["journey", id] });
       if (data?.enrolled !== undefined) {
-        toast.success(`Journey activated — ${data.enrolled} contacts enrolled`);
+        const matched = data.matched ?? data.enrolled;
+        const skipped = data.skipped ?? 0;
+        if (data.enrolled === 0 && matched > 0) {
+          toast.error(`Activated, but 0 of ${matched} contacts could be enrolled${data.reason ? ` — ${data.reason}` : ""}`);
+        } else if (skipped > 0) {
+          toast.success(`Journey activated — ${data.enrolled} of ${matched} enrolled (${skipped} skipped${data.reason ? `: ${data.reason}` : ""})`);
+        } else {
+          toast.success(`Journey activated — ${data.enrolled} contacts enrolled`);
+        }
       } else {
         toast.success("Journey status updated");
       }
