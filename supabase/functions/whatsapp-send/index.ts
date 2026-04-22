@@ -65,7 +65,7 @@ serve(async (req) => {
 
     const { data: template, error: tmplError } = await supabase
       .from('whatsapp_templates')
-      .select('*')
+      .select('*, twilio_content_types, twilio_template_type, twilio_media_url, twilio_media_is_variable, twilio_required_variables')
       .eq('id', template_id)
       .single();
 
