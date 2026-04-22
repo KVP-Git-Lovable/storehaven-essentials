@@ -65,25 +65,49 @@ export default function OrdersList() {
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("create");
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
 
+  const [searchColumn, setSearchColumn] = useState<string>("order_number");
+  const activeColumn = SEARCH_COLUMNS.find((c) => c.key === searchColumn) || SEARCH_COLUMNS[0];
+
   const usingListView = activeFilters.length > 0;
 
+  const applyClientSearch = (rows: any[]) => {
+    if (!search.trim()) return rows;
+    const s = search.toLowerCase();
+    if (searchColumn === "customer_name") {
+      return rows.filter((o: any) => (o.customers?.name || "").toLowerCase().includes(s));
+    }
+    if (searchColumn === "customer_phone") {
+      return rows.filter((o: any) => (o.customers?.phone || "").toLowerCase().includes(s));
+    }
+    if (activeColumn.type === "date") {
+      return rows.filter((o: any) => {
+        const v = o[searchColumn];
+        if (!v) return false;
+        return format(new Date(v), "yyyy-MM-dd") === search;
+      });
+    }
+    if (activeColumn.type === "number") {
+      const num = Number(search);
+      if (Number.isNaN(num)) return rows;
+      return rows.filter((o: any) => Number(o[searchColumn]) === num);
+    }
+    return rows.filter((o: any) => String(o[searchColumn] ?? "").toLowerCase().includes(s));
+  };
+
   const { data, isLoading } = useQuery({
-    queryKey: ["transactions-orders", search, page, activeViewId, activeFilters],
+    queryKey: ["transactions-orders", search, searchColumn, page, activeViewId, activeFilters],
     queryFn: async () => {
       if (usingListView) {
         const result = await executeListView({ entity_type: "orders", filters: activeFilters }, { limit: 1000 });
         let rows = result.rows;
-        if (search.trim()) {
-          const s = search.toLowerCase();
-          rows = rows.filter((o: any) => (o.order_number || "").toLowerCase().includes(s));
-        }
-        // Hydrate customer info
+        // Hydrate customer info first so client-side search on customer fields works
         const customerIds = Array.from(new Set(rows.map((r: any) => r.customer_id).filter(Boolean)));
         if (customerIds.length) {
           const { data: customers } = await supabase.from("customers").select("id, name, phone").in("id", customerIds);
           const byId = new Map((customers || []).map((c: any) => [c.id, c]));
           rows = rows.map((r: any) => ({ ...r, customers: byId.get(r.customer_id) || null }));
         }
+        rows = applyClientSearch(rows);
         const orderIds = rows.map((r: any) => r.id);
         if (orderIds.length) {
           const { data: itemCounts } = await supabase
@@ -98,21 +122,48 @@ export default function OrdersList() {
         const paged = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
         return { rows: paged, count };
       }
-      let q = supabase
+      let q: any = supabase
         .from("orders")
         .select("*, customers(name, phone)", { count: "exact" })
         .order("created_at", { ascending: false });
-      if (search.trim()) q = q.ilike("order_number", `%${search}%`);
-      q = q.range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+      const isClientSearch = activeColumn.clientOnly;
+      if (search.trim() && !isClientSearch) {
+        if (activeColumn.type === "date") {
+          // Match the calendar date by range
+          const start = new Date(search + "T00:00:00").toISOString();
+          const end = new Date(search + "T23:59:59.999").toISOString();
+          q = q.gte(searchColumn, start).lte(searchColumn, end);
+        } else if (activeColumn.type === "number") {
+          const num = Number(search);
+          if (!Number.isNaN(num)) q = q.eq(searchColumn, num);
+        } else if (activeColumn.type === "enum") {
+          q = q.eq(searchColumn, search);
+        } else {
+          q = q.ilike(searchColumn, `%${search}%`);
+        }
+      }
+      // For client-only search (customer name/phone), pull a wider set then filter
+      if (isClientSearch && search.trim()) {
+        q = q.range(0, 999);
+      } else {
+        q = q.range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+      }
       const { data, error, count } = await q;
       if (error) throw error;
-      const orderIds = (data || []).map((row: any) => row.id);
-      if (!orderIds.length) return { rows: data || [], count: count || 0 };
+      let rows: any[] = data || [];
+      let total = count || 0;
+      if (isClientSearch && search.trim()) {
+        rows = applyClientSearch(rows);
+        total = rows.length;
+        rows = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+      }
+      const orderIds = rows.map((row: any) => row.id);
+      if (!orderIds.length) return { rows, count: total };
       const { data: itemCounts, error: itemErr } = await supabase.from("order_items").select("order_id").in("order_id", orderIds);
       if (itemErr) throw itemErr;
       const counts = new Map<string, number>();
       (itemCounts || []).forEach((item: any) => counts.set(item.order_id, (counts.get(item.order_id) || 0) + 1));
-      return { rows: (data || []).map((row: any) => ({ ...row, item_count: counts.get(row.id) || 0 })), count: count || 0 };
+      return { rows: rows.map((row: any) => ({ ...row, item_count: counts.get(row.id) || 0 })), count: total };
     },
   });
 
