@@ -311,49 +311,86 @@ export default function CommunicationCalendar() {
             </div>
           ) : (
             <div className="grid grid-cols-7 gap-1">
-              {gridDays.map((cell) => {
+              {gridDays.map((cell, i) => {
                 const events = eventsByDay.get(cell.key) || [];
                 const visible = events.slice(0, 3);
                 const hidden = events.length - visible.length;
+                const isSelected = selectedDayKey === cell.key;
+                const weekIndex = Math.floor(i / 7);
+                const isLastInWeek = i % 7 === 6;
+                const selectedWeekIndex = selectedDayKey
+                  ? Math.floor(gridDays.findIndex((c) => c.key === selectedDayKey) / 7)
+                  : -1;
+                const shouldInjectPanel = isLastInWeek && selectedWeekIndex === weekIndex;
+                const selectedCell = shouldInjectPanel ? gridDays.find((c) => c.key === selectedDayKey) : null;
+                const selectedEvents: DayEvent[] = selectedCell
+                  ? (eventsByDay.get(selectedCell.key) || []).map((e) => ({
+                      id: e.id,
+                      journey_id: e.journey_id,
+                      journey_name: e.journey_name,
+                      channel: e.channel,
+                      start: e.start,
+                      canvas_data: e.canvas_data,
+                    }))
+                  : [];
+
                 return (
-                  <div
-                    key={cell.key}
-                    className={cn(
-                      "min-h-[96px] border rounded-md p-1.5 flex flex-col gap-1 bg-card",
-                      !cell.isCurrent && "opacity-50 bg-muted/40",
-                      cell.isToday && "ring-2 ring-primary",
+                  <>
+                    <button
+                      key={cell.key}
+                      type="button"
+                      onClick={() => setSelectedDayKey((prev) => (prev === cell.key ? null : cell.key))}
+                      className={cn(
+                        "min-h-[96px] border rounded-md p-1.5 flex flex-col gap-1 bg-card text-left transition-colors hover:bg-accent/40",
+                        !cell.isCurrent && "opacity-50 bg-muted/40",
+                        cell.isToday && "ring-2 ring-primary",
+                        isSelected && "ring-2 ring-primary bg-primary/5 shadow-sm",
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className={cn(
+                          "text-xs font-semibold",
+                          cell.isToday ? "text-primary" : "text-foreground",
+                        )}>
+                          {cell.day}
+                        </span>
+                        {events.length > 0 && (
+                          <span className="text-[10px] text-muted-foreground">{events.length}</span>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-0.5 overflow-hidden">
+                        {visible.map((e) => renderChip(e))}
+                        {hidden > 0 && (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={(ev) => ev.stopPropagation()}
+                                className="text-[11px] text-muted-foreground hover:text-foreground hover:underline text-left px-1.5 cursor-pointer"
+                              >
+                                +{hidden} more
+                              </span>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-64 p-2 space-y-1" align="start" onClick={(e) => e.stopPropagation()}>
+                              <div className="text-xs font-semibold mb-1 px-1">
+                                {cell.day} {MONTH_NAMES[cell.month0]} {cell.year}
+                              </div>
+                              {events.map((e) => renderChip(e))}
+                            </PopoverContent>
+                          </Popover>
+                        )}
+                      </div>
+                    </button>
+                    {shouldInjectPanel && selectedCell && (
+                      <div key={`panel-${selectedCell.key}`} className="col-span-7 mt-1 mb-2">
+                        <div className="mb-2 px-1 text-sm font-semibold text-foreground">
+                          {selectedCell.day} {MONTH_NAMES[selectedCell.month0]} {selectedCell.year}
+                        </div>
+                        <CalendarDayDetails dayKey={selectedCell.key} events={selectedEvents} />
+                      </div>
                     )}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className={cn(
-                        "text-xs font-semibold",
-                        cell.isToday ? "text-primary" : "text-foreground",
-                      )}>
-                        {cell.day}
-                      </span>
-                      {events.length > 0 && (
-                        <span className="text-[10px] text-muted-foreground">{events.length}</span>
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-0.5 overflow-hidden">
-                      {visible.map((e) => renderChip(e))}
-                      {hidden > 0 && (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button className="text-[11px] text-muted-foreground hover:text-foreground hover:underline text-left px-1.5">
-                              +{hidden} more
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-64 p-2 space-y-1" align="start">
-                            <div className="text-xs font-semibold mb-1 px-1">
-                              {cell.day} {MONTH_NAMES[cell.month0]} {cell.year}
-                            </div>
-                            {events.map((e) => renderChip(e))}
-                          </PopoverContent>
-                        </Popover>
-                      )}
-                    </div>
-                  </div>
+                  </>
                 );
               })}
             </div>
