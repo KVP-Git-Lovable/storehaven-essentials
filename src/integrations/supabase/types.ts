@@ -10762,6 +10762,7 @@ export type Database = {
           status: string
           twilio_content_sid: string | null
           updated_at: string
+          user_initiated_approved: boolean
         }
         Insert: {
           body: string
@@ -10775,6 +10776,7 @@ export type Database = {
           status?: string
           twilio_content_sid?: string | null
           updated_at?: string
+          user_initiated_approved?: boolean
         }
         Update: {
           body?: string
@@ -10788,6 +10790,7 @@ export type Database = {
           status?: string
           twilio_content_sid?: string | null
           updated_at?: string
+          user_initiated_approved?: boolean
         }
         Relationships: [
           {

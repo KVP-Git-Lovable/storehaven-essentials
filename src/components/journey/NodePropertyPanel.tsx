@@ -25,6 +25,8 @@ interface WhatsAppTemplateOption {
   body: string;
   category: string;
   language: string;
+  status: string;
+  user_initiated_approved: boolean;
 }
 
 export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) {
@@ -35,8 +37,8 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
     queryFn: async () => {
       const { data, error } = await supabase
         .from("whatsapp_templates")
-        .select("id, name, body, category, language")
-        .eq("status", "approved")
+        .select("id, name, body, category, language, status, user_initiated_approved")
+        .or("status.eq.approved,user_initiated_approved.eq.true")
         .order("name", { ascending: true });
 
       if (error) throw error;
@@ -204,12 +206,25 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
                   <SelectContent>
                     {approvedWhatsAppTemplates.map((template) => (
                       <SelectItem key={template.id} value={template.id}>
-                        {template.name}
+                        <span className="flex items-center gap-2">
+                          <span>{template.name}</span>
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded-sm font-medium ${
+                              template.status === "approved"
+                                ? "bg-primary/10 text-primary"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {template.status === "approved" ? "Business" : "User-initiated"}
+                          </span>
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">Only approved templates are available in journeys.</p>
+                <p className="text-xs text-muted-foreground">
+                  Includes business-approved templates and user-initiated templates. User-initiated templates can only be sent within 24h of a customer's last inbound message.
+                </p>
               </div>
 
               {selectedWhatsAppTemplate && (

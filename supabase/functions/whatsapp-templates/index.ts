@@ -167,6 +167,8 @@ serve(async (req) => {
           // Determine status from approval info
           let status = 'submitted';
           let rejectionReason = null;
+          // User-initiated eligibility: any well-formed template (not rejected) is eligible
+          let userInitiatedApproved = true;
 
           // Try to fetch approval status
           try {
@@ -181,6 +183,7 @@ serve(async (req) => {
               else if (waStatus === 'rejected') {
                 status = 'rejected';
                 rejectionReason = approvalData?.whatsapp?.rejection_reason || 'Unknown';
+                userInitiatedApproved = false;
               }
             }
           } catch (e) {
@@ -203,6 +206,7 @@ serve(async (req) => {
             twilio_content_sid: content.sid,
             status,
             rejection_reason: rejectionReason,
+            user_initiated_approved: userInitiatedApproved,
             created_by: user.id,
           });
 
@@ -226,7 +230,7 @@ serve(async (req) => {
         const { data: templates } = await supabase
           .from('whatsapp_templates')
           .select('*')
-          .in('status', ['submitted'])
+          .in('status', ['submitted', 'pending', 'approved'])
           .not('twilio_content_sid', 'is', null);
 
         const results = [];
@@ -239,18 +243,25 @@ serve(async (req) => {
             const data = await resp.json();
             const whatsappStatus = data?.whatsapp?.status;
 
+            // User-initiated approved: any non-rejected template with a content SID
+            const userInitiatedApproved = whatsappStatus !== 'rejected';
+
+            const updates: Record<string, unknown> = {
+              user_initiated_approved: userInitiatedApproved,
+            };
             if (whatsappStatus === 'approved' || whatsappStatus === 'rejected') {
-              await supabase
-                .from('whatsapp_templates')
-                .update({
-                  status: whatsappStatus,
-                  rejection_reason: whatsappStatus === 'rejected'
-                    ? (data?.whatsapp?.rejection_reason || 'Unknown')
-                    : null,
-                })
-                .eq('id', tmpl.id);
+              updates.status = whatsappStatus;
+              updates.rejection_reason = whatsappStatus === 'rejected'
+                ? (data?.whatsapp?.rejection_reason || 'Unknown')
+                : null;
             }
-            results.push({ id: tmpl.id, status: whatsappStatus || tmpl.status });
+
+            await supabase
+              .from('whatsapp_templates')
+              .update(updates)
+              .eq('id', tmpl.id);
+
+            results.push({ id: tmpl.id, status: whatsappStatus || tmpl.status, user_initiated_approved: userInitiatedApproved });
           } catch (e) {
             results.push({ id: tmpl.id, error: String(e) });
           }
@@ -298,6 +309,7 @@ serve(async (req) => {
         const approvalData = await twilioResponse.json();
         let newStatus = template.status;
         let rejectionReason = template.rejection_reason;
+        let userInitiatedApproved = true;
 
         if (twilioResponse.ok) {
           const whatsappStatus = approvalData?.whatsapp?.status;
@@ -306,12 +318,17 @@ serve(async (req) => {
           } else if (whatsappStatus === 'rejected') {
             newStatus = 'rejected';
             rejectionReason = approvalData?.whatsapp?.rejection_reason || 'Unknown reason';
+            userInitiatedApproved = false;
           }
         }
 
         const { data: updated } = await supabase
           .from('whatsapp_templates')
-          .update({ status: newStatus, rejection_reason: rejectionReason })
+          .update({
+            status: newStatus,
+            rejection_reason: rejectionReason,
+            user_initiated_approved: userInitiatedApproved,
+          })
           .eq('id', template_id)
           .select()
           .single();
