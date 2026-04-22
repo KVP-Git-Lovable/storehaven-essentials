@@ -89,21 +89,44 @@ Deno.serve(async (req) => {
       try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL");
         const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-        if (!supabaseUrl || !serviceKey || !normalizedFrom) return;
+        console.log("[whatsapp-inbound] logMessages start", {
+          hasUrl: !!supabaseUrl,
+          hasKey: !!serviceKey,
+          normalizedFrom,
+          isGreeting,
+        });
+        if (!supabaseUrl || !serviceKey || !normalizedFrom) {
+          console.warn("[whatsapp-inbound] missing config or phone, skipping log");
+          return;
+        }
         const supabase = createClient(supabaseUrl, serviceKey);
 
-        // Lookup customer by phone (exact, then last 10 digits)
+        // Lookup customer by phone — try exact match, then last-10-digits suffix.
         let customerId: string | null = null;
         const last10 = normalizedFrom.replace(/\D/g, "").slice(-10);
-        const { data: cust } = await supabase
-          .from("customers")
-          .select("id, phone")
-          .or(`phone.eq.${normalizedFrom},phone.ilike.%${last10}`)
-          .limit(1)
-          .maybeSingle();
-        if (cust?.id) customerId = cust.id;
+        try {
+          const { data: exact } = await supabase
+            .from("customers")
+            .select("id")
+            .eq("phone", normalizedFrom)
+            .limit(1)
+            .maybeSingle();
+          if (exact?.id) {
+            customerId = exact.id;
+          } else if (last10.length === 10) {
+            const { data: fuzzy } = await supabase
+              .from("customers")
+              .select("id")
+              .ilike("phone", `%${last10}`)
+              .limit(1)
+              .maybeSingle();
+            if (fuzzy?.id) customerId = fuzzy.id;
+          }
+        } catch (lookupErr) {
+          console.error("[whatsapp-inbound] customer lookup error:", lookupErr);
+        }
 
-        await supabase.from("whatsapp_messages").insert({
+        const inboundRow = {
           phone: normalizedFrom,
           customer_id: customerId,
           direction: "inbound",
@@ -113,18 +136,37 @@ Deno.serve(async (req) => {
           twilio_message_sid: messageSid || null,
           profile_name: profileName || null,
           is_read: false,
-        });
+        };
+        const { data: insIn, error: insInErr } = await supabase
+          .from("whatsapp_messages")
+          .insert(inboundRow)
+          .select("id")
+          .maybeSingle();
+        if (insInErr) {
+          console.error("[whatsapp-inbound] insert inbound error:", insInErr);
+        } else {
+          console.log("[whatsapp-inbound] inbound saved", insIn?.id);
+        }
 
         if (isGreeting) {
-          await supabase.from("whatsapp_messages").insert({
-            phone: normalizedFrom,
-            customer_id: customerId,
-            direction: "outbound",
-            message: WELCOME,
-            message_type: "text",
-            status: "sent",
-            is_read: true,
-          });
+          const { data: insOut, error: insOutErr } = await supabase
+            .from("whatsapp_messages")
+            .insert({
+              phone: normalizedFrom,
+              customer_id: customerId,
+              direction: "outbound",
+              message: WELCOME,
+              message_type: "text",
+              status: "sent",
+              is_read: true,
+            })
+            .select("id")
+            .maybeSingle();
+          if (insOutErr) {
+            console.error("[whatsapp-inbound] insert outbound error:", insOutErr);
+          } else {
+            console.log("[whatsapp-inbound] outbound (welcome) saved", insOut?.id);
+          }
         }
       } catch (e) {
         console.error("[whatsapp-inbound] log error:", e);
