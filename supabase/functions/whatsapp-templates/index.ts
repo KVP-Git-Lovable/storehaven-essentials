@@ -181,13 +181,12 @@ serve(async (req) => {
                if (waStatus === 'approved') {
                  status = 'approved';
                  userInitiatedApproved = true;
-               } else if (waStatus) {
-                 status = waStatus;
-               }
-              else if (waStatus === 'rejected') {
+               } else if (waStatus === 'rejected') {
                 status = 'rejected';
                 rejectionReason = approvalData?.whatsapp?.rejection_reason || 'Unknown';
                 userInitiatedApproved = false;
+               } else if (waStatus) {
+                 status = waStatus;
               }
             }
           } catch (e) {
@@ -319,12 +318,12 @@ serve(async (req) => {
           if (whatsappStatus === 'approved') {
             newStatus = 'approved';
             userInitiatedApproved = true;
-          } else if (whatsappStatus) {
-            newStatus = whatsappStatus;
           } else if (whatsappStatus === 'rejected') {
             newStatus = 'rejected';
             rejectionReason = approvalData?.whatsapp?.rejection_reason || 'Unknown reason';
             userInitiatedApproved = false;
+          } else if (whatsappStatus) {
+            newStatus = whatsappStatus;
           }
         }
 
