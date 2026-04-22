@@ -12,6 +12,26 @@ import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar
 import { OrderFormDialog } from "@/components/transactions/OrderFormDialog";
 import { executeListView } from "@/lib/listViewExecutor";
 import type { FilterCondition } from "@/lib/listViewSchema";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+type SearchColumn = {
+  key: string;
+  label: string;
+  type: "text" | "date" | "number" | "enum";
+  options?: string[];
+  // for joined customer fields searched client-side
+  clientOnly?: boolean;
+};
+
+const SEARCH_COLUMNS: SearchColumn[] = [
+  { key: "order_number", label: "Order #", type: "text" },
+  { key: "customer_name", label: "Customer Name", type: "text", clientOnly: true },
+  { key: "customer_phone", label: "Customer Phone", type: "text", clientOnly: true },
+  { key: "status", label: "Status", type: "enum", options: ["pending", "completed", "cancelled", "refunded"] },
+  { key: "payment_status", label: "Payment Status", type: "enum", options: ["paid", "pending", "failed", "refunded"] },
+  { key: "total_amount", label: "Total Amount", type: "number" },
+  { key: "created_at", label: "Order Date", type: "date" },
+];
 import {
   AlertDialog,
   AlertDialogAction,
