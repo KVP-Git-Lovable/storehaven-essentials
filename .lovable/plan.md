@@ -1,125 +1,57 @@
 
 
-## WhatsApp Conversations Dashboard
+## Show user-initiated approved templates in journey Message node
 
-Replace the existing **WhatsApp Senders** page with a full **WhatsApp Conversations** dashboard that captures every inbound and outbound message, lets admins read full chat threads, and surfaces customer/order insights.
+### Problem
 
-### 1. Database
+Twilio templates can be approved in two scopes:
 
-New table `public.whatsapp_messages`:
+- **Business-initiated** — formal Content Template Approval (`approvalRequests.whatsapp.status === 'approved'`). Required to message a contact outside the 24-hour session window.
+- **User-initiated** — eligible for sending inside an active 24-hour customer session window. In Twilio's console this shows as "WhatsApp user initiated" and is granted broadly to most well-formed templates, even when the formal business-initiated approval is still `pending`.
 
-| column | type | notes |
-|---|---|---|
-| `id` | uuid PK default `gen_random_uuid()` | |
-| `phone` | text NOT NULL | E.164, normalized (strip `whatsapp:` prefix) |
-| `customer_id` | uuid NULL | FK → `customers.id` (nullable, no cascade) |
-| `direction` | text NOT NULL | `inbound` \| `outbound` |
-| `message` | text | message body |
-| `message_type` | text default `'text'` | `text` \| `template` \| `button` |
-| `order_id` | uuid NULL | FK → `orders.id` |
-| `status` | text default `'sent'` | `sent` \| `delivered` \| `read` \| `received` |
-| `twilio_message_sid` | text NULL | for de-dup / status callbacks |
-| `profile_name` | text NULL | from Twilio inbound `ProfileName` |
-| `is_read` | boolean default `false` | for unread badge in left panel |
-| `created_at` | timestamptz default `now()` | |
+Today our sync only flips a template to `status='approved'` when `whatsapp.status === 'approved'`. Templates like `highvalue_8lakh` (formally `pending`, but user-initiated eligible) stay as `submitted` and are excluded from the journey Message node's "Approved Template" dropdown.
 
-Indexes: `(phone, created_at desc)`, `(customer_id)`, `(created_at desc)`.
+### Approach
 
-RLS: enabled.
-- `SELECT`: authenticated users.
-- `INSERT/UPDATE`: admin only via `is_admin(auth.uid())` (edge functions use service role and bypass RLS).
+Add a second eligibility field — **`user_initiated_approved` (boolean)** — on `whatsapp_templates`, populated from Twilio. Keep the existing `status` column unchanged so business-initiated logic and the Templates list view stay intact. Loosen the journey dropdown to include any template that is either business-initiated approved OR user-initiated approved.
 
-Realtime: add table to `supabase_realtime` publication so the conversation panel can live-update.
+### Changes
 
-### 2. Data capture (additive only — existing flows untouched)
+**1. Database migration**
 
-**`whatsapp-inbound`** edge function — append after greeting handling, before TwiML response:
-1. Normalize `from` → strip `whatsapp:` prefix.
-2. Lookup `customers.id` by phone (best-effort match against `phone` column, also try last 10 digits).
-3. Insert row: `direction='inbound'`, `message=body`, `phone`, `customer_id`, `profile_name`, `twilio_message_sid`, `status='received'`, `is_read=false`.
-4. If a greeting auto-reply is sent, also insert an `outbound` row with the welcome text.
-5. Wrapped in try/catch — logging failure must never break TwiML response.
+- Add column `whatsapp_templates.user_initiated_approved boolean NOT NULL DEFAULT false`.
+- Backfill: for every row with a `twilio_content_sid`, set `true` when `status` is one of `approved`, `submitted`, `pending` (i.e. not `rejected`/`draft`). Final source of truth is the next sync. Mark `highvalue_8lakh` (`HX807de5f45cf0e60b26d89cb5d3617142`) as `true` immediately so it surfaces right away.
 
-**`whatsapp-send`** edge function — after successful Twilio send, in addition to existing `whatsapp_message_log` insert, also insert into `whatsapp_messages`:
-- `direction='outbound'`, `phone=to_number`, `message=messageBody`, `message_type='template'`, `twilio_message_sid`, `status=twilioData.status`, `customer_id` (lookup by phone).
-- Existing `whatsapp_message_log` insert is **not** removed — both tables coexist.
+**2. Edge function `whatsapp-templates`**
 
-### 3. Route changes
+For all three sync paths (`import-from-twilio`, `bulk-sync`, `refresh-status`), interpret Twilio's `ApprovalRequests` response:
 
-- **Replace** `/communication/whatsapp/senders` → `/communication/whatsapp/conversations` in `src/App.tsx` (lazy import switched to new file).
-- Update `src/lib/modules.ts` mapping key.
-- Update `src/pages/communication/WhatsAppCenter.tsx` card: title "WhatsApp Conversations", description "View all WhatsApp chats with customers, track orders and engagement.", icon `MessagesSquare`, href `/communication/whatsapp/conversations`.
-- Old `WhatsAppSenders.tsx` file is deleted.
+- A template is **business-initiated approved** when `whatsapp.status === 'approved'` → keep writing `status='approved'`.
+- A template is **user-initiated approved** when the template has a valid `twilio_content_sid` and is not `rejected` (matches Twilio's UI behavior of granting user-initiated to any well-formed template). Set `user_initiated_approved=true`. If `whatsapp.status === 'rejected'`, set it to `false`.
+- Loosen `bulk-sync` to also pull in templates currently marked `submitted` (already does) and update both fields.
 
-### 4. New page — `src/pages/communication/WhatsAppConversations.tsx`
+**3. Journey Message node — `src/components/journey/NodePropertyPanel.tsx`**
 
-Two-pane layout, full-height (`h-[calc(100vh-12rem)]`), responsive (stacks on mobile with a back-to-list arrow on the chat pane).
+- Replace the `.eq("status","approved")` filter with `.or("status.eq.approved,user_initiated_approved.eq.true")`.
+- Select the new column.
+- In the dropdown, append a small inline tag next to each template name: **"Business"** if `status='approved'`, **"User-initiated"** otherwise. This makes it clear which approval scope each template carries (helpful because user-initiated only works inside a 24-hour customer session).
+- Show a one-line muted helper under the select: *"User-initiated templates can only be sent within 24h of a customer's last inbound message."*
 
-```text
-+------------------- Header (BackButton + title + filters) -------------------+
-| Search [name/phone]   Date [from-to]   Type [all|text|template|button]      |
-+------------------+----------------------------------+----------------------+
-| LEFT (conv list) | CENTER (chat thread)             | RIGHT (insights)     |
-| 320px            | flex-1                           | 280px (xl+ only)     |
-| - Avatar         | Header: name, phone, View Order  | Total messages       |
-| - Name / phone   | Scroll: msgs grouped by date     | WhatsApp orders      |
-| - Last preview   |  inbound = left bubble (muted)   | Revenue (₹ en-IN)    |
-| - Time (relative)|  outbound= right bubble (primary)| Last interaction     |
-| - Unread badge   |  template tag, button tag        | Customer tier        |
-+------------------+----------------------------------+----------------------+
-```
+**4. Templates list — `src/pages/communication/WhatsAppTemplates.tsx` (small visual update)**
 
-**Left panel — conversation list**
-- Query: distinct `phone` with `last_message`, `last_at`, `unread_count` — implemented as a single `whatsapp_messages` select sorted by `created_at desc` then reduced client-side (volume-friendly with index + limit 500). Joined with `customers` via `customer_id` for name/tier.
-- Search input filters list client-side by name OR phone substring.
-- Selecting a row sets `selectedPhone`, marks unread rows `is_read=true` (admin-only update; UI optimistic).
+- Add a "User-initiated" badge next to the existing status badge when `user_initiated_approved=true` and `status !== 'approved'`. No filter changes; non-disruptive.
 
-**Center — chat thread**
-- Query: `whatsapp_messages` where `phone = selectedPhone` ordered ascending, applying date + message_type filters.
-- Bubbles: inbound left (`bg-muted`), outbound right (`bg-primary text-primary-foreground`); timestamp under each.
-- Template messages get a small `Badge` "Template"; button replies get "Button".
-- Realtime subscription on `whatsapp_messages` filtered to `phone=eq.{selectedPhone}` — appends new rows live.
-- If any message in thread has `order_id`, render a "View Order" button that navigates to `/transactions/orders` (drill into order row); also each individual message with `order_id` shows an inline "View Order" link.
+**5. Untouched**
 
-**Right — Customer Insights** (only when a customer is linked)
-- Total messages: count of all rows for `phone`.
-- Orders via WhatsApp: distinct `order_id` count from `whatsapp_messages` for that customer.
-- Revenue: sum of `orders.total_amount` for those linked orders (status `completed`).
-- Last interaction: relative time of most recent message.
-- If no `customer_id`, show a muted "Unknown contact — not linked to any customer" block.
-
-**Filters bar**
-- Search (debounced 250 ms) — name or phone.
-- Date range (two `Input type="date"` or shadcn date popover) — applied to thread + list.
-- Message type `Select`: All / Text / Template / Button.
-
-### 5. Order linking
-
-- Inbound messages: webhook does **not** attempt order detection in this iteration (out of scope per "do not modify order logic"). `order_id` stays nullable and can be populated later by future intent handlers.
-- Outbound: when `whatsapp-send` is invoked with a future `order_id` variable, the field is stored if present in `body.order_id` (added as optional param, backwards compatible — existing callers unaffected).
-- UI surfaces "View Order" only when `order_id` is set.
-
-### 6. Scalability notes
-
-- Composite index `(phone, created_at desc)` keeps thread reads O(log n).
-- List query limited to most recent 500 messages then grouped client-side; can be replaced later with a SQL view / materialized rollup if volume grows.
-- Realtime channel scoped per `phone` to avoid global broadcast storms.
-
-### 7. Constraints honored
-
-- No changes to `customers`, `orders`, or any existing logic.
-- `whatsapp_message_log`, `whatsapp_templates`, `whatsapp-config`, `whatsapp-senders` functions untouched.
-- Inbound greeting flow preserved exactly — capture happens in a try/catch around the existing logic.
-- Old `WhatsAppSenders` page is removed (replaced as requested).
+- `whatsapp-send` still requires `status='approved'` for business-initiated sends. (Sends inside an open session that should rely on user-initiated eligibility are out of scope of this change — journeys today fire as business-initiated; the dropdown change just makes the template choosable. If you want sends to honor user-initiated for in-session customers, that's a separate follow-up.)
+- Templates page filters, status enum, and `whatsapp_message_log` are unchanged.
 
 ### Files
 
-- **Migration:** create `whatsapp_messages` + indexes + RLS + realtime publication.
-- **Edit:** `supabase/functions/whatsapp-inbound/index.ts` — log inbound + auto-reply.
-- **Edit:** `supabase/functions/whatsapp-send/index.ts` — log outbound, accept optional `order_id`.
-- **New:** `src/pages/communication/WhatsAppConversations.tsx`
-- **Edit:** `src/App.tsx` — swap route and lazy import.
-- **Edit:** `src/lib/modules.ts` — update path key.
-- **Edit:** `src/pages/communication/WhatsAppCenter.tsx` — update card.
-- **Delete:** `src/pages/communication/WhatsAppSenders.tsx`.
+- **Migration**: add `user_initiated_approved` column + backfill.
+- **Edit**: `supabase/functions/whatsapp-templates/index.ts` — set the new column in all three sync paths.
+- **Edit**: `src/components/journey/NodePropertyPanel.tsx` — broaden filter, show scope tag and helper text.
+- **Edit**: `src/pages/communication/WhatsAppTemplates.tsx` — add "User-initiated" badge.
+
+After the migration runs, click **Bulk Sync** on the Templates page once to refresh `user_initiated_approved` for all existing rows; `highvalue_8lakh` will then be selectable in the Message node immediately (already backfilled).
 
