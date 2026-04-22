@@ -302,11 +302,19 @@ serve(async (req) => {
         const results = [];
         for (const tmpl of templates || []) {
           try {
-            const resp = await fetch(
-              `${CONTENT_API_BASE}/v1/Content/${tmpl.twilio_content_sid}/ApprovalRequests`,
-              { headers: { 'Authorization': twilio.authHeader } }
-            );
-            const data = await resp.json();
+            // Fetch BOTH the approval state and the live Content definition
+            // so the local row stays a faithful mirror of Twilio's record.
+            const [approvalResp, contentResp] = await Promise.all([
+              fetch(
+                `${CONTENT_API_BASE}/v1/Content/${tmpl.twilio_content_sid}/ApprovalRequests`,
+                { headers: { 'Authorization': twilio.authHeader } },
+              ),
+              fetch(
+                `${CONTENT_API_BASE}/v1/Content/${tmpl.twilio_content_sid}`,
+                { headers: { 'Authorization': twilio.authHeader } },
+              ),
+            ]);
+            const data = await approvalResp.json();
             const whatsappStatus = data?.whatsapp?.status;
 
             const userInitiatedApproved = whatsappStatus === 'approved';
@@ -319,6 +327,17 @@ serve(async (req) => {
               updates.rejection_reason = whatsappStatus === 'rejected'
                 ? (data?.whatsapp?.rejection_reason || 'Unknown')
                 : null;
+            }
+
+            if (contentResp.ok) {
+              const contentJson = await contentResp.json();
+              const meta = deriveTwilioMetadata(contentJson?.types);
+              updates.twilio_content_types = contentJson?.types ?? null;
+              updates.twilio_template_type = meta.templateType;
+              updates.twilio_media_url = meta.mediaUrl;
+              updates.twilio_media_is_variable = meta.mediaIsVariable;
+              updates.twilio_required_variables = meta.requiredVariables;
+              updates.twilio_synced_at = new Date().toISOString();
             }
 
             await supabase
