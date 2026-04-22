@@ -27,7 +27,18 @@ interface WhatsAppTemplateOption {
   language: string;
   status: string;
   user_initiated_approved: boolean;
+  twilio_template_type: string | null;
+  twilio_media_url: string | null;
+  twilio_required_variables: string[] | null;
 }
+
+const CONTACT_FIELD_SUGGESTIONS: { label: string; token: string }[] = [
+  { label: "Contact name", token: "{{contact.name}}" },
+  { label: "First name", token: "{{contact.first_name}}" },
+  { label: "Phone", token: "{{contact.phone}}" },
+  { label: "Email", token: "{{contact.email}}" },
+  { label: "City", token: "{{contact.city}}" },
+];
 
 export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) {
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -37,7 +48,7 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
     queryFn: async () => {
       const { data, error } = await supabase
         .from("whatsapp_templates")
-        .select("id, name, body, category, language, status, user_initiated_approved")
+        .select("id, name, body, category, language, status, user_initiated_approved, twilio_template_type, twilio_media_url, twilio_required_variables")
         .or("status.eq.approved,user_initiated_approved.eq.true")
         .order("name", { ascending: true });
 
@@ -62,9 +73,15 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
   }, [selectedWhatsAppTemplate]);
 
   const whatsappVariables = useMemo(() => {
-    const matches = whatsappTemplateBody.matchAll(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g);
-    return Array.from(new Set(Array.from(matches, (match) => match[1])));
-  }, [whatsappTemplateBody]);
+    // Accept both Twilio numeric ({{1}}) and friendly ({{name}}) placeholders
+    const matches = whatsappTemplateBody.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g);
+    const fromBody = Array.from(matches, (m) => m[1]);
+    // Merge with the canonical list synced from Twilio so media/header variables are surfaced too
+    const fromSync = Array.isArray(selectedWhatsAppTemplate?.twilio_required_variables)
+      ? (selectedWhatsAppTemplate!.twilio_required_variables as string[])
+      : [];
+    return Array.from(new Set([...fromBody, ...fromSync]));
+  }, [whatsappTemplateBody, selectedWhatsAppTemplate]);
 
   const updateWhatsAppVariable = (name: string, value: string) => {
     const existing = (node.data.template_variables as Record<string, string> | undefined) ?? {};
@@ -98,8 +115,10 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
 
     const { twilioBody, mapping } = parseStoredBody(firstTemplate.body);
     const displayBody = mapping ? transformTwilioToFriendly(twilioBody, mapping) : twilioBody;
+    const bodyVars = Array.from(displayBody.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g), (m) => m[1]);
+    const syncVars = Array.isArray(firstTemplate.twilio_required_variables) ? firstTemplate.twilio_required_variables : [];
     const initialVariables = Object.fromEntries(
-      Array.from(displayBody.matchAll(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g), (match) => [match[1], `{{${match[1]}}}`])
+      Array.from(new Set([...bodyVars, ...syncVars])).map((v) => [v, `{{${v}}}`])
     );
 
     onUpdate(node.id, {
@@ -118,8 +137,10 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
 
     const { twilioBody, mapping } = parseStoredBody(template.body);
     const displayBody = mapping ? transformTwilioToFriendly(twilioBody, mapping) : twilioBody;
+    const bodyVars = Array.from(displayBody.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g), (m) => m[1]);
+    const syncVars = Array.isArray(template.twilio_required_variables) ? template.twilio_required_variables : [];
     const initialVariables = Object.fromEntries(
-      Array.from(displayBody.matchAll(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g), (match) => [match[1], `{{${match[1]}}}`])
+      Array.from(new Set([...bodyVars, ...syncVars])).map((v) => [v, `{{${v}}}`])
     );
 
     onUpdate(node.id, {
@@ -242,16 +263,30 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
                 <div className="space-y-3">
                   <div>
                     <Label>Template Variables</Label>
-                    <p className="text-xs text-muted-foreground mt-1">Map each placeholder to a contact field token or fixed value.</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Bind each placeholder to a contact field token (e.g. <code>{"{{contact.name}}"}</code>) or type a fixed value.
+                    </p>
                   </div>
                   {whatsappVariables.map((variable) => (
-                    <div key={variable} className="space-y-1">
-                      <Label className="text-xs">{`{{${variable}}}`}</Label>
+                    <div key={variable} className="space-y-1.5">
+                      <Label className="text-xs font-mono">{`{{${variable}}}`}</Label>
                       <Input
-                        value={String(node.data.template_variables?.[variable] || `{{${variable}}}`)}
+                        value={String(node.data.template_variables?.[variable] ?? "")}
                         onChange={(e) => updateWhatsAppVariable(variable, e.target.value)}
-                        placeholder={`{{${variable}}}`}
+                        placeholder="e.g. {{contact.name}} or a fixed value"
                       />
+                      <div className="flex flex-wrap gap-1">
+                        {CONTACT_FIELD_SUGGESTIONS.map((s) => (
+                          <button
+                            key={s.token}
+                            type="button"
+                            onClick={() => updateWhatsAppVariable(variable, s.token)}
+                            className="text-[10px] px-1.5 py-0.5 rounded border bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
