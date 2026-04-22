@@ -24,6 +24,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { toast } from "sonner";
 import { Plus, RefreshCw, Eye, Trash2, MessageSquare, Download, ChevronDown, Info, AlertTriangle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { BackButton } from "@/components/shared/BackButton";
 import { format } from "date-fns";
 import {
   VARIABLE_GROUPS,
@@ -204,6 +205,7 @@ export default function WhatsAppTemplates() {
 
   return (
     <div className="space-y-6">
+      <BackButton />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">WhatsApp Templates</h1>

@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { MessageSquare, Users, Settings } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { BackButton } from "@/components/shared/BackButton";
 import whatsappLogo from "@/assets/whatsapp-logo.png";
 
 const cards = [
@@ -29,6 +30,7 @@ const WhatsAppCenter = () => {
 
   return (
     <div className="space-y-6">
+      <BackButton />
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold">WhatsApp Center</h1>
