@@ -106,9 +106,12 @@ serve(async (req) => {
       });
     }
 
+    const statusCallbackUrl = `${supabaseUrl}/functions/v1/whatsapp-inbound?event=status`;
+
     const params = new URLSearchParams({
       To: `whatsapp:${to_number}`,
       From: `whatsapp:${from_number}`,
+      StatusCallback: statusCallbackUrl,
     });
 
     if (template.twilio_content_sid) {

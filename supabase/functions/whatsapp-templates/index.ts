@@ -165,10 +165,9 @@ serve(async (req) => {
           }
 
           // Determine status from approval info
-          let status = 'submitted';
+          let status = 'pending';
           let rejectionReason = null;
-          // User-initiated eligibility: any well-formed template (not rejected) is eligible
-          let userInitiatedApproved = true;
+          let userInitiatedApproved = false;
 
           // Try to fetch approval status
           try {
@@ -179,11 +178,15 @@ serve(async (req) => {
             if (approvalResp.ok) {
               const approvalData = await approvalResp.json();
               const waStatus = approvalData?.whatsapp?.status;
-              if (waStatus === 'approved') status = 'approved';
-              else if (waStatus === 'rejected') {
+               if (waStatus === 'approved') {
+                 status = 'approved';
+                 userInitiatedApproved = true;
+               } else if (waStatus === 'rejected') {
                 status = 'rejected';
                 rejectionReason = approvalData?.whatsapp?.rejection_reason || 'Unknown';
                 userInitiatedApproved = false;
+               } else if (waStatus) {
+                 status = waStatus;
               }
             }
           } catch (e) {
@@ -243,13 +246,12 @@ serve(async (req) => {
             const data = await resp.json();
             const whatsappStatus = data?.whatsapp?.status;
 
-            // User-initiated approved: any non-rejected template with a content SID
-            const userInitiatedApproved = whatsappStatus !== 'rejected';
+            const userInitiatedApproved = whatsappStatus === 'approved';
 
             const updates: Record<string, unknown> = {
               user_initiated_approved: userInitiatedApproved,
             };
-            if (whatsappStatus === 'approved' || whatsappStatus === 'rejected') {
+            if (whatsappStatus) {
               updates.status = whatsappStatus;
               updates.rejection_reason = whatsappStatus === 'rejected'
                 ? (data?.whatsapp?.rejection_reason || 'Unknown')
@@ -309,16 +311,19 @@ serve(async (req) => {
         const approvalData = await twilioResponse.json();
         let newStatus = template.status;
         let rejectionReason = template.rejection_reason;
-        let userInitiatedApproved = true;
+        let userInitiatedApproved = false;
 
         if (twilioResponse.ok) {
           const whatsappStatus = approvalData?.whatsapp?.status;
           if (whatsappStatus === 'approved') {
             newStatus = 'approved';
+            userInitiatedApproved = true;
           } else if (whatsappStatus === 'rejected') {
             newStatus = 'rejected';
             rejectionReason = approvalData?.whatsapp?.rejection_reason || 'Unknown reason';
             userInitiatedApproved = false;
+          } else if (whatsappStatus) {
+            newStatus = whatsappStatus;
           }
         }
 

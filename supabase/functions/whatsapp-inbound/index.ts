@@ -55,6 +55,9 @@ Deno.serve(async (req) => {
     let to = "";
     let messageSid = "";
     let profileName = "";
+    let messageStatus = "";
+    let errorCode = "";
+    let channelStatusMessage = "";
 
     if (contentType.includes("application/x-www-form-urlencoded")) {
       const text = await req.text();
@@ -64,6 +67,9 @@ Deno.serve(async (req) => {
       to = params.get("To") ?? "";
       messageSid = params.get("MessageSid") ?? "";
       profileName = params.get("ProfileName") ?? "";
+      messageStatus = params.get("MessageStatus") ?? "";
+      errorCode = params.get("ErrorCode") ?? "";
+      channelStatusMessage = params.get("ChannelStatusMessage") ?? "";
     } else if (contentType.includes("application/json")) {
       const json = await req.json().catch(() => ({}));
       body = json.Body ?? json.body ?? "";
@@ -71,6 +77,9 @@ Deno.serve(async (req) => {
       to = json.To ?? json.to ?? "";
       messageSid = json.MessageSid ?? "";
       profileName = json.ProfileName ?? "";
+      messageStatus = json.MessageStatus ?? json.messageStatus ?? "";
+      errorCode = json.ErrorCode ?? json.errorCode ?? "";
+      channelStatusMessage = json.ChannelStatusMessage ?? json.channelStatusMessage ?? "";
     }
 
     console.log("[whatsapp-inbound]", {
@@ -81,8 +90,33 @@ Deno.serve(async (req) => {
       bodyPreview: body.slice(0, 200),
     });
 
+    const eventType = new URL(req.url).searchParams.get("event") || "inbound";
+
     // Normalize phone (strip whatsapp: prefix)
     const normalizedFrom = from.replace(/^whatsapp:/i, "").trim();
+
+    if (eventType === "status" && messageSid) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (supabaseUrl && serviceKey) {
+        const supabase = createClient(supabaseUrl, serviceKey);
+        const status = (messageStatus || "unknown").toLowerCase();
+        const errorMessage = [errorCode, channelStatusMessage].filter(Boolean).join(": ") || null;
+        await supabase
+          .from("whatsapp_message_log")
+          .update({ status })
+          .eq("twilio_message_sid", messageSid);
+        await supabase
+          .from("journey_message_log")
+          .update({ status, error_message: errorMessage })
+          .eq("twilio_message_sid", messageSid);
+        await supabase
+          .from("whatsapp_messages")
+          .update({ status })
+          .eq("twilio_message_sid", messageSid);
+      }
+      return twiml();
+    }
 
     // Log inbound message + auto-reply (best-effort, never breaks TwiML)
     const logMessages = async (isGreeting: boolean) => {

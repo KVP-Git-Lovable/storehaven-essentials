@@ -139,6 +139,7 @@ Deno.serve(async (req) => {
           }
 
           let sendStatus = "failed";
+          let sendAccepted = false;
           let errorMessage: string | null = null;
           let twilioSid: string | null = null;
           let renderedBody: string | null = null;
@@ -170,7 +171,7 @@ Deno.serve(async (req) => {
                 to_number: contact.phone,
                 from_number: fromNumber,
                 variables,
-                allow_user_initiated: true,
+                allow_user_initiated: false,
                 internal_caller: "process-journeys",
                 journey_enrollment_id: enrollment.id,
               }),
@@ -179,7 +180,8 @@ Deno.serve(async (req) => {
             if (!resp.ok || !result?.success) {
               throw new Error(result?.error || `whatsapp-send failed (${resp.status})`);
             }
-            sendStatus = "sent";
+            sendStatus = result.status || "queued";
+            sendAccepted = ["accepted", "queued", "sending", "sent", "scheduled"].includes(sendStatus);
             twilioSid = result.twilio_message_sid || result.message_sid || null;
             renderedBody = JSON.stringify(variables);
             messagesSent++;
@@ -198,7 +200,7 @@ Deno.serve(async (req) => {
             .eq("enrollment_id", enrollment.id)
             .eq("node_id", currentNode.id);
 
-          if (sendStatus === "sent") {
+          if (sendAccepted) {
             const nextEdge = canvas.edges.find((e: any) => e.source === currentNode.id);
             if (nextEdge) {
               await supabase.from("journey_enrollments")
