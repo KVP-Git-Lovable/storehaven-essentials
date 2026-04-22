@@ -120,11 +120,20 @@ serve(async (req) => {
       // or when the template has placeholders and variables are missing/empty.
       params.set('ContentSid', template.twilio_content_sid);
 
-      // Determine how many {{N}} placeholders the template expects
+      // Determine the FULL set of placeholders the template expects.
+      // Prefer the synced Twilio metadata (covers body + media + headers + CTAs).
+      // Fall back to scanning the local body string for {{N}} when metadata
+      // is not yet synced (legacy rows).
       const placeholderNums = new Set<string>();
-      const re = /\{\{(\d+)\}\}/g;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(template.body || '')) !== null) placeholderNums.add(m[1]);
+      const metaRequired: string[] = Array.isArray(template.twilio_required_variables)
+        ? (template.twilio_required_variables as string[])
+        : [];
+      for (const v of metaRequired) placeholderNums.add(String(v));
+      if (placeholderNums.size === 0) {
+        const re = /\{\{(\w+)\}\}/g;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(template.body || '')) !== null) placeholderNums.add(m[1]);
+      }
 
       const incoming = (variables && typeof variables === 'object') ? variables as Record<string, string> : {};
       const filled: Record<string, string> = {};
@@ -136,6 +145,24 @@ serve(async (req) => {
       for (const [k, v] of Object.entries(incoming)) {
         if (!(k in filled) && v != null) filled[k] = String(v);
       }
+
+      // Media-template guardrail: if the template uses a variable-driven media
+      // URL and the caller did NOT supply that variable, fail fast with a clear
+      // diagnostic so the journey log says exactly why instead of generic 63019.
+      if (template.twilio_template_type === 'twilio/media' && template.twilio_media_is_variable) {
+        const mediaUrlTemplate = String(template.twilio_media_url || '');
+        const mediaVarMatch = mediaUrlTemplate.match(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/);
+        const mediaVarKey = mediaVarMatch ? mediaVarMatch[1] : null;
+        if (mediaVarKey && (!filled[mediaVarKey] || filled[mediaVarKey] === 'Customer')) {
+          return new Response(JSON.stringify({
+            error: `Template '${template.name}' has a variable media URL ({{${mediaVarKey}}}) but no value was provided for it. Bind the URL in Twilio or pass it in 'variables'.`,
+            template_type: template.twilio_template_type,
+            media_url: template.twilio_media_url,
+            required_variables: metaRequired,
+          }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+      }
+
       if (Object.keys(filled).length > 0) {
         params.set('ContentVariables', JSON.stringify(filled));
       }
