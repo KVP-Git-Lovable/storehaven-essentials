@@ -1,44 +1,170 @@
 
+## Fix: WhatsApp journey shows Failed even though template is approved
 
-## Fix: Journey activation enrolls 0 contacts
+### What is happening now
 
-### Root cause
+The failure is real, not just a stale UI status:
 
-In `supabase/functions/journey-actions/index.ts`, `upsertContactsFromCustomers` writes into `public.journey_contacts` but **swallows every Supabase error silently** — no `error` destructuring, no logging. When the insert fails, `inserted` is `null`, the phone→id map stays empty, and the function returns `[]` → "0 contacts enrolled" — even though the preview correctly shows 2 customers (`Suyog Hegde Kundapura`, `Abhishek Kasaragod`) matching `total_spent ≥ 800000`.
+- The latest journey sends for both contacts failed with provider error:
+  - `63019`
+  - `Twilio Error: [[handleMediaContent]fetchMediaContent Failed: (1/1) media content failed]`
+- The local template record is already `approved`, and the public URL check for  
+  `https://storeops.quickapp.ai/marketing/trayi-jewellery-10-percent-discount.jpg` returns `200 image/jpeg`.
+- So the current blocker is no longer approval status. It is the **media fetch inside the approved Twilio media template**.
 
-Confirmed via DB:
-- 2 customers match the list view filter, both with valid `+91…` phones.
-- `journey_contacts` table is **completely empty (0 rows)** → the insert never landed.
-- `journey_enrollments` for this journey: **0 rows**.
-- Edge function logs show only boot/shutdown — no error trace because nothing is logged.
+### Root cause to fix
 
-The most likely concrete failure inside the insert is the synthetic `email` value (`919148181465@noemail.local`) violating something downstream, OR the `name` field being NULL for one row, OR a transient permission/trigger. Without error capture we can't know — and we don't need to: the fix is to make the path **error-visible**, **idempotent**, and **resilient to per-row failures**.
+There are two gaps in the current implementation:
 
-### Fix
+1. **The app only stores body/status for WhatsApp templates, not the full Twilio media definition.**  
+   That means the system cannot inspect or validate the exact media payload Twilio is using for `HX807de5f45cf0e60b26d89cb5d3617142`:
+   - actual `twilio/media` object
+   - media URL bound in Twilio
+   - any media/header variables required at send time
 
-Edit `supabase/functions/journey-actions/index.ts` → `upsertContactsFromCustomers` (and surrounding `activate` flow):
+2. **Journey state advances too early.**  
+   `process-journeys` moves the enrollment forward as soon as the provider initially accepts the request (`queued/accepted`).  
+   Later, the status callback correctly flips the message log to `failed`, but the enrollment may already be `completed`, so the journey cannot recover or retry correctly.
 
-1. **Capture and log errors** on every `journey_contacts` query (`select`, `insert`). Throw with the Postgres message so it surfaces in the toast and edge logs.
-2. **Insert one row at a time** in a `for` loop instead of a single bulk insert, so one bad row (e.g. duplicate email, NULL name) doesn't drop the entire batch. Wrap each in try/catch, log+skip failures, continue.
-3. **Sanitize fields defensively**:
-   - `name`: fallback to `c.name?.trim() || "Customer"` (current `||` already covers empty string, keep but trim).
-   - `email`: ensure uniqueness-safe synthetic — `journey+${digits}@noemail.local`.
-   - Drop `city` from the insert payload entirely (the `customers` table has no `city` column, so it's always null — harmless but noisy; remove for clarity).
-   - `segment_type`: map `customer_segment` directly; if null → `'customer'`.
-4. **Re-fetch by phone after inserts** so we pick up rows that were inserted in this call AND any pre-existing rows, regardless of insert success path.
-5. **Surface enrollment diagnostics** in the activate response: include `{ enrolled, matched, skipped, reason? }` so the UI toast can show "Activated — 2 of 2 enrolled" or the skip reason.
-6. **Update toast in `JourneyBuilder.tsx`** to show the richer message when `matched > enrolled`.
+### Implementation plan
 
-### Files to edit
+#### 1) Sync the full Twilio content definition into the template record
+Update the template sync/import logic so each WhatsApp template stores the full Twilio Content API payload, not only body text.
 
-- `supabase/functions/journey-actions/index.ts` — robust per-row upsert with error logging; richer activate response.
-- `src/pages/communication/JourneyBuilder.tsx` — surface `matched`/`skipped` counts in the success toast and an error toast if `enrolled === 0` while `matched > 0` (with the first failure reason).
+Files:
+- `supabase/functions/whatsapp-templates/index.ts`
+- database migration if a new JSON column is needed on `whatsapp_templates`
 
-### Verification after fix
+Work:
+- fetch both:
+  - `GET /v1/Content/{sid}`
+  - `GET /v1/Content/{sid}/ApprovalRequests`
+- persist:
+  - raw `types` JSON
+  - detected template type (`twilio/media`, `twilio/text`, etc.)
+  - any extracted media URL / media variable metadata
+- make refresh and bulk-sync update those fields too
 
-After re-activating the journey **"10% Discount for 8L purchased customers"**:
-- `journey_contacts` will contain rows for `+919148181465` and `+919741435887`.
-- `journey_enrollments` will have 2 active rows pointing at the entry node.
-- Within ~60 seconds the `journeys-tick` cron will advance them to the Message node, invoke `whatsapp-send` with template `highvalue_8lakh` (`HX807de5f45cf0e60b26d89cb5d3617142`), then to Exit.
-- Toast will read: *"Journey activated — 2 contacts enrolled"*.
+Result:
+- the app will know the exact media object Twilio is using
+- the template details screen can show whether the media URL is static, variable-based, or missing
 
+#### 2) Fix media-template send logic to validate the actual media requirements
+Update the send worker so it resolves variables using the full Twilio template metadata, not only placeholders found in the body.
+
+Files:
+- `supabase/functions/whatsapp-send/index.ts`
+
+Work:
+- when `twilio_content_sid` is present and template type is `twilio/media`:
+  - inspect stored Twilio metadata
+  - detect all required variables from both body and media/header sections
+  - fail early with a clear error if a media URL variable or required content variable is missing
+  - include debug-safe metadata in the returned error/log so analytics explains *why* the media send failed
+- keep `Body` omitted for content-template sends
+- preserve `ContentSid` + `ContentVariables` behavior
+
+Result:
+- if the issue is “approved template but missing media variable,” it will be caught explicitly
+- if the issue is “Twilio content is pointing at a different/stale URL,” the app will surface that exact URL
+
+#### 3) Correct journey delivery state handling
+Do not treat `queued/accepted` as final success for WhatsApp journey nodes.
+
+Files:
+- `supabase/functions/process-journeys/index.ts`
+- `supabase/functions/whatsapp-inbound/index.ts`
+- database migration only if a new message/enrollment status is required
+
+Work:
+- in `process-journeys`:
+  - for WhatsApp template nodes, create the message log row and send
+  - if provider accepts, mark the message as pending delivery instead of completing the node immediately
+  - do not advance the enrollment to the next node yet
+- in `whatsapp-inbound` status callback:
+  - on successful downstream states (`sent`, `delivered`, `read`), advance the enrollment to the next node
+  - on failed states (`failed`, `undelivered`), mark the enrollment failed and store provider error details
+- ensure retries do not duplicate sends for the same enrollment/node
+
+Result:
+- analytics and journey state will stay consistent
+- a later provider failure will no longer coexist with a completed journey
+
+#### 4) Improve the template diagnostics UI
+Extend the template details page so it shows the real synced Twilio media configuration, not just a manual URL test box.
+
+Files:
+- `src/pages/communication/WhatsAppTemplateDetails.tsx`
+
+Work:
+- show:
+  - synced template type (`twilio/media` / `twilio/text`)
+  - approval status
+  - detected media URL from Twilio content metadata
+  - whether that media is static or variable-driven
+  - required variables for body and media separately
+- keep the existing “Test media URL” utility
+- prefill the tester with the actual synced Twilio media URL when available
+
+Result:
+- you can verify the exact asset Twilio is trying to fetch, not only a manually pasted URL
+
+#### 5) Reconcile the current broken journey after the code fix
+After the logic is corrected, reset only the affected journey records so the two contacts can be reprocessed cleanly.
+
+Backend work:
+- clear stale failed rows for journey `9a60c8b6-0bd2-4ec6-9531-5fdbbc0792f9`
+- restore the affected enrollments to the message node
+- re-run them with the corrected media-template handling
+
+Expected outcome:
+- if Twilio content metadata is valid, both contacts should receive the message
+- if Twilio content still references a different or invalid media asset, the app will expose that exact misconfiguration instead of only showing generic `63019`
+
+### Technical details
+
+```text
+Current evidence
+- Template local status: approved
+- Media URL reachability test: 200 OK, image/jpeg
+- Latest journey_message_log:
+  - 63019
+  - [handleMediaContent]fetchMediaContent Failed
+- Current bug:
+  queued/accepted -> enrollment advances
+  later callback -> message marked failed
+  enrollment already completed
+```
+
+```text
+Likely real issue now
+Twilio is failing on the actual media object inside the approved content template,
+not on the local approval flag and not on the manually tested public URL alone.
+```
+
+### Files likely involved
+
+- `supabase/functions/whatsapp-templates/index.ts`
+- `supabase/functions/whatsapp-send/index.ts`
+- `supabase/functions/process-journeys/index.ts`
+- `supabase/functions/whatsapp-inbound/index.ts`
+- `src/pages/communication/WhatsAppTemplateDetails.tsx`
+- `supabase/migrations/*` if template metadata storage or new statuses are needed
+
+### Verification
+
+After implementation:
+
+1. Open template `highvalue_8lakh`
+   - it should show the synced Twilio content type as `twilio/media`
+   - it should show the actual media URL or media variable source from Twilio metadata
+
+2. Run the built-in media check from that exact synced URL
+   - should return `200 OK`
+
+3. Re-trigger the affected journey
+   - initial status should show pending/queued, not falsely completed
+   - callback should move logs to `delivered` on success, or `failed` with a precise reason on failure
+
+4. Journey analytics should remain consistent
+   - no more `completed` enrollments for failed WhatsApp sends
