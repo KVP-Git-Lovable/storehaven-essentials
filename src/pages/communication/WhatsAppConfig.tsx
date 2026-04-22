@@ -42,7 +42,11 @@ const WhatsAppConfig = () => {
     },
   });
 
-  const isOnline = data?.status === "ONLINE" || data?.status === "IN-USE";
+  const isOnline =
+    data?.status === "ONLINE" ||
+    data?.status === "IN-USE" ||
+    (!!data?.throughput && data.status !== "OFFLINE");
+  const displayStatus = isOnline ? "Active" : data?.status || "UNKNOWN";
 
   const handleCopy = async () => {
     if (!data?.webhook_url) return;
