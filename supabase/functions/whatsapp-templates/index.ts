@@ -414,10 +414,16 @@ serve(async (req) => {
           });
         }
 
-        const twilioResponse = await fetch(
-          `${CONTENT_API_BASE}/v1/Content/${template.twilio_content_sid}/ApprovalRequests`,
-          { headers: { 'Authorization': twilio.authHeader } }
-        );
+        const [twilioResponse, contentResp] = await Promise.all([
+          fetch(
+            `${CONTENT_API_BASE}/v1/Content/${template.twilio_content_sid}/ApprovalRequests`,
+            { headers: { 'Authorization': twilio.authHeader } },
+          ),
+          fetch(
+            `${CONTENT_API_BASE}/v1/Content/${template.twilio_content_sid}`,
+            { headers: { 'Authorization': twilio.authHeader } },
+          ),
+        ]);
 
         const approvalData = await twilioResponse.json();
         let newStatus = template.status;
@@ -438,13 +444,26 @@ serve(async (req) => {
           }
         }
 
+        const updates: Record<string, unknown> = {
+          status: newStatus,
+          rejection_reason: rejectionReason,
+          user_initiated_approved: userInitiatedApproved,
+        };
+
+        if (contentResp.ok) {
+          const contentJson = await contentResp.json();
+          const meta = deriveTwilioMetadata(contentJson?.types);
+          updates.twilio_content_types = contentJson?.types ?? null;
+          updates.twilio_template_type = meta.templateType;
+          updates.twilio_media_url = meta.mediaUrl;
+          updates.twilio_media_is_variable = meta.mediaIsVariable;
+          updates.twilio_required_variables = meta.requiredVariables;
+          updates.twilio_synced_at = new Date().toISOString();
+        }
+
         const { data: updated } = await supabase
           .from('whatsapp_templates')
-          .update({
-            status: newStatus,
-            rejection_reason: rejectionReason,
-            user_initiated_approved: userInitiatedApproved,
-          })
+          .update(updates)
           .eq('id', template_id)
           .select()
           .single();
