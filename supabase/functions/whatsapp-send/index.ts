@@ -109,14 +109,36 @@ serve(async (req) => {
     const params = new URLSearchParams({
       To: `whatsapp:${to_number}`,
       From: `whatsapp:${from_number}`,
-      Body: messageBody,
     });
 
     if (template.twilio_content_sid) {
+      // Template send: must use ContentSid + ContentVariables.
+      // Do NOT send Body — Twilio will reject (error 63019) when both are present
+      // or when the template has placeholders and variables are missing/empty.
       params.set('ContentSid', template.twilio_content_sid);
-      if (variables && typeof variables === 'object' && Object.keys(variables).length > 0) {
-        params.set('ContentVariables', JSON.stringify(variables));
+
+      // Determine how many {{N}} placeholders the template expects
+      const placeholderNums = new Set<string>();
+      const re = /\{\{(\d+)\}\}/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(template.body || '')) !== null) placeholderNums.add(m[1]);
+
+      const incoming = (variables && typeof variables === 'object') ? variables as Record<string, string> : {};
+      const filled: Record<string, string> = {};
+      for (const n of placeholderNums) {
+        const v = incoming[n];
+        filled[n] = (v != null && String(v).trim() !== '') ? String(v) : 'Customer';
       }
+      // Also pass through any extra named variables the caller supplied
+      for (const [k, v] of Object.entries(incoming)) {
+        if (!(k in filled) && v != null) filled[k] = String(v);
+      }
+      if (Object.keys(filled).length > 0) {
+        params.set('ContentVariables', JSON.stringify(filled));
+      }
+    } else {
+      // Free-form (session) message: send the rendered Body
+      params.set('Body', messageBody);
     }
 
     const twilioResponse = await fetch(`${GATEWAY_URL}/Messages.json`, {
