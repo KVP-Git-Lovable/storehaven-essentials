@@ -158,15 +158,35 @@ export default function CustomersList() {
         onApply={(id, filters) => { setActiveViewId(id); setActiveFilters(filters); setPage(0); }}
       />
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Select value={searchColumn} onValueChange={(v) => { setSearchColumn(v); setSearch(""); setPage(0); }}>
+          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {SEARCH_COLUMNS.map((c) => (
+              <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search name, phone, email..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-            className="pl-9"
-          />
+          {activeColumn.type === "enum" && activeColumn.options ? (
+            <Select value={search} onValueChange={(v) => { setSearch(v); setPage(0); }}>
+              <SelectTrigger className="pl-9"><SelectValue placeholder={`Select ${activeColumn.label}...`} /></SelectTrigger>
+              <SelectContent>
+                {activeColumn.options.map((opt) => (
+                  <SelectItem key={opt} value={opt} className="capitalize">{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              type={activeColumn.type === "date" ? "date" : activeColumn.type === "number" ? "number" : "text"}
+              placeholder={searchColumn === "all" ? "Search name, phone, email..." : `Search by ${activeColumn.label}...`}
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+              className="pl-9"
+            />
+          )}
         </div>
         <Badge variant="secondary">{data?.count ?? 0} total</Badge>
       </div>
