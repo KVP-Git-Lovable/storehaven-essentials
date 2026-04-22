@@ -148,6 +148,7 @@ export default function CommunicationCalendar() {
             channel: ch,
             start: ev.start,
             preview,
+            canvas_data: j.canvas_data,
           });
         });
       });
