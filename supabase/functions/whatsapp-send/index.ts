@@ -37,7 +37,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { template_id, to_number, from_number, variables } = body;
+    const { template_id, to_number, from_number, variables, order_id } = body;
 
     if (!template_id || !to_number || !from_number) {
       return new Response(JSON.stringify({ error: 'template_id, to_number, and from_number are required' }), {
@@ -125,7 +125,7 @@ serve(async (req) => {
       });
     }
 
-    // Log the message
+    // Log the message (legacy log)
     await supabase.from('whatsapp_message_log').insert({
       template_id,
       to_number,
@@ -133,6 +133,31 @@ serve(async (req) => {
       status: twilioData.status || 'queued',
       sent_by: user.id,
     });
+
+    // Also log to whatsapp_messages (conversations dashboard)
+    try {
+      const last10 = to_number.replace(/\D/g, '').slice(-10);
+      const { data: cust } = await supabase
+        .from('customers')
+        .select('id')
+        .or(`phone.eq.${to_number},phone.ilike.%${last10}`)
+        .limit(1)
+        .maybeSingle();
+
+      await supabase.from('whatsapp_messages').insert({
+        phone: to_number,
+        customer_id: cust?.id ?? null,
+        direction: 'outbound',
+        message: messageBody,
+        message_type: 'template',
+        order_id: order_id ?? null,
+        status: twilioData.status || 'sent',
+        twilio_message_sid: twilioData.sid,
+        is_read: true,
+      });
+    } catch (e) {
+      console.error('whatsapp_messages insert failed:', e);
+    }
 
     return new Response(JSON.stringify({ success: true, message_sid: twilioData.sid }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

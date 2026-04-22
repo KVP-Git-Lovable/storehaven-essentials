@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { MessageSquare, Users, Settings } from "lucide-react";
+import { MessageSquare, MessagesSquare, Settings } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BackButton } from "@/components/shared/BackButton";
 import whatsappLogo from "@/assets/whatsapp-logo.png";
@@ -12,10 +12,10 @@ const cards = [
     href: "/communication/templates",
   },
   {
-    title: "WhatsApp Senders",
-    description: "View and manage your WhatsApp-enabled sender numbers from Twilio",
-    icon: Users,
-    href: "/communication/whatsapp/senders",
+    title: "WhatsApp Conversations",
+    description: "View all WhatsApp chats with customers, track orders and engagement.",
+    icon: MessagesSquare,
+    href: "/communication/whatsapp/conversations",
   },
   {
     title: "View Configuration",
