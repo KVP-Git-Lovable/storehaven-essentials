@@ -3,6 +3,8 @@
 // Non-greeting messages return an empty TwiML response, leaving room for
 // future intent handlers (orders, products, etc.) without interfering.
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -79,13 +81,65 @@ Deno.serve(async (req) => {
       bodyPreview: body.slice(0, 200),
     });
 
+    // Normalize phone (strip whatsapp: prefix)
+    const normalizedFrom = from.replace(/^whatsapp:/i, "").trim();
+
+    // Log inbound message + auto-reply (best-effort, never breaks TwiML)
+    const logMessages = async (isGreeting: boolean) => {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL");
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (!supabaseUrl || !serviceKey || !normalizedFrom) return;
+        const supabase = createClient(supabaseUrl, serviceKey);
+
+        // Lookup customer by phone (exact, then last 10 digits)
+        let customerId: string | null = null;
+        const last10 = normalizedFrom.replace(/\D/g, "").slice(-10);
+        const { data: cust } = await supabase
+          .from("customers")
+          .select("id, phone")
+          .or(`phone.eq.${normalizedFrom},phone.ilike.%${last10}`)
+          .limit(1)
+          .maybeSingle();
+        if (cust?.id) customerId = cust.id;
+
+        await supabase.from("whatsapp_messages").insert({
+          phone: normalizedFrom,
+          customer_id: customerId,
+          direction: "inbound",
+          message: body,
+          message_type: "text",
+          status: "received",
+          twilio_message_sid: messageSid || null,
+          profile_name: profileName || null,
+          is_read: false,
+        });
+
+        if (isGreeting) {
+          await supabase.from("whatsapp_messages").insert({
+            phone: normalizedFrom,
+            customer_id: customerId,
+            direction: "outbound",
+            message: WELCOME,
+            message_type: "text",
+            status: "sent",
+            is_read: true,
+          });
+        }
+      } catch (e) {
+        console.error("[whatsapp-inbound] log error:", e);
+      }
+    };
+
     // 1) Greeting check runs FIRST, before any other intent logic.
     if (GREETING_RE.test(body)) {
+      await logMessages(true);
       return twiml(WELCOME);
     }
 
     // 2) Fallback: empty response — leaves space for future intent handlers
     //    (orders, products, etc.) to be added above this line.
+    await logMessages(false);
     return twiml();
   } catch (error) {
     console.error("[whatsapp-inbound] error:", error);

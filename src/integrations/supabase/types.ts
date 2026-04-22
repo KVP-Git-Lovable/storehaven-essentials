@@ -10689,6 +10689,66 @@ export type Database = {
           },
         ]
       }
+      whatsapp_messages: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          direction: string
+          id: string
+          is_read: boolean
+          message: string | null
+          message_type: string
+          order_id: string | null
+          phone: string
+          profile_name: string | null
+          status: string
+          twilio_message_sid: string | null
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          direction: string
+          id?: string
+          is_read?: boolean
+          message?: string | null
+          message_type?: string
+          order_id?: string | null
+          phone: string
+          profile_name?: string | null
+          status?: string
+          twilio_message_sid?: string | null
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          direction?: string
+          id?: string
+          is_read?: boolean
+          message?: string | null
+          message_type?: string
+          order_id?: string | null
+          phone?: string
+          profile_name?: string | null
+          status?: string
+          twilio_message_sid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_messages_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_messages_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_templates: {
         Row: {
           body: string
