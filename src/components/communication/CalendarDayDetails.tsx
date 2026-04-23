@@ -202,9 +202,11 @@ export function CalendarDayDetails({ dayKey, events }: Props) {
 
                     <div className="flex flex-wrap items-center gap-1.5">
                       {channels.map((ch) => {
-                        const cs = CHANNEL_STYLES[ch] || CHANNEL_STYLES.whatsapp;
+                        const lc = (ch || "").toLowerCase();
+                        const isWhatsApp = lc === "whatsapp" || lc === "whatsapp_template";
+                        const styleKey = isWhatsApp ? "whatsapp" : lc;
+                        const cs = CHANNEL_STYLES[styleKey] || CHANNEL_STYLES.whatsapp;
                         const Icon = cs.icon;
-                        const isWhatsApp = ch === "whatsapp";
                         return (
                           <Badge key={ch} variant="outline" className={cn("gap-1 font-medium border-transparent", cs.chip)}>
                             {isWhatsApp ? (
