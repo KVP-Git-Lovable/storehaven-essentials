@@ -256,74 +256,138 @@ export default function WhatsAppTemplates() {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Template Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Updated</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Loading...</TableCell>
-                </TableRow>
-              ) : filteredTemplates.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8">
-                    <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground/50 mb-2" />
-                    <p className="text-muted-foreground">No templates found</p>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredTemplates.map((template) => (
-                  <TableRow key={template.id}>
-                    <TableCell className="font-medium">{template.name}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{template.category}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        <Badge className={statusColors[template.status]}>{template.status}</Badge>
+          {/* Mobile compact list */}
+          <div className="md:hidden divide-y">
+            {isLoading ? (
+              <div className="text-center py-8 text-muted-foreground text-sm">Loading...</div>
+            ) : filteredTemplates.length === 0 ? (
+              <div className="text-center py-8">
+                <MessageSquare className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
+                <p className="text-muted-foreground text-sm">No templates found</p>
+              </div>
+            ) : (
+              filteredTemplates.map((template) => {
+                const StatusIcon =
+                  template.status === "approved" ? CheckCircle2
+                  : template.status === "submitted" ? Clock
+                  : template.status === "rejected" ? XCircle
+                  : Circle;
+                const statusIconColor =
+                  template.status === "approved" ? "text-green-600"
+                  : template.status === "submitted" ? "text-yellow-600"
+                  : template.status === "rejected" ? "text-destructive"
+                  : "text-muted-foreground";
+                return (
+                  <button
+                    key={template.id}
+                    type="button"
+                    className="w-full text-left px-3 py-2.5 hover:bg-muted/50 active:bg-muted transition-colors flex items-start gap-2"
+                    onClick={() => navigate(`/communication/templates/${template.id}`)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <StatusIcon className={`h-3.5 w-3.5 shrink-0 ${statusIconColor}`} />
+                        <span className="text-sm font-medium truncate">{template.name}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 leading-tight">{template.category}</Badge>
+                        <span className="text-[11px] text-muted-foreground">{format(new Date(template.updated_at), "MMM d")}</span>
+                        <span className={`text-[10px] capitalize ${statusIconColor}`}>{template.status}</span>
                         {template.user_initiated_approved && template.status !== "approved" && (
-                          <Badge variant="outline" className="text-xs">User-initiated</Badge>
+                          <Badge variant="outline" className="text-[10px] px-1 py-0 leading-tight">User-init</Badge>
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {format(new Date(template.updated_at), "MMM d, yyyy HH:mm")}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => navigate(`/communication/templates/${template.id}`)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive"
-                          onClick={() => {
-                            if (confirm("Delete this template?")) {
-                              deleteMutation.mutate(template.id);
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm("Delete this template?")) {
+                          deleteMutation.mutate(template.id);
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Template Name</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Updated</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Loading...</TableCell>
+                  </TableRow>
+                ) : filteredTemplates.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8">
+                      <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground/50 mb-2" />
+                      <p className="text-muted-foreground">No templates found</p>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  filteredTemplates.map((template) => (
+                    <TableRow key={template.id}>
+                      <TableCell className="font-medium">{template.name}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{template.category}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge className={statusColors[template.status]}>{template.status}</Badge>
+                          {template.user_initiated_approved && template.status !== "approved" && (
+                            <Badge variant="outline" className="text-xs">User-initiated</Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {format(new Date(template.updated_at), "MMM d, yyyy HH:mm")}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => navigate(`/communication/templates/${template.id}`)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive"
+                            onClick={() => {
+                              if (confirm("Delete this template?")) {
+                                deleteMutation.mutate(template.id);
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
