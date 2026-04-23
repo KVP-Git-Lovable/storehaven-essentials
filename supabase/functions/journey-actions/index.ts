@@ -21,11 +21,7 @@ Deno.serve(async (req) => {
         .from("journeys").select("*").eq("id", journey_id).single();
       if (jErr) throw jErr;
 
-      let contactIds: string[] = [];
-      let matched = 0;
-      let skipped = 0;
-      let firstError: string | undefined;
-
+      // Validate list view entity early for a clearer error message
       if (journey.list_view_id) {
         const { data: lv, error: lvErr } = await supabase
           .from("list_views").select("entity_type, name").eq("id", journey.list_view_id).maybeSingle();
@@ -35,29 +31,20 @@ Deno.serve(async (req) => {
         if (!cfg || !cfg.isAudienceSource) {
           throw new Error(`List view "${lv.name}" uses entity "${lv.entity_type}" which is not an audience source. Use a Customers or Orders list view.`);
         }
-
-        // Clear stale enrollments so dynamic filters re-evaluate fresh.
-        await supabase
-          .from("journey_enrollments")
-          .delete()
-          .eq("journey_id", journey_id)
-          .in("status", ["active", "paused", "failed"]);
-
-        const result = await resolveListViewContacts(supabase, journey.list_view_id);
-        contactIds = result.contactIds;
-        matched = result.matched;
-        skipped = result.skipped;
-        firstError = result.firstError;
-      } else {
-        let query = supabase.from("journey_contacts").select("id").eq("opted_out", false);
-        if (journey.segment_type) query = query.eq("segment_type", journey.segment_type);
-        const filters = journey.filters as any;
-        if (filters?.city) query = query.eq("city", filters.city);
-        const { data: contacts, error: cErr } = await query;
-        if (cErr) throw cErr;
-        contactIds = (contacts || []).map((c: any) => c.id);
-        matched = contactIds.length;
       }
+
+      // Clear stale enrollments so dynamic filters re-evaluate fresh.
+      await supabase
+        .from("journey_enrollments")
+        .delete()
+        .eq("journey_id", journey_id)
+        .in("status", ["active", "paused", "failed"]);
+
+      const result = await resolveAudience(supabase, journey);
+      const contactIds = result.contactIds;
+      const matched = result.matched;
+      const skipped = result.skipped;
+      const firstError = result.firstError;
 
       const canvas = journey.canvas_data as any;
       const entryNode = canvas?.nodes?.find((n: any) => n.type === "entry");
