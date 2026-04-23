@@ -10636,6 +10636,7 @@ export type Database = {
           id: string
           last_synced_at: string | null
           sender_number: string | null
+          sms_sender_number: string | null
           throughput: string
           updated_at: string
           webhook_url: string | null
@@ -10646,6 +10647,7 @@ export type Database = {
           id?: string
           last_synced_at?: string | null
           sender_number?: string | null
+          sms_sender_number?: string | null
           throughput?: string
           updated_at?: string
           webhook_url?: string | null
@@ -10656,6 +10658,7 @@ export type Database = {
           id?: string
           last_synced_at?: string | null
           sender_number?: string | null
+          sms_sender_number?: string | null
           throughput?: string
           updated_at?: string
           webhook_url?: string | null

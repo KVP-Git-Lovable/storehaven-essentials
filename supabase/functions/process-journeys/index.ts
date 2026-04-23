@@ -1,5 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { computeNextRun, resolveAudience, type JourneySchedule } from "../_shared/journey-schedule.ts";
+import {
+  renderFreeformBody,
+  sendWhatsAppFreeform,
+  sendSms,
+  sendEmail,
+  type ChannelSendResult,
+  type FreeformChannel,
+} from "../_shared/journey-channels.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
