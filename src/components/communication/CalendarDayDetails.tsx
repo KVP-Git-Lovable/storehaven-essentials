@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { WhatsAppIcon } from "@/components/communication/WhatsAppIcon";
 
 const IST_OFFSET_MIN = 330;
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -161,8 +162,10 @@ export function CalendarDayDetails({ dayKey, events }: Props) {
   return (
     <div className="rounded-lg border bg-muted/20 p-3 sm:p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">
-          {journeys.length} {journeys.length === 1 ? "journey" : "journeys"} scheduled
+        <h3 className="text-sm font-semibold tracking-tight">
+          <span className="tabular-nums">{journeys.length}</span>
+          <span className="mx-1.5" />
+          {journeys.length === 1 ? "Journey" : "Journeys"} Scheduled
         </h3>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -201,9 +204,14 @@ export function CalendarDayDetails({ dayKey, events }: Props) {
                       {channels.map((ch) => {
                         const cs = CHANNEL_STYLES[ch] || CHANNEL_STYLES.whatsapp;
                         const Icon = cs.icon;
+                        const isWhatsApp = ch === "whatsapp";
                         return (
                           <Badge key={ch} variant="outline" className={cn("gap-1 font-medium border-transparent", cs.chip)}>
-                            <Icon className="h-3 w-3" />
+                            {isWhatsApp ? (
+                              <WhatsAppIcon className="h-3.5 w-3.5" />
+                            ) : (
+                              <Icon className="h-3 w-3" />
+                            )}
                             {cs.label}
                           </Badge>
                         );
