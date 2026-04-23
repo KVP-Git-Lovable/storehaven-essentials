@@ -236,7 +236,7 @@ Deno.serve(async (req) => {
 
     const { data: cfg } = await supabase
       .from("whatsapp_config")
-      .select("sender_number")
+      .select("sender_number, sms_sender_number")
       .limit(1)
       .maybeSingle();
     let fromNumber: string | null = cfg?.sender_number || null;
@@ -244,6 +244,8 @@ Deno.serve(async (req) => {
       const envFrom = Deno.env.get("WHATSAPP_FROM_NUMBER");
       if (envFrom && /^\+[1-9]\d{1,14}$/.test(envFrom)) fromNumber = envFrom;
     }
+    const smsFromNumber: string | null =
+      cfg?.sms_sender_number || cfg?.sender_number || Deno.env.get("TWILIO_SMS_FROM") || null;
 
     const { data: activeJourneys } = await supabase
       .from("journeys").select("*").eq("status", "active");
