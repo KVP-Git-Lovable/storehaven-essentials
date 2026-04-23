@@ -162,8 +162,10 @@ export function CalendarDayDetails({ dayKey, events }: Props) {
   return (
     <div className="rounded-lg border bg-muted/20 p-3 sm:p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">
-          {journeys.length} {journeys.length === 1 ? "journey" : "journeys"} scheduled
+        <h3 className="text-sm font-semibold tracking-tight">
+          <span className="tabular-nums">{journeys.length}</span>
+          <span className="mx-1.5" />
+          {journeys.length === 1 ? "Journey" : "Journeys"} Scheduled
         </h3>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
