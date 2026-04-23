@@ -96,7 +96,7 @@ export function CalendarDayDetails({ dayKey, events }: Props) {
 
   // Unique journeys for the day (one card per journey, even if multiple events)
   const journeys = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; canvas_data: any; channels: Set<string>; times: Date[] }>();
+    const map = new Map<string, { id: string; name: string; canvas_data: any; channels: Set<string>; times: Date[]; is_ready: boolean }>();
     events.forEach((e) => {
       const existing = map.get(e.journey_id);
       if (existing) {
@@ -109,6 +109,7 @@ export function CalendarDayDetails({ dayKey, events }: Props) {
           canvas_data: e.canvas_data,
           channels: new Set([e.channel]),
           times: [e.start],
+          is_ready: e.is_ready,
         });
       }
     });
@@ -182,9 +183,14 @@ export function CalendarDayDetails({ dayKey, events }: Props) {
           const statusStyle = STATUS_STYLE[statusBucket];
           const mediaUrl = getJourneyMediaUrl(j.canvas_data);
           const channels = Array.from(j.channels);
+          const readiness = j.is_ready ? READINESS_STYLE.ready : READINESS_STYLE.attention;
 
           return (
-            <Card key={j.id} className="overflow-hidden">
+            <Card
+              key={j.id}
+              className="overflow-hidden border"
+              style={{ backgroundColor: readiness.bg, borderColor: readiness.border }}
+            >
               <CardContent className="p-3 sm:p-4">
                 <div className="flex gap-3">
                   {mediaUrl && (
