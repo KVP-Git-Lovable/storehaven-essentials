@@ -443,7 +443,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ processed, messagesSent }), {
+    return new Response(JSON.stringify({
+      processed,
+      messagesSent,
+      scheduled_runs_triggered: sweep.triggered,
+      schedule_errors: sweep.errors,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
