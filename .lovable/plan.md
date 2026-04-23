@@ -1,69 +1,103 @@
 
 
-## Fix: Journey schedules never trigger runs
+## Add Message Type selection (Template vs Free-form, multi-channel)
 
-### Root cause
+Restructure the Journey Builder Message node so the user first picks a Message Type, then sees a UI tailored to that mode. Template mode keeps today's WhatsApp template flow untouched. Free-form mode is new and supports WhatsApp, SMS, and Email — all three using the same body text per node.
 
-The Journey schedule UI writes correctly to `journey_schedules` (your "Testing for 8L Purchases" row has `frequency=daily`, `execution_time=13:00:00 IST`, `next_run_at=2026-04-23 07:30:00 UTC` = today 1:00 PM IST), and the cron job `journeys-tick` correctly calls `process-journeys` every minute. But **no code in the project ever reads `journey_schedules`**.
+### 1. Property panel UI (`NodePropertyPanel.tsx`)
 
-`process-journeys` only iterates `journey_enrollments` whose `next_action_at` has passed — i.e., contacts that someone *already enrolled*. Enrollment only happens when a user clicks **Activate** (in `journey-actions/activate`). After every contact has run through the canvas once, the journey is effectively dormant. The schedule is a database row with no executor.
+Replace the current single Channel dropdown for Message nodes with this layout:
 
-That's why your 1:00 PM IST run produced nothing in Analytics: at 1:00 PM IST the cron fired, `process-journeys` looked at `journey_enrollments` for this journey, saw all rows already `status=completed`, and exited. It never re-enrolled the audience.
+- **Message Type** (new top-level dropdown, first field)
+  - `Template` (default for backward compat — every existing node has `channel: "whatsapp_template"`)
+  - `Free-form`
+- **If Template** → render the EXISTING block exactly as today:
+  - Label remains **"WhatsApp Template"**
+  - Approved Template dropdown, body preview, variable bindings
+  - No channel checkboxes (template = WhatsApp only)
+- **If Free-form** → render a new block:
+  - **Channels** (checkbox group, one or more required): ☑ WhatsApp · ☑ SMS · ☑ Email
+  - **Message** (textarea, supports emojis natively, ~6 rows). Helper line: "Same message will be used across all selected channels."
+  - When WhatsApp is checked, show an inline note in light-orange (`bg-orange-50 border-orange-200 text-orange-800`):
+    > ⚠ WhatsApp free-form messages may fail outside the 24h window, as per existing policy from Meta.
 
-The 3 enrollments visible today at 04:43 UTC (10:13 IST) came from a manual Activate, not from the schedule.
+### 2. Node data model (backward compatible)
 
-### Fix
+Stored on the message node's `data`:
 
-Teach `process-journeys` to also act as the **scheduler**: at the top of each tick, find every active journey whose `journey_schedules.next_run_at <= now()`, re-enroll its audience (same logic as `journey-actions/activate`), then advance `next_run_at` to the next occurrence using the existing `computeNextRun` rules.
+```
+{
+  message_type: "template" | "freeform",   // NEW (default "template")
+  // Template mode (unchanged):
+  channel: "whatsapp_template",
+  whatsapp_template_id, whatsapp_template_name,
+  template_body, template_variables,
+  // Free-form mode (NEW):
+  freeform_channels: ("whatsapp" | "sms" | "email")[],
+  freeform_body: string,
+  freeform_subject?: string  // only used for email; auto-generated from journey name if blank
+}
+```
 
-#### Changes in `supabase/functions/process-journeys/index.ts`
+Migration rule in the panel: if `message_type` is missing, treat as `"template"` so existing journeys keep working. Switching modes preserves the other mode's stored fields so users can flip back without losing config.
 
-1. **New "schedule sweep" block** that runs before the existing enrollment processing loop:
-   - Query `journey_schedules` joined to `journeys`, filter:
-     - `journeys.status = 'active'`
-     - `journeys.approval_status = 'approved'` (skip drafts/pending)
-     - `journey_schedules.next_run_at <= now()`
-   - For each due schedule, **claim it atomically** by updating `next_run_at` to a temporary far-future value (or a new "running" sentinel) before doing work — this avoids a second cron tick double-enrolling if work overlaps a minute boundary.
-   - Resolve the audience using the same code path as `journey-actions`:
-     - If `journey.list_view_id` set → call the existing list-view resolver (extract the helper from `journey-actions/index.ts` into a shared module so both functions use it; or inline the same SQL/RPC call).
-     - Else → query `journey_contacts` with `segment_type` / `filters.city`.
-   - Delete the prior `active`/`paused`/`failed` enrollments for this journey (matches Activate behavior so dynamic audiences refresh).
-   - Insert new `journey_enrollments` rows pointing at the canvas entry node with `next_action_at = now()` so the same tick's main loop processes them immediately.
-   - Compute the next IST-aware `next_run_at` using the existing `computeNextRun` from `src/lib/journeySchedule.ts` (port it into a shared Deno-compatible helper under `supabase/functions/_shared/journeySchedule.ts` — pure functions, no React imports). Update `journey_schedules.next_run_at` to that value.
-   - For `type='one_time'` schedules whose date has passed, set `next_run_at = NULL` (don't re-fire).
+### 3. Canvas card (`MessageNode.tsx`)
 
-2. **Audit log entry** (optional but cheap): write a row to `journey_message_log` or a new lightweight `journey_run_log` so the next time a schedule misses, the user can see it in Analytics. Simplest path: insert one row per scheduled run with `status='enrolled'`, `template_body` = `JSON.stringify({ matched, schedule_id })`. Keeps Analytics non-empty even when audience is empty.
+When `message_type === "freeform"`, replace the single channel chip with:
+- Title: "Free-form message"
+- A row of small chips for each selected channel using existing icons (WhatsApp logo for WhatsApp, `Mail` for Email, `MessageSquare` for SMS)
+- Body preview (line-clamp-2)
+- Drop the WhatsApp template approval warning (doesn't apply to free-form)
 
-3. **Empty-audience handling**: if the audience resolves to 0 contacts, still advance `next_run_at` and log "no contacts matched at HH:MM" — so users immediately understand why no message went out instead of seeing silence.
+Template mode card is unchanged.
 
-#### Shared scheduling helper
+### 4. Execution (`process-journeys/index.ts`)
 
-Create `supabase/functions/_shared/journey-schedule.ts` containing Deno-friendly copies of:
-- `computeNextRun(schedule, fromDate)` — same IST math as `src/lib/journeySchedule.ts`.
-- `resolveAudience(supabase, journey)` — extracted from `journey-actions` so both Activate and the scheduler use one source of truth (avoids drift like the variable-resolution bug we already fixed).
+In the message-node branch:
 
-#### Backfill the missed run
+- **Template mode** (`message_type === "template"` or legacy `channel === "whatsapp_template"`): keep current path — single `whatsapp-send` call, single `journey_message_log` row. No change.
+- **Free-form mode**: for each selected channel, create one `journey_message_log` row (so Analytics shows per-channel delivery), send via the right transport, then collapse the multi-channel result into one enrollment advancement.
 
-After deploy, the 1:00 PM IST run today is already in the past. Manually nudge `journey_schedules.next_run_at` for `869cf03d-...` to a near-future timestamp (e.g. `now() + 2 minutes`) so the user can see one successful scheduled execution, then leave the schedule to take over for tomorrow's 1:00 PM IST.
+Per-channel transport:
+- **WhatsApp free-form** → call a new `whatsapp-send-freeform` edge function (sister to `whatsapp-send`) that posts `Body=...` directly to Twilio without a `ContentSid`. No 24h pre-check; Twilio's response carries the failure reason (e.g. error 63016 = outside 24h window) which is captured in `error_message` + `error_code`.
+- **SMS** → new `sms-send` edge function. Uses the existing Twilio connector via the gateway (`POST /Messages.json`, `From` = SMS sender from `whatsapp_config` or new env `TWILIO_SMS_FROM`).
+- **Email** → new `journey-email-send` edge function using the **Lovable Email** infrastructure (set up via the email scaffolder). Will trigger the email-domain setup dialog if no domain exists yet.
 
-This requires an admin-approved migration since it's a write — confirm with the user whether to also nudge it now or just wait for tomorrow's tick.
+After all per-channel sends finish, advance the enrollment exactly once: if at least one channel was accepted by its provider, mark `pending_delivery` (24h hold for status webhooks); if all failed, mark enrollment `failed`. This preserves today's idempotency model.
 
-### Why Activate still works today
+### 5. Logging schema usage
 
-`journey-actions/activate` enrolls contacts and stamps `journeys.status='active'`. The cron-driven `process-journeys` then walks the enrolled rows through the canvas — message nodes call `whatsapp-send`, decision nodes branch, exit nodes mark complete. That part is fine and not changing. We're only adding the missing front-end of the pipeline: turning a schedule tick into fresh enrollments.
+`journey_message_log` already has the fields we need: `channel`, `status`, `error_message`, `error_code`, `provider_metadata`. We will:
+- Set `channel` to `"whatsapp"`, `"sms"`, or `"email"` (template mode keeps `"whatsapp_template"`).
+- Insert one row per channel per enrollment for free-form sends.
+- Stop using the old `(enrollment_id, node_id)` claim shortcut for free-form; instead use `(enrollment_id, node_id, channel)` so each channel is independently logged. A small migration adds a partial unique index on those three columns to keep the existing idempotency guarantees.
 
-### Files to change
+### 6. Analytics page (`JourneyAnalytics.tsx`)
 
-- `supabase/functions/process-journeys/index.ts` — add the schedule-sweep block, share helpers.
-- `supabase/functions/_shared/journey-schedule.ts` *(new)* — `computeNextRun` (Deno port) + `resolveAudience` extracted from `journey-actions`.
-- `supabase/functions/journey-actions/index.ts` — switch its activate path to import the shared `resolveAudience` so behavior stays identical to the scheduler.
+- Add a **Channel-wise delivery summary** card row above the recent-messages table: WhatsApp / SMS / Email tiles each showing Sent · Delivered · Failed counts, computed from `journey_message_log` grouped by `channel`.
+- In the recent-messages table, add a **Reason** column that surfaces `error_message` (truncated, with full text in a tooltip) so 24h-window failures and other provider errors are visible per user.
+- Existing Open/Click/Completed tiles stay as-is.
 
-No DB migration needed for the fix itself. The cron job, the `journey_schedules` table, RLS, and the existing edge functions are already in place. Optionally one ad-hoc UPDATE to backfill `next_run_at` so today's run isn't lost.
+### 7. Files to change / add
 
-### Validation after deploy
+- Edit `src/components/journey/NodePropertyPanel.tsx` — Message Type dropdown, conditional UI, free-form fields, orange WhatsApp note.
+- Edit `src/components/journey/MessageNode.tsx` — render free-form chips when in free-form mode.
+- Edit `src/pages/communication/JourneyAnalytics.tsx` — channel summary + reason column.
+- Edit `supabase/functions/process-journeys/index.ts` — per-channel fan-out for free-form.
+- New `supabase/functions/whatsapp-send-freeform/index.ts` — Twilio free-form WhatsApp send.
+- New `supabase/functions/sms-send/index.ts` — Twilio SMS send.
+- New `supabase/functions/journey-email-send/index.ts` — Lovable email dispatcher (needs scaffold).
+- DB migration: partial unique index on `journey_message_log(enrollment_id, node_id, channel)` for free-form idempotency.
 
-1. Confirm cron call: in edge logs for `process-journeys`, look for new log line `scheduled_runs_triggered: N`.
-2. Confirm new enrollments appear at the next IST tick for "Testing for 8L Purchases" (timestamps around 13:00 IST tomorrow, or right after the manual `next_run_at` nudge).
-3. Confirm `whatsapp-send` is called → `journey_message_log` rows appear with `status='queued'/'sent'`.
-4. Confirm `journey_schedules.next_run_at` advances to the next valid IST occurrence.
+### Constraints honored
+
+- Template flow is byte-for-byte unchanged when `message_type === "template"` (and for any legacy node without `message_type`).
+- New fields are additive; old `canvas_data` JSON keeps working.
+- UI is conditional — channel checkboxes and the orange note only appear in free-form mode.
+
+### Decisions needed before implementation
+
+1. **Email provider for free-form Email**: use Lovable's built-in email (default, requires running the email-domain setup dialog if not done) — confirmed unless you tell me otherwise.
+2. **SMS sender number**: do you already have a Twilio SMS-capable number we should hard-code in `whatsapp_config`, or should we add a new `sms_sender_number` column to `whatsapp_config` (renaming the table later if needed)?
+3. **Email subject**: leave a free "Subject" field in the property panel for free-form Email mode, or auto-derive from the journey name?
 
