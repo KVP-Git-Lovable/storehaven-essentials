@@ -1,89 +1,61 @@
 
-## Fix WhatsApp brand icon rendering in Communication Calendar
 
-Update the calendar channel rendering so WhatsApp template journeys use the same brand logo shown on the WhatsApp page, instead of falling back to the generic message icon.
+## Color-code calendar journey cards by readiness
 
-### Root cause
+Apply per-journey color theming on the Communication Calendar so users can instantly see which journeys are ready to run vs. need attention.
 
-The calendar currently treats only `channel === "whatsapp"` as WhatsApp for icon rendering. But journey message nodes store WhatsApp journeys as `channel === "whatsapp_template"`. Because of that mismatch:
+### Readiness rule
 
-- label/style falls back to the WhatsApp chip style
-- icon logic does not recognize it as WhatsApp
-- the generic `MessageSquare` icon is rendered instead of the brand logo
+A journey is **Ready (green)** when:
+- `journeys.approval_status === "approved"` AND
+- `journeys.status === "active"`
 
-### What to change
+Otherwise → **Attention (yellow)**, including when `approval_status` is missing/undefined.
 
-#### 1. Normalize WhatsApp channel detection
-In both calendar views, treat these values as WhatsApp:
-- `whatsapp`
-- `whatsapp_template`
+Note: the calendar query already filters `status = "active"`, so in practice the discriminator is `approval_status`. The check still includes `status === "active"` so the rule is correct if that filter ever changes.
 
-Add a small shared helper in each file, or normalize the derived channel value before rendering:
-- `isWhatsAppChannel(channel)`
-- optionally map `whatsapp_template -> whatsapp` for display logic
+### Color tokens (applied per card, not per date cell)
 
-#### 2. Update date-cell chips in `CommunicationCalendar.tsx`
-Adjust `renderChip()` so the logo appears whenever the event channel is WhatsApp, including template-based WhatsApp journeys.
+- Ready: bg `#DCFCE7`, border `#22C55E`
+- Attention: bg `#FEF9C3`, border `#EAB308`
+- Text stays default foreground for readability (both backgrounds are light, contrast remains AA-compliant).
 
-Current logic to replace:
-- `const isWhatsApp = e.channel === "whatsapp"`
+Implemented via inline `style={{ backgroundColor, borderColor }}` so we don't need to extend the Tailwind theme.
 
-New behavior:
-- `const isWhatsApp = isWhatsAppChannel(e.channel)`
+### Where the colors apply
 
-Also ensure the channel style lookup resolves cleanly for `whatsapp_template`, so the badge still uses the green WhatsApp chip styling and “WhatsApp” label.
+1. **Date-cell chips** (`renderChip` in `CommunicationCalendar.tsx`)
+   - Replace the channel-tinted chip background with the readiness color, keeping the channel icon (WhatsApp logo / Mail / Phone) and text intact.
+   - Border 1px in the matching readiness color so the card edge reads as a status pill.
 
-#### 3. Update inline expanded cards in `CalendarDayDetails.tsx`
-Apply the same normalization for the channel badges inside the expanded day panel.
+2. **Inline expanded panel cards** (`CalendarDayDetails.tsx`)
+   - Each `<Card>` for a journey gets the readiness background + border.
+   - Channel badges, status badges, and media thumbnail remain unchanged.
 
-Current logic to replace:
-- `const isWhatsApp = ch === "whatsapp"`
+3. **"+N more" Popover items** — same chip styling reused via `renderChip`, so no extra change needed.
 
-New behavior:
-- treat both `whatsapp` and `whatsapp_template` as WhatsApp
-- render `<WhatsAppIcon />` for both
+### Data plumbing
 
-#### 4. Keep branding consistent with `/communication/whatsapp`
-Continue using the existing `WhatsAppIcon` component, since it already imports the same `@/assets/whatsapp-logo.png` used by the WhatsApp page header.
+Both the chip and the expanded card need to know readiness. Currently the calendar fetches `id, name, status, canvas_data, schedule`. Add `approval_status` to the select.
 
-No asset changes are needed unless testing shows the PNG itself is not loading.
+Carry the flag through:
+- `CalEvent` interface gains `is_ready: boolean`.
+- `DayEvent` interface (in `CalendarDayDetails.tsx`) gains `is_ready: boolean`.
+- Compute `is_ready = j.approval_status === "approved" && j.status === "active"` once per journey in the `allEvents` builder, then propagate to every event/chip.
 
-### Files to update
+### Files to change
 
 - `src/pages/communication/CommunicationCalendar.tsx`
-  - normalize channel aliasing for chip icon + style rendering
+  - Add `approval_status` to the journeys select.
+  - Add `is_ready` to `CalEvent` and propagate.
+  - In `renderChip`, swap channel-background classes for inline readiness colors (keep icon/label/text classes).
 - `src/components/communication/CalendarDayDetails.tsx`
-  - normalize channel aliasing for inline badge icon + style rendering
+  - Add `is_ready` to the exported `DayEvent` type.
+  - Apply readiness `style` (bg + border) to each journey `<Card>`.
 
-### Suggested implementation shape
+### Constraints honored
 
-Use a tiny helper like:
+- Calendar grid structure, IST handling, filters, expansion, and the schedule fetch logic are untouched.
+- Only visual styling logic changes; channel chip icons and labels stay the same.
+- Fallback to yellow when `approval_status` is missing/undefined is built into the boolean check.
 
-```ts
-function isWhatsAppChannel(channel?: string) {
-  return ["whatsapp", "whatsapp_template"].includes((channel || "").toLowerCase());
-}
-
-function getDisplayChannel(channel?: string) {
-  return isWhatsAppChannel(channel) ? "whatsapp" : (channel || "").toLowerCase();
-}
-```
-
-Then:
-- use `getDisplayChannel()` for `CHANNEL_STYLES`
-- use `isWhatsAppChannel()` for choosing between `<WhatsAppIcon />` and the Lucide icon
-
-### Expected result
-
-After this change:
-- date-cell chips on `/communication/calendar` will show the branded WhatsApp logo
-- inline expanded cards will also show the branded WhatsApp logo
-- the text label will still read “WhatsApp”
-- SMS/Email/Voice chips remain unchanged
-
-### Validation
-
-Verify on calendar entries where the underlying node channel is `whatsapp_template`:
-- small chip inside date cell shows brand WhatsApp logo
-- expanded card badge shows brand WhatsApp logo
-- no generic messagebox icon appears next to “WhatsApp”
