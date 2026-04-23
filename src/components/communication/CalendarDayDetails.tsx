@@ -204,9 +204,14 @@ export function CalendarDayDetails({ dayKey, events }: Props) {
                       {channels.map((ch) => {
                         const cs = CHANNEL_STYLES[ch] || CHANNEL_STYLES.whatsapp;
                         const Icon = cs.icon;
+                        const isWhatsApp = ch === "whatsapp";
                         return (
                           <Badge key={ch} variant="outline" className={cn("gap-1 font-medium border-transparent", cs.chip)}>
-                            <Icon className="h-3 w-3" />
+                            {isWhatsApp ? (
+                              <WhatsAppIcon className="h-3.5 w-3.5" />
+                            ) : (
+                              <Icon className="h-3 w-3" />
+                            )}
                             {cs.label}
                           </Badge>
                         );
