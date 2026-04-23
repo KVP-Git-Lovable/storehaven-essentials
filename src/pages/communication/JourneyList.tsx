@@ -534,54 +534,54 @@ export default function JourneyList() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <BackButton />
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Journey Builder</h1>
-          <p className="text-muted-foreground">Create automated messaging journeys for your audience segments</p>
+          <h1 className="text-lg md:text-2xl font-bold tracking-tight">Journey Builder</h1>
+          <p className="text-xs md:text-sm text-muted-foreground">Create automated messaging journeys for your audience segments</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setShowInbox(true)}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" className="md:h-10 md:px-4" onClick={() => setShowInbox(true)}>
             <Inbox className="mr-2 h-4 w-4" />
             View Approvals{pendingCount > 0 ? ` (${pendingCount})` : ""}
           </Button>
-          <Button onClick={() => setShowCreate(true)}>
+          <Button size="sm" className="md:h-10 md:px-4" onClick={() => setShowCreate(true)}>
             <Plus className="mr-2 h-4 w-4" /> Create Journey
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 md:pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10"><GitBranch className="h-5 w-5 text-primary" /></div>
               <div>
-                <p className="text-sm text-muted-foreground">Active Journeys</p>
-                <p className="text-2xl font-bold">{stats?.activeJourneys || 0}</p>
+                <p className="text-xs md:text-sm text-muted-foreground">Active Journeys</p>
+                <p className="text-xl md:text-2xl font-bold">{stats?.activeJourneys || 0}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 md:pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-green-100"><Users className="h-5 w-5 text-green-600" /></div>
               <div>
-                <p className="text-sm text-muted-foreground">Enrolled Contacts</p>
-                <p className="text-2xl font-bold">{stats?.enrolledContacts || 0}</p>
+                <p className="text-xs md:text-sm text-muted-foreground">Enrolled Contacts</p>
+                <p className="text-xl md:text-2xl font-bold">{stats?.enrolledContacts || 0}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 md:pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-blue-100"><MessageSquare className="h-5 w-5 text-blue-600" /></div>
               <div>
-                <p className="text-sm text-muted-foreground">Messages Sent</p>
-                <p className="text-2xl font-bold">{stats?.messagesSent || 0}</p>
+                <p className="text-xs md:text-sm text-muted-foreground">Messages Sent</p>
+                <p className="text-xl md:text-2xl font-bold">{stats?.messagesSent || 0}</p>
               </div>
             </div>
           </CardContent>
