@@ -1,26 +1,16 @@
 import { cn } from "@/lib/utils";
+import whatsappLogo from "@/assets/whatsapp-logo.png";
 
 interface Props {
   className?: string;
 }
 
-// Official WhatsApp glyph (simplified) in brand green.
 export function WhatsAppIcon({ className }: Props) {
   return (
-    <svg
-      viewBox="0 0 32 32"
-      xmlns="http://www.w3.org/2000/svg"
-      className={cn("inline-block", className)}
-      aria-label="WhatsApp"
-    >
-      <path
-        fill="#25D366"
-        d="M16.003 3C9.374 3 4 8.373 4 15c0 2.39.696 4.617 1.893 6.49L4 29l7.7-1.86A12.94 12.94 0 0 0 16.003 27C22.63 27 28 21.627 28 15S22.63 3 16.003 3z"
-      />
-      <path
-        fill="#FFFFFF"
-        d="M22.59 19.42c-.28-.14-1.66-.82-1.92-.91-.26-.1-.45-.14-.64.14-.19.28-.74.91-.91 1.1-.17.19-.34.21-.62.07-.28-.14-1.18-.43-2.25-1.38-.83-.74-1.39-1.65-1.55-1.93-.16-.28-.02-.43.12-.57.13-.13.28-.34.42-.51.14-.17.19-.28.28-.47.09-.19.05-.35-.02-.49-.07-.14-.64-1.54-.88-2.11-.23-.56-.47-.48-.64-.49-.16-.01-.35-.01-.54-.01s-.49.07-.74.35c-.26.28-.97.95-.97 2.31 0 1.36.99 2.68 1.13 2.86.14.19 1.95 2.97 4.72 4.16.66.29 1.18.46 1.58.59.66.21 1.27.18 1.74.11.53-.08 1.66-.68 1.89-1.33.23-.66.23-1.22.16-1.34-.07-.12-.25-.19-.53-.33z"
-      />
-    </svg>
+    <img
+      src={whatsappLogo}
+      alt="WhatsApp"
+      className={cn("inline-block object-contain shrink-0", className)}
+    />
   );
 }
