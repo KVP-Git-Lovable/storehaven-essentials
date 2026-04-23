@@ -219,6 +219,7 @@ export default function CommunicationCalendar() {
   const renderChip = (e: CalEvent, compact = true) => {
     const style = CHANNEL_STYLES[e.channel] || CHANNEL_STYLES.whatsapp;
     const Icon = style.icon;
+    const isWhatsApp = e.channel === "whatsapp";
     return (
       <TooltipProvider key={e.id} delayDuration={200}>
         <Tooltip>
@@ -230,7 +231,11 @@ export default function CommunicationCalendar() {
                 style.chip,
               )}
             >
-              <Icon className="h-3 w-3 shrink-0" />
+              {isWhatsApp ? (
+                <WhatsAppIcon className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <Icon className="h-3 w-3 shrink-0" />
+              )}
               <span className="shrink-0">{format12hIst(e.start)}</span>
               <span className="truncate">{e.journey_name}</span>
             </button>
