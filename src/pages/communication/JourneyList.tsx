@@ -680,29 +680,32 @@ export default function JourneyList() {
                     className={cn("cursor-pointer", j.status === "active" && "bg-green-50 hover:bg-green-100")}
                     onClick={() => navigate(`/communication/journeys/${j.id}`)}
                   >
-                    <TableCell className="font-medium">{j.name}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1 flex-wrap">
-                        <Badge className={statusColors[j.status] || ""}>{j.status}</Badge>
+                    <TableCell className="font-medium py-2 md:py-4 text-xs md:text-sm leading-tight">{j.name}</TableCell>
+                    <TableCell className="py-2 md:py-4 align-middle">
+                      <div className="flex items-center gap-1 flex-nowrap md:flex-wrap whitespace-nowrap">
+                        <Badge className={cn(statusColors[j.status] || "", "text-[10px] md:text-xs px-1.5 py-0 leading-tight")}>{j.status}</Badge>
                         {showApprovalBadge && (
-                          <Badge className={approvalBadgeClass[a] || ""}>{approvalLabel[a] || a}</Badge>
+                          <Badge className={cn(approvalBadgeClass[a] || "", "text-[10px] md:text-xs px-1.5 py-0 leading-tight")}>{approvalLabel[a] || a}</Badge>
                         )}
                         {j.schedule && (
-                          <Badge variant="outline" className="text-xs" title={summarizeSchedule(j.schedule as JourneySchedule)}>
-                            <CalendarIcon className="h-3 w-3 mr-1" />
-                            {summarizeSchedule(j.schedule as JourneySchedule)}
+                          <Badge variant="outline" className="text-[10px] md:text-xs px-1.5 py-0 leading-tight max-w-[110px] md:max-w-none truncate" title={summarizeSchedule(j.schedule as JourneySchedule)}>
+                            <CalendarIcon className="h-3 w-3 mr-1 shrink-0" />
+                            <span className="truncate">{summarizeSchedule(j.schedule as JourneySchedule)}</span>
                           </Badge>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-2 md:py-4 text-xs md:text-sm">
                       {j.list_view ? (
-                        <span>{j.list_view.name} <Badge variant="outline" className="ml-1 capitalize">{ENTITY_SCHEMAS[j.list_view.entity_type as EntityKey]?.label || j.list_view.entity_type}</Badge></span>
+                        <span className="line-clamp-2 md:line-clamp-none">{j.list_view.name} <Badge variant="outline" className="ml-1 capitalize text-[10px] md:text-xs px-1 py-0">{ENTITY_SCHEMAS[j.list_view.entity_type as EntityKey]?.label || j.list_view.entity_type}</Badge></span>
                       ) : j.segment_type ? (
-                        <span className="capitalize">{j.segment_type} <Badge variant="outline" className="ml-1">legacy</Badge></span>
+                        <span className="capitalize line-clamp-2 md:line-clamp-none">{j.segment_type} <Badge variant="outline" className="ml-1 text-[10px] md:text-xs px-1 py-0">legacy</Badge></span>
                       ) : "—"}
                     </TableCell>
-                    <TableCell>{format(new Date(j.created_at), "MMM d, yyyy")}</TableCell>
+                    <TableCell className="py-2 md:py-4 text-xs md:text-sm whitespace-nowrap">
+                      <span className="md:hidden">{format(new Date(j.created_at), "MMM d")}</span>
+                      <span className="hidden md:inline">{format(new Date(j.created_at), "MMM d, yyyy")}</span>
+                    </TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         {canSubmit(j) && (
