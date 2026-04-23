@@ -60,7 +60,13 @@ export interface DayEvent {
   channel: string;
   start: Date;
   canvas_data?: any;
+  is_ready: boolean;
 }
+
+const READINESS_STYLE = {
+  ready: { bg: "#DCFCE7", border: "#22C55E" },
+  attention: { bg: "#FEF9C3", border: "#EAB308" },
+} as const;
 
 interface Props {
   dayKey: string;

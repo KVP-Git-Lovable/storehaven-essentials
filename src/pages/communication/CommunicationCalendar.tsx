@@ -121,7 +121,7 @@ export default function CommunicationCalendar() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("journeys")
-        .select("id, name, status, canvas_data, schedule:journey_schedules(*)")
+        .select("id, name, status, approval_status, canvas_data, schedule:journey_schedules(*)")
         .eq("status", "active");
       if (error) throw error;
       return data || [];
@@ -140,6 +140,7 @@ export default function CommunicationCalendar() {
       const channels = deriveChannels(j.canvas_data);
       if (channels.length === 0) return;
       const preview = deriveFirstMessagePreview(j.canvas_data);
+      const isReady = j.approval_status === "approved" && j.status === "active";
       const expanded = expandToCalendarEvents(
         { ...schedule, journey_id: j.id },
         monthStart,
@@ -157,6 +158,7 @@ export default function CommunicationCalendar() {
             start: ev.start,
             preview,
             canvas_data: j.canvas_data,
+            is_ready: isReady,
           });
         });
       });
@@ -228,15 +230,16 @@ export default function CommunicationCalendar() {
     const styleKey = isWhatsApp ? "whatsapp" : ch;
     const style = CHANNEL_STYLES[styleKey] || CHANNEL_STYLES.whatsapp;
     const Icon = style.icon;
+    const readiness = e.is_ready ? READINESS_STYLE.ready : READINESS_STYLE.attention;
     return (
       <TooltipProvider key={e.id} delayDuration={200}>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={(ev) => { ev.stopPropagation(); navigate(`/communication/journeys/${e.journey_id}`); }}
+              style={{ backgroundColor: readiness.bg, borderColor: readiness.border }}
               className={cn(
-                "w-full flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium truncate transition-colors text-left",
-                style.chip,
+                "w-full flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium truncate transition-colors text-left text-foreground border",
               )}
             >
               {isWhatsApp ? (
@@ -345,6 +348,7 @@ export default function CommunicationCalendar() {
                       channel: e.channel,
                       start: e.start,
                       canvas_data: e.canvas_data,
+                      is_ready: e.is_ready,
                     }))
                   : [];
 
