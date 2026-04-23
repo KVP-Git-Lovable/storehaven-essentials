@@ -7,10 +7,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { X, Trash2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { X, Trash2, AlertTriangle } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import type { Node } from "@xyflow/react";
 import { parseStoredBody, transformTwilioToFriendly } from "@/lib/whatsappVariables";
+
+type FreeformChannel = "whatsapp" | "sms" | "email";
+const FREEFORM_CHANNELS: { value: FreeformChannel; label: string }[] = [
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "sms", label: "SMS" },
+  { value: "email", label: "Email" },
+];
 
 interface Props {
   node: Node;
