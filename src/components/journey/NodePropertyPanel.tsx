@@ -206,107 +206,184 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
         )
       )}
 
-      {node.type === "message" && (
-        <>
-          <div><Label>Channel</Label>
-            <Select value={String(node.data.channel || "email")} onValueChange={handleChannelChange}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="email">Email</SelectItem>
-                <SelectItem value="sms">SMS</SelectItem>
-                <SelectItem value="push">Push Notification</SelectItem>
-                <SelectItem value="whatsapp_template">WhatsApp Template</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+      {node.type === "message" && (() => {
+        const messageType = String(node.data.message_type || "template");
+        const freeformChannels: FreeformChannel[] = Array.isArray(node.data.freeform_channels)
+          ? (node.data.freeform_channels as FreeformChannel[])
+          : ["whatsapp"];
+        const toggleFreeformChannel = (ch: FreeformChannel, checked: boolean) => {
+          const next = checked
+            ? Array.from(new Set([...freeformChannels, ch]))
+            : freeformChannels.filter((c) => c !== ch);
+          update("freeform_channels", next);
+        };
+        const handleMessageTypeChange = (value: string) => {
+          if (value === "freeform") {
+            onUpdate(node.id, {
+              ...node.data,
+              message_type: "freeform",
+              freeform_channels: Array.isArray(node.data.freeform_channels) && node.data.freeform_channels.length > 0
+                ? node.data.freeform_channels
+                : ["whatsapp"],
+              freeform_body: node.data.freeform_body ?? "",
+            });
+          } else {
+            onUpdate(node.id, {
+              ...node.data,
+              message_type: "template",
+              channel: "whatsapp_template",
+            });
+          }
+        };
 
-          {node.data.channel === "whatsapp_template" ? (
-            <>
-              <div className="space-y-2">
-                <Label>Approved Template</Label>
-                <Select
-                  value={String(node.data.whatsapp_template_id || "")}
-                  onValueChange={handleWhatsAppTemplateChange}
-                  disabled={loadingWhatsAppTemplates || approvedWhatsAppTemplates.length === 0}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={loadingWhatsAppTemplates ? "Loading templates..." : "Select approved template"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {approvedWhatsAppTemplates.map((template) => (
-                      <SelectItem key={template.id} value={template.id}>
-                        <span className="flex items-center gap-2">
-                          <span>{template.name}</span>
-                          <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded-sm font-medium ${
-                              template.status === "approved"
-                                ? "bg-primary/10 text-primary"
-                                : "bg-muted text-muted-foreground"
-                            }`}
-                          >
-                            {template.status === "approved" ? "Business" : "User-initiated"}
-                          </span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Includes business-approved templates and user-initiated templates. User-initiated templates can only be sent within 24h of a customer's last inbound message.
-                </p>
-              </div>
-
-              {selectedWhatsAppTemplate && (
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline">{selectedWhatsAppTemplate.category}</Badge>
-                  <Badge variant="secondary">{selectedWhatsAppTemplate.language}</Badge>
-                </div>
-              )}
-
-              <div><Label>Message Body</Label>
-                <Textarea value={String(node.data.template_body || whatsappTemplateBody || "")} readOnly placeholder="Select an approved WhatsApp template" rows={4} />
-              </div>
-
-              {whatsappVariables.length > 0 && (
-                <div className="space-y-3">
-                  <div>
-                    <Label>Template Variables</Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Bind each placeholder to a contact field token (e.g. <code>{"{{contact.name}}"}</code>) or type a fixed value.
-                    </p>
-                  </div>
-                  {whatsappVariables.map((variable) => (
-                    <div key={variable} className="space-y-1.5">
-                      <Label className="text-xs font-mono">{`{{${variable}}}`}</Label>
-                      <Input
-                        value={String(node.data.template_variables?.[variable] ?? "")}
-                        onChange={(e) => updateWhatsAppVariable(variable, e.target.value)}
-                        placeholder="e.g. {{contact.name}} or a fixed value"
-                      />
-                      <div className="flex flex-wrap gap-1">
-                        {CONTACT_FIELD_SUGGESTIONS.map((s) => (
-                          <button
-                            key={s.token}
-                            type="button"
-                            onClick={() => updateWhatsAppVariable(variable, s.token)}
-                            className="text-[10px] px-1.5 py-0.5 rounded border bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            {s.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            <div><Label>Message Body</Label>
-              <Textarea value={String(node.data.template_body || "")} onChange={(e) => update("template_body", e.target.value)} placeholder="Use {name}, {last_purchase_date}..." rows={4} />
+        return (
+          <>
+            <div>
+              <Label>Message Type</Label>
+              <Select value={messageType} onValueChange={handleMessageTypeChange}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="template">Template</SelectItem>
+                  <SelectItem value="freeform">Free-form</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          )}
-        </>
-      )}
+
+            {messageType === "template" ? (
+              <>
+                <div className="space-y-2">
+                  <Label>WhatsApp Template</Label>
+                  <Select
+                    value={String(node.data.whatsapp_template_id || "")}
+                    onValueChange={handleWhatsAppTemplateChange}
+                    disabled={loadingWhatsAppTemplates || approvedWhatsAppTemplates.length === 0}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={loadingWhatsAppTemplates ? "Loading templates..." : "Select approved template"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {approvedWhatsAppTemplates.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          <span className="flex items-center gap-2">
+                            <span>{template.name}</span>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded-sm font-medium ${
+                                template.status === "approved"
+                                  ? "bg-primary/10 text-primary"
+                                  : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {template.status === "approved" ? "Business" : "User-initiated"}
+                            </span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Includes business-approved templates and user-initiated templates. User-initiated templates can only be sent within 24h of a customer's last inbound message.
+                  </p>
+                </div>
+
+                {selectedWhatsAppTemplate && (
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">{selectedWhatsAppTemplate.category}</Badge>
+                    <Badge variant="secondary">{selectedWhatsAppTemplate.language}</Badge>
+                  </div>
+                )}
+
+                <div><Label>Message Body</Label>
+                  <Textarea value={String(node.data.template_body || whatsappTemplateBody || "")} readOnly placeholder="Select an approved WhatsApp template" rows={4} />
+                </div>
+
+                {whatsappVariables.length > 0 && (
+                  <div className="space-y-3">
+                    <div>
+                      <Label>Template Variables</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Bind each placeholder to a contact field token (e.g. <code>{"{{contact.name}}"}</code>) or type a fixed value.
+                      </p>
+                    </div>
+                    {whatsappVariables.map((variable) => (
+                      <div key={variable} className="space-y-1.5">
+                        <Label className="text-xs font-mono">{`{{${variable}}}`}</Label>
+                        <Input
+                          value={String(node.data.template_variables?.[variable] ?? "")}
+                          onChange={(e) => updateWhatsAppVariable(variable, e.target.value)}
+                          placeholder="e.g. {{contact.name}} or a fixed value"
+                        />
+                        <div className="flex flex-wrap gap-1">
+                          {CONTACT_FIELD_SUGGESTIONS.map((s) => (
+                            <button
+                              key={s.token}
+                              type="button"
+                              onClick={() => updateWhatsAppVariable(variable, s.token)}
+                              className="text-[10px] px-1.5 py-0.5 rounded border bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>Channels</Label>
+                  <div className="space-y-2 rounded-md border p-3">
+                    {FREEFORM_CHANNELS.map((c) => (
+                      <label key={c.value} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={freeformChannels.includes(c.value)}
+                          onCheckedChange={(v) => toggleFreeformChannel(c.value, v === true)}
+                        />
+                        <span>{c.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {freeformChannels.length === 0 && (
+                    <p className="text-xs text-destructive">Select at least one channel.</p>
+                  )}
+                </div>
+
+                {freeformChannels.includes("whatsapp") && (
+                  <div className="flex items-start gap-1.5 rounded-md border border-orange-200 bg-orange-50 p-2 text-[11px] text-orange-800">
+                    <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                    <span>WhatsApp free-form messages may fail outside the 24h window, as per existing policy from Meta.</span>
+                  </div>
+                )}
+
+                {freeformChannels.includes("email") && (
+                  <div>
+                    <Label>Email Subject (optional)</Label>
+                    <Input
+                      value={String(node.data.freeform_subject || "")}
+                      onChange={(e) => update("freeform_subject", e.target.value)}
+                      placeholder="Defaults to journey name"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <Label>Message</Label>
+                  <Textarea
+                    value={String(node.data.freeform_body || "")}
+                    onChange={(e) => update("freeform_body", e.target.value)}
+                    placeholder="Type your message. Use {{contact.name}} or {name} for personalization. Emojis welcome 👋"
+                    rows={6}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    The same message will be used across all selected channels.
+                  </p>
+                </div>
+              </>
+            )}
+          </>
+        );
+      })()}
 
       {node.type === "delay" && (
         <>
