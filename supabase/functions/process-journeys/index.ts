@@ -1,9 +1,128 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { computeNextRun, resolveAudience, type JourneySchedule } from "../_shared/journey-schedule.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// Sweep journey_schedules: enroll audiences for any due, approved+active journey,
+// then advance next_run_at to the next IST occurrence.
+async function runScheduleSweep(supabase: any): Promise<{ triggered: number; errors: string[] }> {
+  const errors: string[] = [];
+  let triggered = 0;
+  const nowIso = new Date().toISOString();
+
+  const { data: dueSchedules, error: schedErr } = await supabase
+    .from("journey_schedules")
+    .select("*, journeys!inner(id, status, approval_status, list_view_id, segment_type, filters, canvas_data)")
+    .lte("next_run_at", nowIso)
+    .not("next_run_at", "is", null)
+    .eq("journeys.status", "active")
+    .eq("journeys.approval_status", "approved");
+
+  if (schedErr) {
+    console.error("[schedule-sweep] failed to fetch due schedules:", schedErr);
+    return { triggered: 0, errors: [schedErr.message] };
+  }
+  if (!dueSchedules || dueSchedules.length === 0) return { triggered: 0, errors: [] };
+
+  for (const sched of dueSchedules) {
+    const journey = sched.journeys;
+    const scheduleRow: JourneySchedule = {
+      id: sched.id,
+      journey_id: sched.journey_id,
+      type: sched.type,
+      frequency: sched.frequency,
+      execution_date: sched.execution_date,
+      execution_time: sched.execution_time,
+      days_of_week: sched.days_of_week,
+      day_of_month: sched.day_of_month,
+      month_of_quarter: sched.month_of_quarter,
+    };
+
+    // Compute next run BEFORE doing work, then claim atomically by updating
+    // next_run_at to that future value. If the update affects 0 rows another
+    // worker already claimed it.
+    const next = computeNextRun(scheduleRow, new Date());
+    const nextIso = sched.type === "one_time"
+      ? null // one-time schedules don't refire
+      : (next ? next.toISOString() : null);
+
+    const { data: claimed, error: claimErr } = await supabase
+      .from("journey_schedules")
+      .update({ next_run_at: nextIso })
+      .eq("id", sched.id)
+      .lte("next_run_at", nowIso)
+      .select("id");
+    if (claimErr) {
+      errors.push(`claim ${sched.id}: ${claimErr.message}`);
+      continue;
+    }
+    if (!claimed || claimed.length === 0) continue; // someone else got it
+
+    try {
+      // Refresh enrollments so dynamic audiences re-evaluate
+      await supabase
+        .from("journey_enrollments")
+        .delete()
+        .eq("journey_id", journey.id)
+        .in("status", ["active", "paused", "failed"]);
+
+      const audience = await resolveAudience(supabase, journey);
+      const canvas = journey.canvas_data as any;
+      const entryNode = canvas?.nodes?.find((n: any) => n.type === "entry");
+      const firstNodeId = entryNode?.id || canvas?.nodes?.[0]?.id;
+
+      if (audience.contactIds.length > 0 && firstNodeId) {
+        const enrollments = audience.contactIds.map((cid: string) => ({
+          journey_id: journey.id,
+          contact_id: cid,
+          current_node_id: firstNodeId,
+          status: "active",
+          next_action_at: new Date().toISOString(),
+        }));
+        const { error: enrErr } = await supabase.from("journey_enrollments").insert(enrollments);
+        if (enrErr) throw new Error(`enroll: ${enrErr.message}`);
+      }
+
+      // Audit log: one row per scheduled run so Analytics shows misses too
+      await supabase.from("journey_message_log").insert({
+        journey_id: journey.id,
+        enrollment_id: null,
+        node_id: null,
+        contact_id: null,
+        channel: "system",
+        status: audience.contactIds.length > 0 ? "scheduled_enrolled" : "scheduled_no_audience",
+        template_body: JSON.stringify({
+          schedule_id: sched.id,
+          matched: audience.matched,
+          enrolled: audience.contactIds.length,
+          skipped: audience.skipped,
+          reason: audience.firstError || null,
+        }),
+      });
+
+      triggered++;
+      console.log(
+        `[schedule-sweep] journey=${journey.id} enrolled=${audience.contactIds.length} matched=${audience.matched} next_run=${nextIso}`,
+      );
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      console.error(`[schedule-sweep] journey ${journey.id} failed:`, msg);
+      errors.push(`journey ${journey.id}: ${msg}`);
+      await supabase.from("journey_message_log").insert({
+        journey_id: journey.id,
+        channel: "system",
+        status: "scheduled_failed",
+        template_body: JSON.stringify({ schedule_id: sched.id, error: msg }),
+        error_message: msg,
+      });
+    }
+  }
+
+  return { triggered, errors };
+}
 
 function getNested(obj: any, path: string): any {
   if (!obj || !path) return undefined;
@@ -103,8 +222,10 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Resolve a single active sender — first from whatsapp_config, then from
-    // the most recent inbound message (Twilio's `To` value), then env var.
+    // Step 1: Schedule sweep — turn due journey_schedules rows into fresh enrollments.
+    const sweep = await runScheduleSweep(supabase);
+    console.log(`scheduled_runs_triggered: ${sweep.triggered}`);
+
     const { data: cfg } = await supabase
       .from("whatsapp_config")
       .select("sender_number")
@@ -112,7 +233,6 @@ Deno.serve(async (req) => {
       .maybeSingle();
     let fromNumber: string | null = cfg?.sender_number || null;
     if (!fromNumber) {
-      // Fallback: env var override (lets ops set a default sender without DB write)
       const envFrom = Deno.env.get("WHATSAPP_FROM_NUMBER");
       if (envFrom && /^\+[1-9]\d{1,14}$/.test(envFrom)) fromNumber = envFrom;
     }
@@ -121,7 +241,7 @@ Deno.serve(async (req) => {
       .from("journeys").select("*").eq("status", "active");
 
     if (!activeJourneys || activeJourneys.length === 0) {
-      return new Response(JSON.stringify({ processed: 0 }), {
+      return new Response(JSON.stringify({ processed: 0, scheduled_runs_triggered: sweep.triggered, schedule_errors: sweep.errors }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -323,7 +443,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ processed, messagesSent }), {
+    return new Response(JSON.stringify({
+      processed,
+      messagesSent,
+      scheduled_runs_triggered: sweep.triggered,
+      schedule_errors: sweep.errors,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
