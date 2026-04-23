@@ -306,104 +306,185 @@ Deno.serve(async (req) => {
         if (nodeType === "message") {
           const contact = enrollment.journey_contacts;
           const data = currentNode.data || {};
-          const channel = data.channel || "whatsapp_template";
-          const templateId = data.whatsapp_template_id;
-          const variablesMap = data.template_variables || {};
+          const messageType: string =
+            data.message_type || (data.channel === "whatsapp_template" ? "template" : "template");
 
-          // Idempotency: try to claim this (enrollment, node) slot first
-          const { error: claimErr } = await supabase
-            .from("journey_message_log")
-            .insert({
-              journey_id: journey.id,
-              enrollment_id: enrollment.id,
-              node_id: currentNode.id,
-              contact_id: enrollment.contact_id,
-              channel,
-              template_body: null,
-              status: "sending",
-            });
+          // ============ TEMPLATE MODE (unchanged path) ============
+          if (messageType === "template") {
+            const channel = data.channel || "whatsapp_template";
+            const templateId = data.whatsapp_template_id;
+            const variablesMap = data.template_variables || {};
 
-          if (claimErr) {
-            // Conflict (already processed for this node) — just advance.
-            const nextEdge = canvas.edges.find((e: any) => e.source === currentNode.id);
-            if (nextEdge) {
+            // Idempotency: try to claim this (enrollment, node, channel) slot first
+            const { error: claimErr } = await supabase
+              .from("journey_message_log")
+              .insert({
+                journey_id: journey.id,
+                enrollment_id: enrollment.id,
+                node_id: currentNode.id,
+                contact_id: enrollment.contact_id,
+                channel,
+                template_body: null,
+                status: "sending",
+              });
+
+            if (claimErr) {
+              const nextEdge = canvas.edges.find((e: any) => e.source === currentNode.id);
+              if (nextEdge) {
+                await supabase.from("journey_enrollments")
+                  .update({ current_node_id: nextEdge.target, next_action_at: new Date().toISOString() })
+                  .eq("id", enrollment.id);
+              }
+              processed++;
+              continue;
+            }
+
+            let sendStatus = "failed";
+            let sendAccepted = false;
+            let errorMessage: string | null = null;
+            let twilioSid: string | null = null;
+            let renderedBody: string | null = null;
+
+            try {
+              if (channel !== "whatsapp_template") throw new Error(`Unsupported channel: ${channel}`);
+              if (!templateId) throw new Error("Message node missing whatsapp_template_id");
+              if (!fromNumber) throw new Error("No active WhatsApp sender configured (whatsapp_config.sender_number)");
+              if (!contact?.phone) throw new Error("Contact phone missing");
+
+              const variables = resolveVariables(variablesMap as Record<string, string>, contact);
+              if (!variables["1"]) {
+                variables["1"] = (contact?.name && String(contact.name).trim()) || "Customer";
+              }
+
+              const resp = await fetch(`${supabaseUrl}/functions/v1/whatsapp-send`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-Internal-Service-Key": serviceKey,
+                  "Authorization": `Bearer ${serviceKey}`,
+                },
+                body: JSON.stringify({
+                  template_id: templateId,
+                  to_number: contact.phone,
+                  from_number: fromNumber,
+                  variables,
+                  allow_user_initiated: false,
+                  internal_caller: "process-journeys",
+                  journey_enrollment_id: enrollment.id,
+                }),
+              });
+              const result = await resp.json();
+              if (!resp.ok || !result?.success) {
+                throw new Error(result?.error || `whatsapp-send failed (${resp.status})`);
+              }
+              sendStatus = result.status || "queued";
+              sendAccepted = ["accepted", "queued", "sending", "sent", "scheduled"].includes(sendStatus);
+              twilioSid = result.twilio_message_sid || result.message_sid || null;
+              renderedBody = JSON.stringify(variables);
+              messagesSent++;
+            } catch (e) {
+              errorMessage = (e as Error).message;
+              console.error(`Journey ${journey.id} enrollment ${enrollment.id} send failed:`, errorMessage);
+            }
+
+            await supabase.from("journey_message_log")
+              .update({
+                status: sendStatus,
+                delivery_status: sendAccepted ? "pending" : "failed",
+                twilio_message_sid: twilioSid,
+                error_message: errorMessage,
+                template_body: renderedBody,
+              })
+              .eq("enrollment_id", enrollment.id)
+              .eq("node_id", currentNode.id)
+              .eq("channel", channel);
+
+            if (sendAccepted) {
               await supabase.from("journey_enrollments")
-                .update({ current_node_id: nextEdge.target, next_action_at: new Date().toISOString() })
+                .update({
+                  status: "pending_delivery",
+                  next_action_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+                })
+                .eq("id", enrollment.id);
+            } else {
+              await supabase.from("journey_enrollments")
+                .update({ status: "failed" })
                 .eq("id", enrollment.id);
             }
             processed++;
             continue;
           }
 
-          let sendStatus = "failed";
-          let sendAccepted = false;
-          let errorMessage: string | null = null;
-          let twilioSid: string | null = null;
-          let renderedBody: string | null = null;
+          // ============ FREE-FORM MODE (new) ============
+          const channels: FreeformChannel[] = Array.isArray(data.freeform_channels)
+            ? (data.freeform_channels as FreeformChannel[]).filter((c) => ["whatsapp", "sms", "email"].includes(c))
+            : [];
+          const rawBody: string = String(data.freeform_body || "").trim();
+          const subject: string =
+            String(data.freeform_subject || "").trim() || `Message from ${journey.name || "your team"}`;
 
-          try {
-            if (channel !== "whatsapp_template") {
-              throw new Error(`Unsupported channel: ${channel}`);
-            }
-            if (!templateId) throw new Error("Message node missing whatsapp_template_id");
-            if (!fromNumber) throw new Error("No active WhatsApp sender configured (whatsapp_config.sender_number)");
-            if (!contact?.phone) throw new Error("Contact phone missing");
-
-            const variables = resolveVariables(variablesMap as Record<string, string>, contact);
-            // Default {{1}} to contact name if the journey didn't map any variables.
-            // WhatsApp templates with missing placeholders are silently rejected by Meta (Twilio error 63019).
-            if (!variables["1"]) {
-              variables["1"] = (contact?.name && String(contact.name).trim()) || "Customer";
-            }
-
-            const resp = await fetch(`${supabaseUrl}/functions/v1/whatsapp-send`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "X-Internal-Service-Key": serviceKey,
-                "Authorization": `Bearer ${serviceKey}`,
-              },
-              body: JSON.stringify({
-                template_id: templateId,
-                to_number: contact.phone,
-                from_number: fromNumber,
-                variables,
-                allow_user_initiated: false,
-                internal_caller: "process-journeys",
-                journey_enrollment_id: enrollment.id,
-              }),
+          if (channels.length === 0 || !rawBody) {
+            await supabase.from("journey_message_log").insert({
+              journey_id: journey.id,
+              enrollment_id: enrollment.id,
+              node_id: currentNode.id,
+              contact_id: enrollment.contact_id,
+              channel: "system",
+              status: "failed",
+              error_message: !rawBody ? "Free-form body is empty" : "No channels selected",
             });
-            const result = await resp.json();
-            if (!resp.ok || !result?.success) {
-              throw new Error(result?.error || `whatsapp-send failed (${resp.status})`);
-            }
-            sendStatus = result.status || "queued";
-            sendAccepted = ["accepted", "queued", "sending", "sent", "scheduled"].includes(sendStatus);
-            twilioSid = result.twilio_message_sid || result.message_sid || null;
-            renderedBody = JSON.stringify(variables);
-            messagesSent++;
-          } catch (e) {
-            errorMessage = (e as Error).message;
-            console.error(`Journey ${journey.id} enrollment ${enrollment.id} send failed:`, errorMessage);
+            await supabase.from("journey_enrollments")
+              .update({ status: "failed" })
+              .eq("id", enrollment.id);
+            processed++;
+            continue;
           }
 
-          await supabase.from("journey_message_log")
-            .update({
-              status: sendStatus,
-              delivery_status: sendAccepted ? "pending" : "failed",
-              twilio_message_sid: twilioSid,
-              error_message: errorMessage,
-              template_body: renderedBody,
-            })
-            .eq("enrollment_id", enrollment.id)
-            .eq("node_id", currentNode.id);
+          const renderedBody = renderFreeformBody(rawBody, contact);
+          const sendResults: ChannelSendResult[] = [];
 
-          if (sendAccepted) {
-            // Provider accepted the request — but WhatsApp delivery can still
-            // fail downstream (e.g. media fetch error 63019). Hold the
-            // enrollment at this node until the status webhook reports a
-            // terminal state. We push next_action_at into the future so the
-            // cron does not re-process this row in the meantime.
+          for (const ch of channels) {
+            // Per-channel idempotency claim
+            const { error: claimErr } = await supabase
+              .from("journey_message_log")
+              .insert({
+                journey_id: journey.id,
+                enrollment_id: enrollment.id,
+                node_id: currentNode.id,
+                contact_id: enrollment.contact_id,
+                channel: ch,
+                template_body: renderedBody,
+                status: "sending",
+              });
+            if (claimErr) continue; // already attempted this channel
+
+            let result: ChannelSendResult;
+            if (ch === "whatsapp") {
+              result = await sendWhatsAppFreeform(fromNumber || "", contact?.phone || "", renderedBody);
+            } else if (ch === "sms") {
+              result = await sendSms(smsFromNumber || "", contact?.phone || "", renderedBody);
+            } else {
+              result = await sendEmail(contact?.email || "", subject, renderedBody);
+            }
+            sendResults.push(result);
+            if (result.accepted) messagesSent++;
+
+            await supabase.from("journey_message_log")
+              .update({
+                status: result.status,
+                delivery_status: result.accepted ? "pending" : "failed",
+                twilio_message_sid: result.providerMessageId,
+                error_message: result.errorMessage,
+                error_code: result.errorCode,
+                provider_metadata: result.providerMetadata as any,
+              })
+              .eq("enrollment_id", enrollment.id)
+              .eq("node_id", currentNode.id)
+              .eq("channel", ch);
+          }
+
+          const anyAccepted = sendResults.some((r) => r.accepted);
+          if (anyAccepted) {
             await supabase.from("journey_enrollments")
               .update({
                 status: "pending_delivery",
@@ -411,7 +492,6 @@ Deno.serve(async (req) => {
               })
               .eq("id", enrollment.id);
           } else {
-            // Mark enrollment failed to prevent infinite retry loops on the same node
             await supabase.from("journey_enrollments")
               .update({ status: "failed" })
               .eq("id", enrollment.id);
