@@ -217,9 +217,11 @@ export default function CommunicationCalendar() {
   function goToday() { setViewYear(todayIst.year); setViewMonth(todayIst.month0); }
 
   const renderChip = (e: CalEvent, compact = true) => {
-    const style = CHANNEL_STYLES[e.channel] || CHANNEL_STYLES.whatsapp;
+    const ch = (e.channel || "").toLowerCase();
+    const isWhatsApp = ch === "whatsapp" || ch === "whatsapp_template";
+    const styleKey = isWhatsApp ? "whatsapp" : ch;
+    const style = CHANNEL_STYLES[styleKey] || CHANNEL_STYLES.whatsapp;
     const Icon = style.icon;
-    const isWhatsApp = e.channel === "whatsapp";
     return (
       <TooltipProvider key={e.id} delayDuration={200}>
         <Tooltip>
