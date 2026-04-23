@@ -91,7 +91,13 @@ interface CalEvent {
   start: Date;
   preview: string | null;
   canvas_data?: any;
+  is_ready: boolean;
 }
+
+const READINESS_STYLE = {
+  ready: { bg: "#DCFCE7", border: "#22C55E" },
+  attention: { bg: "#FEF9C3", border: "#EAB308" },
+} as const;
 
 function startOfMonthIst(year: number, month0: number): Date {
   // First moment of month in IST = (year, month0, 1, 00:00 IST) -> UTC
