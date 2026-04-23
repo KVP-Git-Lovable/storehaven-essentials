@@ -205,32 +205,32 @@ export default function WhatsAppTemplates() {
   const { twilioBody } = transformFriendlyToTwilio(form.body);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <BackButton />
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">WhatsApp Templates</h1>
-          <p className="text-muted-foreground">Create and manage WhatsApp message templates via Twilio</p>
+          <h1 className="text-lg md:text-2xl font-bold">WhatsApp Templates</h1>
+          <p className="text-xs md:text-sm text-muted-foreground">Create and manage WhatsApp message templates via Twilio</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => importMutation.mutate()} disabled={importMutation.isPending}>
-            <Download className={`h-4 w-4 mr-2 ${importMutation.isPending ? "animate-spin" : ""}`} />
-            Import from Twilio
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" className="md:h-10 md:px-4" onClick={() => importMutation.mutate()} disabled={importMutation.isPending}>
+            <Download className={`h-4 w-4 sm:mr-2 ${importMutation.isPending ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">Import from Twilio</span>
           </Button>
-          <Button variant="outline" onClick={() => bulkSyncMutation.mutate()} disabled={bulkSyncMutation.isPending}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${bulkSyncMutation.isPending ? "animate-spin" : ""}`} />
-            Sync All
+          <Button variant="outline" size="sm" className="md:h-10 md:px-4" onClick={() => bulkSyncMutation.mutate()} disabled={bulkSyncMutation.isPending}>
+            <RefreshCw className={`h-4 w-4 sm:mr-2 ${bulkSyncMutation.isPending ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">Sync All</span>
           </Button>
-          <Button onClick={() => setShowCreateDialog(true)}>
+          <Button size="sm" className="md:h-10 md:px-4" onClick={() => setShowCreateDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Create Template
           </Button>
         </div>
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-2 md:gap-3">
         <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-[48%] sm:w-40">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -242,7 +242,7 @@ export default function WhatsAppTemplates() {
           </SelectContent>
         </Select>
         <Select value={filterCategory} onValueChange={setFilterCategory}>
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-[48%] sm:w-40">
             <SelectValue placeholder="Category" />
           </SelectTrigger>
           <SelectContent>

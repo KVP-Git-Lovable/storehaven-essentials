@@ -336,9 +336,9 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
     }) ?? false;
 
   const handleNavClick = () => {
-    if (isMobile) {
-      onOpenChange(false);
-    }
+    // Always close the mobile Sheet on leaf nav clicks. On desktop the Sheet
+    // isn't rendered, so this is a harmless no-op (sidebarOpen is already false).
+    onOpenChange(false);
   };
 
   const sidebarContent = (
