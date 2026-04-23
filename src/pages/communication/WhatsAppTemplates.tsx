@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { Plus, RefreshCw, Eye, Trash2, MessageSquare, Download, ChevronDown, Info, AlertTriangle } from "lucide-react";
+import { Plus, RefreshCw, Eye, Trash2, MessageSquare, Download, ChevronDown, Info, AlertTriangle, CheckCircle2, Clock, XCircle, Circle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { BackButton } from "@/components/shared/BackButton";
 import { format } from "date-fns";
