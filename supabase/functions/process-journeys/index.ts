@@ -222,8 +222,10 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Resolve a single active sender — first from whatsapp_config, then from
-    // the most recent inbound message (Twilio's `To` value), then env var.
+    // Step 1: Schedule sweep — turn due journey_schedules rows into fresh enrollments.
+    const sweep = await runScheduleSweep(supabase);
+    console.log(`scheduled_runs_triggered: ${sweep.triggered}`);
+
     const { data: cfg } = await supabase
       .from("whatsapp_config")
       .select("sender_number")
@@ -231,7 +233,6 @@ Deno.serve(async (req) => {
       .maybeSingle();
     let fromNumber: string | null = cfg?.sender_number || null;
     if (!fromNumber) {
-      // Fallback: env var override (lets ops set a default sender without DB write)
       const envFrom = Deno.env.get("WHATSAPP_FROM_NUMBER");
       if (envFrom && /^\+[1-9]\d{1,14}$/.test(envFrom)) fromNumber = envFrom;
     }
@@ -240,7 +241,7 @@ Deno.serve(async (req) => {
       .from("journeys").select("*").eq("status", "active");
 
     if (!activeJourneys || activeJourneys.length === 0) {
-      return new Response(JSON.stringify({ processed: 0 }), {
+      return new Response(JSON.stringify({ processed: 0, scheduled_runs_triggered: sweep.triggered, schedule_errors: sweep.errors }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
