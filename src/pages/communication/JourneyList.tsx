@@ -255,12 +255,15 @@ export default function JourneyList() {
       return data;
     },
     onSuccess: (data) => {
-      toast.success("Journey created");
+      // Close dialog and reset state first so the modal exits smoothly
       setShowCreate(false);
       setForm({ name: "", description: "", list_view_id: "" });
       setAudienceCount(null);
+      toast.success("Journey created");
       queryClient.invalidateQueries({ queryKey: ["journeys"] });
-      navigate(`/communication/journeys/${data.id}`);
+      // Defer navigation so the dialog close animation can run before
+      // the heavy JourneyBuilder route mounts and blocks the main thread
+      setTimeout(() => navigate(`/communication/journeys/${data.id}`), 0);
     },
     onError: (e: any) => toast.error(e.message || "Failed to create journey"),
   });
