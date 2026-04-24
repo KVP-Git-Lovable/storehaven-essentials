@@ -31,6 +31,8 @@ import {
   buildStoredBody,
   transformFriendlyToTwilio,
   validateFriendlyBody,
+  parseStoredBody,
+  transformTwilioToFriendly,
 } from "@/lib/whatsappVariables";
 
 interface WhatsAppTemplate {
