@@ -68,6 +68,7 @@ const initialForm = {
   contentType: "text" as ContentType,
   mediaUrl: "",
   ctaButtons: [emptyCta()] as CtaButton[],
+  variableSamples: {} as Record<string, string>,
 };
 
 export default function WhatsAppTemplates() {
