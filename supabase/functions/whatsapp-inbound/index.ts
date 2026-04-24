@@ -15,6 +15,98 @@ const GREETING_RE = /^\s*(hi|hello|hey|start)[\s!.?,]*$/i;
 const WELCOME =
   "Welcome to Trayi Jewellery. ✨ I am your StoreOps assistant. How may I assist you today?";
 
+// Product Inquiry intent: keyword match (case-insensitive, word-boundary)
+const PRODUCT_INTENT_RE = /\b(products?|diamonds?|jewell?ery|collections?|items?)\b/i;
+const PRODUCT_TEMPLATE_SID = "HX440122d86a157cb01de5f75a3aba1dd3";
+const TWILIO_GATEWAY = "https://connector-gateway.lovable.dev/twilio";
+
+async function sendProductTemplate(
+  toNumber: string,
+  fromNumber: string,
+  customerId: string | null,
+): Promise<void> {
+  try {
+    const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+    const twilioKey = Deno.env.get("TWILIO_API_KEY");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!lovableKey || !twilioKey) {
+      console.warn("[whatsapp-inbound] product-intent: missing Twilio/Lovable keys, skipping");
+      return;
+    }
+    if (!toNumber || !/^\+[1-9]\d{1,14}$/.test(toNumber)) {
+      console.warn("[whatsapp-inbound] product-intent: invalid recipient", toNumber);
+      return;
+    }
+
+    let sender = fromNumber;
+    if ((!sender || !/^\+[1-9]\d{1,14}$/.test(sender)) && supabaseUrl && serviceKey) {
+      try {
+        const sb = createClient(supabaseUrl, serviceKey);
+        const { data: cfg } = await sb
+          .from("whatsapp_config")
+          .select("sender_number")
+          .limit(1)
+          .maybeSingle();
+        if (cfg?.sender_number) sender = String(cfg.sender_number);
+      } catch (e) {
+        console.error("[whatsapp-inbound] product-intent: sender lookup err", e);
+      }
+    }
+    if (!sender || !/^\+[1-9]\d{1,14}$/.test(sender)) {
+      console.warn("[whatsapp-inbound] product-intent: no valid sender number");
+      return;
+    }
+
+    const statusCallbackUrl = supabaseUrl
+      ? `${supabaseUrl}/functions/v1/whatsapp-inbound?event=status`
+      : null;
+
+    const params = new URLSearchParams({
+      To: `whatsapp:${toNumber}`,
+      From: `whatsapp:${sender}`,
+      ContentSid: PRODUCT_TEMPLATE_SID,
+    });
+    if (statusCallbackUrl) params.set("StatusCallback", statusCallbackUrl);
+
+    const resp = await fetch(`${TWILIO_GATEWAY}/Messages.json`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${lovableKey}`,
+        "X-Connection-Api-Key": twilioKey,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params,
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      console.error("[whatsapp-inbound] product-intent: Twilio error", resp.status, data);
+      return;
+    }
+    console.log("[whatsapp-inbound] product-intent: template sent", data?.sid);
+
+    if (supabaseUrl && serviceKey) {
+      try {
+        const sb = createClient(supabaseUrl, serviceKey);
+        await sb.from("whatsapp_messages").insert({
+          phone: toNumber,
+          customer_id: customerId,
+          direction: "outbound",
+          message: "[Product Inquiry template]",
+          message_type: "template",
+          status: data?.status || "queued",
+          twilio_message_sid: data?.sid || null,
+          is_read: true,
+        });
+      } catch (e) {
+        console.error("[whatsapp-inbound] product-intent: log insert err", e);
+      }
+    }
+  } catch (e) {
+    console.error("[whatsapp-inbound] product-intent: unexpected error", e);
+  }
+}
+
 function escapeXml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -299,7 +391,44 @@ Deno.serve(async (req) => {
       return twiml(WELCOME);
     }
 
-    // 2) Fallback: empty response — leaves space for future intent handlers
+    // 2) Product Inquiry intent — sends a predefined Twilio template.
+    //    Template send happens via REST (not TwiML), so we still return empty TwiML.
+    if (PRODUCT_INTENT_RE.test(body)) {
+      await logMessages(false);
+      // Lookup customer_id again for the outbound row (best-effort).
+      let customerId: string | null = null;
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL");
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (supabaseUrl && serviceKey && normalizedFrom) {
+          const sb = createClient(supabaseUrl, serviceKey);
+          const last10 = normalizedFrom.replace(/\D/g, "").slice(-10);
+          const { data: exact } = await sb
+            .from("customers")
+            .select("id")
+            .eq("phone", normalizedFrom)
+            .limit(1)
+            .maybeSingle();
+          if (exact?.id) customerId = exact.id;
+          else if (last10.length === 10) {
+            const { data: fuzzy } = await sb
+              .from("customers")
+              .select("id")
+              .ilike("phone", `%${last10}`)
+              .limit(1)
+              .maybeSingle();
+            if (fuzzy?.id) customerId = fuzzy.id;
+          }
+        }
+      } catch (e) {
+        console.error("[whatsapp-inbound] product-intent customer lookup err", e);
+      }
+      const senderNumber = (to || "").replace(/^whatsapp:/i, "").trim();
+      await sendProductTemplate(normalizedFrom, senderNumber, customerId);
+      return twiml();
+    }
+
+    // 3) Fallback: empty response — leaves space for future intent handlers
     //    (orders, products, etc.) to be added above this line.
     await logMessages(false);
     return twiml();
