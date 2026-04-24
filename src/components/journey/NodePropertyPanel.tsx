@@ -105,12 +105,13 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
 
   const updateWhatsAppVariable = (name: string, value: string) => {
     const existing = (node.data.template_variables as Record<string, string> | undefined) ?? {};
+    const next: Record<string, string> = { ...existing, [name]: value };
+    // Mirror to the numeric key Twilio expects (e.g. customer_name -> "1")
+    const numKey = friendlyToNumeric[name];
+    if (numKey) next[numKey] = value;
     onUpdate(node.id, {
       ...node.data,
-      template_variables: {
-        ...existing,
-        [name]: value,
-      },
+      template_variables: next,
     });
   };
 
