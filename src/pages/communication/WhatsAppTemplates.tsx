@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { Plus, RefreshCw, Eye, Trash2, MessageSquare, Download, ChevronDown, Info, AlertTriangle, CheckCircle2, Clock, XCircle, Circle } from "lucide-react";
+import { Plus, RefreshCw, Eye, Trash2, MessageSquare, Download, ChevronDown, Info, AlertTriangle, CheckCircle2, Clock, XCircle, Circle, Image as ImageIcon, Link2, Phone, Upload, X, FileText, MessageCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { BackButton } from "@/components/shared/BackButton";
 import { format } from "date-fns";
@@ -55,32 +55,84 @@ const statusColors: Record<string, string> = {
   rejected: "bg-destructive/10 text-destructive",
 };
 
+type ContentType = "text" | "media" | "call_to_action";
+type CtaButton = { type: "URL" | "PHONE_NUMBER"; title: string; url: string; phone: string };
+
+const emptyCta = (): CtaButton => ({ type: "URL", title: "", url: "", phone: "" });
+
+const initialForm = {
+  name: "",
+  category: "UTILITY",
+  language: "en",
+  body: "",
+  contentType: "text" as ContentType,
+  mediaUrl: "",
+  ctaButtons: [emptyCta()] as CtaButton[],
+};
+
 export default function WhatsAppTemplates() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
-  const [form, setForm] = useState({ name: "", category: "UTILITY", language: "en", body: "" });
+  const [form, setForm] = useState(initialForm);
+  const [mediaUploading, setMediaUploading] = useState(false);
+  const [mediaTab, setMediaTab] = useState<"url" | "upload">("url");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { data: templates = [], isLoading } = useQuery({
-    queryKey: ["whatsapp-templates"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("whatsapp_templates")
-        .select("*")
-        .order("updated_at", { ascending: false });
-      if (error) throw error;
-      return data as WhatsAppTemplate[];
-    },
-  });
+  const handleMediaUpload = async (file: File) => {
+    if (!file) return;
+    if (file.size > 16 * 1024 * 1024) {
+      toast.error("File too large (max 16 MB)");
+      return;
+    }
+    setMediaUploading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in");
+      const ext = file.name.split(".").pop() || "bin";
+      const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("whatsapp-media").upload(path, file, {
+        contentType: file.type,
+        cacheControl: "3600",
+      });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("whatsapp-media").getPublicUrl(path);
+      setForm((f) => ({ ...f, mediaUrl: pub.publicUrl }));
+      toast.success("File uploaded");
+    } catch (e: any) {
+      toast.error(e?.message || "Upload failed");
+    } finally {
+      setMediaUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const createMutation = useMutation({
     mutationFn: async (templateData: typeof form) => {
       const { data: { session } } = await supabase.auth.getSession();
       // Convert friendly body -> stored body (numeric + hidden mapping marker)
       const { storedBody } = buildStoredBody(templateData.body);
+      const payload: Record<string, unknown> = {
+        name: templateData.name,
+        category: templateData.category,
+        language: templateData.language,
+        body: storedBody,
+        content_type: templateData.contentType,
+      };
+      if (templateData.contentType === "media") {
+        payload.media_url = templateData.mediaUrl.trim();
+      }
+      if (templateData.contentType === "call_to_action") {
+        payload.cta_actions = templateData.ctaButtons.map((b) => ({
+          type: b.type,
+          title: b.title.trim(),
+          url: b.type === "URL" ? b.url.trim() : undefined,
+          phone: b.type === "PHONE_NUMBER" ? b.phone.trim() : undefined,
+        }));
+      }
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-templates`,
         {
@@ -89,12 +141,7 @@ export default function WhatsAppTemplates() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${session?.access_token}`,
           },
-          body: JSON.stringify({
-            name: templateData.name,
-            category: templateData.category,
-            language: templateData.language,
-            body: storedBody,
-          }),
+          body: JSON.stringify(payload),
         }
       );
       if (!response.ok) {
@@ -106,10 +153,23 @@ export default function WhatsAppTemplates() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp-templates"] });
       setShowCreateDialog(false);
-      setForm({ name: "", category: "UTILITY", language: "en", body: "" });
+      setForm(initialForm);
+      setMediaTab("url");
       toast.success("Template created successfully");
     },
     onError: (error: Error) => toast.error(error.message),
+  });
+
+  const { data: templates = [], isLoading } = useQuery({
+    queryKey: ["whatsapp-templates"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("whatsapp_templates")
+        .select("*")
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return data as WhatsAppTemplate[];
+    },
   });
 
   const bulkSyncMutation = useMutation({
@@ -203,6 +263,35 @@ export default function WhatsAppTemplates() {
 
   const validation = validateFriendlyBody(form.body);
   const { twilioBody } = transformFriendlyToTwilio(form.body);
+
+  // Content-type-specific validity for the submit button
+  const ctaValid =
+    form.contentType !== "call_to_action" ||
+    (form.ctaButtons.length > 0 &&
+      form.ctaButtons.length <= 2 &&
+      form.ctaButtons.every(
+        (b) =>
+          b.title.trim().length > 0 &&
+          (b.type === "URL" ? b.url.trim().length > 0 : b.phone.trim().length > 0),
+      ));
+  const mediaValid = form.contentType !== "media" || form.mediaUrl.trim().length > 0;
+  const canSubmit =
+    !!form.name &&
+    !!form.body &&
+    validation.valid &&
+    ctaValid &&
+    mediaValid &&
+    !createMutation.isPending;
+
+  const updateCta = (idx: number, patch: Partial<CtaButton>) =>
+    setForm((f) => ({
+      ...f,
+      ctaButtons: f.ctaButtons.map((b, i) => (i === idx ? { ...b, ...patch } : b)),
+    }));
+  const addCta = () =>
+    setForm((f) => (f.ctaButtons.length >= 2 ? f : { ...f, ctaButtons: [...f.ctaButtons, emptyCta()] }));
+  const removeCta = (idx: number) =>
+    setForm((f) => ({ ...f, ctaButtons: f.ctaButtons.filter((_, i) => i !== idx) }));
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -398,6 +487,36 @@ export default function WhatsAppTemplates() {
             <DialogTitle>Create WhatsApp Template</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Content type selector */}
+            <div>
+              <Label>Content Type</Label>
+              <div className="grid grid-cols-3 gap-2 mt-1">
+                {([
+                  { v: "text", icon: MessageCircle, label: "Text", desc: "Plain message" },
+                  { v: "media", icon: ImageIcon, label: "Media", desc: "Image, video or PDF" },
+                  { v: "call_to_action", icon: Link2, label: "Call to action", desc: "Button to URL or phone" },
+                ] as const).map(({ v, icon: Icon, label, desc }) => {
+                  const active = form.contentType === v;
+                  return (
+                    <button
+                      type="button"
+                      key={v}
+                      onClick={() => setForm((f) => ({ ...f, contentType: v }))}
+                      className={`flex flex-col items-start gap-1 rounded-md border p-3 text-left transition-colors ${
+                        active
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted/50"
+                      }`}
+                    >
+                      <Icon className={`h-4 w-4 ${active ? "text-primary" : "text-muted-foreground"}`} />
+                      <span className="text-sm font-medium">{label}</span>
+                      <span className="text-[11px] text-muted-foreground leading-tight">{desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div>
               <Label>Template Name</Label>
               <Input
@@ -432,6 +551,65 @@ export default function WhatsAppTemplates() {
                 </Select>
               </div>
             </div>
+
+            {/* Media section */}
+            {form.contentType === "media" && (
+              <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4 text-primary" />
+                  <Label className="text-sm font-medium">Header Media</Label>
+                </div>
+                <Tabs value={mediaTab} onValueChange={(v) => setMediaTab(v as "url" | "upload")}>
+                  <TabsList className="grid w-full grid-cols-2 h-8">
+                    <TabsTrigger value="url" className="text-xs">Paste URL</TabsTrigger>
+                    <TabsTrigger value="upload" className="text-xs">Upload file</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="url" className="mt-2">
+                    <Input
+                      placeholder="https://example.com/image.jpg"
+                      value={form.mediaUrl}
+                      onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })}
+                    />
+                  </TabsContent>
+                  <TabsContent value="upload" className="mt-2 space-y-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*,video/*,application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleMediaUpload(f);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      disabled={mediaUploading}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className={`h-4 w-4 mr-2 ${mediaUploading ? "animate-pulse" : ""}`} />
+                      {mediaUploading ? "Uploading..." : "Choose file (image / video / PDF, max 16 MB)"}
+                    </Button>
+                    {form.mediaUrl && (
+                      <p className="text-[11px] text-muted-foreground break-all">
+                        Uploaded: {form.mediaUrl}
+                      </p>
+                    )}
+                  </TabsContent>
+                </Tabs>
+                {form.mediaUrl && /\.(jpe?g|png|gif|webp)$/i.test(form.mediaUrl) && (
+                  <img
+                    src={form.mediaUrl}
+                    alt="Media preview"
+                    className="max-h-40 rounded border object-contain"
+                  />
+                )}
+              </div>
+            )}
+
             <div>
               <div className="flex items-center justify-between mb-1">
                 <Label>Message Body</Label>
@@ -504,17 +682,130 @@ export default function WhatsAppTemplates() {
               )}
             </div>
 
+            {/* Call-to-action buttons */}
+            {form.contentType === "call_to_action" && (
+              <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Link2 className="h-4 w-4 text-primary" />
+                    <Label className="text-sm font-medium">Call to Action Buttons</Label>
+                  </div>
+                  <span className="text-[11px] text-muted-foreground">{form.ctaButtons.length}/2</span>
+                </div>
+                {form.ctaButtons.map((btn, idx) => (
+                  <div key={idx} className="rounded border bg-background p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">Button {idx + 1}</span>
+                      {form.ctaButtons.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-destructive"
+                          onClick={() => removeCta(idx)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">Type of action</Label>
+                        <Select
+                          value={btn.type}
+                          onValueChange={(v) => updateCta(idx, { type: v as "URL" | "PHONE_NUMBER" })}
+                        >
+                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="URL">
+                              <span className="flex items-center gap-2"><Link2 className="h-3 w-3" /> Visit Website</span>
+                            </SelectItem>
+                            <SelectItem value="PHONE_NUMBER">
+                              <span className="flex items-center gap-2"><Phone className="h-3 w-3" /> Call Phone Number</span>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Button Text</Label>
+                        <Input
+                          className="h-9"
+                          maxLength={25}
+                          placeholder="e.g. Shop Now"
+                          value={btn.title}
+                          onChange={(e) => updateCta(idx, { title: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    {btn.type === "URL" ? (
+                      <div>
+                        <Label className="text-xs">URL</Label>
+                        <Input
+                          className="h-9"
+                          placeholder="https://example.com"
+                          value={btn.url}
+                          onChange={(e) => updateCta(idx, { url: e.target.value })}
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <Label className="text-xs">Phone Number (E.164)</Label>
+                        <Input
+                          className="h-9"
+                          placeholder="+14155551234"
+                          value={btn.phone}
+                          onChange={(e) => updateCta(idx, { phone: e.target.value })}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {form.ctaButtons.length < 2 && (
+                  <Button type="button" variant="outline" size="sm" className="w-full" onClick={addCta}>
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add another button
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Live preview */}
             {form.body && (
               <div>
                 <Label className="text-sm">Preview</Label>
                 <Tabs defaultValue="friendly" className="mt-1">
                   <TabsList className="grid w-full grid-cols-2 h-8">
-                    <TabsTrigger value="friendly" className="text-xs">Friendly view</TabsTrigger>
+                    <TabsTrigger value="friendly" className="text-xs">WhatsApp preview</TabsTrigger>
                     <TabsTrigger value="twilio" className="text-xs">Twilio format</TabsTrigger>
                   </TabsList>
                   <TabsContent value="friendly">
-                    <div className="bg-muted/50 rounded-md p-3 text-sm whitespace-pre-wrap leading-relaxed border">
-                      {form.body || <span className="text-muted-foreground">Empty</span>}
+                    <div className="rounded-md border bg-[#e5ddd5] dark:bg-muted/50 p-3">
+                      <div className="rounded-lg bg-background shadow-sm p-3 space-y-2 max-w-sm">
+                        {form.contentType === "media" && form.mediaUrl && (
+                          /\.(jpe?g|png|gif|webp)$/i.test(form.mediaUrl) ? (
+                            <img src={form.mediaUrl} alt="" className="rounded max-h-40 w-full object-cover" />
+                          ) : (
+                            <div className="flex items-center gap-2 rounded bg-muted px-2 py-1.5 text-xs text-muted-foreground">
+                              <FileText className="h-3 w-3" />
+                              <span className="truncate">{form.mediaUrl}</span>
+                            </div>
+                          )
+                        )}
+                        <p className="text-sm whitespace-pre-wrap leading-relaxed">{form.body}</p>
+                        {form.contentType === "call_to_action" && (
+                          <div className="border-t pt-1 -mx-3 px-3 -mb-3 pb-1 space-y-1">
+                            {form.ctaButtons.map((b, i) => (
+                              <div
+                                key={i}
+                                className="flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium text-primary border-t first:border-t-0"
+                              >
+                                {b.type === "URL" ? <Link2 className="h-3 w-3" /> : <Phone className="h-3 w-3" />}
+                                {b.title || <span className="text-muted-foreground">Button text</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </TabsContent>
                   <TabsContent value="twilio">
@@ -530,7 +821,7 @@ export default function WhatsAppTemplates() {
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>Cancel</Button>
             <Button
               onClick={() => createMutation.mutate(form)}
-              disabled={!form.name || !form.body || !validation.valid || createMutation.isPending}
+              disabled={!canSubmit}
             >
               {createMutation.isPending ? "Creating..." : "Create & Submit"}
             </Button>
