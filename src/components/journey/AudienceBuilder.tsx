@@ -38,7 +38,7 @@ export function AudienceBuilder({ value, onChange }: Props) {
         .select("id, name, entity_type")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data || []).filter((v: any) => v.entity_type === "customers" || v.entity_type === "orders");
+      return ((data as any[]) || []).filter((v: any) => v.entity_type === "customers" || v.entity_type === "orders") as any[];
     },
   });
 
@@ -148,7 +148,8 @@ export function AudienceBuilder({ value, onChange }: Props) {
                 value={seg.list_view_id}
                 onValueChange={(v) => {
                   if (segments.length === 0) {
-                    onChange({ ...value, segments: [{ key: "A", list_view_id: v, label: listViews.find((lv: any) => lv.id === v)?.name }] });
+                    const lv = (listViews as any[]).find((x) => x.id === v);
+                    onChange({ ...value, segments: [{ key: "A", list_view_id: v, label: lv?.name }] });
                   } else {
                     setSegment(idx, v);
                   }
