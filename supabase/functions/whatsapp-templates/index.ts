@@ -497,6 +497,7 @@ serve(async (req) => {
         content_type: contentTypeRaw,
         media_url: mediaUrl,
         cta_actions: ctaActionsRaw,
+        variable_samples: variableSamplesRaw,
       } = body;
 
       const contentType: 'text' | 'media' | 'call_to_action' =
