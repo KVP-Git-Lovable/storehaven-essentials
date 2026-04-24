@@ -57,16 +57,24 @@ export default function JourneyBuilder() {
         .single();
       if (error) throw error;
       const lv = (data as any).list_view;
-      const enrichEntry = (n: any) =>
-        n.type === "entry" && lv
-          ? { ...n, data: { ...n.data, list_view_id: lv.id, list_view_name: lv.name, list_view_entity_type: lv.entity_type } }
-          : n;
+      const ac = (data as any).audience_config;
+      const enrichEntry = (n: any) => {
+        if (n.type !== "entry") return n;
+        const extra: any = {};
+        if (lv) {
+          extra.list_view_id = lv.id;
+          extra.list_view_name = lv.name;
+          extra.list_view_entity_type = lv.entity_type;
+        }
+        if (ac) extra.audience_config = ac;
+        return { ...n, data: { ...n.data, ...extra } };
+      };
       if (!initialized.current && data.canvas_data) {
         const canvas = data.canvas_data as any;
         if (canvas.nodes) setNodes(canvas.nodes.map(enrichEntry));
         if (canvas.edges) setEdges(canvas.edges);
         initialized.current = true;
-      } else if (lv) {
+      } else if (lv || ac) {
         setNodes((nds) => nds.map(enrichEntry));
       }
       return data;
@@ -80,10 +88,14 @@ export default function JourneyBuilder() {
 
   const addNode = (type: string) => {
     const lv = (journey as any)?.list_view;
-    const defaults: Record<string, any> = {
-      entry: lv
+    const ac = (journey as any)?.audience_config;
+    const entryDefaults: any = ac
+      ? { audience_config: ac, ...(lv ? { list_view_id: lv.id, list_view_name: lv.name, list_view_entity_type: lv.entity_type } : {}) }
+      : lv
         ? { list_view_id: lv.id, list_view_name: lv.name, list_view_entity_type: lv.entity_type }
-        : { segment_type: "customer" },
+        : { segment_type: "customer" };
+    const defaults: Record<string, any> = {
+      entry: entryDefaults,
       message: { channel: "email", template_body: "", whatsapp_template_id: null, whatsapp_template_name: "", template_variables: {} },
       delay: { duration: 1, unit: "days" },
       decision: { condition: "opened" },
