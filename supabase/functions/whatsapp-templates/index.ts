@@ -485,7 +485,22 @@ serve(async (req) => {
       }
 
       // --- Create template (default action) ---
-      const { name, category, language, body: templateBody } = body;
+      // Supports three Twilio Content types:
+      //   - twilio/text             (default, body only)
+      //   - twilio/media            (header media URL + body)
+      //   - twilio/call-to-action   (body + up to 2 URL/PHONE buttons)
+      const {
+        name,
+        category,
+        language,
+        body: templateBody,
+        content_type: contentTypeRaw,
+        media_url: mediaUrl,
+        cta_actions: ctaActionsRaw,
+      } = body;
+
+      const contentType: 'text' | 'media' | 'call_to_action' =
+        contentTypeRaw === 'media' || contentTypeRaw === 'call_to_action' ? contentTypeRaw : 'text';
 
       // Strip the friendly-variable mapping marker before sending to Twilio.
       // The marker is preserved in DB so the UI can reconstruct friendly names.
@@ -512,7 +527,76 @@ serve(async (req) => {
         });
       }
 
-      // Insert into DB as draft
+      // Validate content-type-specific inputs
+      if (contentType === 'media') {
+        if (typeof mediaUrl !== 'string' || mediaUrl.trim().length === 0) {
+          return new Response(JSON.stringify({ error: 'media_url is required for media templates' }), {
+            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
+      type CtaAction = { type: 'URL' | 'PHONE_NUMBER'; title: string; url?: string; phone?: string };
+      let ctaActions: CtaAction[] = [];
+      if (contentType === 'call_to_action') {
+        if (!Array.isArray(ctaActionsRaw) || ctaActionsRaw.length === 0 || ctaActionsRaw.length > 2) {
+          return new Response(JSON.stringify({ error: 'call_to_action requires 1-2 actions' }), {
+            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        for (const a of ctaActionsRaw) {
+          if (!a || typeof a !== 'object') continue;
+          const type = a.type === 'PHONE_NUMBER' ? 'PHONE_NUMBER' : 'URL';
+          const title = typeof a.title === 'string' ? a.title.trim() : '';
+          if (!title) {
+            return new Response(JSON.stringify({ error: 'Each CTA button needs a title' }), {
+              status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          if (type === 'URL') {
+            const url = typeof a.url === 'string' ? a.url.trim() : '';
+            if (!url) {
+              return new Response(JSON.stringify({ error: `CTA "${title}" needs a URL` }), {
+                status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
+            ctaActions.push({ type, title, url });
+          } else {
+            const phone = typeof a.phone === 'string' ? a.phone.trim() : '';
+            if (!phone) {
+              return new Response(JSON.stringify({ error: `CTA "${title}" needs a phone number` }), {
+                status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
+            ctaActions.push({ type, title, phone });
+          }
+        }
+      }
+
+      // Build the Twilio `types` map for both DB persistence and Twilio submission
+      const twilioTypes: Record<string, any> = {};
+      if (contentType === 'media') {
+        twilioTypes['twilio/media'] = {
+          body: twilioCleanBody,
+          media: [mediaUrl.trim()],
+        };
+      } else if (contentType === 'call_to_action') {
+        twilioTypes['twilio/call-to-action'] = {
+          body: twilioCleanBody,
+          actions: ctaActions.map((a) =>
+            a.type === 'URL'
+              ? { type: 'URL', title: a.title, url: a.url }
+              : { type: 'PHONE_NUMBER', title: a.title, phone: a.phone },
+          ),
+        };
+      } else {
+        twilioTypes['twilio/text'] = { body: twilioCleanBody };
+      }
+
+      const meta = deriveTwilioMetadata(twilioTypes);
+
+      // Insert into DB as draft (already populating the synced metadata so the
+      // detail page renders media/CTA immediately, even before Twilio responds).
       const { data: template, error: insertError } = await supabase
         .from('whatsapp_templates')
         .insert({
@@ -522,6 +606,12 @@ serve(async (req) => {
           body: templateBody,
           status: 'draft',
           created_by: user.id,
+          twilio_content_types: twilioTypes,
+          twilio_template_type: meta.templateType,
+          twilio_media_url: meta.mediaUrl,
+          twilio_media_is_variable: meta.mediaIsVariable,
+          twilio_required_variables: meta.requiredVariables,
+          twilio_synced_at: new Date().toISOString(),
         })
         .select()
         .single();
@@ -546,11 +636,7 @@ serve(async (req) => {
               friendly_name: name,
               language: language || 'en',
               variables: {},
-              types: {
-                'twilio/text': {
-                  body: twilioCleanBody,
-                },
-              },
+              types: twilioTypes,
             }),
           });
 
