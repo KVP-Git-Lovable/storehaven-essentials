@@ -694,6 +694,38 @@ export default function WhatsAppTemplates() {
                   ))}
                 </div>
               )}
+
+              {validation.variables.length > 0 && (
+                <div className="mt-3 rounded-md border bg-muted/30 p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Info className="h-3.5 w-3.5 text-primary" />
+                    <Label className="text-sm font-medium">Sample values for variables</Label>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    WhatsApp requires an example for each variable so reviewers can preview the message. These samples are not sent to customers.
+                  </p>
+                  <div className="space-y-2">
+                    {validation.variables.map((v, i) => (
+                      <div key={v} className="grid grid-cols-[auto,1fr] items-center gap-2">
+                        <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                          {`{{${i + 1}}}`} · {v}
+                        </Badge>
+                        <Input
+                          value={form.variableSamples[v] || ""}
+                          onChange={(e) =>
+                            setForm((f) => ({
+                              ...f,
+                              variableSamples: { ...f.variableSamples, [v]: e.target.value },
+                            }))
+                          }
+                          placeholder={`Example value for ${v}`}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Call-to-action buttons */}
