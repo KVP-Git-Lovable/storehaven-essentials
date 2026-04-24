@@ -264,6 +264,35 @@ export default function WhatsAppTemplates() {
   const validation = validateFriendlyBody(form.body);
   const { twilioBody } = transformFriendlyToTwilio(form.body);
 
+  // Content-type-specific validity for the submit button
+  const ctaValid =
+    form.contentType !== "call_to_action" ||
+    (form.ctaButtons.length > 0 &&
+      form.ctaButtons.length <= 2 &&
+      form.ctaButtons.every(
+        (b) =>
+          b.title.trim().length > 0 &&
+          (b.type === "URL" ? b.url.trim().length > 0 : b.phone.trim().length > 0),
+      ));
+  const mediaValid = form.contentType !== "media" || form.mediaUrl.trim().length > 0;
+  const canSubmit =
+    !!form.name &&
+    !!form.body &&
+    validation.valid &&
+    ctaValid &&
+    mediaValid &&
+    !createMutation.isPending;
+
+  const updateCta = (idx: number, patch: Partial<CtaButton>) =>
+    setForm((f) => ({
+      ...f,
+      ctaButtons: f.ctaButtons.map((b, i) => (i === idx ? { ...b, ...patch } : b)),
+    }));
+  const addCta = () =>
+    setForm((f) => (f.ctaButtons.length >= 2 ? f : { ...f, ctaButtons: [...f.ctaButtons, emptyCta()] }));
+  const removeCta = (idx: number) =>
+    setForm((f) => ({ ...f, ctaButtons: f.ctaButtons.filter((_, i) => i !== idx) }));
+
   return (
     <div className="space-y-4 md:space-y-6">
       <BackButton />
