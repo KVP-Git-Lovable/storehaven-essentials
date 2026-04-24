@@ -48,6 +48,7 @@ interface WhatsAppTemplate {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  twilio_content_types?: Record<string, any> | null;
 }
 
 const statusColors: Record<string, string> = {
