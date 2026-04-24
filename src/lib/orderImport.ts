@@ -49,9 +49,9 @@ const SAMPLE_ROW = {
   order_id: "",
   customer_phone: "9876543210",
   customer_name: "Asha Mehta",
-  product_name: "Premium Coffee 250g",
-  quantity: 2,
-  unit_price: 450,
+  product_name: "Gold Diamond Solitaire Ring",
+  quantity: 1,
+  unit_price: 75000,
   order_date: "2026-04-20",
   status: "completed",
 };
