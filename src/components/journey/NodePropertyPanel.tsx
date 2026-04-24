@@ -74,11 +74,23 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
     [approvedWhatsAppTemplates, node.data.whatsapp_template_id]
   );
 
-  const whatsappTemplateBody = useMemo(() => {
-    if (!selectedWhatsAppTemplate) return "";
+  const whatsappTemplateParsed = useMemo(() => {
+    if (!selectedWhatsAppTemplate) return { body: "", numericToFriendly: null as Record<string, string> | null };
     const { twilioBody, mapping } = parseStoredBody(selectedWhatsAppTemplate.body);
-    return mapping ? transformTwilioToFriendly(twilioBody, mapping) : twilioBody;
+    const body = mapping ? transformTwilioToFriendly(twilioBody, mapping) : twilioBody;
+    return { body, numericToFriendly: mapping };
   }, [selectedWhatsAppTemplate]);
+  const whatsappTemplateBody = whatsappTemplateParsed.body;
+  // friendly_name -> "1"/"2"/...
+  const friendlyToNumeric = useMemo(() => {
+    const out: Record<string, string> = {};
+    if (whatsappTemplateParsed.numericToFriendly) {
+      for (const [num, name] of Object.entries(whatsappTemplateParsed.numericToFriendly)) {
+        out[name] = num;
+      }
+    }
+    return out;
+  }, [whatsappTemplateParsed]);
 
   const whatsappVariables = useMemo(() => {
     // Accept both Twilio numeric ({{1}}) and friendly ({{name}}) placeholders
@@ -93,13 +105,49 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
 
   const updateWhatsAppVariable = (name: string, value: string) => {
     const existing = (node.data.template_variables as Record<string, string> | undefined) ?? {};
+    const next: Record<string, string> = { ...existing, [name]: value };
+    // Mirror to the numeric key Twilio expects (e.g. customer_name -> "1")
+    const numKey = friendlyToNumeric[name];
+    if (numKey) next[numKey] = value;
     onUpdate(node.id, {
       ...node.data,
-      template_variables: {
-        ...existing,
-        [name]: value,
-      },
+      template_variables: next,
     });
+  };
+
+  // Build initial template_variables for a template:
+  // - Friendly key gets a sensible default token (e.g. customer_name -> {{contact.name}})
+  // - Numeric Twilio key (e.g. "1") is mirrored with the same value so whatsapp-send fills it
+  const buildInitialVariables = (template: WhatsAppTemplateOption) => {
+    const { twilioBody, mapping } = parseStoredBody(template.body);
+    const displayBody = mapping ? transformTwilioToFriendly(twilioBody, mapping) : twilioBody;
+    const bodyVars = Array.from(displayBody.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g), (m) => m[1]);
+    const syncVars = Array.isArray(template.twilio_required_variables) ? template.twilio_required_variables : [];
+    const all = Array.from(new Set([...bodyVars, ...syncVars]));
+    // friendly_name -> "1" (inverted from numeric mapping)
+    const friendlyToNum: Record<string, string> = {};
+    if (mapping) for (const [num, name] of Object.entries(mapping)) friendlyToNum[name] = num;
+
+    const defaultFor = (name: string): string => {
+      const lower = name.toLowerCase();
+      if (lower === "name" || lower.includes("customer_name") || lower.includes("contact_name") || lower === "first_name") {
+        return "{{contact.name}}";
+      }
+      if (lower.includes("phone")) return "{{contact.phone}}";
+      if (lower.includes("email")) return "{{contact.email}}";
+      if (lower.includes("city")) return "{{contact.city}}";
+      // Fallback: try contact.<name> (resolver will check metadata too)
+      return /^\d+$/.test(name) ? "" : `{{contact.${name}}}`;
+    };
+
+    const out: Record<string, string> = {};
+    for (const v of all) {
+      const def = defaultFor(v);
+      out[v] = def;
+      const num = friendlyToNum[v];
+      if (num) out[num] = def;
+    }
+    return { displayBody, initialVariables: out };
   };
 
   const handleChannelChange = (value: string) => {
@@ -121,14 +169,7 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
       return;
     }
 
-    const { twilioBody, mapping } = parseStoredBody(firstTemplate.body);
-    const displayBody = mapping ? transformTwilioToFriendly(twilioBody, mapping) : twilioBody;
-    const bodyVars = Array.from(displayBody.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g), (m) => m[1]);
-    const syncVars = Array.isArray(firstTemplate.twilio_required_variables) ? firstTemplate.twilio_required_variables : [];
-    const initialVariables = Object.fromEntries(
-      Array.from(new Set([...bodyVars, ...syncVars])).map((v) => [v, `{{${v}}}`])
-    );
-
+    const { displayBody, initialVariables } = buildInitialVariables(firstTemplate);
     onUpdate(node.id, {
       ...node.data,
       channel: value,
@@ -143,14 +184,7 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
     const template = approvedWhatsAppTemplates.find((item) => item.id === templateId);
     if (!template) return;
 
-    const { twilioBody, mapping } = parseStoredBody(template.body);
-    const displayBody = mapping ? transformTwilioToFriendly(twilioBody, mapping) : twilioBody;
-    const bodyVars = Array.from(displayBody.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g), (m) => m[1]);
-    const syncVars = Array.isArray(template.twilio_required_variables) ? template.twilio_required_variables : [];
-    const initialVariables = Object.fromEntries(
-      Array.from(new Set([...bodyVars, ...syncVars])).map((v) => [v, `{{${v}}}`])
-    );
-
+    const { displayBody, initialVariables } = buildInitialVariables(template);
     onUpdate(node.id, {
       ...node.data,
       channel: "whatsapp_template",
