@@ -487,6 +487,36 @@ export default function WhatsAppTemplates() {
             <DialogTitle>Create WhatsApp Template</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Content type selector */}
+            <div>
+              <Label>Content Type</Label>
+              <div className="grid grid-cols-3 gap-2 mt-1">
+                {([
+                  { v: "text", icon: MessageCircle, label: "Text", desc: "Plain message" },
+                  { v: "media", icon: ImageIcon, label: "Media", desc: "Image, video or PDF" },
+                  { v: "call_to_action", icon: Link2, label: "Call to action", desc: "Button to URL or phone" },
+                ] as const).map(({ v, icon: Icon, label, desc }) => {
+                  const active = form.contentType === v;
+                  return (
+                    <button
+                      type="button"
+                      key={v}
+                      onClick={() => setForm((f) => ({ ...f, contentType: v }))}
+                      className={`flex flex-col items-start gap-1 rounded-md border p-3 text-left transition-colors ${
+                        active
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted/50"
+                      }`}
+                    >
+                      <Icon className={`h-4 w-4 ${active ? "text-primary" : "text-muted-foreground"}`} />
+                      <span className="text-sm font-medium">{label}</span>
+                      <span className="text-[11px] text-muted-foreground leading-tight">{desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div>
               <Label>Template Name</Label>
               <Input
@@ -521,6 +551,65 @@ export default function WhatsAppTemplates() {
                 </Select>
               </div>
             </div>
+
+            {/* Media section */}
+            {form.contentType === "media" && (
+              <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4 text-primary" />
+                  <Label className="text-sm font-medium">Header Media</Label>
+                </div>
+                <Tabs value={mediaTab} onValueChange={(v) => setMediaTab(v as "url" | "upload")}>
+                  <TabsList className="grid w-full grid-cols-2 h-8">
+                    <TabsTrigger value="url" className="text-xs">Paste URL</TabsTrigger>
+                    <TabsTrigger value="upload" className="text-xs">Upload file</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="url" className="mt-2">
+                    <Input
+                      placeholder="https://example.com/image.jpg"
+                      value={form.mediaUrl}
+                      onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })}
+                    />
+                  </TabsContent>
+                  <TabsContent value="upload" className="mt-2 space-y-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*,video/*,application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleMediaUpload(f);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      disabled={mediaUploading}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className={`h-4 w-4 mr-2 ${mediaUploading ? "animate-pulse" : ""}`} />
+                      {mediaUploading ? "Uploading..." : "Choose file (image / video / PDF, max 16 MB)"}
+                    </Button>
+                    {form.mediaUrl && (
+                      <p className="text-[11px] text-muted-foreground break-all">
+                        Uploaded: {form.mediaUrl}
+                      </p>
+                    )}
+                  </TabsContent>
+                </Tabs>
+                {form.mediaUrl && /\.(jpe?g|png|gif|webp)$/i.test(form.mediaUrl) && (
+                  <img
+                    src={form.mediaUrl}
+                    alt="Media preview"
+                    className="max-h-40 rounded border object-contain"
+                  />
+                )}
+              </div>
+            )}
+
             <div>
               <div className="flex items-center justify-between mb-1">
                 <Label>Message Body</Label>
@@ -593,17 +682,130 @@ export default function WhatsAppTemplates() {
               )}
             </div>
 
+            {/* Call-to-action buttons */}
+            {form.contentType === "call_to_action" && (
+              <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Link2 className="h-4 w-4 text-primary" />
+                    <Label className="text-sm font-medium">Call to Action Buttons</Label>
+                  </div>
+                  <span className="text-[11px] text-muted-foreground">{form.ctaButtons.length}/2</span>
+                </div>
+                {form.ctaButtons.map((btn, idx) => (
+                  <div key={idx} className="rounded border bg-background p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">Button {idx + 1}</span>
+                      {form.ctaButtons.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-destructive"
+                          onClick={() => removeCta(idx)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">Type of action</Label>
+                        <Select
+                          value={btn.type}
+                          onValueChange={(v) => updateCta(idx, { type: v as "URL" | "PHONE_NUMBER" })}
+                        >
+                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="URL">
+                              <span className="flex items-center gap-2"><Link2 className="h-3 w-3" /> Visit Website</span>
+                            </SelectItem>
+                            <SelectItem value="PHONE_NUMBER">
+                              <span className="flex items-center gap-2"><Phone className="h-3 w-3" /> Call Phone Number</span>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Button Text</Label>
+                        <Input
+                          className="h-9"
+                          maxLength={25}
+                          placeholder="e.g. Shop Now"
+                          value={btn.title}
+                          onChange={(e) => updateCta(idx, { title: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    {btn.type === "URL" ? (
+                      <div>
+                        <Label className="text-xs">URL</Label>
+                        <Input
+                          className="h-9"
+                          placeholder="https://example.com"
+                          value={btn.url}
+                          onChange={(e) => updateCta(idx, { url: e.target.value })}
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <Label className="text-xs">Phone Number (E.164)</Label>
+                        <Input
+                          className="h-9"
+                          placeholder="+14155551234"
+                          value={btn.phone}
+                          onChange={(e) => updateCta(idx, { phone: e.target.value })}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {form.ctaButtons.length < 2 && (
+                  <Button type="button" variant="outline" size="sm" className="w-full" onClick={addCta}>
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add another button
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Live preview */}
             {form.body && (
               <div>
                 <Label className="text-sm">Preview</Label>
                 <Tabs defaultValue="friendly" className="mt-1">
                   <TabsList className="grid w-full grid-cols-2 h-8">
-                    <TabsTrigger value="friendly" className="text-xs">Friendly view</TabsTrigger>
+                    <TabsTrigger value="friendly" className="text-xs">WhatsApp preview</TabsTrigger>
                     <TabsTrigger value="twilio" className="text-xs">Twilio format</TabsTrigger>
                   </TabsList>
                   <TabsContent value="friendly">
-                    <div className="bg-muted/50 rounded-md p-3 text-sm whitespace-pre-wrap leading-relaxed border">
-                      {form.body || <span className="text-muted-foreground">Empty</span>}
+                    <div className="rounded-md border bg-[#e5ddd5] dark:bg-muted/50 p-3">
+                      <div className="rounded-lg bg-background shadow-sm p-3 space-y-2 max-w-sm">
+                        {form.contentType === "media" && form.mediaUrl && (
+                          /\.(jpe?g|png|gif|webp)$/i.test(form.mediaUrl) ? (
+                            <img src={form.mediaUrl} alt="" className="rounded max-h-40 w-full object-cover" />
+                          ) : (
+                            <div className="flex items-center gap-2 rounded bg-muted px-2 py-1.5 text-xs text-muted-foreground">
+                              <FileText className="h-3 w-3" />
+                              <span className="truncate">{form.mediaUrl}</span>
+                            </div>
+                          )
+                        )}
+                        <p className="text-sm whitespace-pre-wrap leading-relaxed">{form.body}</p>
+                        {form.contentType === "call_to_action" && (
+                          <div className="border-t pt-1 -mx-3 px-3 -mb-3 pb-1 space-y-1">
+                            {form.ctaButtons.map((b, i) => (
+                              <div
+                                key={i}
+                                className="flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium text-primary border-t first:border-t-0"
+                              >
+                                {b.type === "URL" ? <Link2 className="h-3 w-3" /> : <Phone className="h-3 w-3" />}
+                                {b.title || <span className="text-muted-foreground">Button text</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </TabsContent>
                   <TabsContent value="twilio">
@@ -619,7 +821,7 @@ export default function WhatsAppTemplates() {
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>Cancel</Button>
             <Button
               onClick={() => createMutation.mutate(form)}
-              disabled={!form.name || !form.body || !validation.valid || createMutation.isPending}
+              disabled={!canSubmit}
             >
               {createMutation.isPending ? "Creating..." : "Create & Submit"}
             </Button>
