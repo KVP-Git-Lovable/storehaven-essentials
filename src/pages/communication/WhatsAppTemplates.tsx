@@ -160,6 +160,18 @@ export default function WhatsAppTemplates() {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const { data: templates = [], isLoading } = useQuery({
+    queryKey: ["whatsapp-templates"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("whatsapp_templates")
+        .select("*")
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return data as WhatsAppTemplate[];
+    },
+  });
+
   const bulkSyncMutation = useMutation({
     mutationFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
