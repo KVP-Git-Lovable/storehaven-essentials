@@ -391,7 +391,44 @@ Deno.serve(async (req) => {
       return twiml(WELCOME);
     }
 
-    // 2) Fallback: empty response — leaves space for future intent handlers
+    // 2) Product Inquiry intent — sends a predefined Twilio template.
+    //    Template send happens via REST (not TwiML), so we still return empty TwiML.
+    if (PRODUCT_INTENT_RE.test(body)) {
+      await logMessages(false);
+      // Lookup customer_id again for the outbound row (best-effort).
+      let customerId: string | null = null;
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL");
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (supabaseUrl && serviceKey && normalizedFrom) {
+          const sb = createClient(supabaseUrl, serviceKey);
+          const last10 = normalizedFrom.replace(/\D/g, "").slice(-10);
+          const { data: exact } = await sb
+            .from("customers")
+            .select("id")
+            .eq("phone", normalizedFrom)
+            .limit(1)
+            .maybeSingle();
+          if (exact?.id) customerId = exact.id;
+          else if (last10.length === 10) {
+            const { data: fuzzy } = await sb
+              .from("customers")
+              .select("id")
+              .ilike("phone", `%${last10}`)
+              .limit(1)
+              .maybeSingle();
+            if (fuzzy?.id) customerId = fuzzy.id;
+          }
+        }
+      } catch (e) {
+        console.error("[whatsapp-inbound] product-intent customer lookup err", e);
+      }
+      const senderNumber = (to || "").replace(/^whatsapp:/i, "").trim();
+      await sendProductTemplate(normalizedFrom, senderNumber, customerId);
+      return twiml();
+    }
+
+    // 3) Fallback: empty response — leaves space for future intent handlers
     //    (orders, products, etc.) to be added above this line.
     await logMessages(false);
     return twiml();
