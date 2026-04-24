@@ -657,7 +657,7 @@ serve(async (req) => {
             body: JSON.stringify({
               friendly_name: name,
               language: language || 'en',
-              variables: {},
+              variables: variableSamples,
               types: twilioTypes,
             }),
           });
