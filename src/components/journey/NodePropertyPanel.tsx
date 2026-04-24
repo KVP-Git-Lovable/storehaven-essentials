@@ -169,7 +169,26 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
       </div>
 
       {node.type === "entry" && (
-        node.data.list_view_id ? (
+        (node.data as any).audience_config ? (
+          <div className="space-y-3">
+            <div className="rounded-md border bg-muted/40 p-3 space-y-2">
+              <p className="text-xs font-medium">Multi-segment audience</p>
+              <p className="text-xs text-muted-foreground">
+                This entry node uses a combined audience defined on the journey. To change segments or the combine rule, edit the journey's audience configuration.
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {((node.data as any).audience_config?.segments || []).map((s: any) => (
+                  <Badge key={s.key} variant="outline" className="text-[10px]">
+                    {s.key}: {s.label || s.list_view_id?.slice(0, 8)}
+                  </Badge>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Combine: <span className="font-mono">{(node.data as any).audience_config?.combinator || "union"}</span>
+              </p>
+            </div>
+          </div>
+        ) : node.data.list_view_id ? (
           <div className="space-y-3">
             <div className="rounded-md border bg-muted/40 p-3 space-y-2">
               <p className="text-xs font-medium">Audience controlled by List View</p>

@@ -22,6 +22,7 @@ import { executeListView } from "@/lib/listViewExecutor";
 import { JourneyScheduleDialog } from "@/components/journey/JourneyScheduleDialog";
 import { summarizeSchedule, type JourneySchedule } from "@/lib/journeySchedule";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
+import { AudienceBuilder, type AudienceConfig } from "@/components/journey/AudienceBuilder";
 import { cn } from "@/lib/utils";
 
 const statusColors: Record<string, string> = {
@@ -69,8 +70,8 @@ export default function JourneyList() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState<{ name: string; description: string; list_view_id: string }>({ name: "", description: "", list_view_id: "" });
-  const [audienceCount, setAudienceCount] = useState<number | null>(null);
+  const [form, setForm] = useState<{ name: string; description: string }>({ name: "", description: "" });
+  const [audienceConfig, setAudienceConfig] = useState<AudienceConfig>({ segments: [], combinator: "union" });
 
   // Submit-for-approval modal state
   const [submitJourney, setSubmitJourney] = useState<any | null>(null);
@@ -174,23 +175,7 @@ export default function JourneyList() {
     enabled: journeys.length >= 0,
   });
 
-  const handleListViewChange = async (id: string) => {
-    setForm({ ...form, list_view_id: id });
-    setAudienceCount(null);
-    if (!id) return;
-    try {
-      const { data: full } = await supabase.from("list_views" as any).select("*").eq("id", id).maybeSingle();
-      const lv = full as any;
-      if (!lv) return;
-      const result = await executeListView(
-        { entity_type: lv.entity_type, selected_fields: lv.selected_fields, filters: lv.filters },
-        { countOnly: true }
-      );
-      setAudienceCount(result.count);
-    } catch {
-      setAudienceCount(null);
-    }
-  };
+  // Audience is now driven by the AudienceBuilder component (multi-segment).
 
   const openSubmitDialog = async (journey: any) => {
     setSubmitJourney(journey);
@@ -239,12 +224,21 @@ export default function JourneyList() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      const validSegments = (audienceConfig.segments || []).filter((s) => s.list_view_id);
+      const hasMulti = validSegments.length > 0;
+      const acToSave = hasMulti
+        ? { segments: validSegments, combinator: audienceConfig.combinator || "union", primary: audienceConfig.primary }
+        : null;
+      // Keep list_view_id in sync with the first segment for back-compat with the
+      // existing canvas EntryNode badge & legacy reads.
+      const firstLvId = validSegments[0]?.list_view_id || null;
       const { data, error } = await supabase
         .from("journeys")
         .insert({
           name: form.name,
           description: form.description,
-          list_view_id: form.list_view_id || null,
+          list_view_id: firstLvId,
+          audience_config: acToSave,
           segment_type: null,
           canvas_data: { nodes: [], edges: [] },
           created_by: user?.id,
@@ -257,8 +251,8 @@ export default function JourneyList() {
     onSuccess: (data) => {
       // Close dialog and reset state first so the modal exits smoothly
       setShowCreate(false);
-      setForm({ name: "", description: "", list_view_id: "" });
-      setAudienceCount(null);
+      setForm({ name: "", description: "" });
+      setAudienceConfig({ segments: [], combinator: "union" });
       toast.success("Journey created");
       queryClient.invalidateQueries({ queryKey: ["journeys"] });
       // Defer navigation so the dialog close animation can run before
@@ -766,32 +760,10 @@ export default function JourneyList() {
               <Label>Description</Label>
               <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Describe the journey purpose..." />
             </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <Label>Target Segment (List View)</Label>
-                <Button variant="link" size="sm" className="h-auto p-0" onClick={() => window.open("/list-views/new", "_blank")}>
-                  <Plus className="h-3 w-3 mr-1" /> Create New List View
-                </Button>
-              </div>
-              <SearchableSelect
-                value={form.list_view_id}
-                onValueChange={handleListViewChange}
-                options={listViews.map((v) => ({
-                  value: v.id,
-                  label: `${v.name} (${ENTITY_SCHEMAS[v.entity_type as EntityKey]?.label || v.entity_type})`,
-                }))}
-                placeholder="Select a list view..."
-                searchPlaceholder="Search list views..."
-                emptyMessage="No list views yet"
-              />
-              <p className="text-xs text-muted-foreground mt-1">Select a pre-configured list view to define your target audience.</p>
-              {audienceCount !== null && form.list_view_id && (
-                <Badge variant="secondary" className="mt-2">Estimated audience: {audienceCount}</Badge>
-              )}
-              <a href="/list-views" target="_blank" rel="noreferrer" className="text-xs text-primary inline-flex items-center gap-1 mt-2">
-                Manage list views <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
+            <AudienceBuilder value={audienceConfig} onChange={setAudienceConfig} />
+            <a href="/list-views" target="_blank" rel="noreferrer" className="text-xs text-primary inline-flex items-center gap-1">
+              Manage list views <ExternalLink className="h-3 w-3" />
+            </a>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>

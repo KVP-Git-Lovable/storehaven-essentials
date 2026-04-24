@@ -1,0 +1,1 @@
+ALTER TABLE public.journeys ADD COLUMN IF NOT EXISTS audience_config jsonb;

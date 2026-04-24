@@ -3191,6 +3191,7 @@ export type Database = {
           approval_status: string
           approved_at: string | null
           approver_id: string | null
+          audience_config: Json | null
           canvas_data: Json
           created_at: string
           created_by: string | null
@@ -3210,6 +3211,7 @@ export type Database = {
           approval_status?: string
           approved_at?: string | null
           approver_id?: string | null
+          audience_config?: Json | null
           canvas_data?: Json
           created_at?: string
           created_by?: string | null
@@ -3229,6 +3231,7 @@ export type Database = {
           approval_status?: string
           approved_at?: string | null
           approver_id?: string | null
+          audience_config?: Json | null
           canvas_data?: Json
           created_at?: string
           created_by?: string | null
