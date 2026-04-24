@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { Plus, RefreshCw, Eye, Trash2, MessageSquare, Download, ChevronDown, Info, AlertTriangle, CheckCircle2, Clock, XCircle, Circle, Image as ImageIcon, Link2, Phone, Upload, X, FileText, MessageCircle } from "lucide-react";
+import { Plus, RefreshCw, Eye, Trash2, MessageSquare, Download, ChevronDown, Info, AlertTriangle, CheckCircle2, Clock, XCircle, Circle, Image as ImageIcon, Link2, Phone, Upload, X, FileText, MessageCircle, Copy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { BackButton } from "@/components/shared/BackButton";
 import { format } from "date-fns";
@@ -31,6 +31,8 @@ import {
   buildStoredBody,
   transformFriendlyToTwilio,
   validateFriendlyBody,
+  parseStoredBody,
+  transformTwilioToFriendly,
 } from "@/lib/whatsappVariables";
 
 interface WhatsAppTemplate {
@@ -46,6 +48,7 @@ interface WhatsAppTemplate {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  twilio_content_types?: Record<string, any> | null;
 }
 
 const statusColors: Record<string, string> = {
@@ -307,6 +310,64 @@ export default function WhatsAppTemplates() {
   const removeCta = (idx: number) =>
     setForm((f) => ({ ...f, ctaButtons: f.ctaButtons.filter((_, i) => i !== idx) }));
 
+  // Duplicate an existing template: pre-fill the Create dialog from its content
+  // and let the user edit + submit. Nothing is persisted until they click Create.
+  const handleDuplicate = (tpl: WhatsAppTemplate) => {
+    // Recover friendly body (named variables) from stored numeric body + marker
+    const { twilioBody, mapping } = parseStoredBody(tpl.body || "");
+    const friendlyBody = mapping
+      ? transformTwilioToFriendly(twilioBody, mapping)
+      : twilioBody;
+
+    // Detect content type + media/CTA from the persisted Twilio types map
+    const types = tpl.twilio_content_types || {};
+    let contentType: ContentType = "text";
+    let mediaUrl = "";
+    let ctaButtons: CtaButton[] = [emptyCta()];
+
+    if (types["twilio/media"]) {
+      contentType = "media";
+      const mediaArr = types["twilio/media"]?.media;
+      if (Array.isArray(mediaArr) && typeof mediaArr[0] === "string") {
+        mediaUrl = mediaArr[0];
+      }
+    } else if (types["twilio/call-to-action"]) {
+      contentType = "call_to_action";
+      const actions = types["twilio/call-to-action"]?.actions;
+      if (Array.isArray(actions) && actions.length > 0) {
+        ctaButtons = actions.slice(0, 2).map((a: any) => ({
+          type: a?.type === "PHONE_NUMBER" ? "PHONE_NUMBER" : "URL",
+          title: typeof a?.title === "string" ? a.title : "",
+          url: typeof a?.url === "string" ? a.url : "",
+          phone: typeof a?.phone === "string" ? a.phone : "",
+        }));
+      }
+    }
+
+    // Suggest a unique name (Twilio requires lowercase + underscores, must be unique)
+    const baseName = (tpl.name || "template").replace(/_copy(_\d+)?$/, "");
+    let candidate = `${baseName}_copy`;
+    const existingNames = new Set(templates.map((t) => t.name));
+    let n = 2;
+    while (existingNames.has(candidate)) {
+      candidate = `${baseName}_copy_${n++}`;
+    }
+
+    setForm({
+      name: candidate,
+      category: tpl.category || "UTILITY",
+      language: tpl.language || "en",
+      body: friendlyBody,
+      contentType,
+      mediaUrl,
+      ctaButtons,
+      variableSamples: {},
+    });
+    setMediaTab(mediaUrl ? "url" : "url");
+    setShowCreateDialog(true);
+    toast.info("Duplicated — review and click Create to submit");
+  };
+
   return (
     <div className="space-y-4 md:space-y-6">
       <BackButton />
@@ -401,19 +462,32 @@ export default function WhatsAppTemplates() {
                         )}
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm("Delete this template?")) {
-                          deleteMutation.mutate(template.id);
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDuplicate(template);
+                        }}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm("Delete this template?")) {
+                            deleteMutation.mutate(template.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </button>
                 );
               })
@@ -471,6 +545,18 @@ export default function WhatsAppTemplates() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDuplicate(template)}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Duplicate template</TooltipContent>
+                          </Tooltip>
                           <Button
                             variant="ghost"
                             size="icon"
