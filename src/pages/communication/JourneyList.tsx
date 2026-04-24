@@ -760,32 +760,10 @@ export default function JourneyList() {
               <Label>Description</Label>
               <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Describe the journey purpose..." />
             </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <Label>Target Segment (List View)</Label>
-                <Button variant="link" size="sm" className="h-auto p-0" onClick={() => window.open("/list-views/new", "_blank")}>
-                  <Plus className="h-3 w-3 mr-1" /> Create New List View
-                </Button>
-              </div>
-              <SearchableSelect
-                value={form.list_view_id}
-                onValueChange={handleListViewChange}
-                options={listViews.map((v) => ({
-                  value: v.id,
-                  label: `${v.name} (${ENTITY_SCHEMAS[v.entity_type as EntityKey]?.label || v.entity_type})`,
-                }))}
-                placeholder="Select a list view..."
-                searchPlaceholder="Search list views..."
-                emptyMessage="No list views yet"
-              />
-              <p className="text-xs text-muted-foreground mt-1">Select a pre-configured list view to define your target audience.</p>
-              {audienceCount !== null && form.list_view_id && (
-                <Badge variant="secondary" className="mt-2">Estimated audience: {audienceCount}</Badge>
-              )}
-              <a href="/list-views" target="_blank" rel="noreferrer" className="text-xs text-primary inline-flex items-center gap-1 mt-2">
-                Manage list views <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
+            <AudienceBuilder value={audienceConfig} onChange={setAudienceConfig} />
+            <a href="/list-views" target="_blank" rel="noreferrer" className="text-xs text-primary inline-flex items-center gap-1">
+              Manage list views <ExternalLink className="h-3 w-3" />
+            </a>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
