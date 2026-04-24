@@ -285,12 +285,16 @@ export default function WhatsAppTemplates() {
           (b.type === "URL" ? b.url.trim().length > 0 : b.phone.trim().length > 0),
       ));
   const mediaValid = form.contentType !== "media" || form.mediaUrl.trim().length > 0;
+  const samplesValid = validation.variables.every(
+    (v) => (form.variableSamples[v] || "").trim().length > 0,
+  );
   const canSubmit =
     !!form.name &&
     !!form.body &&
     validation.valid &&
     ctaValid &&
     mediaValid &&
+    samplesValid &&
     !createMutation.isPending;
 
   const updateCta = (idx: number, patch: Partial<CtaButton>) =>
