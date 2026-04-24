@@ -310,6 +310,64 @@ export default function WhatsAppTemplates() {
   const removeCta = (idx: number) =>
     setForm((f) => ({ ...f, ctaButtons: f.ctaButtons.filter((_, i) => i !== idx) }));
 
+  // Duplicate an existing template: pre-fill the Create dialog from its content
+  // and let the user edit + submit. Nothing is persisted until they click Create.
+  const handleDuplicate = (tpl: WhatsAppTemplate) => {
+    // Recover friendly body (named variables) from stored numeric body + marker
+    const { twilioBody, mapping } = parseStoredBody(tpl.body || "");
+    const friendlyBody = mapping
+      ? transformTwilioToFriendly(twilioBody, mapping)
+      : twilioBody;
+
+    // Detect content type + media/CTA from the persisted Twilio types map
+    const types = tpl.twilio_content_types || {};
+    let contentType: ContentType = "text";
+    let mediaUrl = "";
+    let ctaButtons: CtaButton[] = [emptyCta()];
+
+    if (types["twilio/media"]) {
+      contentType = "media";
+      const mediaArr = types["twilio/media"]?.media;
+      if (Array.isArray(mediaArr) && typeof mediaArr[0] === "string") {
+        mediaUrl = mediaArr[0];
+      }
+    } else if (types["twilio/call-to-action"]) {
+      contentType = "call_to_action";
+      const actions = types["twilio/call-to-action"]?.actions;
+      if (Array.isArray(actions) && actions.length > 0) {
+        ctaButtons = actions.slice(0, 2).map((a: any) => ({
+          type: a?.type === "PHONE_NUMBER" ? "PHONE_NUMBER" : "URL",
+          title: typeof a?.title === "string" ? a.title : "",
+          url: typeof a?.url === "string" ? a.url : "",
+          phone: typeof a?.phone === "string" ? a.phone : "",
+        }));
+      }
+    }
+
+    // Suggest a unique name (Twilio requires lowercase + underscores, must be unique)
+    const baseName = (tpl.name || "template").replace(/_copy(_\d+)?$/, "");
+    let candidate = `${baseName}_copy`;
+    const existingNames = new Set(templates.map((t) => t.name));
+    let n = 2;
+    while (existingNames.has(candidate)) {
+      candidate = `${baseName}_copy_${n++}`;
+    }
+
+    setForm({
+      name: candidate,
+      category: tpl.category || "UTILITY",
+      language: tpl.language || "en",
+      body: friendlyBody,
+      contentType,
+      mediaUrl,
+      ctaButtons,
+      variableSamples: {},
+    });
+    setMediaTab(mediaUrl ? "url" : "url");
+    setShowCreateDialog(true);
+    toast.info("Duplicated — review and click Create to submit");
+  };
+
   return (
     <div className="space-y-4 md:space-y-6">
       <BackButton />
