@@ -74,11 +74,23 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
     [approvedWhatsAppTemplates, node.data.whatsapp_template_id]
   );
 
-  const whatsappTemplateBody = useMemo(() => {
-    if (!selectedWhatsAppTemplate) return "";
+  const whatsappTemplateParsed = useMemo(() => {
+    if (!selectedWhatsAppTemplate) return { body: "", numericToFriendly: null as Record<string, string> | null };
     const { twilioBody, mapping } = parseStoredBody(selectedWhatsAppTemplate.body);
-    return mapping ? transformTwilioToFriendly(twilioBody, mapping) : twilioBody;
+    const body = mapping ? transformTwilioToFriendly(twilioBody, mapping) : twilioBody;
+    return { body, numericToFriendly: mapping };
   }, [selectedWhatsAppTemplate]);
+  const whatsappTemplateBody = whatsappTemplateParsed.body;
+  // friendly_name -> "1"/"2"/...
+  const friendlyToNumeric = useMemo(() => {
+    const out: Record<string, string> = {};
+    if (whatsappTemplateParsed.numericToFriendly) {
+      for (const [num, name] of Object.entries(whatsappTemplateParsed.numericToFriendly)) {
+        out[name] = num;
+      }
+    }
+    return out;
+  }, [whatsappTemplateParsed]);
 
   const whatsappVariables = useMemo(() => {
     // Accept both Twilio numeric ({{1}}) and friendly ({{name}}) placeholders
