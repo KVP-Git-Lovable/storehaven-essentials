@@ -188,19 +188,13 @@ function resolveVariables(
   const out: Record<string, string> = {};
   if (!mapping || typeof mapping !== "object") return out;
 
-  for (const [key, source] of Object.entries(mapping)) {
-    if (source == null) continue;
-    if (typeof source !== "string") {
-      out[key] = String(source);
-      continue;
-    }
-
-    let resolved: string;
+  const tryResolve = (source: any): string => {
+    if (source == null) return "";
+    if (typeof source !== "string") return String(source);
     const hasDoubleBrace = /\{\{[^}]+\}\}/.test(source);
     const hasSingleBrace = /\{[^{}]+\}/.test(source);
-
+    let resolved: string;
     if (hasDoubleBrace || hasSingleBrace) {
-      // Replace all {{...}} first, then any remaining {...}
       resolved = source.replace(/\{\{([^}]+)\}\}/g, (_m, inner) =>
         resolveSingleToken(inner, contact),
       );
@@ -208,12 +202,30 @@ function resolveVariables(
         resolveSingleToken(inner, contact),
       );
     } else {
-      // Plain field name: direct lookup (with contact.* alias support)
       resolved = resolveContactPath(contact, source);
+    }
+    return resolved || "";
+  };
+
+  for (const [key, source] of Object.entries(mapping)) {
+    let resolved = tryResolve(source);
+
+    // Sibling-resolution fallback: a numeric key (e.g. "1") whose source is
+    // self-referential (e.g. "{{1}}") or empty cannot resolve. Look for a
+    // friendly sibling key whose value resolves and use that.
+    const isNumericKey = /^\d+$/.test(key);
+    if (isNumericKey && (!resolved || !resolved.trim())) {
+      for (const [otherKey, otherSource] of Object.entries(mapping)) {
+        if (otherKey === key || /^\d+$/.test(otherKey)) continue;
+        const otherResolved = tryResolve(otherSource);
+        if (otherResolved && otherResolved.trim() && otherResolved !== `{{${key}}}`) {
+          resolved = otherResolved;
+          break;
+        }
+      }
     }
 
     if (!resolved || !resolved.trim()) {
-      // Safety fallback for variable {{1}} (Twilio rejects empty placeholders)
       out[key] = key === "1" ? "Customer" : "";
     } else {
       out[key] = resolved;
