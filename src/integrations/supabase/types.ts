@@ -3061,6 +3061,7 @@ export type Database = {
           sent_at: string
           status: string
           template_body: string | null
+          template_id: string | null
           twilio_message_sid: string | null
         }
         Insert: {
@@ -3077,6 +3078,7 @@ export type Database = {
           sent_at?: string
           status?: string
           template_body?: string | null
+          template_id?: string | null
           twilio_message_sid?: string | null
         }
         Update: {
@@ -3093,6 +3095,7 @@ export type Database = {
           sent_at?: string
           status?: string
           template_body?: string | null
+          template_id?: string | null
           twilio_message_sid?: string | null
         }
         Relationships: [
@@ -3115,6 +3118,13 @@ export type Database = {
             columns: ["journey_id"]
             isOneToOne: false
             referencedRelation: "journeys"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journey_message_log_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_templates"
             referencedColumns: ["id"]
           },
         ]
@@ -10703,6 +10713,47 @@ export type Database = {
           webhook_url?: string | null
         }
         Relationships: []
+      }
+      whatsapp_link_clicks: {
+        Row: {
+          clicked_at: string
+          created_at: string
+          id: string
+          ip_address: string | null
+          journey_id: string | null
+          phone_number: string
+          template_sid: string
+          user_agent: string | null
+        }
+        Insert: {
+          clicked_at?: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          journey_id?: string | null
+          phone_number: string
+          template_sid: string
+          user_agent?: string | null
+        }
+        Update: {
+          clicked_at?: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          journey_id?: string | null
+          phone_number?: string
+          template_sid?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_link_clicks_journey_id_fkey"
+            columns: ["journey_id"]
+            isOneToOne: false
+            referencedRelation: "journeys"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       whatsapp_message_log: {
         Row: {
