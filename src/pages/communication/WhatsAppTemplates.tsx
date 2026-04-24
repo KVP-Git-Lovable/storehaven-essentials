@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { Plus, RefreshCw, Eye, Trash2, MessageSquare, Download, ChevronDown, Info, AlertTriangle, CheckCircle2, Clock, XCircle, Circle } from "lucide-react";
+import { Plus, RefreshCw, Eye, Trash2, MessageSquare, Download, ChevronDown, Info, AlertTriangle, CheckCircle2, Clock, XCircle, Circle, Image as ImageIcon, Link2, Phone, Upload, X, FileText, MessageCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { BackButton } from "@/components/shared/BackButton";
 import { format } from "date-fns";
@@ -55,32 +55,84 @@ const statusColors: Record<string, string> = {
   rejected: "bg-destructive/10 text-destructive",
 };
 
+type ContentType = "text" | "media" | "call_to_action";
+type CtaButton = { type: "URL" | "PHONE_NUMBER"; title: string; url: string; phone: string };
+
+const emptyCta = (): CtaButton => ({ type: "URL", title: "", url: "", phone: "" });
+
+const initialForm = {
+  name: "",
+  category: "UTILITY",
+  language: "en",
+  body: "",
+  contentType: "text" as ContentType,
+  mediaUrl: "",
+  ctaButtons: [emptyCta()] as CtaButton[],
+};
+
 export default function WhatsAppTemplates() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
-  const [form, setForm] = useState({ name: "", category: "UTILITY", language: "en", body: "" });
+  const [form, setForm] = useState(initialForm);
+  const [mediaUploading, setMediaUploading] = useState(false);
+  const [mediaTab, setMediaTab] = useState<"url" | "upload">("url");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { data: templates = [], isLoading } = useQuery({
-    queryKey: ["whatsapp-templates"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("whatsapp_templates")
-        .select("*")
-        .order("updated_at", { ascending: false });
-      if (error) throw error;
-      return data as WhatsAppTemplate[];
-    },
-  });
+  const handleMediaUpload = async (file: File) => {
+    if (!file) return;
+    if (file.size > 16 * 1024 * 1024) {
+      toast.error("File too large (max 16 MB)");
+      return;
+    }
+    setMediaUploading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in");
+      const ext = file.name.split(".").pop() || "bin";
+      const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("whatsapp-media").upload(path, file, {
+        contentType: file.type,
+        cacheControl: "3600",
+      });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("whatsapp-media").getPublicUrl(path);
+      setForm((f) => ({ ...f, mediaUrl: pub.publicUrl }));
+      toast.success("File uploaded");
+    } catch (e: any) {
+      toast.error(e?.message || "Upload failed");
+    } finally {
+      setMediaUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const createMutation = useMutation({
     mutationFn: async (templateData: typeof form) => {
       const { data: { session } } = await supabase.auth.getSession();
       // Convert friendly body -> stored body (numeric + hidden mapping marker)
       const { storedBody } = buildStoredBody(templateData.body);
+      const payload: Record<string, unknown> = {
+        name: templateData.name,
+        category: templateData.category,
+        language: templateData.language,
+        body: storedBody,
+        content_type: templateData.contentType,
+      };
+      if (templateData.contentType === "media") {
+        payload.media_url = templateData.mediaUrl.trim();
+      }
+      if (templateData.contentType === "call_to_action") {
+        payload.cta_actions = templateData.ctaButtons.map((b) => ({
+          type: b.type,
+          title: b.title.trim(),
+          url: b.type === "URL" ? b.url.trim() : undefined,
+          phone: b.type === "PHONE_NUMBER" ? b.phone.trim() : undefined,
+        }));
+      }
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-templates`,
         {
@@ -89,12 +141,7 @@ export default function WhatsAppTemplates() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${session?.access_token}`,
           },
-          body: JSON.stringify({
-            name: templateData.name,
-            category: templateData.category,
-            language: templateData.language,
-            body: storedBody,
-          }),
+          body: JSON.stringify(payload),
         }
       );
       if (!response.ok) {
@@ -106,7 +153,8 @@ export default function WhatsAppTemplates() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp-templates"] });
       setShowCreateDialog(false);
-      setForm({ name: "", category: "UTILITY", language: "en", body: "" });
+      setForm(initialForm);
+      setMediaTab("url");
       toast.success("Template created successfully");
     },
     onError: (error: Error) => toast.error(error.message),
