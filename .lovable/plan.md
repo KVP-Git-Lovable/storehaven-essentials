@@ -1,43 +1,131 @@
 
 
-## Mobile-only refinements for Journeys & WhatsApp Templates tables
+## Bulk Order Import (Template → Upload → Validate → Import)
 
-### 1. Journey Builder list table (mobile only)
+Add a controlled bulk-import flow to the **Orders** page (`/transactions/orders`). Nothing is written to the database until the user reviews validation results and clicks Import.
 
-Goal: shrink each row's vertical footprint. Today the Status cell stacks `status` → `Approved` → schedule badge vertically because 3 wide badges can't fit a narrow column.
+### 1. UI entry point — `OrdersList.tsx` header
 
-Changes in `src/pages/communication/JourneyList.tsx` (rows ~683–705):
+Next to "New Order", add a second button **`Import Orders`** (Upload icon). Opens a full-screen Dialog `OrderImportDialog` with three steps:
 
-- **Status badges** (line 685 wrapper): switch from `flex-wrap` to a tight horizontal row on mobile — `flex items-center gap-1 flex-nowrap` with each badge `text-[10px] md:text-xs px-1.5 py-0 leading-tight`. The schedule badge keeps the calendar icon but truncates the text to one line (`max-w-[110px] truncate md:max-w-none`).
-- **Status cell width**: add a min-width override on mobile so all three badges sit on one line: `<TableCell className="align-top">` with inner wrapper `whitespace-nowrap`.
-- **Name cell** (line 683): `text-xs md:text-sm font-medium leading-tight` and remove the implicit large padding by leveraging the existing mobile `p-2` from `table.tsx`.
-- **Segment cell** (line 698): on mobile, drop the inline `legacy/Customers` outline badge to a smaller chip (`text-[10px] px-1 py-0`) and clamp segment name to 2 lines (`line-clamp-2 md:line-clamp-none`).
-- **Created cell** (line 705): on mobile, render a compact format `MMM d` instead of `MMM d, yyyy` using a responsive span: `<span className="md:hidden">{format(d, 'MMM d')}</span><span className="hidden md:inline">{format(d, 'MMM d, yyyy')}</span>`.
-- **Row vertical padding**: tighten cells via `className="py-2 md:py-4"` on each `TableCell` in this table (override the default `p-2 md:p-4`).
-- Result on 390px: each row becomes ~2 lines tall instead of ~6 — the three status pills sit horizontally, name on one/two lines.
+```text
+[ Step 1: Download ] → [ Step 2: Upload ] → [ Step 3: Validate & Confirm ]
+```
 
-### 2. WhatsApp Templates table (mobile only)
+A persistent **Download Template** button is shown in steps 1 & 2.
 
-Goal: stop hiding all columns behind horizontal scroll. Currently the table requires a 500px min-width which forces only the Name column to be visible at 390px.
+### 2. Template — CSV + XLSX
 
-Changes in `src/pages/communication/WhatsAppTemplates.tsx`:
+`Download Order Import Template` generates a file with the exact required columns and one example row:
 
-- **Replace the table with a card list on mobile**, keep the existing table on `md+`. Inside the existing `<Card><CardContent className="p-0">`:
-  - Add `<div className="md:hidden divide-y">` rendering each template as a compact row:
-    - Line 1: template name (`text-sm font-medium truncate`) on the left, status icon on the right (✓ green for `approved`, ⏱ yellow for `submitted`, ⚠ red for `rejected`, • muted for `draft`) using small Lucide icons (`CheckCircle2`, `Clock`, `XCircle`, `Circle`) with a tiny status label next to it (`text-[10px]`).
-    - Line 2 (muted, `text-[11px]`): category chip + relative date `MMM d` + a `User-initiated` badge if applicable.
-    - Tap area: whole row is a button → `navigate(\`/communication/templates/${t.id}\`)`. Trailing icon-only delete button (`<Trash2 className="h-3.5 w-3.5">`) with `onClick stopPropagation`.
-  - Wrap the existing `<Table>` block in `<div className="hidden md:block">` so desktop is untouched.
-- **Filter row spacing**: keep the recently-added `flex-wrap gap-2` and `w-[48%] sm:w-40` widths.
+| order_id (optional) | customer_phone* | customer_name | product_name* | quantity* | unit_price* | order_date* | status |
+|---|---|---|---|---|---|---|---|
+| (blank) | 9876543210 | Asha Mehta | Premium Coffee 250g | 2 | 450 | 2026-04-20 | completed |
 
-### Files to change
+- Default download = **CSV** (zero deps). A second link **"Download as Excel (.xlsx)"** uses the `xlsx` npm package (already common; we'll add it via `npm i xlsx` if not present) to emit a `.xlsx` with a styled header row.
+- Same column order is enforced on import; extra columns are ignored, missing required columns block parsing with a clear error.
 
-- `src/pages/communication/JourneyList.tsx` — compact status badges, smaller text, tighter cell padding, mobile date format. Mobile only (`md:` breakpoints preserve desktop).
-- `src/pages/communication/WhatsAppTemplates.tsx` — render a compact mobile list with status icons and hide the full table on mobile; desktop table unchanged.
+### 3. Upload & parse — client-side only
 
-### Constraints
+- Accept `.csv`, `.xlsx` (single file). Drag-drop + file picker.
+- Parse with `xlsx` library (handles both formats via `XLSX.read`).
+- No DB writes here. Result feeds the validation step.
+- Soft cap: 5,000 rows per file (warn above; hard-stop above 10,000 to protect the browser).
 
-- Desktop layout (`md:` breakpoint and above) is byte-for-byte identical.
-- No data-fetching, routing, mutation, permission or RLS changes.
-- No new dependencies — uses existing Lucide icons and Tailwind utilities.
+### 4. Validation engine (pure client function)
+
+Pre-fetch lookup maps once for the whole file:
+- `customers`: `select id, name, phone` (all rows) → `Map<phone, {id,name}>`
+- `products`: `select id, name` (all rows) → `Map<lowercased name, id>` (case-insensitive exact match; if multiple share a name, surface as warning + pick first)
+- `orders`: `select order_number` for any non-blank `order_id` values in file → `Set<order_number>` for duplicate check
+
+Per-row checks (in this order; collect ALL issues per row, don't stop at first):
+
+| Field | Rule | Severity |
+|---|---|---|
+| customer_phone | non-empty, 10-15 digits | error |
+| customer | phone found in customers map | OK; else error `Customer not found` (will be auto-created if `customer_name` provided, else error) |
+| customer name match | if phone exists & file `customer_name` differs from DB `name` (case-insensitive trim) | warning `Customer name mismatch (DB: "Asha M.")` |
+| product_name | found in products map | error `Product not found` |
+| quantity | integer > 0 | error `Invalid quantity` |
+| unit_price | numeric ≥ 0 | error `Invalid price` |
+| order_date | parses to a real date (`yyyy-MM-dd` or Excel serial) | error `Invalid date` |
+| order_id | if non-blank and already in orders.order_number | error `Duplicate order` |
+| status | if provided, must be one of `pending/completed/cancelled/refunded`; default `completed` | warning if invalid → coerced to `completed` |
+
+A row is **valid** iff zero errors (warnings allowed).
+
+### 5. Validation preview UI
+
+Sticky summary banner at top:
+```text
+Total: 120   ✅ Valid: 105   ⚠ Warnings: 8   ❌ Invalid: 15
+```
+
+Table (virtualised if >200 rows via simple windowing):
+
+| # | Status | Customer (phone · name) | Product | Qty | Price | Date | Order Status | Issues |
+|---|---|---|---|---|---|---|---|---|
+
+- Status column: `CheckCircle2` (green) / `AlertTriangle` (yellow) / `XCircle` (red).
+- Issues column: chips listing every error/warning message (full text in tooltip if truncated).
+- Filter pills above table: **All · Valid · Warnings · Invalid**.
+- Footer actions:
+  - **Cancel Import** (destructive outline) — closes dialog, no writes.
+  - **Download Error Rows** (outline) — exports invalid rows + an `errors` column to CSV.
+  - **Import Valid Rows Only** (primary, disabled when valid count = 0) — proceeds to insertion.
+
+### 6. Insertion logic (only for valid rows)
+
+Runs inside a single mutation with progress toast. For each valid row:
+
+1. **Customer**:
+   - If phone exists → use existing `customer_id`.
+   - Else (auto-create allowed because validation already required `customer_name`) → insert into `customers (phone, name)` and use new id.
+   - Customer name mismatch warnings do **not** update existing customer records (non-destructive by design).
+2. **Order**:
+   - Insert into `orders` with: `order_number` = file `order_id` if provided, else generated `IMP-YYYYMMDD-<6char>`, `customer_id`, `subtotal=quantity*unit_price`, `total_amount=subtotal`, `payment_method='import'`, `payment_status='pending'`, `status` from row, `created_by='Bulk Import'`, `created_at` = parsed `order_date`.
+3. **Order item**:
+   - Insert into `order_items` with the resolved product `item_id`, `quantity`, `unit_price`, `total_amount=quantity*unit_price`.
+
+Inserts are **chunked in batches of 50** customers/orders/items to avoid request size limits. Each batch wrapped with per-row try/catch so a single failure doesn't abort the whole batch — failures are appended to a runtime "post-insert errors" list shown after import.
+
+### 7. Import logging — new table `order_import_logs`
+
+Migration:
+```sql
+create table public.order_import_logs (
+  id uuid primary key default gen_random_uuid(),
+  file_name text not null,
+  total_rows integer not null default 0,
+  success_count integer not null default 0,
+  failure_count integer not null default 0,
+  warning_count integer not null default 0,
+  imported_by uuid references auth.users(id),
+  error_summary jsonb default '[]'::jsonb,  -- compact list of {row, errors[]}
+  created_at timestamptz not null default now()
+);
+alter table public.order_import_logs enable row level security;
+create policy "admins_all" on public.order_import_logs for all to authenticated using (public.is_admin(auth.uid())) with check (public.is_admin(auth.uid()));
+create policy "users_read_own" on public.order_import_logs for select to authenticated using (imported_by = auth.uid());
+create policy "users_insert_own" on public.order_import_logs for insert to authenticated with check (imported_by = auth.uid());
+```
+
+One log row per import (created at import completion). Not exposed in UI in this iteration — stored for audit / future reporting.
+
+### 8. Files to add / change
+
+- **New** `src/components/transactions/OrderImportDialog.tsx` — the 3-step dialog (download / upload / validate-preview) with all state + mutations.
+- **New** `src/lib/orderImport.ts` — pure helpers: template generation (CSV + XLSX), file parsing, validation engine, error-row CSV export. Unit-test friendly.
+- **Edit** `src/pages/transactions/OrdersList.tsx` — add `Import Orders` button + dialog mount; invalidate `transactions-orders` and `transactions-customers` on success.
+- **DB migration** — `order_import_logs` table with RLS as above.
+- **Dependency** — add `xlsx` (SheetJS) to `package.json` if not already present.
+
+### 9. Constraints honoured
+
+- No row hits the DB before the user clicks **Import Valid Rows Only**.
+- Invalid rows are never inserted — they can only be re-downloaded for correction.
+- Existing `orders` / `order_items` / `customers` schema is untouched.
+- All inserts respect existing RLS; the dialog is rendered from the same authenticated context as the page.
+- Performance: lookups are 3 batched selects regardless of file size; inserts chunked at 50.
 
