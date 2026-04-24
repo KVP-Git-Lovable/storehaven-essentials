@@ -22,6 +22,7 @@ import { executeListView } from "@/lib/listViewExecutor";
 import { JourneyScheduleDialog } from "@/components/journey/JourneyScheduleDialog";
 import { summarizeSchedule, type JourneySchedule } from "@/lib/journeySchedule";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
+import { AudienceBuilder, type AudienceConfig } from "@/components/journey/AudienceBuilder";
 import { cn } from "@/lib/utils";
 
 const statusColors: Record<string, string> = {
@@ -69,8 +70,8 @@ export default function JourneyList() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState<{ name: string; description: string; list_view_id: string }>({ name: "", description: "", list_view_id: "" });
-  const [audienceCount, setAudienceCount] = useState<number | null>(null);
+  const [form, setForm] = useState<{ name: string; description: string }>({ name: "", description: "" });
+  const [audienceConfig, setAudienceConfig] = useState<AudienceConfig>({ segments: [], combinator: "union" });
 
   // Submit-for-approval modal state
   const [submitJourney, setSubmitJourney] = useState<any | null>(null);
