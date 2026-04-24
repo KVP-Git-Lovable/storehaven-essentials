@@ -154,7 +154,7 @@ export function OrderImportDialog({ open, onOpenChange }: Props) {
                 subtotal,
                 total_amount: subtotal,
                 payment_method: "import",
-                payment_status: "pending",
+                payment_status: res.status === "completed" ? "paid" : "pending",
                 status: res.status,
                 created_by: "Bulk Import",
                 created_at: res.order_date.toISOString(),
