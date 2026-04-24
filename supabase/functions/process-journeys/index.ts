@@ -326,6 +326,7 @@ Deno.serve(async (req) => {
                 channel,
                 template_body: null,
                 status: "sending",
+                template_id: templateId || null,
               });
 
             if (claimErr) {
