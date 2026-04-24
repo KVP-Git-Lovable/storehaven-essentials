@@ -107,11 +107,28 @@ export default function JourneyAnalytics() {
   const completed = enrollments?.filter((e: any) => e.status === "completed").length || 0;
   const channelSummary = summarizeByChannel(messages);
 
-  // Detect whether this journey ever sent the tracked template.
-  const trackedMessages = messages.filter(
-    (m: any) => m.whatsapp_templates?.twilio_content_sid === TRACKED_TEMPLATE_SID
-  );
-  const hasTrackedTemplate = trackedMessages.length > 0;
+  // Detect whether this journey uses the tracked template — check both:
+  // (a) message log rows that have template_id populated (new sends), and
+  // (b) the journey's canvas_data message nodes (covers historical sends where template_id is NULL).
+  const journeyUsesTrackedTemplate = (() => {
+    const nodes = (journey?.canvas_data as any)?.nodes || [];
+    return nodes.some((n: any) => {
+      if (n?.type !== "message") return false;
+      const tmplId = n?.data?.whatsapp_template_id;
+      // We compare via template_id resolved against the messages join below, plus a body URL hint.
+      const body = typeof n?.data?.template_body === "string"
+        ? n.data.template_body
+        : JSON.stringify(n?.data?.template_body || "");
+      return body.includes("trayijewellers.in") || tmplId === "0ff21b07-ff6b-4d20-90b6-b089082b9f51";
+    });
+  })();
+  const trackedMessages = messages.filter((m: any) => {
+    // Prefer explicit template_id match when present
+    if (m.whatsapp_templates?.twilio_content_sid === TRACKED_TEMPLATE_SID) return true;
+    // Fallback: if journey uses the tracked template and the message is a whatsapp template send, treat as tracked
+    return journeyUsesTrackedTemplate && (m.channel === "whatsapp_template" || m.channel === "whatsapp");
+  });
+  const hasTrackedTemplate = journeyUsesTrackedTemplate || trackedMessages.length > 0;
 
   // Build a Set of last10 phone digits that clicked (deduped per user).
   const clickedPhonesLast10 = new Set(linkClicks.map((c: any) => last10(c.phone_number)));
