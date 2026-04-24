@@ -1,10 +1,31 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { ALLOWED_ENTITIES, resolveAudience } from "../_shared/journey-schedule.ts";
+import {
+  ALLOWED_ENTITIES,
+  resolveAudience,
+  resolveAudienceConfig,
+  resolveListViewContactIdsReadOnly,
+  combineSegmentSets,
+  type AudienceConfig,
+} from "../_shared/journey-schedule.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// In-memory cache (per edge-function instance) for live audience-preview counts.
+// Key: list_view_id → { ids, expiresAt }. 60s TTL keeps combinator toggles snappy.
+const PREVIEW_CACHE = new Map<string, { ids: string[]; expiresAt: number }>();
+const PREVIEW_TTL_MS = 60_000;
+
+async function getSegmentIdsCached(supabase: any, listViewId: string): Promise<string[]> {
+  const now = Date.now();
+  const cached = PREVIEW_CACHE.get(listViewId);
+  if (cached && cached.expiresAt > now) return cached.ids;
+  const res = await resolveListViewContactIdsReadOnly(supabase, listViewId);
+  PREVIEW_CACHE.set(listViewId, { ids: res.contactIds, expiresAt: now + PREVIEW_TTL_MS });
+  return res.contactIds;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -14,15 +35,63 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    const { action, journey_id, contact_id, event_type, event_data } = await req.json();
+    const { action, journey_id, contact_id, event_type, event_data, audience_config } = await req.json();
+
+    if (action === "audience-preview") {
+      const cfg = audience_config as AudienceConfig | undefined;
+      if (!cfg || !Array.isArray(cfg.segments) || cfg.segments.length === 0) {
+        return new Response(JSON.stringify({ error: "audience_config with at least one segment required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const perSegment: Record<string, string[]> = {};
+      const counts: Record<string, number> = {};
+      for (const seg of cfg.segments) {
+        try {
+          const ids = await getSegmentIdsCached(supabase, seg.list_view_id);
+          perSegment[seg.key] = ids;
+          counts[seg.key] = ids.length;
+        } catch (e: any) {
+          perSegment[seg.key] = [];
+          counts[seg.key] = 0;
+          // Surface the first error in `error` but keep computing.
+          counts[`${seg.key}_error`] = 0;
+          (counts as any)[`${seg.key}_errorMsg`] = e?.message || String(e);
+        }
+      }
+
+      let intersection = 0;
+      let union = 0;
+      if (cfg.segments.length >= 2) {
+        const a = new Set(perSegment[cfg.segments[0].key] || []);
+        const b = new Set(perSegment[cfg.segments[1].key] || []);
+        intersection = Array.from(a).filter((x) => b.has(x)).length;
+        union = new Set([...a, ...b]).size;
+      } else {
+        union = (perSegment[cfg.segments[0].key] || []).length;
+      }
+
+      const finalIds = combineSegmentSets(perSegment, cfg);
+
+      return new Response(JSON.stringify({
+        success: true,
+        perSegment: counts,
+        intersection,
+        union,
+        final: finalIds.length,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (action === "activate") {
       const { data: journey, error: jErr } = await supabase
         .from("journeys").select("*").eq("id", journey_id).single();
       if (jErr) throw jErr;
 
-      // Validate list view entity early for a clearer error message
-      if (journey.list_view_id) {
+      // Validate list view entity early for a clearer error message (legacy single-LV path)
+      if (journey.list_view_id && !journey.audience_config) {
         const { data: lv, error: lvErr } = await supabase
           .from("list_views").select("entity_type, name").eq("id", journey.list_view_id).maybeSingle();
         if (lvErr) throw lvErr;
@@ -40,7 +109,13 @@ Deno.serve(async (req) => {
         .eq("journey_id", journey_id)
         .in("status", ["active", "paused", "failed"]);
 
-      const result = await resolveAudience(supabase, journey);
+      // Branch: multi-segment audience_config wins when present; else legacy resolveAudience.
+      const ac = journey.audience_config as AudienceConfig | null;
+      const useMultiSegment = !!(ac && Array.isArray(ac.segments) && ac.segments.length > 0);
+      const result = useMultiSegment
+        ? await resolveAudienceConfig(supabase, ac as AudienceConfig)
+        : await resolveAudience(supabase, journey);
+
       const contactIds = result.contactIds;
       const matched = result.matched;
       const skipped = result.skipped;

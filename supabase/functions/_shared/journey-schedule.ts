@@ -301,6 +301,178 @@ export async function resolveListViewContacts(
 }
 
 /**
+ * READ-ONLY variant: resolves a list view's contact ids (existing journey_contacts only),
+ * without inserting new rows. Used by the audience-preview endpoint so live previews
+ * don't write to the DB. Counts customers matched by phone (deduped).
+ */
+export async function resolveListViewContactIdsReadOnly(
+  supabase: any,
+  listViewId: string,
+): Promise<{ contactIds: string[]; matched: number }> {
+  const { data: lv, error: lvErr } = await supabase
+    .from("list_views")
+    .select("entity_type, filters")
+    .eq("id", listViewId)
+    .maybeSingle();
+  if (lvErr) throw lvErr;
+  if (!lv) throw new Error("List view not found");
+
+  const entity = ALLOWED_ENTITIES[lv.entity_type];
+  if (!entity || !entity.isAudienceSource) {
+    return { contactIds: [], matched: 0 };
+  }
+
+  let q = supabase.from(entity.table).select("*");
+  for (const cond of lv.filters || []) q = applyFilter(q, cond);
+  q = q.limit(10000);
+  const { data: rows, error } = await q;
+  if (error) throw error;
+
+  // Resolve phones (customers directly, or via order.customer_id → customers)
+  let customers: any[] = [];
+  if (lv.entity_type === "customers") {
+    customers = rows || [];
+  } else if (lv.entity_type === "orders") {
+    const customerIds = Array.from(new Set((rows || []).map((r: any) => r.customer_id).filter(Boolean)));
+    if (customerIds.length === 0) return { contactIds: [], matched: 0 };
+    const { data: cs, error: cErr } = await supabase
+      .from("customers")
+      .select("id, phone")
+      .in("id", customerIds);
+    if (cErr) throw cErr;
+    customers = cs || [];
+  }
+
+  const phones = new Set<string>();
+  for (const c of customers) {
+    const p = normalizeE164(c.phone);
+    if (p) phones.add(p);
+  }
+  const matched = phones.size;
+  if (matched === 0) return { contactIds: [], matched: 0 };
+
+  const { data: existing, error: exErr } = await supabase
+    .from("journey_contacts")
+    .select("id, phone, opted_out")
+    .in("phone", Array.from(phones));
+  if (exErr) throw exErr;
+
+  // For preview, use phone as the stable identity (avoids inserts), so set logic
+  // still gives correct counts even if some contacts haven't been inserted yet.
+  const contactIds: string[] = [];
+  const seen = new Set<string>();
+  // Include all matched phones (whether or not they exist in journey_contacts) so the
+  // preview reflects what *would* be enrolled at activation time.
+  const optedOutPhones = new Set<string>(
+    (existing || []).filter((e: any) => e.opted_out).map((e: any) => e.phone),
+  );
+  for (const p of phones) {
+    if (optedOutPhones.has(p)) continue;
+    if (seen.has(p)) continue;
+    seen.add(p);
+    contactIds.push(p); // use phone as the stable contact id for preview/set ops
+  }
+
+  return { contactIds, matched: contactIds.length };
+}
+
+export type AudienceConfig = {
+  segments?: Array<{ key: string; label?: string; list_view_id: string }>;
+  combinator?: "union" | "intersection" | "difference" | "only_a" | "only_b";
+  primary?: string;
+};
+
+/**
+ * Combine multiple segment contact-id sets using a combinator.
+ * Always returns a deduped array.
+ */
+export function combineSegmentSets(
+  perSegment: Record<string, string[]>,
+  audienceConfig: AudienceConfig,
+): string[] {
+  const segments = audienceConfig.segments || [];
+  if (segments.length === 0) return [];
+  if (segments.length === 1) {
+    return Array.from(new Set(perSegment[segments[0].key] || []));
+  }
+
+  const a = new Set(perSegment[segments[0].key] || []);
+  const b = new Set(perSegment[segments[1].key] || []);
+  const combinator = audienceConfig.combinator || "union";
+  const primary = audienceConfig.primary || segments[0].key;
+
+  switch (combinator) {
+    case "union":
+      return Array.from(new Set([...a, ...b]));
+    case "intersection":
+      return Array.from(a).filter((x) => b.has(x));
+    case "difference": {
+      const primarySet = primary === segments[1].key ? b : a;
+      const otherSet = primary === segments[1].key ? a : b;
+      return Array.from(primarySet).filter((x) => !otherSet.has(x));
+    }
+    case "only_a":
+      return Array.from(a);
+    case "only_b":
+      return Array.from(b);
+    default:
+      return Array.from(new Set([...a, ...b]));
+  }
+}
+
+/**
+ * Resolve a multi-segment audience for activation.
+ * Uses the same resolveListViewContacts (with upserts) per segment, then applies
+ * Set-based combination → guarantees per-user uniqueness in the final audience.
+ *
+ * Note: returns CONTACT IDs from journey_contacts. Per-segment resolution upserts
+ * any missing journey_contacts so the final ids are real, insertable references.
+ */
+export async function resolveAudienceConfig(
+  supabase: any,
+  audienceConfig: AudienceConfig,
+): Promise<{ contactIds: string[]; matched: number; skipped: number; firstError?: string }> {
+  const segments = audienceConfig.segments || [];
+  if (segments.length === 0) {
+    return { contactIds: [], matched: 0, skipped: 0, firstError: "No segments configured" };
+  }
+
+  // Validate each segment's list view is an audience source.
+  for (const seg of segments) {
+    const { data: lv, error: lvErr } = await supabase
+      .from("list_views")
+      .select("entity_type, name")
+      .eq("id", seg.list_view_id)
+      .maybeSingle();
+    if (lvErr) throw lvErr;
+    if (!lv) throw new Error(`Segment ${seg.key}: list view not found`);
+    const cfg = ALLOWED_ENTITIES[lv.entity_type];
+    if (!cfg || !cfg.isAudienceSource) {
+      throw new Error(
+        `Segment ${seg.key} ("${lv.name}") uses entity "${lv.entity_type}" which is not an audience source. Use a Customers or Orders list view.`,
+      );
+    }
+  }
+
+  // Resolve each segment (real contact ids; performs upserts).
+  const perSegment: Record<string, string[]> = {};
+  let totalMatched = 0;
+  let totalSkipped = 0;
+  let firstError: string | undefined;
+
+  for (const seg of segments) {
+    const res = await resolveListViewContacts(supabase, seg.list_view_id);
+    perSegment[seg.key] = res.contactIds;
+    totalMatched += res.matched;
+    totalSkipped += res.skipped;
+    if (!firstError && res.firstError) firstError = `Segment ${seg.key}: ${res.firstError}`;
+  }
+
+  const finalIds = combineSegmentSets(perSegment, audienceConfig);
+  return { contactIds: finalIds, matched: totalMatched, skipped: totalSkipped, firstError };
+}
+
+/**
  * Resolve audience for a journey row using either its list_view_id or
  * legacy segment_type/filters columns. Returns contact_ids.
  */
