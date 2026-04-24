@@ -225,8 +225,6 @@ function csvCell(v: string) {
 
 /* -------- Order number generator -------- */
 export function generateOrderNumber() {
-  const d = new Date();
-  const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
-  return `IMP-${ymd}-${rand}`;
+  return `ORD-${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 10)}`;
 }
+
