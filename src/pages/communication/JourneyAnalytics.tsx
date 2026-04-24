@@ -276,7 +276,8 @@ export default function JourneyAnalytics() {
                 <TableRow><TableCell colSpan={hasTrackedTemplate ? 6 : 5} className="text-center py-8 text-muted-foreground">No messages sent yet</TableCell></TableRow>
               ) : messages.map((m: any) => {
                 const reason = m.error_message || (m.status === "scheduled_no_audience" ? "No audience matched" : "");
-                const isTracked = m.whatsapp_templates?.twilio_content_sid === TRACKED_TEMPLATE_SID;
+                const isTracked = m.whatsapp_templates?.twilio_content_sid === TRACKED_TEMPLATE_SID
+                  || (journeyUsesTrackedTemplate && (m.channel === "whatsapp_template" || m.channel === "whatsapp"));
                 const phoneL10 = last10(m.journey_contacts?.phone);
                 const wasClicked = isTracked && phoneL10 && clickedPhonesLast10.has(phoneL10);
                 return (
