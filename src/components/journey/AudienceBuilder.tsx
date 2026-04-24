@@ -45,7 +45,7 @@ export function AudienceBuilder({ value, onChange }: Props) {
   const setSegment = (idx: number, list_view_id: string) => {
     const next = [...segments];
     const key = SEGMENT_KEYS[idx];
-    const lv = listViews.find((v: any) => v.id === list_view_id);
+    const lv = (listViews as any[]).find((v) => v.id === list_view_id);
     next[idx] = { key, label: lv?.name, list_view_id };
     onChange({ ...value, segments: next });
   };
@@ -122,7 +122,7 @@ export function AudienceBuilder({ value, onChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewKey]);
 
-  const lvOptions = listViews.map((v: any) => ({
+  const lvOptions = (listViews as any[]).map((v) => ({
     value: v.id,
     label: `${v.name} (${ENTITY_SCHEMAS[v.entity_type as EntityKey]?.label || v.entity_type})`,
   }));
