@@ -532,6 +532,18 @@ export default function WhatsAppTemplates() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDuplicate(template)}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Duplicate template</TooltipContent>
+                          </Tooltip>
                           <Button
                             variant="ghost"
                             size="icon"
