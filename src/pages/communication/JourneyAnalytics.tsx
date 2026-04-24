@@ -6,12 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowLeft, Send, Eye, MousePointer, Target, Mail, MessageSquare } from "lucide-react";
+import { ArrowLeft, Send, Eye, MousePointer, Target, Mail, MessageSquare, Link2, CheckCircle2, XCircle } from "lucide-react";
 import { WhatsAppIcon } from "@/components/communication/WhatsAppIcon";
 import { format } from "date-fns";
 
 const SUCCESS_STATUSES = new Set(["sent", "delivered", "queued", "accepted", "scheduled", "sending"]);
 const FAIL_STATUSES = new Set(["failed", "undelivered"]);
+
+// Template SID we track link clicks for (per spec).
+const TRACKED_TEMPLATE_SID = "HX2a54377b41a3c48d5ae8984a4e900e56";
 
 const channelMeta: Record<string, { label: string; Icon: any; iconClass: string; bgClass: string }> = {
   whatsapp: { label: "WhatsApp", Icon: WhatsAppIcon, iconClass: "text-green-600", bgClass: "bg-green-100" },
@@ -36,6 +39,11 @@ function summarizeByChannel(messages: any[]) {
   return groups;
 }
 
+// Normalize phone to last-10-digits for match-by-suffix comparisons.
+function last10(raw: string | null | undefined): string {
+  return String(raw || "").replace(/\D/g, "").slice(-10);
+}
+
 export default function JourneyAnalytics() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -55,7 +63,7 @@ export default function JourneyAnalytics() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("journey_message_log")
-        .select("*, journey_contacts(name, email)")
+        .select("*, journey_contacts(name, email, phone), whatsapp_templates:template_id(twilio_content_sid)")
         .eq("journey_id", id!)
         .order("sent_at", { ascending: false })
         .limit(50);
@@ -78,11 +86,44 @@ export default function JourneyAnalytics() {
     enabled: !!id,
   });
 
+  // Pull link clicks for the tracked template, scoped to clicks attributed to this journey.
+  const { data: linkClicks = [] } = useQuery({
+    queryKey: ["journey-link-clicks", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("whatsapp_link_clicks")
+        .select("phone_number, clicked_at, journey_id")
+        .eq("template_sid", TRACKED_TEMPLATE_SID)
+        .eq("journey_id", id!);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!id,
+  });
+
   const totalSent = messages.length;
   const opened = messages.filter((m: any) => m.status === "opened").length;
   const clicked = messages.filter((m: any) => m.status === "clicked").length;
   const completed = enrollments?.filter((e: any) => e.status === "completed").length || 0;
   const channelSummary = summarizeByChannel(messages);
+
+  // Detect whether this journey ever sent the tracked template.
+  const trackedMessages = messages.filter(
+    (m: any) => m.whatsapp_templates?.twilio_content_sid === TRACKED_TEMPLATE_SID
+  );
+  const hasTrackedTemplate = trackedMessages.length > 0;
+
+  // Build a Set of last10 phone digits that clicked (deduped per user).
+  const clickedPhonesLast10 = new Set(linkClicks.map((c: any) => last10(c.phone_number)));
+
+  // Recipients = unique contact phones to whom the tracked template was sent.
+  const trackedRecipients = new Set(
+    trackedMessages
+      .map((m: any) => last10(m.journey_contacts?.phone))
+      .filter(Boolean)
+  );
+  const uniqueClickers = Array.from(clickedPhonesLast10).filter((p) => trackedRecipients.has(p)).length;
+  const clickRate = trackedRecipients.size > 0 ? (uniqueClickers / trackedRecipients.size) * 100 : 0;
 
   return (
     <TooltipProvider>
@@ -144,6 +185,36 @@ export default function JourneyAnalytics() {
           </Card>
         </div>
 
+        {hasTrackedTemplate && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                Link Engagement (Tracked Template)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs text-muted-foreground">Template Messages Sent</p>
+                  <p className="text-2xl font-bold">{trackedMessages.length}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {trackedRecipients.size} unique recipient{trackedRecipients.size === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs text-muted-foreground">Unique Users Clicked</p>
+                  <p className="text-2xl font-bold text-green-600">{uniqueClickers}</p>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs text-muted-foreground">Click Rate</p>
+                  <p className="text-2xl font-bold">{clickRate.toFixed(1)}%</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader><CardTitle>Channel-wise Delivery</CardTitle></CardHeader>
           <CardContent>
@@ -178,20 +249,43 @@ export default function JourneyAnalytics() {
                 <TableHead>Contact</TableHead>
                 <TableHead>Channel</TableHead>
                 <TableHead>Status</TableHead>
+                {hasTrackedTemplate && <TableHead>Link Status</TableHead>}
                 <TableHead>Reason</TableHead>
                 <TableHead>Sent</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {messages.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No messages sent yet</TableCell></TableRow>
+                <TableRow><TableCell colSpan={hasTrackedTemplate ? 6 : 5} className="text-center py-8 text-muted-foreground">No messages sent yet</TableCell></TableRow>
               ) : messages.map((m: any) => {
                 const reason = m.error_message || (m.status === "scheduled_no_audience" ? "No audience matched" : "");
+                const isTracked = m.whatsapp_templates?.twilio_content_sid === TRACKED_TEMPLATE_SID;
+                const phoneL10 = last10(m.journey_contacts?.phone);
+                const wasClicked = isTracked && phoneL10 && clickedPhonesLast10.has(phoneL10);
                 return (
                   <TableRow key={m.id}>
                     <TableCell>{m.journey_contacts?.name || "—"}</TableCell>
                     <TableCell className="capitalize">{m.channel === "whatsapp_template" ? "WhatsApp" : m.channel}</TableCell>
                     <TableCell><Badge variant="outline" className="capitalize">{m.status}</Badge></TableCell>
+                    {hasTrackedTemplate && (
+                      <TableCell>
+                        {isTracked ? (
+                          wasClicked ? (
+                            <Badge variant="outline" className="border-green-600 text-green-700 bg-green-50">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Link clicked
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Not clicked
+                            </Badge>
+                          )
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell className="max-w-[260px]">
                       {reason ? (
                         <Tooltip>
