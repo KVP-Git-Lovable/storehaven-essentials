@@ -497,6 +497,7 @@ serve(async (req) => {
         content_type: contentTypeRaw,
         media_url: mediaUrl,
         cta_actions: ctaActionsRaw,
+        variable_samples: variableSamplesRaw,
       } = body;
 
       const contentType: 'text' | 'media' | 'call_to_action' =
@@ -595,6 +596,27 @@ serve(async (req) => {
 
       const meta = deriveTwilioMetadata(twilioTypes);
 
+      // Build numeric-keyed sample map (Twilio/WhatsApp require an example for
+      // every {{N}} placeholder, otherwise approval errors with subCode 2388043).
+      const variableSamples: Record<string, string> = {};
+      if (variableSamplesRaw && typeof variableSamplesRaw === 'object') {
+        for (const key of meta.requiredVariables) {
+          const v = (variableSamplesRaw as Record<string, unknown>)[key];
+          if (typeof v === 'string' && v.trim().length > 0) {
+            variableSamples[key] = v.trim();
+          }
+        }
+      }
+      const missingSamples = meta.requiredVariables.filter((k) => !variableSamples[k]);
+      if (missingSamples.length > 0) {
+        return new Response(
+          JSON.stringify({
+            error: `Sample value required for variable(s): ${missingSamples.map((k) => `{{${k}}}`).join(', ')}`,
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
       // Insert into DB as draft (already populating the synced metadata so the
       // detail page renders media/CTA immediately, even before Twilio responds).
       const { data: template, error: insertError } = await supabase
@@ -635,7 +657,7 @@ serve(async (req) => {
             body: JSON.stringify({
               friendly_name: name,
               language: language || 'en',
-              variables: {},
+              variables: variableSamples,
               types: twilioTypes,
             }),
           });

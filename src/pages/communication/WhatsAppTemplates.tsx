@@ -68,6 +68,7 @@ const initialForm = {
   contentType: "text" as ContentType,
   mediaUrl: "",
   ctaButtons: [emptyCta()] as CtaButton[],
+  variableSamples: {} as Record<string, string>,
 };
 
 export default function WhatsAppTemplates() {
@@ -132,6 +133,15 @@ export default function WhatsAppTemplates() {
           url: b.type === "URL" ? b.url.trim() : undefined,
           phone: b.type === "PHONE_NUMBER" ? b.phone.trim() : undefined,
         }));
+      }
+      // Build numeric-indexed sample map for Twilio's required `variables` field
+      const friendlyVars = validation.variables;
+      if (friendlyVars.length > 0) {
+        const samples: Record<string, string> = {};
+        friendlyVars.forEach((name, idx) => {
+          samples[String(idx + 1)] = (templateData.variableSamples[name] || "").trim();
+        });
+        payload.variable_samples = samples;
       }
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-templates`,
@@ -275,12 +285,16 @@ export default function WhatsAppTemplates() {
           (b.type === "URL" ? b.url.trim().length > 0 : b.phone.trim().length > 0),
       ));
   const mediaValid = form.contentType !== "media" || form.mediaUrl.trim().length > 0;
+  const samplesValid = validation.variables.every(
+    (v) => (form.variableSamples[v] || "").trim().length > 0,
+  );
   const canSubmit =
     !!form.name &&
     !!form.body &&
     validation.valid &&
     ctaValid &&
     mediaValid &&
+    samplesValid &&
     !createMutation.isPending;
 
   const updateCta = (idx: number, patch: Partial<CtaButton>) =>
@@ -678,6 +692,38 @@ export default function WhatsAppTemplates() {
                       {`{{${v}}}`} → {`{{${i + 1}}}`}
                     </Badge>
                   ))}
+                </div>
+              )}
+
+              {validation.variables.length > 0 && (
+                <div className="mt-3 rounded-md border bg-muted/30 p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Info className="h-3.5 w-3.5 text-primary" />
+                    <Label className="text-sm font-medium">Sample values for variables</Label>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    WhatsApp requires an example for each variable so reviewers can preview the message. These samples are not sent to customers.
+                  </p>
+                  <div className="space-y-2">
+                    {validation.variables.map((v, i) => (
+                      <div key={v} className="grid grid-cols-[auto,1fr] items-center gap-2">
+                        <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                          {`{{${i + 1}}}`} · {v}
+                        </Badge>
+                        <Input
+                          value={form.variableSamples[v] || ""}
+                          onChange={(e) =>
+                            setForm((f) => ({
+                              ...f,
+                              variableSamples: { ...f.variableSamples, [v]: e.target.value },
+                            }))
+                          }
+                          placeholder={`Example value for ${v}`}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
