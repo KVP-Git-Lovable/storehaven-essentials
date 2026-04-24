@@ -134,6 +134,15 @@ export default function WhatsAppTemplates() {
           phone: b.type === "PHONE_NUMBER" ? b.phone.trim() : undefined,
         }));
       }
+      // Build numeric-indexed sample map for Twilio's required `variables` field
+      const friendlyVars = validation.variables;
+      if (friendlyVars.length > 0) {
+        const samples: Record<string, string> = {};
+        friendlyVars.forEach((name, idx) => {
+          samples[String(idx + 1)] = (templateData.variableSamples[name] || "").trim();
+        });
+        payload.variable_samples = samples;
+      }
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-templates`,
         {
