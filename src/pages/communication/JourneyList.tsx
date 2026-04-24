@@ -312,7 +312,9 @@ export default function JourneyList() {
 
   const canSubmit = (j: any) => {
     const a = j.approval_status;
-    return j.status === "draft" && (!a || a === "draft" || a === "rejected");
+    // Show Submit for Approval whenever the journey hasn't been approved yet (or was rejected),
+    // regardless of run status (draft / active / paused).
+    return !a || a === "draft" || a === "rejected";
   };
 
   // Pending approvals count for current user
