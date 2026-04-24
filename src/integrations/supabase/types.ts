@@ -5254,6 +5254,42 @@ export type Database = {
           },
         ]
       }
+      order_import_logs: {
+        Row: {
+          created_at: string
+          error_summary: Json | null
+          failure_count: number
+          file_name: string
+          id: string
+          imported_by: string | null
+          success_count: number
+          total_rows: number
+          warning_count: number
+        }
+        Insert: {
+          created_at?: string
+          error_summary?: Json | null
+          failure_count?: number
+          file_name: string
+          id?: string
+          imported_by?: string | null
+          success_count?: number
+          total_rows?: number
+          warning_count?: number
+        }
+        Update: {
+          created_at?: string
+          error_summary?: Json | null
+          failure_count?: number
+          file_name?: string
+          id?: string
+          imported_by?: string | null
+          success_count?: number
+          total_rows?: number
+          warning_count?: number
+        }
+        Relationships: []
+      }
       order_items: {
         Row: {
           created_at: string

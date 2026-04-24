@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Search, ChevronLeft, ChevronRight, Plus, Eye, Pencil, Trash2 } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Plus, Eye, Pencil, Trash2, Upload } from "lucide-react";
 import { format } from "date-fns";
 import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar";
 import { OrderFormDialog } from "@/components/transactions/OrderFormDialog";
+import { OrderImportDialog } from "@/components/transactions/OrderImportDialog";
 import { executeListView } from "@/lib/listViewExecutor";
 import type { FilterCondition } from "@/lib/listViewSchema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -64,6 +65,7 @@ export default function OrdersList() {
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("create");
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const [searchColumn, setSearchColumn] = useState<string>("order_number");
   const activeColumn = SEARCH_COLUMNS.find((c) => c.key === searchColumn) || SEARCH_COLUMNS[0];
@@ -192,9 +194,14 @@ export default function OrdersList() {
           <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
           <p className="text-muted-foreground">All customer orders, most recent first.</p>
         </div>
-        <Button onClick={() => { setSelectedOrder(null); setDialogMode("create"); setCreateOpen(true); }}>
-          <Plus className="mr-2 h-4 w-4" /> New Order
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" /> Import Orders
+          </Button>
+          <Button onClick={() => { setSelectedOrder(null); setDialogMode("create"); setCreateOpen(true); }}>
+            <Plus className="mr-2 h-4 w-4" /> New Order
+          </Button>
+        </div>
       </div>
 
       <EntityListViewsBar
@@ -301,6 +308,7 @@ export default function OrdersList() {
       </div>
 
       <OrderFormDialog open={createOpen} onOpenChange={setCreateOpen} order={selectedOrder} mode={dialogMode} />
+      <OrderImportDialog open={importOpen} onOpenChange={setImportOpen} />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
