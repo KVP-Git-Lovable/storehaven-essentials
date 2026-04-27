@@ -4109,6 +4109,7 @@ export type Database = {
       }
       list_views: {
         Row: {
+          column_order: Json
           created_at: string
           created_by: string | null
           description: string | null
@@ -4122,6 +4123,7 @@ export type Database = {
           visibility: string
         }
         Insert: {
+          column_order?: Json
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -4135,6 +4137,7 @@ export type Database = {
           visibility?: string
         }
         Update: {
+          column_order?: Json
           created_at?: string
           created_by?: string | null
           description?: string | null

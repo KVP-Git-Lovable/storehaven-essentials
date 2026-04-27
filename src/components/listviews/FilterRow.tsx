@@ -2,17 +2,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X } from "lucide-react";
-import { OPERATORS_BY_TYPE, type EntityDef, type FilterCondition } from "@/lib/listViewSchema";
+import { OPERATORS_BY_TYPE, type FieldDef, type FilterCondition } from "@/lib/listViewSchema";
 
 interface Props {
-  entity: EntityDef;
+  fields: FieldDef[];
   value: FilterCondition;
   onChange: (next: FilterCondition) => void;
   onRemove: () => void;
 }
 
-export function FilterRow({ entity, value, onChange, onRemove }: Props) {
-  const fieldMeta = entity.fields.find((f) => f.key === value.field) || entity.fields[0];
+export function FilterRow({ fields, value, onChange, onRemove }: Props) {
+  if (!fields.length) return null;
+  const fieldMeta = fields.find((f) => f.key === value.field) || fields[0];
   const allOperators = OPERATORS_BY_TYPE[fieldMeta.type];
   // Hide recurring operator unless field is flagged as recurring
   const operators = allOperators.filter(
@@ -26,18 +27,18 @@ export function FilterRow({ entity, value, onChange, onRemove }: Props) {
     value.operator === "upcoming_anniversary_n_days";
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Select
         value={value.field}
         onValueChange={(field) => {
-          const newMeta = entity.fields.find((f) => f.key === field)!;
+          const newMeta = fields.find((f) => f.key === field)!;
           const newOps = OPERATORS_BY_TYPE[newMeta.type];
           onChange({ field, operator: newOps[0].value, value: "" });
         }}
       >
         <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
         <SelectContent>
-          {entity.fields.map((f) => (
+          {fields.map((f) => (
             <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>
           ))}
         </SelectContent>
@@ -55,7 +56,7 @@ export function FilterRow({ entity, value, onChange, onRemove }: Props) {
       {opMeta.needsValue && (
         fieldMeta.type === "enum" && fieldMeta.options ? (
           <Select value={String(value.value ?? "")} onValueChange={(v) => onChange({ ...value, value: v })}>
-            <SelectTrigger className="flex-1"><SelectValue placeholder="Select..." /></SelectTrigger>
+            <SelectTrigger className="flex-1 min-w-[160px]"><SelectValue placeholder="Select..." /></SelectTrigger>
             <SelectContent>
               {fieldMeta.options.map((opt) => (
                 <SelectItem key={opt} value={opt}>{opt}</SelectItem>
@@ -64,7 +65,7 @@ export function FilterRow({ entity, value, onChange, onRemove }: Props) {
           </Select>
         ) : (
           <Input
-            className="flex-1"
+            className="flex-1 min-w-[160px]"
             type={fieldMeta.type === "number" || isNDaysOp ? "number" : fieldMeta.type === "date" ? "date" : "text"}
             value={String(value.value ?? "")}
             onChange={(e) => onChange({ ...value, value: e.target.value })}
