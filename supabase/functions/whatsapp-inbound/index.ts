@@ -21,6 +21,22 @@ const WELCOME =
 const ASSISTANCE_INTENT_RE =
   /\b(help|support|assist|assistance|issue|issues|problem|problems)\b|\bnot\s+working\b/i;
 
+// Order history intent: deterministic phrase match. Checked AFTER assistance
+// but BEFORE product intent so "my orders" / "order history" returns the
+// user's recent orders instead of the product template.
+const ORDER_HISTORY_INTENT_RE =
+  /\b(my\s+orders?|order\s+history|previous\s+orders?|order\s+summary|order\s+information|past\s+orders?)\b/i;
+
+// Store location intent: deterministic phrase match for address enquiries.
+const STORE_LOCATION_INTENT_RE =
+  /\b(where\s+is\s+your\s+store|where\s+are\s+you\s+located|store\s+address|store\s+location|your\s+address|your\s+location|location|address)\b/i;
+
+const STORE_LOCATION_REPLY =
+  "We are located at:\n\n2nd Floor, Bharath Mall,\nOpp KSRTC Bus Stand,\nBejai, Mangalore - 575003.\n\nYou may reach us at +91 8971783030 for any queries,\nor visit our website:\nhttps://trayijewellers.in/\n\nPlease note: We currently do not have any branches.";
+
+const NO_ORDERS_REPLY =
+  "I could not find any past orders associated with your number. If you need help, I can log a request for assistance.";
+
 // Product Inquiry intent: keyword match (case-insensitive, word-boundary)
 const PRODUCT_INTENT_RE = /\b(products?|diamonds?|jewell?ery|collections?|items?)\b/i;
 const PRODUCT_TEMPLATE_SID = "HX440122d86a157cb01de5f75a3aba1dd3";
