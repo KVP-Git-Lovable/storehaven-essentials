@@ -30,7 +30,7 @@ type WAMessage = {
   created_at: string;
 };
 
-type Customer = { id: string; name: string | null; phone: string; tier: string | null };
+type Customer = { id: string; name: string | null; phone: string; tier: string | null; total_orders?: number | null; total_spent?: number | null };
 
 type Conversation = {
   phone: string;
