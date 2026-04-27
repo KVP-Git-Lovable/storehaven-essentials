@@ -11,7 +11,7 @@ import { format } from "date-fns";
 import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar";
 import { CustomerFormDialog } from "@/components/transactions/CustomerFormDialog";
 import { executeListView } from "@/lib/listViewExecutor";
-import type { FilterCondition } from "@/lib/listViewSchema";
+import { ENTITY_SCHEMAS, type FilterCondition } from "@/lib/listViewSchema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type SearchColumn = {
@@ -54,6 +54,8 @@ export default function CustomersList() {
   const [page, setPage] = useState(0);
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<FilterCondition[]>([]);
+  const [activeSelectedFields, setActiveSelectedFields] = useState<string[]>([]);
+  const [activeColumnOrder, setActiveColumnOrder] = useState<string[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("create");
@@ -62,7 +64,51 @@ export default function CustomersList() {
   const [searchColumn, setSearchColumn] = useState<string>("all");
   const activeColumn = SEARCH_COLUMNS.find((c) => c.key === searchColumn) || SEARCH_COLUMNS[0];
 
-  const usingListView = activeFilters.length > 0;
+  const usingListView = activeViewId !== null;
+
+  // Compute the columns to render: when a list view is active, use its column_order
+  // (falling back to selected_fields). Otherwise show the default customer columns.
+  const customerEntity = ENTITY_SCHEMAS.customers;
+  const fieldLabel = (key: string) =>
+    customerEntity.fields.find((f) => f.key === key)?.label || key;
+
+  const DEFAULT_COLUMNS = [
+    "name", "phone", "email", "tier", "total_orders",
+    "total_spent", "created_at", "date_of_birth", "anniversary_date",
+  ];
+  const viewColumns = (activeColumnOrder.length ? activeColumnOrder : activeSelectedFields)
+    .filter((k) => k !== "id");
+  const displayColumns = usingListView && viewColumns.length ? viewColumns : DEFAULT_COLUMNS;
+
+  const renderCell = (col: string, c: any) => {
+    const v = c[col];
+    switch (col) {
+      case "name":
+        return <span className="font-medium">{v || "—"}</span>;
+      case "tier":
+        return <Badge variant="outline" className="capitalize">{v || "—"}</Badge>;
+      case "total_orders":
+        return v || 0;
+      case "total_spent":
+      case "store_credit":
+        return <span className="font-medium">{inr(Number(v) || 0)}</span>;
+      case "loyalty_points":
+        return Number(v || 0);
+      case "created_at":
+      case "date_of_birth":
+      case "anniversary_date":
+        return v ? format(new Date(v), "dd MMM yyyy") : "—";
+      case "email":
+        return <span className="text-xs">{v || "—"}</span>;
+      default:
+        if (v === null || v === undefined || v === "") return "—";
+        if (typeof v === "object") return JSON.stringify(v);
+        return String(v);
+    }
+  };
+
+  const numericRightAligned = new Set(["total_orders", "total_spent", "loyalty_points", "store_credit"]);
+
 
   const applyClientSearch = (rows: any[]) => {
     if (!search.trim()) return rows;
@@ -155,7 +201,13 @@ export default function CustomersList() {
       <EntityListViewsBar
         entity="customers"
         activeViewId={activeViewId}
-        onApply={(id, filters) => { setActiveViewId(id); setActiveFilters(filters); setPage(0); }}
+        onApply={(id, filters, selectedFields, columnOrder) => {
+          setActiveViewId(id);
+          setActiveFilters(filters);
+          setActiveSelectedFields(selectedFields || []);
+          setActiveColumnOrder(columnOrder || []);
+          setPage(0);
+        }}
       />
 
       <div className="flex items-center gap-2 flex-wrap">
@@ -195,35 +247,33 @@ export default function CustomersList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Tier</TableHead>
-              <TableHead className="text-right">Orders</TableHead>
-              <TableHead className="text-right">Total Spent</TableHead>
-              <TableHead>Created Date</TableHead>
-              <TableHead>DOB</TableHead>
-              <TableHead>Anniversary</TableHead>
+              {displayColumns.map((col) => (
+                <TableHead
+                  key={col}
+                  className={numericRightAligned.has(col) ? "text-right" : undefined}
+                >
+                  {fieldLabel(col)}
+                </TableHead>
+              ))}
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
             ) : (data?.rows || []).length === 0 ? (
-              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No customers found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">No customers found.</TableCell></TableRow>
             ) : (
               data!.rows.map((c: any) => (
                 <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.name || "—"}</TableCell>
-                  <TableCell>{c.phone}</TableCell>
-                  <TableCell className="text-xs">{c.email || "—"}</TableCell>
-                  <TableCell><Badge variant="outline" className="capitalize">{c.tier || "—"}</Badge></TableCell>
-                  <TableCell className="text-right">{c.total_orders || 0}</TableCell>
-                  <TableCell className="text-right font-medium">{inr(Number(c.total_spent) || 0)}</TableCell>
-                  <TableCell className="text-xs">{c.created_at ? format(new Date(c.created_at), "dd MMM yyyy") : "—"}</TableCell>
-                  <TableCell>{c.date_of_birth ? format(new Date(c.date_of_birth), "dd MMM yyyy") : "—"}</TableCell>
-                  <TableCell>{c.anniversary_date ? format(new Date(c.anniversary_date), "dd MMM yyyy") : "—"}</TableCell>
+                  {displayColumns.map((col) => (
+                    <TableCell
+                      key={col}
+                      className={numericRightAligned.has(col) ? "text-right" : undefined}
+                    >
+                      {renderCell(col, c)}
+                    </TableCell>
+                  ))}
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Button variant="outline" size="icon" onClick={() => { setSelectedCustomer(c); setDialogMode("view"); setCreateOpen(true); }}>

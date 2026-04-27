@@ -13,7 +13,12 @@ import type { EntityKey, FilterCondition } from "@/lib/listViewSchema";
 interface Props {
   entity: EntityKey;
   activeViewId: string | null;
-  onApply: (viewId: string | null, filters: FilterCondition[]) => void;
+  onApply: (
+    viewId: string | null,
+    filters: FilterCondition[],
+    selectedFields?: string[],
+    columnOrder?: string[]
+  ) => void;
 }
 
 export function EntityListViewsBar({ entity, activeViewId, onApply }: Props) {
@@ -25,7 +30,7 @@ export function EntityListViewsBar({ entity, activeViewId, onApply }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("list_views" as any)
-        .select("id, name, filters, entity_type")
+        .select("id, name, filters, entity_type, selected_fields, column_order")
         .eq("entity_type", entity)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -41,7 +46,7 @@ export function EntityListViewsBar({ entity, activeViewId, onApply }: Props) {
     onSuccess: () => {
       toast.success("List view deleted");
       qc.invalidateQueries({ queryKey: ["list-views-by-entity", entity] });
-      onApply(null, []);
+      onApply(null, [], [], []);
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -76,12 +81,17 @@ export function EntityListViewsBar({ entity, activeViewId, onApply }: Props) {
           value={activeViewId ?? "all"}
           onValueChange={(value) => {
             if (value === "all") {
-              onApply(null, []);
+              onApply(null, [], [], []);
               return;
             }
 
             const nextView = views.find((view: any) => view.id === value);
-            onApply(nextView?.id ?? null, (nextView?.filters as FilterCondition[]) || []);
+            onApply(
+              nextView?.id ?? null,
+              (nextView?.filters as FilterCondition[]) || [],
+              (nextView?.selected_fields as string[]) || [],
+              (nextView?.column_order as string[]) || []
+            );
           }}
         >
           <SelectTrigger className="h-9 min-w-0">
