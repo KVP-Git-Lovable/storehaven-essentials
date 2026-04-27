@@ -62,7 +62,14 @@ export default function WhatsAppConversations() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [showListMobile, setShowListMobile] = useState(true);
+  const [activeTab, setActiveTab] = useState<"all" | "requests">("all");
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const openConversationFromRequest = (phone: string) => {
+    setSelectedPhone(phone);
+    setShowListMobile(false);
+    setActiveTab("all");
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 250);
