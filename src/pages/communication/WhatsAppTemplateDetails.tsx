@@ -287,95 +287,109 @@ export default function WhatsAppTemplateDetails() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-lg">Twilio Content Definition</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          {twilioSyncedAt ? (
-            <>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Template type</span>
-                <Badge variant="outline">{twilioType || "unknown"}</Badge>
-              </div>
-              {twilioType === "twilio/media" && (
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Media URL</span>
-                    <Badge variant="outline">{twilioMediaIsVar ? "variable" : "static"}</Badge>
-                  </div>
-                  {twilioMediaUrl ? (
-                    <code className="block w-full break-all rounded bg-muted px-2 py-1 text-xs">
-                      {twilioMediaUrl}
-                    </code>
-                  ) : (
-                    <p className="text-xs text-destructive">
-                      No media URL is bound on this template in Twilio. WhatsApp will reject sends with error 63019.
-                    </p>
-                  )}
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Required variables</span>
-                <span className="font-mono text-xs">
-                  {twilioRequired.length > 0 ? twilioRequired.map((v) => `{{${v}}}`).join(", ") : "none"}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Last synced from Twilio: {format(new Date(twilioSyncedAt), "MMM d, yyyy HH:mm")}
-              </p>
-            </>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Twilio Content metadata not yet synced. Click <strong>Refresh Status</strong> above to pull the live definition (template type, media URL, required variables) from Twilio.
-            </p>
+          {isMobile && (
+            <Button variant="ghost" size="sm" onClick={() => setShowTwilioDef((v) => !v)}>
+              {showTwilioDef ? <><ChevronUp className="h-4 w-4 mr-1" />Hide</> : <><ChevronDown className="h-4 w-4 mr-1" />Show</>}
+            </Button>
           )}
-        </CardContent>
+        </CardHeader>
+        {(!isMobile || showTwilioDef) && (
+          <CardContent className="space-y-3 text-sm">
+            {twilioSyncedAt ? (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Template type</span>
+                  <Badge variant="outline">{twilioType || "unknown"}</Badge>
+                </div>
+                {twilioType === "twilio/media" && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Media URL</span>
+                      <Badge variant="outline">{twilioMediaIsVar ? "variable" : "static"}</Badge>
+                    </div>
+                    {twilioMediaUrl ? (
+                      <code className="block w-full break-all rounded bg-muted px-2 py-1 text-xs">
+                        {twilioMediaUrl}
+                      </code>
+                    ) : (
+                      <p className="text-xs text-destructive">
+                        No media URL is bound on this template in Twilio. WhatsApp will reject sends with error 63019.
+                      </p>
+                    )}
+                  </div>
+                )}
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground shrink-0">Required variables</span>
+                  <span className="font-mono text-xs text-right break-all">
+                    {twilioRequired.length > 0 ? twilioRequired.map((v) => `{{${v}}}`).join(", ") : "none"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Last synced from Twilio: {format(new Date(twilioSyncedAt), "MMM d, yyyy HH:mm")}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Twilio Content metadata not yet synced. Click <strong>Refresh Status</strong> above to pull the live definition (template type, media URL, required variables) from Twilio.
+              </p>
+            )}
+          </CardContent>
+        )}
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-lg">Media URL Reachability Test</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Verify that any media URL referenced by this template is publicly downloadable by Twilio/Meta. A 403 here is the most common cause of media-template delivery failures.
-          </p>
-          <div className="flex gap-2">
-            <Input
-              placeholder="https://your-domain.com/path/image.jpg"
-              value={mediaUrlInput}
-              onChange={(e) => setMediaUrlInput(e.target.value)}
-            />
-            <Button onClick={() => verifyMediaUrl(mediaUrlInput)} disabled={mediaChecking}>
-              {mediaChecking ? "Testing..." : "Test media URL"}
+          {isMobile && (
+            <Button variant="ghost" size="sm" onClick={() => setShowMediaTest((v) => !v)}>
+              {showMediaTest ? <><ChevronUp className="h-4 w-4 mr-1" />Hide</> : <><ChevronDown className="h-4 w-4 mr-1" />Show</>}
             </Button>
-          </div>
-          {mediaCheck && (
-            <div
-              className={`flex items-start gap-2 rounded-md border p-3 text-sm ${
-                mediaCheck.ok
-                  ? "border-primary/30 bg-primary/5 text-primary"
-                  : "border-destructive/40 bg-destructive/5 text-destructive"
-              }`}
-            >
-              {mediaCheck.ok ? <CheckCircle className="h-4 w-4 mt-0.5" /> : <AlertTriangle className="h-4 w-4 mt-0.5" />}
-              <div className="space-y-0.5">
-                <p className="font-medium">
-                  {mediaCheck.ok ? "Reachable" : "Unreachable"} · HTTP {mediaCheck.status}
-                </p>
-                {mediaCheck.content_type && (
-                  <p className="text-xs opacity-90">Content-Type: {mediaCheck.content_type}</p>
-                )}
-                {typeof mediaCheck.content_length === "number" && (
-                  <p className="text-xs opacity-90">
-                    Size: {(mediaCheck.content_length / 1024).toFixed(1)} KB
-                  </p>
-                )}
-                {mediaCheck.error && <p className="text-xs opacity-90">{mediaCheck.error}</p>}
-              </div>
-            </div>
           )}
-        </CardContent>
+        </CardHeader>
+        {(!isMobile || showMediaTest) && (
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Verify that any media URL referenced by this template is publicly downloadable by Twilio/Meta. A 403 here is the most common cause of media-template delivery failures.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input
+                placeholder="https://your-domain.com/path/image.jpg"
+                value={mediaUrlInput}
+                onChange={(e) => setMediaUrlInput(e.target.value)}
+              />
+              <Button onClick={() => verifyMediaUrl(mediaUrlInput)} disabled={mediaChecking} className="sm:w-auto w-full">
+                {mediaChecking ? "Testing..." : "Test media URL"}
+              </Button>
+            </div>
+            {mediaCheck && (
+              <div
+                className={`flex items-start gap-2 rounded-md border p-3 text-sm ${
+                  mediaCheck.ok
+                    ? "border-primary/30 bg-primary/5 text-primary"
+                    : "border-destructive/40 bg-destructive/5 text-destructive"
+                }`}
+              >
+                {mediaCheck.ok ? <CheckCircle className="h-4 w-4 mt-0.5" /> : <AlertTriangle className="h-4 w-4 mt-0.5" />}
+                <div className="space-y-0.5 min-w-0">
+                  <p className="font-medium">
+                    {mediaCheck.ok ? "Reachable" : "Unreachable"} · HTTP {mediaCheck.status}
+                  </p>
+                  {mediaCheck.content_type && (
+                    <p className="text-xs opacity-90 break-all">Content-Type: {mediaCheck.content_type}</p>
+                  )}
+                  {typeof mediaCheck.content_length === "number" && (
+                    <p className="text-xs opacity-90">
+                      Size: {(mediaCheck.content_length / 1024).toFixed(1)} KB
+                    </p>
+                  )}
+                  {mediaCheck.error && <p className="text-xs opacity-90 break-all">{mediaCheck.error}</p>}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        )}
       </Card>
 
       {/* Send Test Dialog */}
