@@ -510,6 +510,12 @@ export default function WhatsAppConversations() {
           </CardContent>
         </Card>
       </div>
+        </TabsContent>
+
+        <TabsContent value="requests" className="mt-4">
+          <WhatsAppRequestsTab onOpenConversation={openConversationFromRequest} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
