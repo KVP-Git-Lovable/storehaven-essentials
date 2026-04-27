@@ -266,7 +266,11 @@ export default function CustomersList() {
               <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">No customers found.</TableCell></TableRow>
             ) : (
               data!.rows.map((c: any) => (
-                <TableRow key={c.id}>
+                <TableRow
+                  key={c.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => { setSelectedCustomer(c); setDialogMode("view"); setCreateOpen(true); }}
+                >
                   {displayColumns.map((col) => (
                     <TableCell
                       key={col}
@@ -275,7 +279,7 @@ export default function CustomersList() {
                       {renderCell(col, c)}
                     </TableCell>
                   ))}
-                  <TableCell className="text-right">
+                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1">
                       <Button variant="outline" size="icon" onClick={() => { setSelectedCustomer(c); setDialogMode("view"); setCreateOpen(true); }}>
                         <Eye className="h-4 w-4" />
