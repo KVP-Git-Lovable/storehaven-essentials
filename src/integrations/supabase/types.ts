@@ -3628,6 +3628,62 @@ export type Database = {
           },
         ]
       }
+      leads: {
+        Row: {
+          address: string | null
+          city: string | null
+          converted_at: string | null
+          converted_customer_id: string | null
+          country: string | null
+          created_at: string
+          email: string | null
+          id: string
+          is_converted: boolean
+          name: string | null
+          phone: string
+          state: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          city?: string | null
+          converted_at?: string | null
+          converted_customer_id?: string | null
+          country?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_converted?: boolean
+          name?: string | null
+          phone: string
+          state?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          city?: string | null
+          converted_at?: string | null
+          converted_customer_id?: string | null
+          country?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_converted?: boolean
+          name?: string | null
+          phone?: string
+          state?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_converted_customer_id_fkey"
+            columns: ["converted_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       learning_enrollments: {
         Row: {
           completed_at: string | null
