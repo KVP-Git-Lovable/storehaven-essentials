@@ -12,6 +12,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BackButton } from "@/components/shared/BackButton";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import WhatsAppRequestsTab from "@/components/communication/WhatsAppRequestsTab";
 import { Search, ArrowLeft, ExternalLink, MessageSquare, ShoppingBag, IndianRupee, Clock } from "lucide-react";
 
 type WAMessage = {
