@@ -26,6 +26,7 @@ export default function WhatsAppTemplateDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [showSendDialog, setShowSendDialog] = useState(false);
   const [toNumber, setToNumber] = useState("");
   const [fromNumber, setFromNumber] = useState("");
@@ -33,6 +34,8 @@ export default function WhatsAppTemplateDetails() {
   const [mediaUrlInput, setMediaUrlInput] = useState("");
   const [mediaCheck, setMediaCheck] = useState<{ ok: boolean; status: number; content_type?: string | null; content_length?: number | null; error?: string } | null>(null);
   const [mediaChecking, setMediaChecking] = useState(false);
+  const [showTwilioDef, setShowTwilioDef] = useState(false);
+  const [showMediaTest, setShowMediaTest] = useState(false);
 
   const verifyMediaUrl = async (url: string) => {
     if (!url.trim()) {
