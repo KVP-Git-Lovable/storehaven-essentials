@@ -186,21 +186,23 @@ export default function WhatsAppTemplateDetails() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/communication/templates")}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">{template.name}</h1>
-          <p className="text-muted-foreground">Template details</p>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/communication/templates")} className="shrink-0">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl sm:text-2xl font-bold truncate">{template.name}</h1>
+            <p className="text-sm text-muted-foreground">Template details</p>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => refreshMutation.mutate()} disabled={refreshMutation.isPending}>
+        <div className="flex flex-wrap gap-2 sm:ml-auto">
+          <Button variant="outline" size="sm" onClick={() => refreshMutation.mutate()} disabled={refreshMutation.isPending}>
             <RefreshCw className={`h-4 w-4 mr-2 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
             Refresh Status
           </Button>
           {template.status === "approved" && (
-            <Button onClick={() => setShowSendDialog(true)}>
+            <Button size="sm" onClick={() => setShowSendDialog(true)}>
               <Send className="h-4 w-4 mr-2" />
               Send Test Message
             </Button>
