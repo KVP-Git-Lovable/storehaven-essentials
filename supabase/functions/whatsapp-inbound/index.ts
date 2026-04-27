@@ -21,6 +21,22 @@ const WELCOME =
 const ASSISTANCE_INTENT_RE =
   /\b(help|support|assist|assistance|issue|issues|problem|problems)\b|\bnot\s+working\b/i;
 
+// Order history intent: deterministic phrase match. Checked AFTER assistance
+// but BEFORE product intent so "my orders" / "order history" returns the
+// user's recent orders instead of the product template.
+const ORDER_HISTORY_INTENT_RE =
+  /\b(my\s+orders?|order\s+history|previous\s+orders?|order\s+summary|order\s+information|past\s+orders?)\b/i;
+
+// Store location intent: deterministic phrase match for address enquiries.
+const STORE_LOCATION_INTENT_RE =
+  /\b(where\s+is\s+your\s+store|where\s+are\s+you\s+located|store\s+address|store\s+location|your\s+address|your\s+location|location|address)\b/i;
+
+const STORE_LOCATION_REPLY =
+  "We are located at:\n\n2nd Floor, Bharath Mall,\nOpp KSRTC Bus Stand,\nBejai, Mangalore - 575003.\n\nYou may reach us at +91 8971783030 for any queries,\nor visit our website:\nhttps://trayijewellers.in/\n\nPlease note: We currently do not have any branches.";
+
+const NO_ORDERS_REPLY =
+  "I could not find any past orders associated with your number. If you need help, I can log a request for assistance.";
+
 // Product Inquiry intent: keyword match (case-insensitive, word-boundary)
 const PRODUCT_INTENT_RE = /\b(products?|diamonds?|jewell?ery|collections?|items?)\b/i;
 const PRODUCT_TEMPLATE_SID = "HX440122d86a157cb01de5f75a3aba1dd3";
@@ -401,6 +417,115 @@ Deno.serve(async (req) => {
     //    "need help on some orders" are routed to the fallback (assistance
     //    request) flow instead of the product template.
     const isAssistanceIntent = ASSISTANCE_INTENT_RE.test(body);
+
+    // 2a) Order history intent — deterministic phrase match. Fetch last 3
+    //     orders for the customer matched on phone and reply via TwiML.
+    if (!isAssistanceIntent && ORDER_HISTORY_INTENT_RE.test(body)) {
+      await logMessages(false);
+      let reply = NO_ORDERS_REPLY;
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL");
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (supabaseUrl && serviceKey && normalizedFrom) {
+          const sb = createClient(supabaseUrl, serviceKey);
+          const last10 = normalizedFrom.replace(/\D/g, "").slice(-10);
+          let customerId: string | null = null;
+          const { data: exact } = await sb
+            .from("customers")
+            .select("id")
+            .eq("phone", normalizedFrom)
+            .limit(1)
+            .maybeSingle();
+          if (exact?.id) customerId = exact.id;
+          else if (last10.length === 10) {
+            const { data: fuzzy } = await sb
+              .from("customers")
+              .select("id")
+              .ilike("phone", `%${last10}`)
+              .limit(1)
+              .maybeSingle();
+            if (fuzzy?.id) customerId = fuzzy.id;
+          }
+
+          if (customerId) {
+            const { data: orders } = await sb
+              .from("orders")
+              .select("id, order_number, created_at, total_amount, order_items(quantity, products:item_id(name))")
+              .eq("customer_id", customerId)
+              .order("created_at", { ascending: false })
+              .limit(3);
+
+            if (orders && orders.length > 0) {
+              const lines = ["Here are your last 3 orders:", ""];
+              for (const o of orders as any[]) {
+                const dateStr = o.created_at
+                  ? new Date(o.created_at).toLocaleDateString("en-IN", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })
+                  : "";
+                lines.push(`Order #${o.order_number} (${dateStr})`);
+                const items = Array.isArray(o.order_items) ? o.order_items : [];
+                if (items.length === 0) {
+                  lines.push("  (no items)");
+                } else {
+                  for (const it of items) {
+                    const pname = it?.products?.name || "Item";
+                    lines.push(`  ${pname} x ${it?.quantity ?? 1}`);
+                  }
+                }
+                lines.push("");
+              }
+              lines.push("Let me know if you need more details on any order.");
+              reply = lines.join("\n");
+            }
+          }
+
+          // Log the outbound reply on the conversation thread.
+          try {
+            await sb.from("whatsapp_messages").insert({
+              phone: normalizedFrom,
+              customer_id: customerId,
+              direction: "outbound",
+              message: reply,
+              message_type: "text",
+              status: "sent",
+              is_read: true,
+            });
+          } catch (e) {
+            console.error("[whatsapp-inbound] order-history outbound log err", e);
+          }
+        }
+      } catch (e) {
+        console.error("[whatsapp-inbound] order-history handler err", e);
+      }
+      return twiml(reply);
+    }
+
+    // 2b) Store location intent — static reply with address/contact details.
+    if (!isAssistanceIntent && STORE_LOCATION_INTENT_RE.test(body)) {
+      await logMessages(false);
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL");
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (supabaseUrl && serviceKey && normalizedFrom) {
+          const sb = createClient(supabaseUrl, serviceKey);
+          await sb.from("whatsapp_messages").insert({
+            phone: normalizedFrom,
+            customer_id: null,
+            direction: "outbound",
+            message: STORE_LOCATION_REPLY,
+            message_type: "text",
+            status: "sent",
+            is_read: true,
+          });
+        }
+      } catch (e) {
+        console.error("[whatsapp-inbound] store-location outbound log err", e);
+      }
+      return twiml(STORE_LOCATION_REPLY);
+    }
 
     // 3) Product Inquiry intent — sends a predefined Twilio template.
     //    Template send happens via REST (not TwiML), so we still return empty TwiML.
