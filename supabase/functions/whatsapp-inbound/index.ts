@@ -15,6 +15,12 @@ const GREETING_RE = /^\s*(hi|hello|hey|start)[\s!.?,]*$/i;
 const WELCOME =
   "Welcome to Trayi Jewellery. ✨ I am your StoreOps assistant. How may I assist you today?";
 
+// Assistance intent: explicit cry-for-help keywords. Checked BEFORE product
+// intent so phrases like "need help on some orders" route to the fallback
+// (assistance request) flow instead of the product template.
+const ASSISTANCE_INTENT_RE =
+  /\b(help|support|assist|assistance|issue|issues|problem|problems)\b|\bnot\s+working\b/i;
+
 // Product Inquiry intent: keyword match (case-insensitive, word-boundary)
 const PRODUCT_INTENT_RE = /\b(products?|diamonds?|jewell?ery|collections?|items?)\b/i;
 const PRODUCT_TEMPLATE_SID = "HX440122d86a157cb01de5f75a3aba1dd3";
@@ -391,9 +397,14 @@ Deno.serve(async (req) => {
       return twiml(WELCOME);
     }
 
-    // 2) Product Inquiry intent — sends a predefined Twilio template.
+    // 2) Assistance intent — checked BEFORE product intent so phrases like
+    //    "need help on some orders" are routed to the fallback (assistance
+    //    request) flow instead of the product template.
+    const isAssistanceIntent = ASSISTANCE_INTENT_RE.test(body);
+
+    // 3) Product Inquiry intent — sends a predefined Twilio template.
     //    Template send happens via REST (not TwiML), so we still return empty TwiML.
-    if (PRODUCT_INTENT_RE.test(body)) {
+    if (!isAssistanceIntent && PRODUCT_INTENT_RE.test(body)) {
       await logMessages(false);
       // Lookup customer_id again for the outbound row (best-effort).
       let customerId: string | null = null;
