@@ -471,17 +471,17 @@ export default function WhatsAppConversations() {
                 />
                 <Stat
                   icon={<ShoppingBag className="h-4 w-4" />}
-                  label="Orders via WhatsApp"
-                  value={insights?.ordersCount ?? 0}
+                  label="Total Orders"
+                  value={insights?.totalOrders ?? 0}
                 />
                 <Stat
                   icon={<IndianRupee className="h-4 w-4" />}
-                  label="Revenue"
+                  label="Total Revenue"
                   value={new Intl.NumberFormat("en-IN", {
                     style: "currency",
                     currency: "INR",
                     maximumFractionDigits: 0,
-                  }).format(insights?.revenue ?? 0)}
+                  }).format(insights?.totalRevenue ?? 0)}
                 />
                 <Stat
                   icon={<Clock className="h-4 w-4" />}
