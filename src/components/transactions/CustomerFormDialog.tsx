@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { OrderFormDialog } from "@/components/transactions/OrderFormDialog";
 
 interface Props {
   open: boolean;
@@ -41,6 +42,8 @@ const inr = (n: number) =>
 export function CustomerFormDialog({ open, onOpenChange, customer = null, mode = "create" }: Props) {
   const qc = useQueryClient();
   const [form, setForm] = useState(emptyForm);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [orderDialogOpen, setOrderDialogOpen] = useState(false);
   const isView = mode === "view";
   const isEdit = mode === "edit";
 
@@ -171,7 +174,15 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
                       );
                       return (
                         <TableRow key={o.id}>
-                          <TableCell className="font-mono text-xs">{o.order_number || o.id.slice(0, 8)}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            <button
+                              type="button"
+                              className="text-primary hover:underline"
+                              onClick={() => { setSelectedOrder(o); setOrderDialogOpen(true); }}
+                            >
+                              {o.order_number || o.id.slice(0, 8)}
+                            </button>
+                          </TableCell>
                           <TableCell className="text-xs">{o.created_at ? format(new Date(o.created_at), "dd MMM yyyy") : "—"}</TableCell>
                           <TableCell className="text-right">{itemCount}</TableCell>
                           <TableCell><Badge variant="outline" className="capitalize text-xs">{o.status || "—"}</Badge></TableCell>
@@ -195,6 +206,12 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
           )}
         </DialogFooter>
       </DialogContent>
+      <OrderFormDialog
+        open={orderDialogOpen}
+        onOpenChange={setOrderDialogOpen}
+        order={selectedOrder}
+        mode="view"
+      />
     </Dialog>
   );
 }
