@@ -10863,6 +10863,51 @@ export type Database = {
           },
         ]
       }
+      whatsapp_requests: {
+        Row: {
+          city: string | null
+          conversation_phone: string
+          created_at: string
+          customer_id: string | null
+          customer_name: string | null
+          id: string
+          inbound_message_id: string | null
+          message_text: string | null
+          phone_number: string
+          request_type: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          city?: string | null
+          conversation_phone: string
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          id?: string
+          inbound_message_id?: string | null
+          message_text?: string | null
+          phone_number: string
+          request_type?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          city?: string | null
+          conversation_phone?: string
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          id?: string
+          inbound_message_id?: string | null
+          message_text?: string | null
+          phone_number?: string
+          request_type?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       whatsapp_templates: {
         Row: {
           body: string
