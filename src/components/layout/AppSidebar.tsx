@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -334,6 +334,15 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
       if (child.subChildren) return isChildActive(child.subChildren);
       return false;
     }) ?? false;
+
+  // Auto-close mobile sheet whenever the route changes (covers nav clicks
+  // where Sheet's onOpenChange race with Radix focus management).
+  useEffect(() => {
+    if (isMobile && open) {
+      onOpenChange(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   const handleNavClick = () => {
     // Always close the mobile Sheet on leaf nav clicks. On desktop the Sheet
