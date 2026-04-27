@@ -12,6 +12,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BackButton } from "@/components/shared/BackButton";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import WhatsAppRequestsTab from "@/components/communication/WhatsAppRequestsTab";
 import { Search, ArrowLeft, ExternalLink, MessageSquare, ShoppingBag, IndianRupee, Clock } from "lucide-react";
 
 type WAMessage = {
@@ -60,7 +62,14 @@ export default function WhatsAppConversations() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [showListMobile, setShowListMobile] = useState(true);
+  const [activeTab, setActiveTab] = useState<"all" | "requests">("all");
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const openConversationFromRequest = (phone: string) => {
+    setSelectedPhone(phone);
+    setShowListMobile(false);
+    setActiveTab("all");
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 250);
@@ -265,6 +274,13 @@ export default function WhatsAppConversations() {
         </p>
       </div>
 
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "all" | "requests")}>
+        <TabsList>
+          <TabsTrigger value="all">All Conversations</TabsTrigger>
+          <TabsTrigger value="requests">Requests</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="all" className="space-y-4 mt-4">
       {/* Filters */}
       <Card>
         <CardContent className="pt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -494,6 +510,12 @@ export default function WhatsAppConversations() {
           </CardContent>
         </Card>
       </div>
+        </TabsContent>
+
+        <TabsContent value="requests" className="mt-4">
+          <WhatsAppRequestsTab onOpenConversation={openConversationFromRequest} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
