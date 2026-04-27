@@ -13,7 +13,12 @@ import type { EntityKey, FilterCondition } from "@/lib/listViewSchema";
 interface Props {
   entity: EntityKey;
   activeViewId: string | null;
-  onApply: (viewId: string | null, filters: FilterCondition[]) => void;
+  onApply: (
+    viewId: string | null,
+    filters: FilterCondition[],
+    selectedFields?: string[],
+    columnOrder?: string[]
+  ) => void;
 }
 
 export function EntityListViewsBar({ entity, activeViewId, onApply }: Props) {
