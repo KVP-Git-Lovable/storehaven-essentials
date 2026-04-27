@@ -201,7 +201,13 @@ export default function CustomersList() {
       <EntityListViewsBar
         entity="customers"
         activeViewId={activeViewId}
-        onApply={(id, filters) => { setActiveViewId(id); setActiveFilters(filters); setPage(0); }}
+        onApply={(id, filters, selectedFields, columnOrder) => {
+          setActiveViewId(id);
+          setActiveFilters(filters);
+          setActiveSelectedFields(selectedFields || []);
+          setActiveColumnOrder(columnOrder || []);
+          setPage(0);
+        }}
       />
 
       <div className="flex items-center gap-2 flex-wrap">
