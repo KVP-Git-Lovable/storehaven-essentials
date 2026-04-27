@@ -10,9 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, RefreshCw, Send, AlertTriangle, Copy, CheckCircle } from "lucide-react";
+import { ArrowLeft, RefreshCw, Send, AlertTriangle, Copy, CheckCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
 import { parseStoredBody, transformTwilioToFriendly } from "@/lib/whatsappVariables";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
