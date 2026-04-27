@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { OrderFormDialog } from "@/components/transactions/OrderFormDialog";
 
 interface Props {
   open: boolean;
