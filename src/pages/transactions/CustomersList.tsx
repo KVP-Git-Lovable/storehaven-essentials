@@ -74,7 +74,8 @@ export default function CustomersList() {
 
   const DEFAULT_COLUMNS = [
     "name", "phone", "email", "tier", "total_orders",
-    "total_spent", "created_at", "date_of_birth", "anniversary_date",
+    "total_spent", "loyalty_points", "store_credit",
+    "created_at", "date_of_birth", "anniversary_date",
   ];
   const viewColumns = (activeColumnOrder.length ? activeColumnOrder : activeSelectedFields)
     .filter((k) => k !== "id");

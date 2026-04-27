@@ -30,7 +30,7 @@ type WAMessage = {
   created_at: string;
 };
 
-type Customer = { id: string; name: string | null; phone: string; tier: string | null };
+type Customer = { id: string; name: string | null; phone: string; tier: string | null; total_orders?: number | null; total_spent?: number | null };
 
 type Conversation = {
   phone: string;
@@ -101,7 +101,7 @@ export default function WhatsAppConversations() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("customers")
-        .select("id, name, phone, tier")
+        .select("id, name, phone, tier, total_orders, total_spent")
         .in("id", customerIds);
       if (error) throw error;
       return data as Customer[];
@@ -217,7 +217,7 @@ export default function WhatsAppConversations() {
     [thread]
   );
 
-  // Insights (totals across all messages for this phone, not filtered)
+  // Insights (totals across all messages for this phone, plus customer lifetime totals)
   const { data: insights } = useQuery({
     queryKey: ["wa-insights", selectedPhone, selectedConv?.customer?.id],
     enabled: !!selectedPhone,
@@ -227,27 +227,10 @@ export default function WhatsAppConversations() {
         .select("*", { count: "exact", head: true })
         .eq("phone", selectedPhone!);
 
-      const { data: orderRows } = await supabase
-        .from("whatsapp_messages")
-        .select("order_id")
-        .eq("phone", selectedPhone!)
-        .not("order_id", "is", null);
-      const orderIds = Array.from(new Set((orderRows ?? []).map((r: any) => r.order_id)));
-
-      let revenue = 0;
-      if (orderIds.length > 0) {
-        const { data: orders } = await supabase
-          .from("orders")
-          .select("total_amount, status")
-          .in("id", orderIds)
-          .eq("status", "completed");
-        revenue = (orders ?? []).reduce((s: number, o: any) => s + Number(o.total_amount ?? 0), 0);
-      }
-
       return {
         totalMessages: totalMessages ?? 0,
-        ordersCount: orderIds.length,
-        revenue,
+        totalOrders: Number(selectedConv?.customer?.total_orders ?? 0),
+        totalRevenue: Number(selectedConv?.customer?.total_spent ?? 0),
       };
     },
   });
@@ -488,17 +471,17 @@ export default function WhatsAppConversations() {
                 />
                 <Stat
                   icon={<ShoppingBag className="h-4 w-4" />}
-                  label="Orders via WhatsApp"
-                  value={insights?.ordersCount ?? 0}
+                  label="Total Orders"
+                  value={insights?.totalOrders ?? 0}
                 />
                 <Stat
                   icon={<IndianRupee className="h-4 w-4" />}
-                  label="Revenue"
+                  label="Total Revenue"
                   value={new Intl.NumberFormat("en-IN", {
                     style: "currency",
                     currency: "INR",
                     maximumFractionDigits: 0,
-                  }).format(insights?.revenue ?? 0)}
+                  }).format(insights?.totalRevenue ?? 0)}
                 />
                 <Stat
                   icon={<Clock className="h-4 w-4" />}
