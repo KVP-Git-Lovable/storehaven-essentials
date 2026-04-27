@@ -54,6 +54,8 @@ export default function CustomersList() {
   const [page, setPage] = useState(0);
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<FilterCondition[]>([]);
+  const [activeSelectedFields, setActiveSelectedFields] = useState<string[]>([]);
+  const [activeColumnOrder, setActiveColumnOrder] = useState<string[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("create");
