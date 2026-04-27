@@ -81,12 +81,17 @@ export function EntityListViewsBar({ entity, activeViewId, onApply }: Props) {
           value={activeViewId ?? "all"}
           onValueChange={(value) => {
             if (value === "all") {
-              onApply(null, []);
+              onApply(null, [], [], []);
               return;
             }
 
             const nextView = views.find((view: any) => view.id === value);
-            onApply(nextView?.id ?? null, (nextView?.filters as FilterCondition[]) || []);
+            onApply(
+              nextView?.id ?? null,
+              (nextView?.filters as FilterCondition[]) || [],
+              (nextView?.selected_fields as string[]) || [],
+              (nextView?.column_order as string[]) || []
+            );
           }}
         >
           <SelectTrigger className="h-9 min-w-0">
