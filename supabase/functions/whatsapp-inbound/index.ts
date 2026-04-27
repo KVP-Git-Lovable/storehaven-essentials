@@ -397,9 +397,14 @@ Deno.serve(async (req) => {
       return twiml(WELCOME);
     }
 
-    // 2) Product Inquiry intent — sends a predefined Twilio template.
+    // 2) Assistance intent — checked BEFORE product intent so phrases like
+    //    "need help on some orders" are routed to the fallback (assistance
+    //    request) flow instead of the product template.
+    const isAssistanceIntent = ASSISTANCE_INTENT_RE.test(body);
+
+    // 3) Product Inquiry intent — sends a predefined Twilio template.
     //    Template send happens via REST (not TwiML), so we still return empty TwiML.
-    if (PRODUCT_INTENT_RE.test(body)) {
+    if (!isAssistanceIntent && PRODUCT_INTENT_RE.test(body)) {
       await logMessages(false);
       // Lookup customer_id again for the outbound row (best-effort).
       let customerId: string | null = null;
