@@ -277,7 +277,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
   const { profile } = useAuth();
   const { visibleAttendanceMenus } = useAttendanceRole();
   const { data: companyInfo } = useCompanyInfo();
-  const [openMenus, setOpenMenus] = useState<string[]>(["Store Management", "Assets & Vendors"]);
+  const [openMenus, setOpenMenus] = useState<string[]>([]);
 
   // Filter navigation based on permissions
   const filteredNavigation = useMemo(() => {
