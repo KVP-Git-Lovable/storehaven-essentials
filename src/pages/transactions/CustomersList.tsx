@@ -247,35 +247,33 @@ export default function CustomersList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Tier</TableHead>
-              <TableHead className="text-right">Orders</TableHead>
-              <TableHead className="text-right">Total Spent</TableHead>
-              <TableHead>Created Date</TableHead>
-              <TableHead>DOB</TableHead>
-              <TableHead>Anniversary</TableHead>
+              {displayColumns.map((col) => (
+                <TableHead
+                  key={col}
+                  className={numericRightAligned.has(col) ? "text-right" : undefined}
+                >
+                  {fieldLabel(col)}
+                </TableHead>
+              ))}
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
             ) : (data?.rows || []).length === 0 ? (
-              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No customers found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">No customers found.</TableCell></TableRow>
             ) : (
               data!.rows.map((c: any) => (
                 <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.name || "—"}</TableCell>
-                  <TableCell>{c.phone}</TableCell>
-                  <TableCell className="text-xs">{c.email || "—"}</TableCell>
-                  <TableCell><Badge variant="outline" className="capitalize">{c.tier || "—"}</Badge></TableCell>
-                  <TableCell className="text-right">{c.total_orders || 0}</TableCell>
-                  <TableCell className="text-right font-medium">{inr(Number(c.total_spent) || 0)}</TableCell>
-                  <TableCell className="text-xs">{c.created_at ? format(new Date(c.created_at), "dd MMM yyyy") : "—"}</TableCell>
-                  <TableCell>{c.date_of_birth ? format(new Date(c.date_of_birth), "dd MMM yyyy") : "—"}</TableCell>
-                  <TableCell>{c.anniversary_date ? format(new Date(c.anniversary_date), "dd MMM yyyy") : "—"}</TableCell>
+                  {displayColumns.map((col) => (
+                    <TableCell
+                      key={col}
+                      className={numericRightAligned.has(col) ? "text-right" : undefined}
+                    >
+                      {renderCell(col, c)}
+                    </TableCell>
+                  ))}
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Button variant="outline" size="icon" onClick={() => { setSelectedCustomer(c); setDialogMode("view"); setCreateOpen(true); }}>
