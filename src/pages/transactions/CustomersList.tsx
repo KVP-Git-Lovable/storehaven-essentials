@@ -244,7 +244,7 @@ export default function CustomersList() {
         <Badge variant="secondary">{data?.count ?? 0} total</Badge>
       </div>
 
-      <Card>
+      <Card className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
