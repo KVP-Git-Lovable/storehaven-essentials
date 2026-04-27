@@ -101,7 +101,7 @@ export default function WhatsAppConversations() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("customers")
-        .select("id, name, phone, tier")
+        .select("id, name, phone, tier, total_orders, total_spent")
         .in("id", customerIds);
       if (error) throw error;
       return data as Customer[];
