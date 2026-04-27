@@ -46,7 +46,7 @@ export function EntityListViewsBar({ entity, activeViewId, onApply }: Props) {
     onSuccess: () => {
       toast.success("List view deleted");
       qc.invalidateQueries({ queryKey: ["list-views-by-entity", entity] });
-      onApply(null, []);
+      onApply(null, [], [], []);
     },
     onError: (e: any) => toast.error(e.message),
   });
