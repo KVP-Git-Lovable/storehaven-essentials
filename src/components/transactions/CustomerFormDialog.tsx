@@ -174,7 +174,15 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
                       );
                       return (
                         <TableRow key={o.id}>
-                          <TableCell className="font-mono text-xs">{o.order_number || o.id.slice(0, 8)}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            <button
+                              type="button"
+                              className="text-primary hover:underline"
+                              onClick={() => { setSelectedOrder(o); setOrderDialogOpen(true); }}
+                            >
+                              {o.order_number || o.id.slice(0, 8)}
+                            </button>
+                          </TableCell>
                           <TableCell className="text-xs">{o.created_at ? format(new Date(o.created_at), "dd MMM yyyy") : "—"}</TableCell>
                           <TableCell className="text-right">{itemCount}</TableCell>
                           <TableCell><Badge variant="outline" className="capitalize text-xs">{o.status || "—"}</Badge></TableCell>
