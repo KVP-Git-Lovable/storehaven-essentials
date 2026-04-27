@@ -1,74 +1,93 @@
-# List View Builder — Filter Scoping + Column Reorder
+## Goal
+Add a structured fallback + request-logging system to the WhatsApp module so that whenever the bot can't answer, the customer gets a reassuring reply and a "Request" record is created for the team to action from a new tab in the Conversations page.
 
-Two enhancements to the New/Edit List View page (`/list-views/new`, `/list-views/:id`):
+## Part 1 — Database (migration)
 
-1. **Filters limited to selected fields** — only fields the user picked appear in the filter field dropdown.
-2. **Drag-and-drop column reorder** in the Preview table, persisted in a new `column_order` column.
+New table `public.whatsapp_requests`:
 
----
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | default `gen_random_uuid()` |
+| phone_number | text | not null, indexed |
+| customer_id | uuid | nullable, FK-style ref to `customers.id` (no hard FK to keep it resilient) |
+| customer_name | text | nullable, captured from profile/customer at time of logging |
+| request_type | text | default `'Assistance'` (free text — supports future "Complaint", "Suggestion", etc.) |
+| message_text | text | the original user message that triggered fallback |
+| city | text | nullable, taken from `customers.city` if available |
+| conversation_phone | text | same as `phone_number`, used to deep-link to the thread |
+| inbound_message_id | uuid | nullable, ref to the `whatsapp_messages.id` that triggered it |
+| status | text | default `'Open'`, allowed: `Open`, `Converted`, `Cleared` |
+| created_at | timestamptz | default `now()` |
+| updated_at | timestamptz | default `now()` |
 
-## 1. Database migration
+- Enable RLS. Policies: authenticated users can `select`/`update`; service role (edge function) can `insert`.
+- Add `updated_at` trigger using existing `update_updated_at_column()`.
+- Add to realtime publication so the Requests tab updates live.
 
-Add a nullable JSONB column to `list_views`:
+## Part 2 — Edge function fallback (`supabase/functions/whatsapp-inbound/index.ts`)
 
-```sql
-ALTER TABLE public.list_views
-ADD COLUMN column_order jsonb NOT NULL DEFAULT '[]'::jsonb;
-```
+Today the inbound handler matches greetings, then a product-intent regex, otherwise returns empty TwiML. We'll add an explicit fallback branch:
 
-- Nullable-equivalent via empty default → existing rows are unaffected.
-- Fallback at render time: if `column_order` is empty, use `selected_fields` order.
+1. After greeting + product-intent checks fail (and the message is non-empty / not a status callback), treat it as **unhandled**.
+2. Reply via TwiML with the exact copy:
+   > "I'm sorry, I do not have that information right now. Meanwhile, I will log a request for assistance on your behalf so that a member of our team can help you shortly."
+3. Insert a row into `whatsapp_requests`:
+   - `phone_number` = normalized `from`
+   - `customer_id`, `customer_name`, `city` = looked up from `customers` (reuse existing exact + last-10-digit fuzzy lookup)
+   - `customer_name` falls back to `ProfileName` if no customer match
+   - `message_text` = inbound `Body`
+   - `inbound_message_id` = id returned from the existing inbound `whatsapp_messages` insert
+   - `request_type` = `'Assistance'`, `status` = `'Open'`
+4. Also log the bot's apology reply into `whatsapp_messages` (outbound) so it shows in the thread.
+5. Existing greeting and product-intent flows stay untouched.
 
-No RLS changes (existing policies cover the new column).
+## Part 3 — UI: Conversations page tabs
 
-## 2. Filters scoped to selected fields (`ListViewBuilder.tsx`)
+`src/pages/communication/WhatsAppConversations.tsx`:
 
-- Build `availableFilterFields = entity.fields.filter(f => selectedFields.includes(f.key))`.
-- Pass `availableFilterFields` (instead of `entity`) to `FilterRow` via a small refactor: change `FilterRow`'s `entity` prop to `fields: FieldDef[]` (plus `entityLabel` if needed). Adjust internal lookups accordingly.
-- "Add filter" button:
-  - Disabled with tooltip "Select at least one field first" when `selectedFields.length === 0`.
-  - Uses `availableFilterFields[0].key` as the default field.
-- When a field is removed from `selectedFields`, auto-prune any filter rows referencing it (with a toast: "Removed N filter(s) on unselected fields").
-- If an existing saved view has filters on fields not in `selectedFields`, auto-add those fields back to `selectedFields` on load (so old views never break) — alternatively keep the filters and surface a warning. **Chosen: auto-add to selectedFields on load** to preserve behaviour.
+- Wrap current page body in a `Tabs` component with two tabs:
+  - **All Conversations** — current 3-pane layout, unchanged.
+  - **Requests** — new view (component below).
+- Tab state lives in URL search param `?tab=requests` so we can deep-link from a request row back to "All Conversations" with a preselected phone.
 
-## 3. Column reorder in Preview
+## Part 4 — Requests tab
 
-Use the already-installed `@dnd-kit/core` + `@dnd-kit/sortable`.
+New component `src/components/communication/WhatsAppRequestsTab.tsx`:
 
-- New state: `const [columnOrder, setColumnOrder] = useState<string[]>([])`.
-- Sync rules:
-  - On load of an existing view: `columnOrder = existing.column_order?.length ? existing.column_order : existing.selected_fields`.
-  - When `selectedFields` changes:
-    - Append newly selected fields to the end of `columnOrder`.
-    - Remove deselected fields from `columnOrder`.
-- Preview table renders headers from `columnOrder` (falls back to `selectedFields` then default first 5).
-- Wrap the `<TableHeader>` row in `DndContext` + `SortableContext` (horizontal strategy). Each `<TableHead>` becomes a `SortableHeader` component with a drag handle icon (`GripVertical`) and `useSortable`. On `onDragEnd`, reorder `columnOrder` via `arrayMove`.
-- Body cells render in the same `columnOrder` sequence so columns visually move together.
-- Small "Reset order" link button next to the Preview title when `columnOrder` differs from `selectedFields` order.
+- Filters bar:
+  - **Request Type** select (options pulled distinct from table, default `All`, plus seeded `Assistance`, `Complaint`, `Suggestion`)
+  - **Status** select: `All / Open / Converted / Cleared` (default `Open`)
+  - **Date range** from / to (created_at)
+  - Search box (name / phone)
+- Table columns: Customer Name · Phone Number · Request Type (Badge) · Message (truncated, tooltip on hover) · Date & Time · City · Status · Actions
+- Actions per row:
+  - **View Conversation** → switches parent tab to "All Conversations" and sets `selectedPhone` to that request's phone (lifted via callback or URL param).
+  - **Add to Ticket** → updates `status='Converted'` (placeholder for future ticketing integration; toast says "Marked as converted — ticketing integration coming soon").
+  - **Clear** → updates `status='Cleared'`.
+- Uses `useQuery` against `whatsapp_requests` joined with `customers` for name/city fallback.
+- Subscribes to realtime inserts on `whatsapp_requests` to refresh the list.
+- Empty state + loading skeletons.
 
-## 4. Save payload
+## Part 5 — Wiring conversation deep-link
 
-`ListViewBuilder.saveMutation` payload gains `column_order: columnOrder`. Insert and update both include it.
+- Lift `selectedPhone` and `activeTab` into the parent page so the Requests tab can call `onOpenConversation(phone)` which sets `activeTab='all'` and `selectedPhone=phone`.
 
-## 5. Rendering saved views elsewhere
+## Part 6 — Constraints honored
 
-`executeListView` already uses `selected_fields` for the SELECT (server-side order doesn't matter for the UI). Consumers that render columns should prefer `column_order` when present. Currently the only consumer rendering tabular results from a saved list view is the Preview itself; `EntityListViewsBar` only applies filters and doesn't pick column order, so no further changes are required for this scope. (If the user later wants entity transaction tables to honour `column_order`, that's a follow-up.)
+- Greeting and Product-Inquiry intents are evaluated **before** fallback, so existing flows are unaffected.
+- Logging only happens in the new fallback branch.
+- `request_type` is a free-text column with a default — adding new types later requires no schema change.
+- Existing `whatsapp_messages` schema is untouched.
 
-## 6. Backwards compatibility
+## Files to create / edit
 
-- New column has default `'[]'` → old rows load with empty array → fallback to `selected_fields` order. No breakage.
-- The Supabase generated types file regenerates automatically post-migration; the code uses `from("list_views" as any)` already, so no manual type changes needed.
+- **migration**: create `whatsapp_requests` table + RLS + trigger + realtime
+- **edit** `supabase/functions/whatsapp-inbound/index.ts` — add fallback branch, insert request, send apology TwiML
+- **edit** `src/pages/communication/WhatsAppConversations.tsx` — add Tabs wrapper, lift state
+- **create** `src/components/communication/WhatsAppRequestsTab.tsx` — Requests table, filters, actions
 
----
+## Out of scope (flagged for later)
 
-### Files to change
-
-- `supabase` migration: add `column_order` column.
-- `src/pages/listviews/ListViewBuilder.tsx`: state, filter scoping, dnd preview, save payload, load logic.
-- `src/components/listviews/FilterRow.tsx`: accept `fields: FieldDef[]` instead of full `entity`.
-- New small component (inline or `src/components/listviews/SortablePreviewHeader.tsx`) for the sortable `<TableHead>`.
-
-### Out of scope
-
-- Reordering columns in entity transaction list pages (Customers/Orders/Products tables) — only the builder Preview honours `column_order` in this iteration.
-- Per-column width / visibility toggles.
+- Real ticket creation — "Add to Ticket" only flips status today; ticketing integration is a follow-up.
+- Multi-language fallback copy.
+- Auto-classifying request types via AI.
