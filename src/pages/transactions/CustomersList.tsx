@@ -64,7 +64,51 @@ export default function CustomersList() {
   const [searchColumn, setSearchColumn] = useState<string>("all");
   const activeColumn = SEARCH_COLUMNS.find((c) => c.key === searchColumn) || SEARCH_COLUMNS[0];
 
-  const usingListView = activeFilters.length > 0;
+  const usingListView = activeViewId !== null;
+
+  // Compute the columns to render: when a list view is active, use its column_order
+  // (falling back to selected_fields). Otherwise show the default customer columns.
+  const customerEntity = ENTITY_SCHEMAS.customers;
+  const fieldLabel = (key: string) =>
+    customerEntity.fields.find((f) => f.key === key)?.label || key;
+
+  const DEFAULT_COLUMNS = [
+    "name", "phone", "email", "tier", "total_orders",
+    "total_spent", "created_at", "date_of_birth", "anniversary_date",
+  ];
+  const viewColumns = (activeColumnOrder.length ? activeColumnOrder : activeSelectedFields)
+    .filter((k) => k !== "id");
+  const displayColumns = usingListView && viewColumns.length ? viewColumns : DEFAULT_COLUMNS;
+
+  const renderCell = (col: string, c: any) => {
+    const v = c[col];
+    switch (col) {
+      case "name":
+        return <span className="font-medium">{v || "—"}</span>;
+      case "tier":
+        return <Badge variant="outline" className="capitalize">{v || "—"}</Badge>;
+      case "total_orders":
+        return v || 0;
+      case "total_spent":
+      case "store_credit":
+        return <span className="font-medium">{inr(Number(v) || 0)}</span>;
+      case "loyalty_points":
+        return Number(v || 0);
+      case "created_at":
+      case "date_of_birth":
+      case "anniversary_date":
+        return v ? format(new Date(v), "dd MMM yyyy") : "—";
+      case "email":
+        return <span className="text-xs">{v || "—"}</span>;
+      default:
+        if (v === null || v === undefined || v === "") return "—";
+        if (typeof v === "object") return JSON.stringify(v);
+        return String(v);
+    }
+  };
+
+  const numericRightAligned = new Set(["total_orders", "total_spent", "loyalty_points", "store_credit"]);
+
 
   const applyClientSearch = (rows: any[]) => {
     if (!search.trim()) return rows;
