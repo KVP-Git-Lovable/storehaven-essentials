@@ -30,7 +30,7 @@ export function EntityListViewsBar({ entity, activeViewId, onApply }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("list_views" as any)
-        .select("id, name, filters, entity_type")
+        .select("id, name, filters, entity_type, selected_fields, column_order")
         .eq("entity_type", entity)
         .order("created_at", { ascending: false });
       if (error) throw error;
