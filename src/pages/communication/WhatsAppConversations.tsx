@@ -274,6 +274,13 @@ export default function WhatsAppConversations() {
         </p>
       </div>
 
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "all" | "requests")}>
+        <TabsList>
+          <TabsTrigger value="all">All Conversations</TabsTrigger>
+          <TabsTrigger value="requests">Requests</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="all" className="space-y-4 mt-4">
       {/* Filters */}
       <Card>
         <CardContent className="pt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
