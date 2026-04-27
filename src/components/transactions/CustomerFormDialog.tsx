@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { format } from "date-fns";
 import { toast } from "sonner";
 
 interface Props {
@@ -32,6 +35,9 @@ const emptyForm = {
   anniversary_date: "",
 };
 
+const inr = (n: number) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
+
 export function CustomerFormDialog({ open, onOpenChange, customer = null, mode = "create" }: Props) {
   const qc = useQueryClient();
   const [form, setForm] = useState(emptyForm);
@@ -55,6 +61,20 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
 
     setForm(emptyForm);
   }, [open, customer]);
+
+  const { data: orders, isLoading: ordersLoading } = useQuery({
+    queryKey: ["customer-orders", customer?.id],
+    enabled: open && isView && !!customer?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id, order_number, created_at, status, total_amount, order_items(quantity)")
+        .eq("customer_id", customer!.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   const createMut = useMutation({
     mutationFn: async () => {
@@ -85,7 +105,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className={isView ? "max-w-3xl max-h-[90vh] overflow-y-auto" : undefined}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -123,6 +143,49 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
             <Input type="date" disabled={isView} value={form.anniversary_date} onChange={(e) => setForm({ ...form, anniversary_date: e.target.value })} />
           </div>
         </div>
+
+        {isView && customer && (
+          <div className="mt-2">
+            <h3 className="text-sm font-semibold mb-2">Orders ({orders?.length ?? 0})</h3>
+            <div className="border rounded-md max-h-[300px] overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Order #</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Items</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ordersLoading ? (
+                    <TableRow><TableCell colSpan={5} className="text-center py-4 text-muted-foreground text-sm">Loading...</TableCell></TableRow>
+                  ) : (orders ?? []).length === 0 ? (
+                    <TableRow><TableCell colSpan={5} className="text-center py-4 text-muted-foreground text-sm">No orders yet.</TableCell></TableRow>
+                  ) : (
+                    (orders ?? []).map((o: any) => {
+                      const itemCount = (o.order_items ?? []).reduce(
+                        (s: number, it: any) => s + Number(it.quantity ?? 0),
+                        0
+                      );
+                      return (
+                        <TableRow key={o.id}>
+                          <TableCell className="font-mono text-xs">{o.order_number || o.id.slice(0, 8)}</TableCell>
+                          <TableCell className="text-xs">{o.created_at ? format(new Date(o.created_at), "dd MMM yyyy") : "—"}</TableCell>
+                          <TableCell className="text-right">{itemCount}</TableCell>
+                          <TableCell><Badge variant="outline" className="capitalize text-xs">{o.status || "—"}</Badge></TableCell>
+                          <TableCell className="text-right font-medium">{inr(Number(o.total_amount) || 0)}</TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        )}
+
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>{isView ? "Close" : "Cancel"}</Button>
           {!isView && (
