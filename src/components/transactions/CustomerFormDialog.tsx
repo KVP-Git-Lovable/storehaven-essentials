@@ -42,6 +42,8 @@ const inr = (n: number) =>
 export function CustomerFormDialog({ open, onOpenChange, customer = null, mode = "create" }: Props) {
   const qc = useQueryClient();
   const [form, setForm] = useState(emptyForm);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [orderDialogOpen, setOrderDialogOpen] = useState(false);
   const isView = mode === "view";
   const isEdit = mode === "edit";
 
