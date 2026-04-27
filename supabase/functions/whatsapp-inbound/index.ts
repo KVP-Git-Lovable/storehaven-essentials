@@ -428,10 +428,109 @@ Deno.serve(async (req) => {
       return twiml();
     }
 
-    // 3) Fallback: empty response — leaves space for future intent handlers
-    //    (orders, products, etc.) to be added above this line.
+    // 3) Fallback: bot couldn't help. Apologise, log a request for the team.
+    const FALLBACK_REPLY =
+      "I'm sorry, I do not have that information right now. Meanwhile, I will log a request for assistance on your behalf so that a member of our team can help you shortly.";
+
+    // Skip empty bodies (e.g. media-only messages with no text) to avoid noise.
+    if (!body || !body.trim()) {
+      await logMessages(false);
+      return twiml();
+    }
+
     await logMessages(false);
-    return twiml();
+
+    // Best-effort: log the apology as outbound + create a whatsapp_requests row.
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (supabaseUrl && serviceKey && normalizedFrom) {
+        const sb = createClient(supabaseUrl, serviceKey);
+
+        // Resolve customer for name/id (city column not yet on customers).
+        let customerId: string | null = null;
+        let customerName: string | null = null;
+        try {
+          const last10 = normalizedFrom.replace(/\D/g, "").slice(-10);
+          const { data: exact } = await sb
+            .from("customers")
+            .select("id, name")
+            .eq("phone", normalizedFrom)
+            .limit(1)
+            .maybeSingle();
+          if (exact?.id) {
+            customerId = exact.id;
+            customerName = exact.name ?? null;
+          } else if (last10.length === 10) {
+            const { data: fuzzy } = await sb
+              .from("customers")
+              .select("id, name")
+              .ilike("phone", `%${last10}`)
+              .limit(1)
+              .maybeSingle();
+            if (fuzzy?.id) {
+              customerId = fuzzy.id;
+              customerName = fuzzy.name ?? null;
+            }
+          }
+        } catch (e) {
+          console.error("[whatsapp-inbound] fallback customer lookup err", e);
+        }
+
+        // Find the inbound message id we just inserted (most recent for this phone).
+        let inboundMessageId: string | null = null;
+        try {
+          const { data: lastIn } = await sb
+            .from("whatsapp_messages")
+            .select("id")
+            .eq("phone", normalizedFrom)
+            .eq("direction", "inbound")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (lastIn?.id) inboundMessageId = lastIn.id;
+        } catch (e) {
+          console.error("[whatsapp-inbound] fallback inbound lookup err", e);
+        }
+
+        // Log the apology reply into the conversation thread.
+        try {
+          await sb.from("whatsapp_messages").insert({
+            phone: normalizedFrom,
+            customer_id: customerId,
+            direction: "outbound",
+            message: FALLBACK_REPLY,
+            message_type: "text",
+            status: "sent",
+            is_read: true,
+          });
+        } catch (e) {
+          console.error("[whatsapp-inbound] fallback outbound insert err", e);
+        }
+
+        // Insert the structured request row.
+        try {
+          const { error: reqErr } = await sb.from("whatsapp_requests").insert({
+            phone_number: normalizedFrom,
+            customer_id: customerId,
+            customer_name: customerName ?? profileName ?? null,
+            request_type: "Assistance",
+            message_text: body,
+            city: null,
+            conversation_phone: normalizedFrom,
+            inbound_message_id: inboundMessageId,
+            status: "Open",
+          });
+          if (reqErr) console.error("[whatsapp-inbound] request insert err", reqErr);
+        } catch (e) {
+          console.error("[whatsapp-inbound] request insert exception", e);
+        }
+      }
+    } catch (e) {
+      console.error("[whatsapp-inbound] fallback handler err", e);
+    }
+
+    return twiml(FALLBACK_REPLY);
   } catch (error) {
     console.error("[whatsapp-inbound] error:", error);
     // Always return valid TwiML so Twilio doesn't retry-storm.
