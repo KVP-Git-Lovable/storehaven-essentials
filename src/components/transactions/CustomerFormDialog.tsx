@@ -206,6 +206,12 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
           )}
         </DialogFooter>
       </DialogContent>
+      <OrderFormDialog
+        open={orderDialogOpen}
+        onOpenChange={setOrderDialogOpen}
+        order={selectedOrder}
+        mode="view"
+      />
     </Dialog>
   );
 }
