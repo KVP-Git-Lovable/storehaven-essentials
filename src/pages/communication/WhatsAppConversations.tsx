@@ -217,7 +217,7 @@ export default function WhatsAppConversations() {
     [thread]
   );
 
-  // Insights (totals across all messages for this phone, not filtered)
+  // Insights (totals across all messages for this phone, plus customer lifetime totals)
   const { data: insights } = useQuery({
     queryKey: ["wa-insights", selectedPhone, selectedConv?.customer?.id],
     enabled: !!selectedPhone,
@@ -227,27 +227,10 @@ export default function WhatsAppConversations() {
         .select("*", { count: "exact", head: true })
         .eq("phone", selectedPhone!);
 
-      const { data: orderRows } = await supabase
-        .from("whatsapp_messages")
-        .select("order_id")
-        .eq("phone", selectedPhone!)
-        .not("order_id", "is", null);
-      const orderIds = Array.from(new Set((orderRows ?? []).map((r: any) => r.order_id)));
-
-      let revenue = 0;
-      if (orderIds.length > 0) {
-        const { data: orders } = await supabase
-          .from("orders")
-          .select("total_amount, status")
-          .in("id", orderIds)
-          .eq("status", "completed");
-        revenue = (orders ?? []).reduce((s: number, o: any) => s + Number(o.total_amount ?? 0), 0);
-      }
-
       return {
         totalMessages: totalMessages ?? 0,
-        ordersCount: orderIds.length,
-        revenue,
+        totalOrders: Number(selectedConv?.customer?.total_orders ?? 0),
+        totalRevenue: Number(selectedConv?.customer?.total_spent ?? 0),
       };
     },
   });
