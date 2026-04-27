@@ -88,6 +88,7 @@ const navigation: NavItem[] = [
     icon: Receipt,
     moduleKey: "transactions",
     children: [
+      { title: "Leads", href: "/transactions/leads", moduleKey: "transactions.leads" },
       { title: "Customers", href: "/transactions/customers", moduleKey: "transactions.customers" },
       { title: "Products", href: "/transactions/products", moduleKey: "transactions.products" },
       { title: "Orders", href: "/transactions/orders", moduleKey: "transactions.orders" },

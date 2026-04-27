@@ -137,6 +137,7 @@ const VoiceCenter = lazy(() => import("./pages/communication/VoiceCenter"));
 const EmailCenter = lazy(() => import("./pages/communication/EmailCenter"));
 const ListViewsList = lazy(() => import("./pages/listviews/ListViewsList"));
 const ListViewBuilder = lazy(() => import("./pages/listviews/ListViewBuilder"));
+const TxnLeadsList = lazy(() => import("./pages/transactions/LeadsList"));
 const TxnCustomersList = lazy(() => import("./pages/transactions/CustomersList"));
 const TxnProductsList = lazy(() => import("./pages/transactions/ProductsList"));
 const TxnOrdersList = lazy(() => import("./pages/transactions/OrdersList"));
@@ -251,6 +252,7 @@ const App = () => (
                 <Route path="/communication/email" element={<EmailCenter />} />
                 <Route path="/list-views" element={<ListViewsList />} />
                 <Route path="/list-views/:id" element={<ListViewBuilder />} />
+                <Route path="/transactions/leads" element={<TxnLeadsList />} />
                 <Route path="/transactions/customers" element={<TxnCustomersList />} />
                 <Route path="/transactions/products" element={<TxnProductsList />} />
                 <Route path="/transactions/orders" element={<TxnOrdersList />} />
