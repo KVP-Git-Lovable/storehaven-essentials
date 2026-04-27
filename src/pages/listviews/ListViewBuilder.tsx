@@ -12,11 +12,27 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Plus, Save } from "lucide-react";
+import { ArrowLeft, Plus, Save, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { ENTITY_LIST, ENTITY_SCHEMAS, type EntityKey, type FilterCondition } from "@/lib/listViewSchema";
 import { FilterRow } from "@/components/listviews/FilterRow";
 import { executeListView } from "@/lib/listViewExecutor";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
+import { SortablePreviewHeader } from "@/components/listviews/SortablePreviewHeader";
 
 export default function ListViewBuilder() {
   const { id } = useParams<{ id: string }>();
@@ -31,6 +47,7 @@ export default function ListViewBuilder() {
   const [description, setDescription] = useState("");
   const [entityType, setEntityType] = useState<EntityKey>(entityFromQuery || "customers");
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [filters, setFilters] = useState<FilterCondition[]>([]);
   const [visibility, setVisibility] = useState<"private" | "shared">("private");
   const [tags, setTags] = useState<string>("");
@@ -53,12 +70,51 @@ export default function ListViewBuilder() {
       setName(existing.name);
       setDescription(existing.description || "");
       setEntityType(existing.entity_type);
-      setSelectedFields(existing.selected_fields || []);
-      setFilters(existing.filters || []);
+      const loadedFields: string[] = existing.selected_fields || [];
+      const loadedFilters: FilterCondition[] = existing.filters || [];
+      // Auto-add fields referenced by filters but missing from selected_fields (backwards-compat)
+      const filterFieldKeys = loadedFilters.map((f) => f.field).filter(Boolean);
+      const merged = Array.from(new Set([...loadedFields, ...filterFieldKeys]));
+      setSelectedFields(merged);
+      setFilters(loadedFilters);
+      const savedOrder: string[] = existing.column_order || [];
+      const validSaved = savedOrder.filter((k) => loadedFields.includes(k));
+      const missing = loadedFields.filter((k) => !validSaved.includes(k));
+      setColumnOrder(validSaved.length ? [...validSaved, ...missing] : loadedFields);
       setVisibility(existing.visibility);
       setTags((existing.tags || []).join(", "));
     }
   }, [existing]);
+
+  // Keep columnOrder in sync with selectedFields (append new, remove deselected)
+  useEffect(() => {
+    setColumnOrder((prev) => {
+      const filtered = prev.filter((k) => selectedFields.includes(k));
+      const additions = selectedFields.filter((k) => !filtered.includes(k));
+      const next = [...filtered, ...additions];
+      // Avoid no-op state updates
+      if (next.length === prev.length && next.every((v, i) => v === prev[i])) return prev;
+      return next;
+    });
+  }, [selectedFields]);
+
+  // Fields available for filtering = currently selected fields
+  const availableFilterFields = useMemo(
+    () => entity.fields.filter((f) => selectedFields.includes(f.key)),
+    [entity, selectedFields]
+  );
+
+  // Auto-prune filter rows whose field was deselected
+  useEffect(() => {
+    const allowed = new Set(availableFilterFields.map((f) => f.key));
+    setFilters((prev) => {
+      const next = prev.filter((c) => allowed.has(c.field));
+      if (next.length !== prev.length) {
+        toast.info(`Removed ${prev.length - next.length} filter(s) on unselected field(s)`);
+      }
+      return next;
+    });
+  }, [availableFilterFields]);
 
   // Live preview
   const previewQuery = useQuery({
@@ -73,6 +129,7 @@ export default function ListViewBuilder() {
         description: description || null,
         entity_type: entityType,
         selected_fields: selectedFields,
+        column_order: columnOrder,
         filters,
         visibility,
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
@@ -101,9 +158,31 @@ export default function ListViewBuilder() {
   });
 
   const previewColumns = useMemo(() => {
+    if (columnOrder.length) return columnOrder;
     if (selectedFields.length) return selectedFields;
     return entity.fields.slice(0, 5).map((f) => f.key);
-  }, [selectedFields, entity]);
+  }, [columnOrder, selectedFields, entity]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const isReorderable = columnOrder.length > 0;
+  const isOrderModified =
+    columnOrder.length === selectedFields.length &&
+    columnOrder.some((k, i) => k !== selectedFields[i]);
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setColumnOrder((items) => {
+      const oldIndex = items.indexOf(String(active.id));
+      const newIndex = items.indexOf(String(over.id));
+      if (oldIndex < 0 || newIndex < 0) return items;
+      return arrayMove(items, oldIndex, newIndex);
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -136,7 +215,7 @@ export default function ListViewBuilder() {
               <Label>Entity</Label>
               <Select
                 value={entityType}
-                onValueChange={(v) => { setEntityType(v as EntityKey); setSelectedFields([]); setFilters([]); }}
+                onValueChange={(v) => { setEntityType(v as EntityKey); setSelectedFields([]); setColumnOrder([]); setFilters([]); }}
                 disabled={!!entityFromQuery}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -194,18 +273,31 @@ export default function ListViewBuilder() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Filters</CardTitle>
-              <Button size="sm" variant="outline" onClick={() => setFilters([...filters, { field: entity.fields[0].key, operator: "eq", value: "" }])}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={availableFilterFields.length === 0}
+                title={availableFilterFields.length === 0 ? "Select at least one field first" : undefined}
+                onClick={() =>
+                  setFilters([
+                    ...filters,
+                    { field: availableFilterFields[0].key, operator: "eq", value: "" },
+                  ])
+                }
+              >
                 <Plus className="mr-2 h-4 w-4" /> Add filter
               </Button>
             </CardHeader>
             <CardContent className="space-y-2">
-              {filters.length === 0 ? (
+              {availableFilterFields.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Select fields above to start filtering.</p>
+              ) : filters.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No filters — all rows will match.</p>
               ) : (
                 filters.map((f, idx) => (
                   <FilterRow
                     key={idx}
-                    entity={entity}
+                    fields={availableFilterFields}
                     value={f}
                     onChange={(next) => setFilters(filters.map((x, i) => (i === idx ? next : x)))}
                     onRemove={() => setFilters(filters.filter((_, i) => i !== idx))}
@@ -217,33 +309,58 @@ export default function ListViewBuilder() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Preview</CardTitle>
-              <Badge variant="secondary">
-                {previewQuery.isLoading ? "Loading..." : previewQuery.error ? "Error" : `${previewQuery.data?.count ?? 0} matching`}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <CardTitle>Preview</CardTitle>
+                {isReorderable && (
+                  <span className="text-xs text-muted-foreground hidden sm:inline">
+                    Drag column headers to reorder
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {isOrderModified && (
+                  <Button size="sm" variant="ghost" onClick={() => setColumnOrder([...selectedFields])}>
+                    <RotateCcw className="mr-1 h-3 w-3" /> Reset order
+                  </Button>
+                )}
+                <Badge variant="secondary">
+                  {previewQuery.isLoading ? "Loading..." : previewQuery.error ? "Error" : `${previewQuery.data?.count ?? 0} matching`}
+                </Badge>
+              </div>
             </CardHeader>
             <CardContent>
               {previewQuery.error ? (
                 <p className="text-sm text-destructive">{(previewQuery.error as any).message}</p>
               ) : (
                 <div className="overflow-auto max-h-[400px]">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        {previewColumns.map((c) => <TableHead key={c}>{entity.fields.find((f) => f.key === c)?.label || c}</TableHead>)}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(previewQuery.data?.rows || []).map((row: any, i: number) => (
-                        <TableRow key={i}>
-                          {previewColumns.map((c) => <TableCell key={c} className="text-xs">{formatValue(row[c])}</TableCell>)}
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <SortableContext items={previewColumns} strategy={horizontalListSortingStrategy}>
+                            {previewColumns.map((c) => {
+                              const label = entity.fields.find((f) => f.key === c)?.label || c;
+                              return isReorderable ? (
+                                <SortablePreviewHeader key={c} id={c} label={label} />
+                              ) : (
+                                <TableHead key={c}>{label}</TableHead>
+                              );
+                            })}
+                          </SortableContext>
                         </TableRow>
-                      ))}
-                      {(!previewQuery.data?.rows || previewQuery.data.rows.length === 0) && !previewQuery.isLoading && (
-                        <TableRow><TableCell colSpan={previewColumns.length} className="text-center text-muted-foreground py-6">No matching rows</TableCell></TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {(previewQuery.data?.rows || []).map((row: any, i: number) => (
+                          <TableRow key={i}>
+                            {previewColumns.map((c) => <TableCell key={c} className="text-xs">{formatValue(row[c])}</TableCell>)}
+                          </TableRow>
+                        ))}
+                        {(!previewQuery.data?.rows || previewQuery.data.rows.length === 0) && !previewQuery.isLoading && (
+                          <TableRow><TableCell colSpan={previewColumns.length} className="text-center text-muted-foreground py-6">No matching rows</TableCell></TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </DndContext>
                 </div>
               )}
             </CardContent>
