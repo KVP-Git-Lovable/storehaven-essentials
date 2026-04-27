@@ -1,53 +1,74 @@
-## Add Product Inquiry intent to WhatsApp inbound webhook
+# List View Builder — Filter Scoping + Column Reorder
 
-Extend `supabase/functions/whatsapp-inbound/index.ts` to detect product-related questions and reply with a fixed Twilio Content (template) message — without disturbing greeting handling, status callbacks, or the future-intent fallback.
+Two enhancements to the New/Edit List View page (`/list-views/new`, `/list-views/:id`):
 
-### 1. Intent detection (added BETWEEN greeting check and fallback)
+1. **Filters limited to selected fields** — only fields the user picked appear in the filter field dropdown.
+2. **Drag-and-drop column reorder** in the Preview table, persisted in a new `column_order` column.
 
-Keyword regex, case-insensitive, word-boundary based to avoid false positives inside other words:
+---
 
-```
-const PRODUCT_INTENT_RE = /\b(products?|diamonds?|jewell?ery|collections?|items?)\b/i;
-const PRODUCT_TEMPLATE_SID = "HX440122d86a157cb01de5f75a3aba1dd3";
-```
+## 1. Database migration
 
-Order of checks inside the `Deno.serve` POST handler stays:
+Add a nullable JSONB column to `list_views`:
 
-```text
-1. Greeting (existing)        → reply WELCOME via TwiML, log inbound + outbound, return
-2. Product Inquiry (new)      → send template via Twilio REST, log inbound + outbound, return empty TwiML
-3. Fallback (existing)        → log inbound, return empty TwiML
+```sql
+ALTER TABLE public.list_views
+ADD COLUMN column_order jsonb NOT NULL DEFAULT '[]'::jsonb;
 ```
 
-### 2. Sending the template
+- Nullable-equivalent via empty default → existing rows are unaffected.
+- Fallback at render time: if `column_order` is empty, use `selected_fields` order.
 
-A template message cannot be returned via TwiML, so we send it through the Twilio REST API (same connector gateway pattern already used by `whatsapp-send`). The webhook still returns an empty TwiML response so Twilio doesn't retry.
+No RLS changes (existing policies cover the new column).
 
-Inside a new helper `sendProductTemplate(toNumber, fromNumber)`:
+## 2. Filters scoped to selected fields (`ListViewBuilder.tsx`)
 
-- Read `LOVABLE_API_KEY` and `TWILIO_API_KEY` from env (skip + log if missing — never throw, webhook must always reply with valid TwiML).
-- Resolve `fromNumber`: prefer the inbound `To` field (already normalized), fallback to `whatsapp_config.sender_number`.
-- POST to `https://connector-gateway.lovable.dev/twilio/Messages.json` with:
-  - `To = whatsapp:<userPhone>`
-  - `From = whatsapp:<senderNumber>`
-  - `ContentSid = HX440122d86a157cb01de5f75a3aba1dd3`
-  - `StatusCallback = ${SUPABASE_URL}/functions/v1/whatsapp-inbound?event=status` (so existing status branch still updates message logs)
-- On success, insert an outbound row into `whatsapp_messages` (`message_type: "template"`, `status: data.status || "queued"`, `twilio_message_sid: data.sid`, `is_read: true`, `message: "[Product Inquiry template]"`) so the conversation thread stays intact.
-- On failure, `console.error` the Twilio payload — still return empty TwiML (no user-facing break).
+- Build `availableFilterFields = entity.fields.filter(f => selectedFields.includes(f.key))`.
+- Pass `availableFilterFields` (instead of `entity`) to `FilterRow` via a small refactor: change `FilterRow`'s `entity` prop to `fields: FieldDef[]` (plus `entityLabel` if needed). Adjust internal lookups accordingly.
+- "Add filter" button:
+  - Disabled with tooltip "Select at least one field first" when `selectedFields.length === 0`.
+  - Uses `availableFilterFields[0].key` as the default field.
+- When a field is removed from `selectedFields`, auto-prune any filter rows referencing it (with a toast: "Removed N filter(s) on unselected fields").
+- If an existing saved view has filters on fields not in `selectedFields`, auto-add those fields back to `selectedFields` on load (so old views never break) — alternatively keep the filters and surface a warning. **Chosen: auto-add to selectedFields on load** to preserve behaviour.
 
-### 3. Inbound logging
+## 3. Column reorder in Preview
 
-Reuse existing `logMessages(false)` to persist the user's incoming text and customer lookup. The product-template outbound is logged separately by the helper above (mirroring how greeting logs its outbound row).
+Use the already-installed `@dnd-kit/core` + `@dnd-kit/sortable`.
 
-### 4. Constraints honoured
+- New state: `const [columnOrder, setColumnOrder] = useState<string[]>([])`.
+- Sync rules:
+  - On load of an existing view: `columnOrder = existing.column_order?.length ? existing.column_order : existing.selected_fields`.
+  - When `selectedFields` changes:
+    - Append newly selected fields to the end of `columnOrder`.
+    - Remove deselected fields from `columnOrder`.
+- Preview table renders headers from `columnOrder` (falls back to `selectedFields` then default first 5).
+- Wrap the `<TableHeader>` row in `DndContext` + `SortableContext` (horizontal strategy). Each `<TableHead>` becomes a `SortableHeader` component with a drag handle icon (`GripVertical`) and `useSortable`. On `onDragEnd`, reorder `columnOrder` via `arrayMove`.
+- Body cells render in the same `columnOrder` sequence so columns visually move together.
+- Small "Reset order" link button next to the Preview title when `columnOrder` differs from `selectedFields` order.
 
-- Greeting branch and `event=status` branch are byte-for-byte unchanged.
-- Free-form responses are NOT used for the product intent — only the predefined template.
-- Fallback path remains a quiet empty TwiML for any unmatched message.
-- Errors in template send never break TwiML — the webhook always returns `<Response/>`.
+## 4. Save payload
 
-### 5. Files to edit
+`ListViewBuilder.saveMutation` payload gains `column_order: columnOrder`. Insert and update both include it.
 
-- **Edit** `supabase/functions/whatsapp-inbound/index.ts` — add `PRODUCT_INTENT_RE`, `PRODUCT_TEMPLATE_SID`, `sendProductTemplate()` helper, and slot the new branch between the greeting check and the fallback.
+## 5. Rendering saved views elsewhere
 
-No DB migrations, no new tables, no UI changes, no new dependencies.
+`executeListView` already uses `selected_fields` for the SELECT (server-side order doesn't matter for the UI). Consumers that render columns should prefer `column_order` when present. Currently the only consumer rendering tabular results from a saved list view is the Preview itself; `EntityListViewsBar` only applies filters and doesn't pick column order, so no further changes are required for this scope. (If the user later wants entity transaction tables to honour `column_order`, that's a follow-up.)
+
+## 6. Backwards compatibility
+
+- New column has default `'[]'` → old rows load with empty array → fallback to `selected_fields` order. No breakage.
+- The Supabase generated types file regenerates automatically post-migration; the code uses `from("list_views" as any)` already, so no manual type changes needed.
+
+---
+
+### Files to change
+
+- `supabase` migration: add `column_order` column.
+- `src/pages/listviews/ListViewBuilder.tsx`: state, filter scoping, dnd preview, save payload, load logic.
+- `src/components/listviews/FilterRow.tsx`: accept `fields: FieldDef[]` instead of full `entity`.
+- New small component (inline or `src/components/listviews/SortablePreviewHeader.tsx`) for the sortable `<TableHead>`.
+
+### Out of scope
+
+- Reordering columns in entity transaction list pages (Customers/Orders/Products tables) — only the builder Preview honours `column_order` in this iteration.
+- Per-column width / visibility toggles.
