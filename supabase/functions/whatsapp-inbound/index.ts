@@ -36,6 +36,26 @@ const ORDER_HISTORY_PATTERNS: RegExp[] = [
 const isOrderHistoryIntent = (text: string): boolean =>
   ORDER_HISTORY_PATTERNS.some((re) => re.test(text));
 
+// Purchase intent: deterministic regex match for buy/purchase queries.
+// Checked AFTER assistance but BEFORE order-history so phrases like
+// "place order" / "want to buy" route to the catalogue reply rather
+// than being captured by the broader /\borders?\b/i order-history pattern.
+const PURCHASE_INTENT_PATTERNS: RegExp[] = [
+  /place.*order/i,
+  /need.*buy/i,
+  /want.*buy/i,
+  /want.*purchase/i,
+  /would.*like.*buy/i,
+  /would.*like.*purchase/i,
+  /\bbuy\b/i,
+  /\bpurchase\b/i,
+];
+const isPurchaseIntent = (text: string): boolean =>
+  PURCHASE_INTENT_PATTERNS.some((re) => re.test(text));
+
+const PURCHASE_INTENT_REPLY =
+  "That's wonderful to hear! At Trayi Jewellers, we specialise in finely curated jewellery, including exquisite diamonds and necklaces.\n\nYou can explore our latest collections on the 'Products' page here:\nhttps://trayijewellers.in/";
+
 // Store location intent: deterministic phrase match for address enquiries.
 const STORE_LOCATION_INTENT_RE =
   /\b(where\s+is\s+your\s+store|where\s+are\s+you\s+located|store\s+address|store\s+location|your\s+address|your\s+location|location|address)\b/i;
@@ -427,12 +447,44 @@ Deno.serve(async (req) => {
     //    request) flow instead of the product template.
     const isAssistanceIntent = ASSISTANCE_INTENT_RE.test(body);
 
-    // 2a) Order history intent — regex-based detection. Fetch last 3
+    // 2a) Purchase intent — deterministic guided reply to the catalogue.
+    //     Runs before order-history so "place order" / "want to buy" don't
+    //     get misrouted by the broad /\borders?\b/i order-history pattern.
+    const purchaseIntentDetected = !isAssistanceIntent && isPurchaseIntent(body);
+    if (purchaseIntentDetected) {
+      console.log("[whatsapp-inbound] purchase-intent matched", {
+        bodyPreview: body.slice(0, 120),
+      });
+      await logMessages(false);
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL");
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (supabaseUrl && serviceKey && normalizedFrom) {
+          const sb = createClient(supabaseUrl, serviceKey);
+          await sb.from("whatsapp_messages").insert({
+            phone: normalizedFrom,
+            customer_id: null,
+            direction: "outbound",
+            message: PURCHASE_INTENT_REPLY,
+            message_type: "text",
+            status: "sent",
+            is_read: true,
+          });
+        }
+      } catch (e) {
+        console.error("[whatsapp-inbound] purchase-intent outbound log err", e);
+      }
+      return twiml(PURCHASE_INTENT_REPLY);
+    }
+
+    // 2b) Order history intent — regex-based detection. Fetch last 3
     //     orders for the customer matched on phone and reply via TwiML.
-    const orderIntentDetected = !isAssistanceIntent && isOrderHistoryIntent(body);
+    const orderIntentDetected =
+      !isAssistanceIntent && !purchaseIntentDetected && isOrderHistoryIntent(body);
     console.log("[whatsapp-inbound] intent", {
       bodyPreview: body.slice(0, 120),
       isAssistanceIntent,
+      purchaseIntentDetected,
       orderIntentDetected,
     });
     if (orderIntentDetected) {
