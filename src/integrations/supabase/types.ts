@@ -3009,6 +3009,7 @@ export type Database = {
           id: string
           journey_id: string
           next_action_at: string | null
+          retry_count: number
           status: string
         }
         Insert: {
@@ -3018,6 +3019,7 @@ export type Database = {
           id?: string
           journey_id: string
           next_action_at?: string | null
+          retry_count?: number
           status?: string
         }
         Update: {
@@ -3027,6 +3029,7 @@ export type Database = {
           id?: string
           journey_id?: string
           next_action_at?: string | null
+          retry_count?: number
           status?: string
         }
         Relationships: [

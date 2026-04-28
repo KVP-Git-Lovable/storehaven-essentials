@@ -234,6 +234,329 @@ function resolveVariables(
   return out;
 }
 
+// Parallel batch size for per-enrollment processing.
+// Tuned to respect Twilio rate limits while still draining audiences quickly.
+const ENROLLMENT_BATCH_SIZE = 20;
+// Cap retries before marking an enrollment as permanently failed.
+const MAX_RETRIES = 3;
+// Backoff delay (ms) added to next_action_at for retryable failures.
+const RETRY_BACKOFF_MS = 5 * 60 * 1000;
+
+interface ProcessCtx {
+  supabase: any;
+  supabaseUrl: string;
+  serviceKey: string;
+  fromNumber: string | null;
+  smsFromNumber: string | null;
+}
+
+async function processEnrollment(
+  enrollment: any,
+  journey: any,
+  canvas: any,
+  ctx: ProcessCtx,
+): Promise<{ processed: boolean; sent: number }> {
+  const { supabase, supabaseUrl, serviceKey, fromNumber, smsFromNumber } = ctx;
+  let messagesSent = 0;
+
+  const currentNode = canvas.nodes.find((n: any) => n.id === enrollment.current_node_id);
+  if (!currentNode) return { processed: false, sent: 0 };
+
+  const nodeType = currentNode.type;
+
+  if (nodeType === "exit") {
+    await supabase.from("journey_enrollments")
+      .update({ status: "completed" })
+      .eq("id", enrollment.id);
+    return { processed: true, sent: 0 };
+  }
+
+  if (nodeType === "delay") {
+    const duration = currentNode.data?.duration || 1;
+    const unit = currentNode.data?.unit || "days";
+    const delayMs = unit === "hours" ? duration * 3600000 : duration * 86400000;
+    const nextActionAt = new Date(enrollment.next_action_at!).getTime();
+    if (Date.now() >= nextActionAt + delayMs) {
+      const nextEdge = canvas.edges.find((e: any) => e.source === currentNode.id);
+      if (nextEdge) {
+        await supabase.from("journey_enrollments")
+          .update({ current_node_id: nextEdge.target, next_action_at: new Date().toISOString() })
+          .eq("id", enrollment.id);
+      }
+    }
+    return { processed: true, sent: 0 };
+  }
+
+  if (nodeType === "message") {
+    const contact = enrollment.journey_contacts;
+    const data = currentNode.data || {};
+    const messageType: string =
+      data.message_type || (data.channel === "whatsapp_template" ? "template" : "template");
+
+    // ============ TEMPLATE MODE ============
+    if (messageType === "template") {
+      const channel = data.channel || "whatsapp_template";
+      const templateId = data.whatsapp_template_id;
+      const variablesMap = data.template_variables || {};
+
+      // Idempotency: try to claim this (enrollment, node, channel) slot first
+      const { error: claimErr } = await supabase
+        .from("journey_message_log")
+        .insert({
+          journey_id: journey.id,
+          enrollment_id: enrollment.id,
+          node_id: currentNode.id,
+          contact_id: enrollment.contact_id,
+          channel,
+          template_body: null,
+          status: "sending",
+          template_id: templateId || null,
+        });
+
+      if (claimErr) {
+        // Already attempted — advance to the next node to avoid getting stuck
+        const nextEdge = canvas.edges.find((e: any) => e.source === currentNode.id);
+        if (nextEdge) {
+          await supabase.from("journey_enrollments")
+            .update({ current_node_id: nextEdge.target, next_action_at: new Date().toISOString() })
+            .eq("id", enrollment.id);
+        }
+        return { processed: true, sent: 0 };
+      }
+
+      let sendStatus = "failed";
+      let sendAccepted = false;
+      let errorMessage: string | null = null;
+      let twilioSid: string | null = null;
+      let renderedBody: string | null = null;
+
+      try {
+        if (channel !== "whatsapp_template") throw new Error(`Unsupported channel: ${channel}`);
+        if (!templateId) throw new Error("Message node missing whatsapp_template_id");
+        if (!fromNumber) throw new Error("No active WhatsApp sender configured (whatsapp_config.sender_number)");
+        if (!contact?.phone) throw new Error("Contact phone missing");
+
+        const variables = resolveVariables(variablesMap as Record<string, string>, contact);
+        if (!variables["1"]) {
+          variables["1"] = (contact?.name && String(contact.name).trim()) || "Customer";
+        }
+
+        const resp = await fetch(`${supabaseUrl}/functions/v1/whatsapp-send`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Service-Key": serviceKey,
+            "Authorization": `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({
+            template_id: templateId,
+            to_number: contact.phone,
+            from_number: fromNumber,
+            variables,
+            allow_user_initiated: false,
+            internal_caller: "process-journeys",
+            journey_enrollment_id: enrollment.id,
+          }),
+        });
+        const result = await resp.json();
+        if (!resp.ok || !result?.success) {
+          throw new Error(result?.error || `whatsapp-send failed (${resp.status})`);
+        }
+        sendStatus = result.status || "queued";
+        sendAccepted = ["accepted", "queued", "sending", "sent", "scheduled"].includes(sendStatus);
+        twilioSid = result.twilio_message_sid || result.message_sid || null;
+        renderedBody = JSON.stringify(variables);
+        if (sendAccepted) messagesSent++;
+      } catch (e) {
+        errorMessage = (e as Error).message;
+        console.error(`Journey ${journey.id} enrollment ${enrollment.id} send failed:`, errorMessage);
+      }
+
+      await supabase.from("journey_message_log")
+        .update({
+          status: sendStatus,
+          delivery_status: sendAccepted ? "pending" : "failed",
+          twilio_message_sid: twilioSid,
+          error_message: errorMessage,
+          template_body: renderedBody,
+        })
+        .eq("enrollment_id", enrollment.id)
+        .eq("node_id", currentNode.id)
+        .eq("channel", channel);
+
+      if (sendAccepted) {
+        await supabase.from("journey_enrollments")
+          .update({
+            status: "pending_delivery",
+            next_action_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          })
+          .eq("id", enrollment.id);
+      } else {
+        // Retry with backoff up to MAX_RETRIES
+        const currentRetries = enrollment.retry_count || 0;
+        if (currentRetries < MAX_RETRIES) {
+          await supabase.from("journey_enrollments")
+            .update({
+              status: "active",
+              retry_count: currentRetries + 1,
+              next_action_at: new Date(Date.now() + RETRY_BACKOFF_MS).toISOString(),
+            })
+            .eq("id", enrollment.id);
+          // Allow re-claim on next run by deleting the failed log row for this slot.
+          await supabase.from("journey_message_log")
+            .delete()
+            .eq("enrollment_id", enrollment.id)
+            .eq("node_id", currentNode.id)
+            .eq("channel", channel)
+            .eq("status", sendStatus);
+        } else {
+          await supabase.from("journey_enrollments")
+            .update({ status: "failed" })
+            .eq("id", enrollment.id);
+        }
+      }
+      return { processed: true, sent: messagesSent };
+    }
+
+    // ============ FREE-FORM MODE ============
+    const channels: FreeformChannel[] = Array.isArray(data.freeform_channels)
+      ? (data.freeform_channels as FreeformChannel[]).filter((c) => ["whatsapp", "sms", "email"].includes(c))
+      : [];
+    const rawBody: string = String(data.freeform_body || "").trim();
+    const subject: string =
+      String(data.freeform_subject || "").trim() || `Message from ${journey.name || "your team"}`;
+
+    if (channels.length === 0 || !rawBody) {
+      await supabase.from("journey_message_log").insert({
+        journey_id: journey.id,
+        enrollment_id: enrollment.id,
+        node_id: currentNode.id,
+        contact_id: enrollment.contact_id,
+        channel: "system",
+        status: "failed",
+        error_message: !rawBody ? "Free-form body is empty" : "No channels selected",
+      });
+      await supabase.from("journey_enrollments")
+        .update({ status: "failed" })
+        .eq("id", enrollment.id);
+      return { processed: true, sent: 0 };
+    }
+
+    const renderedBody = renderFreeformBody(rawBody, contact);
+    const sendResults: ChannelSendResult[] = [];
+
+    // Send to all selected channels in parallel — they're independent.
+    const channelTasks = channels.map(async (ch) => {
+      const { error: claimErr } = await supabase
+        .from("journey_message_log")
+        .insert({
+          journey_id: journey.id,
+          enrollment_id: enrollment.id,
+          node_id: currentNode.id,
+          contact_id: enrollment.contact_id,
+          channel: ch,
+          template_body: renderedBody,
+          status: "sending",
+        });
+      if (claimErr) return null; // already attempted this channel
+
+      let result: ChannelSendResult;
+      if (ch === "whatsapp") {
+        result = await sendWhatsAppFreeform(fromNumber || "", contact?.phone || "", renderedBody);
+      } else if (ch === "sms") {
+        result = await sendSms(smsFromNumber || "", contact?.phone || "", renderedBody);
+      } else {
+        result = await sendEmail(contact?.email || "", subject, renderedBody);
+      }
+
+      await supabase.from("journey_message_log")
+        .update({
+          status: result.status,
+          delivery_status: result.accepted ? "pending" : "failed",
+          twilio_message_sid: result.providerMessageId,
+          error_message: result.errorMessage,
+          error_code: result.errorCode,
+          provider_metadata: result.providerMetadata as any,
+        })
+        .eq("enrollment_id", enrollment.id)
+        .eq("node_id", currentNode.id)
+        .eq("channel", ch);
+
+      return result;
+    });
+
+    const settled = await Promise.all(channelTasks);
+    for (const r of settled) {
+      if (r) {
+        sendResults.push(r);
+        if (r.accepted) messagesSent++;
+      }
+    }
+
+    const anyAccepted = sendResults.some((r) => r.accepted);
+    if (anyAccepted) {
+      await supabase.from("journey_enrollments")
+        .update({
+          status: "pending_delivery",
+          next_action_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        })
+        .eq("id", enrollment.id);
+    } else {
+      const currentRetries = enrollment.retry_count || 0;
+      if (currentRetries < MAX_RETRIES) {
+        await supabase.from("journey_enrollments")
+          .update({
+            status: "active",
+            retry_count: currentRetries + 1,
+            next_action_at: new Date(Date.now() + RETRY_BACKOFF_MS).toISOString(),
+          })
+          .eq("id", enrollment.id);
+        // Clear failed claims so retry can re-attempt
+        await supabase.from("journey_message_log")
+          .delete()
+          .eq("enrollment_id", enrollment.id)
+          .eq("node_id", currentNode.id)
+          .eq("delivery_status", "failed");
+      } else {
+        await supabase.from("journey_enrollments")
+          .update({ status: "failed" })
+          .eq("id", enrollment.id);
+      }
+    }
+    return { processed: true, sent: messagesSent };
+  }
+
+  if (nodeType === "decision") {
+    const condition = currentNode.data?.condition || "opened";
+    const { data: events } = await supabase
+      .from("journey_contact_events")
+      .select("id")
+      .eq("contact_id", enrollment.contact_id)
+      .eq("event_type", condition)
+      .limit(1);
+    const hasEvent = events && events.length > 0;
+    const handleId = hasEvent ? "yes" : "no";
+    const nextEdge = canvas.edges.find(
+      (e: any) => e.source === currentNode.id && (e.sourceHandle === handleId || (!e.sourceHandle && hasEvent))
+    );
+    if (nextEdge) {
+      await supabase.from("journey_enrollments")
+        .update({ current_node_id: nextEdge.target, next_action_at: new Date().toISOString() })
+        .eq("id", enrollment.id);
+    }
+    return { processed: true, sent: 0 };
+  }
+
+  // Entry / unknown -> advance
+  const nextEdge = canvas.edges.find((e: any) => e.source === currentNode.id);
+  if (nextEdge) {
+    await supabase.from("journey_enrollments")
+      .update({ current_node_id: nextEdge.target, next_action_at: new Date().toISOString() })
+      .eq("id", enrollment.id);
+  }
+  return { processed: true, sent: 0 };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -242,9 +565,28 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Step 1: Schedule sweep — turn due journey_schedules rows into fresh enrollments.
-    const sweep = await runScheduleSweep(supabase);
-    console.log(`scheduled_runs_triggered: ${sweep.triggered}`);
+    // Optional body — when invoked from journey-actions/activate we get a journey_id
+    // so we can skip the schedule sweep and target a single journey.
+    let targetJourneyId: string | null = null;
+    let trigger: string = "cron";
+    try {
+      if (req.method === "POST") {
+        const body = await req.json().catch(() => ({}));
+        if (body && typeof body === "object") {
+          targetJourneyId = body.journey_id || null;
+          trigger = body.trigger || "cron";
+        }
+      }
+    } catch { /* no body — cron call */ }
+
+    // Step 1: Schedule sweep — only on cron-style runs
+    let sweep = { triggered: 0, errors: [] as string[] };
+    if (!targetJourneyId) {
+      sweep = await runScheduleSweep(supabase);
+      console.log(`scheduled_runs_triggered: ${sweep.triggered}`);
+    } else {
+      console.log(`[process-journeys] targeted run: journey=${targetJourneyId} trigger=${trigger}`);
+    }
 
     const { data: cfg } = await supabase
       .from("whatsapp_config")
@@ -259,8 +601,9 @@ Deno.serve(async (req) => {
     const smsFromNumber: string | null =
       cfg?.sms_sender_number || cfg?.sender_number || Deno.env.get("TWILIO_SMS_FROM") || null;
 
-    const { data: activeJourneys } = await supabase
-      .from("journeys").select("*").eq("status", "active");
+    let activeJourneysQuery = supabase.from("journeys").select("*").eq("status", "active");
+    if (targetJourneyId) activeJourneysQuery = activeJourneysQuery.eq("id", targetJourneyId);
+    const { data: activeJourneys } = await activeJourneysQuery;
 
     if (!activeJourneys || activeJourneys.length === 0) {
       return new Response(JSON.stringify({ processed: 0, scheduled_runs_triggered: sweep.triggered, schedule_errors: sweep.errors }), {
@@ -268,6 +611,7 @@ Deno.serve(async (req) => {
       });
     }
 
+    const ctx: ProcessCtx = { supabase, supabaseUrl, serviceKey, fromNumber, smsFromNumber };
     let processed = 0;
     let messagesSent = 0;
 
@@ -282,267 +626,30 @@ Deno.serve(async (req) => {
         .eq("status", "active")
         .lte("next_action_at", new Date().toISOString());
 
-      if (!enrollments) continue;
+      if (!enrollments || enrollments.length === 0) continue;
 
-      for (const enrollment of enrollments) {
-        const currentNode = canvas.nodes.find((n: any) => n.id === enrollment.current_node_id);
-        if (!currentNode) continue;
+      console.log(
+        `[process-journeys] journey=${journey.id} enrollments=${enrollments.length} batch_size=${ENROLLMENT_BATCH_SIZE}`,
+      );
 
-        const nodeType = currentNode.type;
-
-        if (nodeType === "exit") {
-          await supabase.from("journey_enrollments")
-            .update({ status: "completed" })
-            .eq("id", enrollment.id);
-          processed++;
-          continue;
+      // Parallel batched execution — respects Twilio rate limits while draining quickly.
+      for (let i = 0; i < enrollments.length; i += ENROLLMENT_BATCH_SIZE) {
+        const batch = enrollments.slice(i, i + ENROLLMENT_BATCH_SIZE);
+        const results = await Promise.all(
+          batch.map((e: any) =>
+            processEnrollment(e, journey, canvas, ctx).catch((err: any) => {
+              console.error(
+                `[process-journeys] enrollment ${e.id} threw:`,
+                err?.message || err,
+              );
+              return { processed: false, sent: 0 };
+            }),
+          ),
+        );
+        for (const r of results) {
+          if (r.processed) processed++;
+          messagesSent += r.sent;
         }
-
-        if (nodeType === "delay") {
-          const duration = currentNode.data?.duration || 1;
-          const unit = currentNode.data?.unit || "days";
-          const delayMs = unit === "hours" ? duration * 3600000 : duration * 86400000;
-          const nextActionAt = new Date(enrollment.next_action_at!).getTime();
-          if (Date.now() >= nextActionAt + delayMs) {
-            const nextEdge = canvas.edges.find((e: any) => e.source === currentNode.id);
-            if (nextEdge) {
-              await supabase.from("journey_enrollments")
-                .update({ current_node_id: nextEdge.target, next_action_at: new Date().toISOString() })
-                .eq("id", enrollment.id);
-            }
-          }
-          processed++;
-          continue;
-        }
-
-        if (nodeType === "message") {
-          const contact = enrollment.journey_contacts;
-          const data = currentNode.data || {};
-          const messageType: string =
-            data.message_type || (data.channel === "whatsapp_template" ? "template" : "template");
-
-          // ============ TEMPLATE MODE (unchanged path) ============
-          if (messageType === "template") {
-            const channel = data.channel || "whatsapp_template";
-            const templateId = data.whatsapp_template_id;
-            const variablesMap = data.template_variables || {};
-
-            // Idempotency: try to claim this (enrollment, node, channel) slot first
-            const { error: claimErr } = await supabase
-              .from("journey_message_log")
-              .insert({
-                journey_id: journey.id,
-                enrollment_id: enrollment.id,
-                node_id: currentNode.id,
-                contact_id: enrollment.contact_id,
-                channel,
-                template_body: null,
-                status: "sending",
-                template_id: templateId || null,
-              });
-
-            if (claimErr) {
-              const nextEdge = canvas.edges.find((e: any) => e.source === currentNode.id);
-              if (nextEdge) {
-                await supabase.from("journey_enrollments")
-                  .update({ current_node_id: nextEdge.target, next_action_at: new Date().toISOString() })
-                  .eq("id", enrollment.id);
-              }
-              processed++;
-              continue;
-            }
-
-            let sendStatus = "failed";
-            let sendAccepted = false;
-            let errorMessage: string | null = null;
-            let twilioSid: string | null = null;
-            let renderedBody: string | null = null;
-
-            try {
-              if (channel !== "whatsapp_template") throw new Error(`Unsupported channel: ${channel}`);
-              if (!templateId) throw new Error("Message node missing whatsapp_template_id");
-              if (!fromNumber) throw new Error("No active WhatsApp sender configured (whatsapp_config.sender_number)");
-              if (!contact?.phone) throw new Error("Contact phone missing");
-
-              const variables = resolveVariables(variablesMap as Record<string, string>, contact);
-              if (!variables["1"]) {
-                variables["1"] = (contact?.name && String(contact.name).trim()) || "Customer";
-              }
-
-              const resp = await fetch(`${supabaseUrl}/functions/v1/whatsapp-send`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "X-Internal-Service-Key": serviceKey,
-                  "Authorization": `Bearer ${serviceKey}`,
-                },
-                body: JSON.stringify({
-                  template_id: templateId,
-                  to_number: contact.phone,
-                  from_number: fromNumber,
-                  variables,
-                  allow_user_initiated: false,
-                  internal_caller: "process-journeys",
-                  journey_enrollment_id: enrollment.id,
-                }),
-              });
-              const result = await resp.json();
-              if (!resp.ok || !result?.success) {
-                throw new Error(result?.error || `whatsapp-send failed (${resp.status})`);
-              }
-              sendStatus = result.status || "queued";
-              sendAccepted = ["accepted", "queued", "sending", "sent", "scheduled"].includes(sendStatus);
-              twilioSid = result.twilio_message_sid || result.message_sid || null;
-              renderedBody = JSON.stringify(variables);
-              messagesSent++;
-            } catch (e) {
-              errorMessage = (e as Error).message;
-              console.error(`Journey ${journey.id} enrollment ${enrollment.id} send failed:`, errorMessage);
-            }
-
-            await supabase.from("journey_message_log")
-              .update({
-                status: sendStatus,
-                delivery_status: sendAccepted ? "pending" : "failed",
-                twilio_message_sid: twilioSid,
-                error_message: errorMessage,
-                template_body: renderedBody,
-              })
-              .eq("enrollment_id", enrollment.id)
-              .eq("node_id", currentNode.id)
-              .eq("channel", channel);
-
-            if (sendAccepted) {
-              await supabase.from("journey_enrollments")
-                .update({
-                  status: "pending_delivery",
-                  next_action_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-                })
-                .eq("id", enrollment.id);
-            } else {
-              await supabase.from("journey_enrollments")
-                .update({ status: "failed" })
-                .eq("id", enrollment.id);
-            }
-            processed++;
-            continue;
-          }
-
-          // ============ FREE-FORM MODE (new) ============
-          const channels: FreeformChannel[] = Array.isArray(data.freeform_channels)
-            ? (data.freeform_channels as FreeformChannel[]).filter((c) => ["whatsapp", "sms", "email"].includes(c))
-            : [];
-          const rawBody: string = String(data.freeform_body || "").trim();
-          const subject: string =
-            String(data.freeform_subject || "").trim() || `Message from ${journey.name || "your team"}`;
-
-          if (channels.length === 0 || !rawBody) {
-            await supabase.from("journey_message_log").insert({
-              journey_id: journey.id,
-              enrollment_id: enrollment.id,
-              node_id: currentNode.id,
-              contact_id: enrollment.contact_id,
-              channel: "system",
-              status: "failed",
-              error_message: !rawBody ? "Free-form body is empty" : "No channels selected",
-            });
-            await supabase.from("journey_enrollments")
-              .update({ status: "failed" })
-              .eq("id", enrollment.id);
-            processed++;
-            continue;
-          }
-
-          const renderedBody = renderFreeformBody(rawBody, contact);
-          const sendResults: ChannelSendResult[] = [];
-
-          for (const ch of channels) {
-            // Per-channel idempotency claim
-            const { error: claimErr } = await supabase
-              .from("journey_message_log")
-              .insert({
-                journey_id: journey.id,
-                enrollment_id: enrollment.id,
-                node_id: currentNode.id,
-                contact_id: enrollment.contact_id,
-                channel: ch,
-                template_body: renderedBody,
-                status: "sending",
-              });
-            if (claimErr) continue; // already attempted this channel
-
-            let result: ChannelSendResult;
-            if (ch === "whatsapp") {
-              result = await sendWhatsAppFreeform(fromNumber || "", contact?.phone || "", renderedBody);
-            } else if (ch === "sms") {
-              result = await sendSms(smsFromNumber || "", contact?.phone || "", renderedBody);
-            } else {
-              result = await sendEmail(contact?.email || "", subject, renderedBody);
-            }
-            sendResults.push(result);
-            if (result.accepted) messagesSent++;
-
-            await supabase.from("journey_message_log")
-              .update({
-                status: result.status,
-                delivery_status: result.accepted ? "pending" : "failed",
-                twilio_message_sid: result.providerMessageId,
-                error_message: result.errorMessage,
-                error_code: result.errorCode,
-                provider_metadata: result.providerMetadata as any,
-              })
-              .eq("enrollment_id", enrollment.id)
-              .eq("node_id", currentNode.id)
-              .eq("channel", ch);
-          }
-
-          const anyAccepted = sendResults.some((r) => r.accepted);
-          if (anyAccepted) {
-            await supabase.from("journey_enrollments")
-              .update({
-                status: "pending_delivery",
-                next_action_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-              })
-              .eq("id", enrollment.id);
-          } else {
-            await supabase.from("journey_enrollments")
-              .update({ status: "failed" })
-              .eq("id", enrollment.id);
-          }
-          processed++;
-          continue;
-        }
-
-        if (nodeType === "decision") {
-          const condition = currentNode.data?.condition || "opened";
-          const { data: events } = await supabase
-            .from("journey_contact_events")
-            .select("id")
-            .eq("contact_id", enrollment.contact_id)
-            .eq("event_type", condition)
-            .limit(1);
-          const hasEvent = events && events.length > 0;
-          const handleId = hasEvent ? "yes" : "no";
-          const nextEdge = canvas.edges.find(
-            (e: any) => e.source === currentNode.id && (e.sourceHandle === handleId || (!e.sourceHandle && hasEvent))
-          );
-          if (nextEdge) {
-            await supabase.from("journey_enrollments")
-              .update({ current_node_id: nextEdge.target, next_action_at: new Date().toISOString() })
-              .eq("id", enrollment.id);
-          }
-          processed++;
-          continue;
-        }
-
-        // Entry / unknown -> advance
-        const nextEdge = canvas.edges.find((e: any) => e.source === currentNode.id);
-        if (nextEdge) {
-          await supabase.from("journey_enrollments")
-            .update({ current_node_id: nextEdge.target, next_action_at: new Date().toISOString() })
-            .eq("id", enrollment.id);
-        }
-        processed++;
       }
     }
 
@@ -551,6 +658,8 @@ Deno.serve(async (req) => {
       messagesSent,
       scheduled_runs_triggered: sweep.triggered,
       schedule_errors: sweep.errors,
+      target_journey_id: targetJourneyId,
+      trigger,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

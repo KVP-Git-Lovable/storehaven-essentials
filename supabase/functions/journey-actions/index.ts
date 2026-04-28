@@ -142,6 +142,20 @@ Deno.serve(async (req) => {
 
       await supabase.from("journeys").update({ status: "active" }).eq("id", journey_id);
 
+      // Fire-and-forget: kick off the processor immediately so messages flow in seconds,
+      // not minutes (the cron sweep is the safety net). We do NOT await this.
+      if (contactIds.length > 0) {
+        supabase.functions
+          .invoke("process-journeys", {
+            body: { journey_id, trigger: "activation" },
+          })
+          .then((r: any) => {
+            if (r?.error) console.error("[activate] kickoff error:", r.error);
+            else console.log(`[activate] kickoff invoked for journey ${journey_id}`);
+          })
+          .catch((e: any) => console.error("[activate] kickoff failed:", e?.message || e));
+      }
+
       return new Response(JSON.stringify({
         success: true,
         enrolled: contactIds.length,
