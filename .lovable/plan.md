@@ -1,90 +1,48 @@
-## Add Purchase Intent Handler to WhatsApp Webhook
+## Fix: Mobile Sidebar Closes Instantly on Submenu Click
 
-Insert a new "purchase intent" handler in `supabase/functions/whatsapp-inbound/index.ts` that runs between the assistance check and the order-history check, returning a deterministic TwiML reply pointing users to the Trayi Jewellers product catalogue.
+### Problem
+On mobile, tapping a submenu (WhatsApp, Voice, Email, Journey Builder, Calendar, etc.) doesn't close the Radix `Sheet` immediately. The sidebar only closes after a second click somewhere else. The current `handleNavClick` defers the close via `requestAnimationFrame`, which still races with Radix Dialog/Sheet's focus + pointer-event handling on touch devices.
 
-### Execution order (after change)
+### Solution
+Switch to **synchronous close on click** and rely on a **route-change effect** as a safety net. Remove all deferred (rAF/setTimeout) close logic.
 
-1. Greeting (`hi`/`hello`/...) → welcome message
-2. Assistance keywords (`help`, `support`, `issue`, ...) → falls through to fallback (logs request)
-3. **Purchase intent (NEW)** → guided catalogue reply
-4. Order history → last 3 orders
-5. Store location → address reply
-6. Product inquiry → Twilio template
-7. Fallback → apology + log assistance request
+### Changes (single file: `src/components/layout/AppSidebar.tsx`)
 
-### Changes to `supabase/functions/whatsapp-inbound/index.ts`
+1. **Synchronous `handleNavClick`** — close the Sheet immediately during the click event (no `requestAnimationFrame`):
+   ```ts
+   const handleNavClick = () => {
+     if (!isMobile) return;
+     onOpenChange(false);
+   };
+   ```
 
-**1. Add constants near the other intent regexes (around line 50):**
+2. **Same-route safety**: when the user taps a link to the page they're already on, `location.pathname` doesn't change so the route-change effect won't fire. Handle that case explicitly inside `handleNavClick` by accepting the target href and force-closing:
+   ```ts
+   const handleNavClick = (href?: string) => {
+     if (!isMobile) return;
+     onOpenChange(false); // always close synchronously
+   };
+   ```
+   (No `popstate` dispatch needed — we already close unconditionally.)
 
-```ts
-const PURCHASE_INTENT_PATTERNS: RegExp[] = [
-  /place.*order/i,
-  /need.*buy/i,
-  /want.*buy/i,
-  /want.*purchase/i,
-  /would.*like.*buy/i,
-  /would.*like.*purchase/i,
-  /\bbuy\b/i,
-  /\bpurchase\b/i,
-];
-const isPurchaseIntent = (text: string): boolean =>
-  PURCHASE_INTENT_PATTERNS.some((re) => re.test(text));
+3. **Keep the route-change effect** as backup (already present at lines 341–346) — fires when navigation actually changes the path:
+   ```ts
+   useEffect(() => {
+     if (isMobile && open) onOpenChange(false);
+   }, [location.pathname]);
+   ```
 
-const PURCHASE_INTENT_REPLY =
-  "That's wonderful to hear! At Trayi Jewellers, we specialise in finely curated jewellery, including exquisite diamonds and necklaces.\n\nYou can explore our latest collections here:\nhttps://trayijewellers.in/";
-```
+4. **Remove the rAF-based deferral** currently in `handleNavClick` (lines 348–359). No `setTimeout`, no `requestAnimationFrame`.
 
-Note: `\bbuy\b` / `\bpurchase\b` use word boundaries so unrelated words like "buyer's remorse" or "purchaser" won't unnecessarily over-trigger, while still catching the requested bare "buy" / "purchase".
+5. **`stopPropagation` on NavLink onClick** is not needed and would block React Router navigation in some cases — we will NOT add it. Synchronous `setOpen(false)` + Radix's controlled `open` prop is sufficient; React batches the state update with the navigation, and the Sheet unmounts cleanly on next render.
 
-**2. Insert the handler immediately AFTER the assistance check and BEFORE the order-history block (around line 432):**
+6. **Modal/overlay**: No changes to the `Sheet`/`SheetContent` props. It's already controlled via `open={open} onOpenChange={onOpenChange}` (line 553).
 
-```ts
-// 2a) Purchase intent — deterministic guided reply to the catalogue.
-//     Runs before order-history so "want to buy" doesn't get misrouted.
-const purchaseIntentDetected = !isAssistanceIntent && isPurchaseIntent(body);
-if (purchaseIntentDetected) {
-  console.log("[whatsapp-inbound] purchase-intent matched", {
-    bodyPreview: body.slice(0, 120),
-  });
-  await logMessages(false);
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (supabaseUrl && serviceKey && normalizedFrom) {
-      const sb = createClient(supabaseUrl, serviceKey);
-      await sb.from("whatsapp_messages").insert({
-        phone: normalizedFrom,
-        customer_id: null,
-        direction: "outbound",
-        message: PURCHASE_INTENT_REPLY,
-        message_type: "text",
-        status: "sent",
-        is_read: true,
-      });
-    }
-  } catch (e) {
-    console.error("[whatsapp-inbound] purchase-intent outbound log err", e);
-  }
-  return twiml(PURCHASE_INTENT_REPLY);
-}
-```
+### Files Edited
+- `src/components/layout/AppSidebar.tsx` — replace `handleNavClick` body; keep existing route-change `useEffect`.
 
-**3. Update the existing order-history gate (line 432) so purchase intent takes precedence:**
-
-```ts
-const orderIntentDetected =
-  !isAssistanceIntent && !purchaseIntentDetected && isOrderHistoryIntent(body);
-```
-
-This prevents "place order" / "want to buy" from being captured by the `/\borders?\b/i` pattern in `ORDER_HISTORY_PATTERNS`.
-
-### Constraints honoured
-
-- No DB lookup performed for matching/responding — reply is fully static.
-- Returned synchronously via TwiML (single Twilio round-trip, sub-second).
-- Conversation thread logging is best-effort and wrapped in try/catch — never blocks the reply.
-- Existing assistance, order-history, store-location, product, and fallback flows remain unchanged.
-
-### Files touched
-
-- `supabase/functions/whatsapp-inbound/index.ts` (edits only — no new files, no migrations, no UI changes)
+### Outcome
+- Tapping any submenu on mobile closes the sidebar in the same frame as navigation.
+- Tapping a link to the current route still closes the sidebar (synchronous close runs regardless of route change).
+- Desktop behavior unchanged (function early-returns when `!isMobile`).
+- No timing hacks remain.

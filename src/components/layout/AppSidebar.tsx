@@ -345,17 +345,12 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
+  // Close the mobile Sheet synchronously on any nav click. The route-change
+  // effect above acts as a backup for cases where state updates get batched
+  // unexpectedly. Desktop is a no-op since the Sheet isn't rendered.
   const handleNavClick = () => {
-    // Close the mobile Sheet on leaf nav clicks. Defer to the next tick so the
-    // close fires AFTER react-router's NavLink processes the click — otherwise
-    // Radix Dialog's focus management can race with the navigation and the
-    // sheet appears to "stick" open until the user taps elsewhere. On desktop
-    // the Sheet isn't rendered, so this is a harmless no-op.
     if (!isMobile) return;
-    // Use rAF + microtask to clear after Radix's internal pointer-event handling.
-    requestAnimationFrame(() => {
-      onOpenChange(false);
-    });
+    onOpenChange(false);
   };
 
   const sidebarContent = (
