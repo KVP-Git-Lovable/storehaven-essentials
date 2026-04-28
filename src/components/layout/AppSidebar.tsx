@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Store,
@@ -273,7 +273,6 @@ interface AppSidebarProps {
 
 export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedChange }: AppSidebarProps) {
   const location = useLocation();
-  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { hasPermission, isAdmin, loading } = usePermissions();
   const { profile } = useAuth();
