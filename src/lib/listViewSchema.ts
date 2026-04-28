@@ -22,7 +22,7 @@ export interface EntityDef {
   fields: FieldDef[];
 }
 
-export type EntityKey = "customers" | "orders" | "revenue" | "products" | "items" | "schemes";
+export type EntityKey = "customers" | "leads" | "orders" | "revenue" | "products" | "items" | "schemes";
 
 export const ENTITY_SCHEMAS: Record<EntityKey, EntityDef> = {
   customers: {
@@ -44,6 +44,26 @@ export const ENTITY_SCHEMAS: Record<EntityKey, EntityDef> = {
       { key: "total_spent", label: "Total Spent", type: "number" },
       { key: "date_of_birth", label: "Date of Birth", type: "date", recurring: true },
       { key: "anniversary_date", label: "Anniversary", type: "date", recurring: true },
+      { key: "created_at", label: "Created Date", type: "date" },
+    ],
+  },
+  leads: {
+    key: "leads",
+    label: "Leads",
+    table: "leads",
+    isAudienceSource: true,
+    contactKey: "phone",
+    fields: [
+      { key: "id", label: "ID", type: "string" },
+      { key: "name", label: "Name", type: "string" },
+      { key: "phone", label: "Phone", type: "string" },
+      { key: "email", label: "Email", type: "string" },
+      { key: "city", label: "City", type: "string" },
+      { key: "state", label: "State", type: "string" },
+      { key: "country", label: "Country", type: "string" },
+      { key: "address", label: "Address", type: "string" },
+      { key: "is_converted", label: "Is Converted", type: "boolean" },
+      { key: "converted_at", label: "Converted Date", type: "date" },
       { key: "created_at", label: "Created Date", type: "date" },
     ],
   },

@@ -38,7 +38,7 @@ export function AudienceBuilder({ value, onChange }: Props) {
         .select("id, name, entity_type")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return ((data as any[]) || []).filter((v: any) => v.entity_type === "customers" || v.entity_type === "orders") as any[];
+      return ((data as any[]) || []).filter((v: any) => v.entity_type === "customers" || v.entity_type === "leads" || v.entity_type === "orders") as any[];
     },
   });
 

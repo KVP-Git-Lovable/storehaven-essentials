@@ -123,6 +123,7 @@ export const ALLOWED_ENTITIES: Record<
   { table: string; isAudienceSource: boolean; contactKey?: string }
 > = {
   customers: { table: "customers", isAudienceSource: true, contactKey: "phone" },
+  leads: { table: "leads", isAudienceSource: true, contactKey: "phone" },
   orders: { table: "orders", isAudienceSource: true, contactKey: "customer_id" },
   revenue: { table: "orders", isAudienceSource: false },
   products: { table: "products", isAudienceSource: false },
@@ -271,7 +272,7 @@ export async function resolveListViewContacts(
   const entity = ALLOWED_ENTITIES[lv.entity_type];
   if (!entity) throw new Error(`Invalid entity: ${lv.entity_type}`);
   if (!entity.isAudienceSource) {
-    throw new Error("Selected list view's entity isn't an audience source. Use a Customers or Orders view.");
+    throw new Error("Selected list view's entity isn't an audience source. Use a Customers, Leads, or Orders view.");
   }
 
   let q = supabase.from(entity.table).select("*");
@@ -283,6 +284,12 @@ export async function resolveListViewContacts(
   if (lv.entity_type === "customers") {
     const res = await upsertContactsFromCustomers(supabase, rows || []);
     return { ...res, warning: res.contactIds.length === 0 ? "No customers enrolled" : undefined };
+  }
+
+  if (lv.entity_type === "leads") {
+    const mapped = (rows || []).map((l: any) => ({ ...l, customer_segment: "lead" }));
+    const res = await upsertContactsFromCustomers(supabase, mapped);
+    return { ...res, warning: res.contactIds.length === 0 ? "No leads enrolled" : undefined };
   }
 
   if (lv.entity_type === "orders") {
@@ -331,6 +338,8 @@ export async function resolveListViewContactIdsReadOnly(
   // Resolve phones (customers directly, or via order.customer_id → customers)
   let customers: any[] = [];
   if (lv.entity_type === "customers") {
+    customers = rows || [];
+  } else if (lv.entity_type === "leads") {
     customers = rows || [];
   } else if (lv.entity_type === "orders") {
     const customerIds = Array.from(new Set((rows || []).map((r: any) => r.customer_id).filter(Boolean)));
@@ -449,7 +458,7 @@ export async function resolveAudienceConfig(
     const cfg = ALLOWED_ENTITIES[lv.entity_type];
     if (!cfg || !cfg.isAudienceSource) {
       throw new Error(
-        `Segment ${seg.key} ("${lv.name}") uses entity "${lv.entity_type}" which is not an audience source. Use a Customers or Orders list view.`,
+        `Segment ${seg.key} ("${lv.name}") uses entity "${lv.entity_type}" which is not an audience source. Use a Customers, Leads, or Orders list view.`,
       );
     }
   }
