@@ -7,13 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Search, ChevronLeft, ChevronRight, Plus, Eye, Pencil, Trash2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar";
 import { CustomerFormDialog } from "@/components/transactions/CustomerFormDialog";
 import { executeListView } from "@/lib/listViewExecutor";
 import { ENTITY_SCHEMAS, type FilterCondition } from "@/lib/listViewSchema";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
 type SearchColumn = {
   key: string;
   label: string;
