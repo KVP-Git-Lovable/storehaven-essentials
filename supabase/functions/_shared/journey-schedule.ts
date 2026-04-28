@@ -339,6 +339,8 @@ export async function resolveListViewContactIdsReadOnly(
   let customers: any[] = [];
   if (lv.entity_type === "customers") {
     customers = rows || [];
+  } else if (lv.entity_type === "leads") {
+    customers = rows || [];
   } else if (lv.entity_type === "orders") {
     const customerIds = Array.from(new Set((rows || []).map((r: any) => r.customer_id).filter(Boolean)));
     if (customerIds.length === 0) return { contactIds: [], matched: 0 };
