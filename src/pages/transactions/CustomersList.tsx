@@ -188,13 +188,13 @@ export default function CustomersList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
           <p className="text-muted-foreground">All registered customers, sortable by spend.</p>
         </div>
-        <Button onClick={() => { setSelectedCustomer(null); setDialogMode("create"); setCreateOpen(true); }}>
-          <Plus className="mr-2 h-4 w-4" /> New Customer
+        <Button onClick={() => { setSelectedCustomer(null); setDialogMode("create"); setCreateOpen(true); }} className="shrink-0">
+          <Plus className="mr-2 h-4 w-4" /> <span className="whitespace-nowrap">New Customer</span>
         </Button>
       </div>
 
