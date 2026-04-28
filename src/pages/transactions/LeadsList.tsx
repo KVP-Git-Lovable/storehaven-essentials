@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Search, ChevronLeft, ChevronRight, Plus, Eye, Pencil, Trash2, ArrowRightLeft, CheckCircle2 } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Plus, Eye, Pencil, Trash2, ArrowRightLeft, CheckCircle2, Upload } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner";
 import { LeadFormDialog, type LeadRow } from "@/components/transactions/LeadFormDialog";
 import { LeadConvertDialog } from "@/components/transactions/LeadConvertDialog";
+import { LeadImportDialog } from "@/components/transactions/LeadImportDialog";
 import { CustomerFormDialog } from "@/components/transactions/CustomerFormDialog";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,7 @@ export default function LeadsList() {
   const [convertLead, setConvertLead] = useState<LeadRow | null>(null);
   const [linkedCustomer, setLinkedCustomer] = useState<any | null>(null);
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["transactions-leads", search, page],
@@ -87,9 +89,14 @@ export default function LeadsList() {
           <h1 className="text-2xl font-bold tracking-tight">Leads</h1>
           <p className="text-muted-foreground">Prospect contacts that can be converted into customers.</p>
         </div>
-        <Button onClick={() => { setSelected(null); setMode("create"); setFormOpen(true); }}>
-          <Plus className="mr-2 h-4 w-4" /> New Lead
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" /> Import Leads
+          </Button>
+          <Button onClick={() => { setSelected(null); setMode("create"); setFormOpen(true); }}>
+            <Plus className="mr-2 h-4 w-4" /> New Lead
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
@@ -205,6 +212,7 @@ export default function LeadsList() {
 
       <LeadFormDialog open={formOpen} onOpenChange={setFormOpen} lead={selected} mode={mode} />
       <LeadConvertDialog open={!!convertLead} onOpenChange={(o) => !o && setConvertLead(null)} lead={convertLead} />
+      <LeadImportDialog open={importOpen} onOpenChange={setImportOpen} />
       <CustomerFormDialog
         open={customerDialogOpen}
         onOpenChange={setCustomerDialogOpen}
