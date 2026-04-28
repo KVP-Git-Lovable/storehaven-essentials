@@ -1,0 +1,2 @@
+ALTER TABLE public.list_views DROP CONSTRAINT list_views_entity_check;
+ALTER TABLE public.list_views ADD CONSTRAINT list_views_entity_check CHECK (entity_type = ANY (ARRAY['customers'::text, 'orders'::text, 'revenue'::text, 'products'::text, 'items'::text, 'schemes'::text, 'leads'::text]));
