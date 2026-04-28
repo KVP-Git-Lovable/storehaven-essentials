@@ -12,8 +12,6 @@ import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar
 import { CustomerFormDialog } from "@/components/transactions/CustomerFormDialog";
 import { executeListView } from "@/lib/listViewExecutor";
 import { ENTITY_SCHEMAS, type FilterCondition } from "@/lib/listViewSchema";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
 type SearchColumn = {
   key: string;
   label: string;
