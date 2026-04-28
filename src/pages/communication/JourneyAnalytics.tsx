@@ -58,6 +58,8 @@ export default function JourneyAnalytics() {
     enabled: !!id,
   });
 
+  const isActive = journey?.status === "active";
+
   const { data: messages = [] } = useQuery({
     queryKey: ["journey-messages", id],
     queryFn: async () => {
@@ -71,6 +73,7 @@ export default function JourneyAnalytics() {
       return data;
     },
     enabled: !!id,
+    refetchInterval: isActive ? 5000 : false,
   });
 
   const { data: enrollments } = useQuery({
@@ -84,6 +87,7 @@ export default function JourneyAnalytics() {
       return data;
     },
     enabled: !!id,
+    refetchInterval: isActive ? 5000 : false,
   });
 
   // Pull link clicks for the tracked template, scoped to clicks attributed to this journey.
