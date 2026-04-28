@@ -111,6 +111,17 @@ export default function JourneyAnalytics() {
   const completed = enrollments?.filter((e: any) => e.status === "completed").length || 0;
   const channelSummary = summarizeByChannel(messages);
 
+  // Live progress (refreshes every 5s while journey is active)
+  const totalEnrolled = enrollments?.length || 0;
+  const sentCount = messages.filter((m: any) =>
+    SUCCESS_STATUSES.has(m.status) || m.delivery_status === "delivered" || m.status === "delivered",
+  ).length;
+  const failedCount = messages.filter((m: any) =>
+    FAIL_STATUSES.has(m.status) || m.delivery_status === "failed",
+  ).length;
+  const pendingCount = Math.max(0, totalEnrolled - sentCount - failedCount);
+  const progressPct = totalEnrolled > 0 ? Math.round(((sentCount + failedCount) / totalEnrolled) * 100) : 0;
+
   // Detect whether this journey uses the tracked template — check both:
   // (a) message log rows that have template_id populated (new sends), and
   // (b) the journey's canvas_data message nodes (covers historical sends where template_id is NULL).
