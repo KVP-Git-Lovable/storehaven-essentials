@@ -392,7 +392,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                     <TooltipTrigger asChild>
                       <NavLink
                         to={item.href}
-                        onClick={handleNavClick}
+                        {...navTapProps(item.href)}
                         className={cn(
                           "flex items-center justify-center rounded-lg p-2.5 transition-colors",
                           isActive(item.href)
@@ -408,7 +408,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                 ) : (
                   <NavLink
                     to={item.href}
-                    onClick={handleNavClick}
+                    {...navTapProps(item.href)}
                     className={cn(
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 md:py-2 text-sm font-medium transition-colors",
                       isActive(item.href)
@@ -425,7 +425,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                   <TooltipTrigger asChild>
                     <NavLink
                       to={item.children?.[0]?.href || item.children?.[0]?.subChildren?.[0]?.href || "/"}
-                      onClick={handleNavClick}
+                      {...navTapProps(item.children?.[0]?.href || item.children?.[0]?.subChildren?.[0]?.href)}
                       className={cn(
                         "flex w-full items-center justify-center rounded-lg p-2.5 transition-colors",
                         isChildActive(item.children)
@@ -488,7 +488,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                                   <NavLink
                                     key={subChild.href}
                                     to={subChild.href!}
-                                    onClick={handleNavClick}
+                                    {...navTapProps(subChild.href)}
                                     className={cn(
                                       "block rounded-lg px-3 py-1.5 text-sm transition-colors",
                                       isActive(subChild.href)
@@ -506,7 +506,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                           <NavLink
                             key={child.href}
                             to={child.href!}
-                            onClick={handleNavClick}
+                            {...navTapProps(child.href)}
                             className={cn(
                               "block rounded-lg px-3 py-2 text-sm transition-colors",
                               isActive(child.href)
