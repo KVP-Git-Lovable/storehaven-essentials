@@ -13,7 +13,9 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     mode === "development" && componentTagger(),
-    VitePWA({
+    // Only enable PWA plugin in production builds. In dev/preview, the static
+    // public/manifest.webmanifest is served directly and no service worker is registered.
+    mode === "production" && VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "favicon.png", "pwa-icon.png", "robots.txt"],
       manifest: {
