@@ -272,7 +272,7 @@ export async function resolveListViewContacts(
   const entity = ALLOWED_ENTITIES[lv.entity_type];
   if (!entity) throw new Error(`Invalid entity: ${lv.entity_type}`);
   if (!entity.isAudienceSource) {
-    throw new Error("Selected list view's entity isn't an audience source. Use a Customers or Orders view.");
+    throw new Error("Selected list view's entity isn't an audience source. Use a Customers, Leads, or Orders view.");
   }
 
   let q = supabase.from(entity.table).select("*");
@@ -458,7 +458,7 @@ export async function resolveAudienceConfig(
     const cfg = ALLOWED_ENTITIES[lv.entity_type];
     if (!cfg || !cfg.isAudienceSource) {
       throw new Error(
-        `Segment ${seg.key} ("${lv.name}") uses entity "${lv.entity_type}" which is not an audience source. Use a Customers or Orders list view.`,
+        `Segment ${seg.key} ("${lv.name}") uses entity "${lv.entity_type}" which is not an audience source. Use a Customers, Leads, or Orders list view.`,
       );
     }
   }
