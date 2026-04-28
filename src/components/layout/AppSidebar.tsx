@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -336,8 +336,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
       return false;
     }) ?? false;
 
-  // Auto-close mobile sheet whenever the route changes (covers nav clicks
-  // where Sheet's onOpenChange race with Radix focus management).
+  // Backup: close mobile sheet on any route change (covers programmatic nav).
   useEffect(() => {
     if (isMobile && open) {
       onOpenChange(false);
@@ -345,13 +344,23 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-  // Close the mobile Sheet synchronously on any nav click. The route-change
-  // effect above acts as a backup for cases where state updates get batched
-  // unexpectedly. Desktop is a no-op since the Sheet isn't rendered.
-  const handleNavClick = () => {
+  // Close the mobile Sheet immediately on tap. We use pointerdown (fires
+  // before Radix Sheet's focus/blur handling) plus onClick as a fallback.
+  // For same-route taps, we still close the sheet (route effect won't fire).
+  const handleNavTap = useCallback((href?: string) => {
     if (!isMobile) return;
     onOpenChange(false);
-  };
+    if (href && location.pathname === href) {
+      // Same-route tap: ensure sheet closes even though route doesn't change.
+      // No navigate needed.
+    }
+  }, [isMobile, onOpenChange, location.pathname]);
+
+  // Helper bound props for every clickable nav link on mobile.
+  const navTapProps = (href?: string) => ({
+    onPointerDown: () => handleNavTap(href),
+    onClick: () => handleNavTap(href),
+  });
 
   const sidebarContent = (
     <>
@@ -382,7 +391,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                     <TooltipTrigger asChild>
                       <NavLink
                         to={item.href}
-                        onClick={handleNavClick}
+                        {...navTapProps(item.href)}
                         className={cn(
                           "flex items-center justify-center rounded-lg p-2.5 transition-colors",
                           isActive(item.href)
@@ -398,7 +407,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                 ) : (
                   <NavLink
                     to={item.href}
-                    onClick={handleNavClick}
+                    {...navTapProps(item.href)}
                     className={cn(
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 md:py-2 text-sm font-medium transition-colors",
                       isActive(item.href)
@@ -415,7 +424,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                   <TooltipTrigger asChild>
                     <NavLink
                       to={item.children?.[0]?.href || item.children?.[0]?.subChildren?.[0]?.href || "/"}
-                      onClick={handleNavClick}
+                      {...navTapProps(item.children?.[0]?.href || item.children?.[0]?.subChildren?.[0]?.href)}
                       className={cn(
                         "flex w-full items-center justify-center rounded-lg p-2.5 transition-colors",
                         isChildActive(item.children)
@@ -478,7 +487,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                                   <NavLink
                                     key={subChild.href}
                                     to={subChild.href!}
-                                    onClick={handleNavClick}
+                                    {...navTapProps(subChild.href)}
                                     className={cn(
                                       "block rounded-lg px-3 py-1.5 text-sm transition-colors",
                                       isActive(subChild.href)
@@ -496,7 +505,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                           <NavLink
                             key={child.href}
                             to={child.href!}
-                            onClick={handleNavClick}
+                            {...navTapProps(child.href)}
                             className={cn(
                               "block rounded-lg px-3 py-2 text-sm transition-colors",
                               isActive(child.href)
