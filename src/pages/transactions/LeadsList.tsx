@@ -22,6 +22,10 @@ import { LeadFormDialog, type LeadRow } from "@/components/transactions/LeadForm
 import { LeadConvertDialog } from "@/components/transactions/LeadConvertDialog";
 import { LeadImportDialog } from "@/components/transactions/LeadImportDialog";
 import { CustomerFormDialog } from "@/components/transactions/CustomerFormDialog";
+import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar";
+import { executeListView } from "@/lib/listViewExecutor";
+import { ENTITY_SCHEMAS, type FilterCondition } from "@/lib/listViewSchema";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
