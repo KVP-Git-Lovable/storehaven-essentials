@@ -21,11 +21,20 @@ const WELCOME =
 const ASSISTANCE_INTENT_RE =
   /\b(help|support|assist|assistance|issue|issues|problem|problems)\b|\bnot\s+working\b/i;
 
-// Order history intent: deterministic phrase match. Checked AFTER assistance
-// but BEFORE product intent so "my orders" / "order history" returns the
-// user's recent orders instead of the product template.
-const ORDER_HISTORY_INTENT_RE =
-  /\b(my\s+orders?|order\s+history|previous\s+orders?|order\s+summary|order\s+information|past\s+orders?)\b/i;
+// Order history intent: regex-based detection across natural variations
+// ("my last order", "need my recent orders", "order history", etc.).
+// Checked AFTER assistance but BEFORE store-location/product/fallback.
+const ORDER_HISTORY_PATTERNS: RegExp[] = [
+  /my.*order/i,
+  /last.*order/i,
+  /recent.*order/i,
+  /order.*history/i,
+  /order.*info/i,
+  /order.*details/i,
+  /\borders?\b/i,
+];
+const isOrderHistoryIntent = (text: string): boolean =>
+  ORDER_HISTORY_PATTERNS.some((re) => re.test(text));
 
 // Store location intent: deterministic phrase match for address enquiries.
 const STORE_LOCATION_INTENT_RE =
@@ -418,9 +427,15 @@ Deno.serve(async (req) => {
     //    request) flow instead of the product template.
     const isAssistanceIntent = ASSISTANCE_INTENT_RE.test(body);
 
-    // 2a) Order history intent — deterministic phrase match. Fetch last 3
+    // 2a) Order history intent — regex-based detection. Fetch last 3
     //     orders for the customer matched on phone and reply via TwiML.
-    if (!isAssistanceIntent && ORDER_HISTORY_INTENT_RE.test(body)) {
+    const orderIntentDetected = !isAssistanceIntent && isOrderHistoryIntent(body);
+    console.log("[whatsapp-inbound] intent", {
+      bodyPreview: body.slice(0, 120),
+      isAssistanceIntent,
+      orderIntentDetected,
+    });
+    if (orderIntentDetected) {
       await logMessages(false);
       let reply = NO_ORDERS_REPLY;
       try {
@@ -454,6 +469,11 @@ Deno.serve(async (req) => {
               .eq("customer_id", customerId)
               .order("created_at", { ascending: false })
               .limit(3);
+
+            console.log("[whatsapp-inbound] order-history fetched", {
+              customerId,
+              count: Array.isArray(orders) ? orders.length : 0,
+            });
 
             if (orders && orders.length > 0) {
               const lines = ["Here are your last 3 orders:", ""];
