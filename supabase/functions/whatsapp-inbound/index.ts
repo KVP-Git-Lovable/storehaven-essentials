@@ -470,6 +470,11 @@ Deno.serve(async (req) => {
               .order("created_at", { ascending: false })
               .limit(3);
 
+            console.log("[whatsapp-inbound] order-history fetched", {
+              customerId,
+              count: Array.isArray(orders) ? orders.length : 0,
+            });
+
             if (orders && orders.length > 0) {
               const lines = ["Here are your last 3 orders:", ""];
               for (const o of orders as any[]) {
