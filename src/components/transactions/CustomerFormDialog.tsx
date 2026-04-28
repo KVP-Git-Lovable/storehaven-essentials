@@ -108,7 +108,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={isView ? "max-w-3xl max-h-[90vh] overflow-y-auto" : undefined}>
+      <DialogContent className={`w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto ${isView ? "sm:max-w-3xl" : "sm:max-w-lg"}`}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
