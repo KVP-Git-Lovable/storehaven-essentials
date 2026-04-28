@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Store,
@@ -31,7 +31,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { useAttendanceRole } from "@/hooks/useAttendanceRole";
 import { useCompanyInfo } from "@/hooks/useCompanyInfo";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -273,7 +272,6 @@ interface AppSidebarProps {
 
 export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedChange }: AppSidebarProps) {
   const location = useLocation();
-  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { hasPermission, isAdmin, loading } = usePermissions();
   const { profile } = useAuth();
@@ -345,27 +343,28 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-  // On mobile, intercept the click: navigate first (synchronously), then
-  // close the Sheet on the next tick. Closing before navigation causes
-  // Radix's focus/unmount handling to cancel the click, so the sidebar
-  // appears to "flash" closed and reopen without navigating.
+  useEffect(() => {
+    if (!isMobile || !open) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isMobile, open]);
+
   const handleNavTap = useCallback(
-    (e: React.MouseEvent, href?: string) => {
+    (href?: string) => {
       if (!isMobile || !href) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (location.pathname !== href) {
-        navigate(href);
-      }
-      // Defer close so navigation commits first.
-      queueMicrotask(() => onOpenChange(false));
+      onOpenChange(false);
     },
-    [isMobile, onOpenChange, location.pathname, navigate],
+    [isMobile, onOpenChange],
   );
 
   // Helper bound props for every clickable nav link on mobile.
   const navTapProps = (href?: string) => ({
-    onClick: (e: React.MouseEvent) => handleNavTap(e, href),
+    onClick: () => handleNavTap(href),
   });
 
   const sidebarContent = (
@@ -560,13 +559,27 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
 
   if (isMobile) {
     return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="left" className="w-72 p-0 bg-sidebar text-sidebar-foreground border-sidebar-border [&>button.absolute]:hidden">
-          <div className="flex flex-col h-full">
+      <>
+        <div
+          className={cn(
+            "fixed inset-0 z-40 bg-foreground/80 transition-opacity duration-200",
+            open ? "opacity-100" : "pointer-events-none opacity-0",
+          )}
+          onClick={() => onOpenChange(false)}
+          aria-hidden="true"
+        />
+        <aside
+          className={cn(
+            "fixed inset-y-0 left-0 z-50 flex h-dvh w-72 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-lg transition-transform duration-200 ease-out",
+            open ? "translate-x-0" : "-translate-x-full",
+          )}
+          aria-hidden={!open}
+        >
+          <div className="flex min-h-0 flex-1 flex-col">
             {sidebarContent}
           </div>
-        </SheetContent>
-      </Sheet>
+        </aside>
+      </>
     );
   }
 
