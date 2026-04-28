@@ -6,9 +6,13 @@ import { VitePWA } from "vite-plugin-pwa";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  cacheDir: "node_modules/.vite-storeops",
   server: {
     host: "::",
     port: 8080,
+  },
+  optimizeDeps: {
+    force: true,
   },
   plugins: [
     react(),
