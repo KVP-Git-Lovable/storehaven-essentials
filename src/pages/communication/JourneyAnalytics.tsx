@@ -170,6 +170,52 @@ export default function JourneyAnalytics() {
           </div>
         </div>
 
+        {totalEnrolled > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between text-base">
+                <span>Live Send Progress</span>
+                {isActive && (
+                  <span className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                    </span>
+                    Live · refreshes every 5s
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Total Enrolled</p>
+                  <p className="text-2xl font-bold">{totalEnrolled.toLocaleString("en-IN")}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Sent</p>
+                  <p className="text-2xl font-bold text-green-600">{sentCount.toLocaleString("en-IN")}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Pending</p>
+                  <p className="text-2xl font-bold text-amber-600">{pendingCount.toLocaleString("en-IN")}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Failed</p>
+                  <p className="text-2xl font-bold text-destructive">{failedCount.toLocaleString("en-IN")}</p>
+                </div>
+              </div>
+              <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-500"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground text-right">{progressPct}% processed</p>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <CardContent className="pt-6">
