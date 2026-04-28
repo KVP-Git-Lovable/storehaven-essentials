@@ -447,12 +447,44 @@ Deno.serve(async (req) => {
     //    request) flow instead of the product template.
     const isAssistanceIntent = ASSISTANCE_INTENT_RE.test(body);
 
-    // 2a) Order history intent — regex-based detection. Fetch last 3
+    // 2a) Purchase intent — deterministic guided reply to the catalogue.
+    //     Runs before order-history so "place order" / "want to buy" don't
+    //     get misrouted by the broad /\borders?\b/i order-history pattern.
+    const purchaseIntentDetected = !isAssistanceIntent && isPurchaseIntent(body);
+    if (purchaseIntentDetected) {
+      console.log("[whatsapp-inbound] purchase-intent matched", {
+        bodyPreview: body.slice(0, 120),
+      });
+      await logMessages(false);
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL");
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (supabaseUrl && serviceKey && normalizedFrom) {
+          const sb = createClient(supabaseUrl, serviceKey);
+          await sb.from("whatsapp_messages").insert({
+            phone: normalizedFrom,
+            customer_id: null,
+            direction: "outbound",
+            message: PURCHASE_INTENT_REPLY,
+            message_type: "text",
+            status: "sent",
+            is_read: true,
+          });
+        }
+      } catch (e) {
+        console.error("[whatsapp-inbound] purchase-intent outbound log err", e);
+      }
+      return twiml(PURCHASE_INTENT_REPLY);
+    }
+
+    // 2b) Order history intent — regex-based detection. Fetch last 3
     //     orders for the customer matched on phone and reply via TwiML.
-    const orderIntentDetected = !isAssistanceIntent && isOrderHistoryIntent(body);
+    const orderIntentDetected =
+      !isAssistanceIntent && !purchaseIntentDetected && isOrderHistoryIntent(body);
     console.log("[whatsapp-inbound] intent", {
       bodyPreview: body.slice(0, 120),
       isAssistanceIntent,
+      purchaseIntentDetected,
       orderIntentDetected,
     });
     if (orderIntentDetected) {
