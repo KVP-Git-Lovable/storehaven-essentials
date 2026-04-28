@@ -286,6 +286,12 @@ export async function resolveListViewContacts(
     return { ...res, warning: res.contactIds.length === 0 ? "No customers enrolled" : undefined };
   }
 
+  if (lv.entity_type === "leads") {
+    const mapped = (rows || []).map((l: any) => ({ ...l, customer_segment: "lead" }));
+    const res = await upsertContactsFromCustomers(supabase, mapped);
+    return { ...res, warning: res.contactIds.length === 0 ? "No leads enrolled" : undefined };
+  }
+
   if (lv.entity_type === "orders") {
     const customerIds = Array.from(new Set((rows || []).map((r: any) => r.customer_id).filter(Boolean)));
     if (customerIds.length === 0) return { contactIds: [], matched: 0, skipped: 0, warning: "No orders with customers matched" };
