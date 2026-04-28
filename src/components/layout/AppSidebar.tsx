@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Store,
@@ -273,6 +273,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedChange }: AppSidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { hasPermission, isAdmin, loading } = usePermissions();
   const { profile } = useAuth();
@@ -344,22 +345,27 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-  // Close the mobile Sheet immediately on tap. We use pointerdown (fires
-  // before Radix Sheet's focus/blur handling) plus onClick as a fallback.
-  // For same-route taps, we still close the sheet (route effect won't fire).
-  const handleNavTap = useCallback((href?: string) => {
-    if (!isMobile) return;
-    onOpenChange(false);
-    if (href && location.pathname === href) {
-      // Same-route tap: ensure sheet closes even though route doesn't change.
-      // No navigate needed.
-    }
-  }, [isMobile, onOpenChange, location.pathname]);
+  // On mobile, intercept the click: navigate first (synchronously), then
+  // close the Sheet on the next tick. Closing before navigation causes
+  // Radix's focus/unmount handling to cancel the click, so the sidebar
+  // appears to "flash" closed and reopen without navigating.
+  const handleNavTap = useCallback(
+    (e: React.MouseEvent, href?: string) => {
+      if (!isMobile || !href) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (location.pathname !== href) {
+        navigate(href);
+      }
+      // Defer close so navigation commits first.
+      queueMicrotask(() => onOpenChange(false));
+    },
+    [isMobile, onOpenChange, location.pathname, navigate],
+  );
 
   // Helper bound props for every clickable nav link on mobile.
   const navTapProps = (href?: string) => ({
-    onPointerDown: () => handleNavTap(href),
-    onClick: () => handleNavTap(href),
+    onClick: (e: React.MouseEvent) => handleNavTap(e, href),
   });
 
   const sidebarContent = (
