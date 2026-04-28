@@ -42,10 +42,43 @@ export default function LeadsList() {
   const [linkedCustomer, setLinkedCustomer] = useState<any | null>(null);
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const [activeFilters, setActiveFilters] = useState<FilterCondition[]>([]);
+  const [activeSelectedFields, setActiveSelectedFields] = useState<string[]>([]);
+  const [activeColumnOrder, setActiveColumnOrder] = useState<string[]>([]);
+
+  const usingListView = activeViewId !== null;
+
+  const leadsEntity = ENTITY_SCHEMAS.leads;
+  const fieldLabel = (key: string) => leadsEntity.fields.find((f) => f.key === key)?.label || key;
+  const DEFAULT_COLUMNS = ["name", "email", "phone", "city", "state", "country", "address", "is_converted"];
+  const viewColumns = (activeColumnOrder.length ? activeColumnOrder : activeSelectedFields).filter((k) => k !== "id");
+  const displayColumns = usingListView && viewColumns.length ? viewColumns : DEFAULT_COLUMNS;
+
+  const applyClientSearch = (rows: any[]) => {
+    if (!search.trim()) return rows;
+    const s = search.toLowerCase();
+    return rows.filter((r: any) =>
+      (r.name || "").toLowerCase().includes(s) ||
+      (r.phone || "").toLowerCase().includes(s) ||
+      (r.email || "").toLowerCase().includes(s) ||
+      (r.city || "").toLowerCase().includes(s)
+    );
+  };
 
   const { data, isLoading } = useQuery({
-    queryKey: ["transactions-leads", search, page],
+    queryKey: ["transactions-leads", search, page, activeViewId, activeFilters],
     queryFn: async () => {
+      if (usingListView) {
+        const result = await executeListView(
+          { entity_type: "leads", filters: activeFilters },
+          { limit: 1000 }
+        );
+        const rows = applyClientSearch(result.rows);
+        const count = rows.length;
+        const paged = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+        return { rows: paged as LeadRow[], count };
+      }
       let q: any = supabase
         .from("leads")
         .select("*", { count: "exact" })
@@ -60,6 +93,29 @@ export default function LeadsList() {
       return { rows: (data || []) as LeadRow[], count: count || 0 };
     },
   });
+
+  const renderCell = (col: string, l: any) => {
+    const v = l[col];
+    switch (col) {
+      case "name":
+        return <span className="font-medium">{v || "—"}</span>;
+      case "email":
+      case "address":
+        return <span className="text-xs">{v || "—"}</span>;
+      case "is_converted":
+        return l.is_converted ? (
+          <Badge variant="secondary" className="gap-1"><CheckCircle2 className="h-3 w-3" /> Converted</Badge>
+        ) : (
+          <Badge variant="outline">New</Badge>
+        );
+      case "created_at":
+      case "converted_at":
+        return v ? format(new Date(v), "dd MMM yyyy") : "—";
+      default:
+        if (v === null || v === undefined || v === "") return "—";
+        return String(v);
+    }
+  };
 
   const deleteMut = useMutation({
     mutationFn: async (id: string) => {
