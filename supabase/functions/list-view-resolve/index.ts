@@ -7,6 +7,7 @@ const corsHeaders = {
 
 const ALLOWED_ENTITIES: Record<string, { table: string; isAudienceSource: boolean; contactKey?: string }> = {
   customers: { table: "customers", isAudienceSource: true, contactKey: "phone" },
+  leads: { table: "leads", isAudienceSource: true, contactKey: "phone" },
   orders: { table: "orders", isAudienceSource: true, contactKey: "customer_id" },
   revenue: { table: "orders", isAudienceSource: false },
   products: { table: "products", isAudienceSource: false },
