@@ -20,8 +20,8 @@ import {
 import { toast } from "sonner";
 import { LeadFormDialog, type LeadRow } from "@/components/transactions/LeadFormDialog";
 import { LeadConvertDialog } from "@/components/transactions/LeadConvertDialog";
-import { CustomerFormDialog } from "@/components/transactions/CustomerFormDialog";
 import { LeadImportDialog } from "@/components/transactions/LeadImportDialog";
+import { CustomerFormDialog } from "@/components/transactions/CustomerFormDialog";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -89,7 +89,7 @@ export default function LeadsList() {
           <h1 className="text-2xl font-bold tracking-tight">Leads</h1>
           <p className="text-muted-foreground">Prospect contacts that can be converted into customers.</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <Upload className="mr-2 h-4 w-4" /> Import Leads
           </Button>
@@ -211,8 +211,8 @@ export default function LeadsList() {
       </div>
 
       <LeadFormDialog open={formOpen} onOpenChange={setFormOpen} lead={selected} mode={mode} />
-      <LeadImportDialog open={importOpen} onOpenChange={setImportOpen} />
       <LeadConvertDialog open={!!convertLead} onOpenChange={(o) => !o && setConvertLead(null)} lead={convertLead} />
+      <LeadImportDialog open={importOpen} onOpenChange={setImportOpen} />
       <CustomerFormDialog
         open={customerDialogOpen}
         onOpenChange={setCustomerDialogOpen}

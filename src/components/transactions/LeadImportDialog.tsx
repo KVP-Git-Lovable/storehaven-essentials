@@ -9,12 +9,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CheckCircle2, AlertTriangle, XCircle, Download, Upload, FileSpreadsheet, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  downloadLeadTemplateCSV,
-  downloadLeadTemplateXLSX,
-  parseLeadFile,
-  validateLeadRows,
-  downloadLeadErrorRows,
-  type ValidatedLeadRow,
+  downloadTemplateCSV,
+  downloadTemplateXLSX,
+  parseFile,
+  validateRows,
+  downloadErrorRows,
+  type ValidatedRow,
 } from "@/lib/leadImport";
 
 type Step = "download" | "upload" | "validate";
@@ -32,7 +32,7 @@ export function LeadImportDialog({ open, onOpenChange }: Props) {
   const [step, setStep] = useState<Step>("download");
   const [fileName, setFileName] = useState<string>("");
   const [validating, setValidating] = useState(false);
-  const [rows, setRows] = useState<ValidatedLeadRow[]>([]);
+  const [rows, setRows] = useState<ValidatedRow[]>([]);
   const [filter, setFilter] = useState<FilterMode>("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -76,26 +76,24 @@ export function LeadImportDialog({ open, onOpenChange }: Props) {
     setFileName(file.name);
     setValidating(true);
     try {
-      const parsed = await parseLeadFile(file);
+      const parsed = await parseFile(file);
       if (parsed.length > 10000) throw new Error("File exceeds 10,000 row hard limit");
       if (parsed.length > 5000) toast.warning(`Large file (${parsed.length} rows) — validation may take a moment`);
 
-      const phones = Array.from(
-        new Set(parsed.map((r) => String(r.phone ?? "").replace(/\s+/g, "")).filter(Boolean))
-      );
+      const phones = Array.from(new Set(parsed.map((r) => String(r.phone ?? "").replace(/\s+/g, "")).filter(Boolean)));
 
       const existingPhones = new Set<string>();
       if (phones.length) {
-        // chunk IN queries to avoid URL limits
+        // batch in chunks of 200 to keep URL length sane
         for (let i = 0; i < phones.length; i += 200) {
-          const slice = phones.slice(i, i + 200);
-          const { data, error } = await supabase.from("leads").select("phone").in("phone", slice);
+          const batch = phones.slice(i, i + 200);
+          const { data, error } = await supabase.from("leads").select("phone").in("phone", batch);
           if (error) throw error;
-          (data || []).forEach((r: any) => existingPhones.add(r.phone));
+          (data || []).forEach((l: any) => l.phone && existingPhones.add(l.phone));
         }
       }
 
-      const validated = validateLeadRows(parsed, existingPhones);
+      const validated = validateRows(parsed, existingPhones);
       setRows(validated);
       setStep("validate");
     } catch (e: any) {
@@ -118,7 +116,7 @@ export function LeadImportDialog({ open, onOpenChange }: Props) {
         const payload = batch.map((r) => r.resolved!);
         const { error } = await supabase.from("leads").insert(payload);
         if (error) {
-          // fallback to per-row to identify failures
+          // fall back to per-row inserts to save as many as possible
           for (const r of batch) {
             const { error: rowErr } = await supabase.from("leads").insert(r.resolved!);
             if (rowErr) failures.push({ row: r.rowNumber, errors: [rowErr.message] });
@@ -157,13 +155,13 @@ export function LeadImportDialog({ open, onOpenChange }: Props) {
         {step === "download" && (
           <div className="space-y-4 py-2">
             <p className="text-sm text-muted-foreground">
-              Download the template, fill in your lead data, and upload it for validation. Required column: phone. Optional: name, email, city, state, country, address.
+              Download the template, fill in your lead data, and upload it for validation. Required column: <strong>phone</strong>. Other columns: name, email, city, state, country, address.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={downloadLeadTemplateCSV} variant="outline">
+              <Button onClick={downloadTemplateCSV} variant="outline">
                 <Download className="mr-2 h-4 w-4" /> Download CSV Template
               </Button>
-              <Button onClick={downloadLeadTemplateXLSX} variant="outline">
+              <Button onClick={downloadTemplateXLSX} variant="outline">
                 <FileSpreadsheet className="mr-2 h-4 w-4" /> Download Excel Template
               </Button>
             </div>
@@ -205,10 +203,10 @@ export function LeadImportDialog({ open, onOpenChange }: Props) {
               />
             </Card>
             <div className="flex flex-wrap gap-2">
-              <Button variant="ghost" size="sm" onClick={downloadLeadTemplateCSV}>
+              <Button variant="ghost" size="sm" onClick={downloadTemplateCSV}>
                 <Download className="mr-2 h-3 w-3" /> Template (CSV)
               </Button>
-              <Button variant="ghost" size="sm" onClick={downloadLeadTemplateXLSX}>
+              <Button variant="ghost" size="sm" onClick={downloadTemplateXLSX}>
                 <FileSpreadsheet className="mr-2 h-3 w-3" /> Template (Excel)
               </Button>
             </div>
@@ -248,7 +246,6 @@ export function LeadImportDialog({ open, onOpenChange }: Props) {
                     <TableHead>Email</TableHead>
                     <TableHead>City</TableHead>
                     <TableHead>State</TableHead>
-                    <TableHead>Country</TableHead>
                     <TableHead>Issues</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -269,7 +266,6 @@ export function LeadImportDialog({ open, onOpenChange }: Props) {
                         <TableCell className="text-xs">{r.raw.email || "—"}</TableCell>
                         <TableCell className="text-xs">{r.raw.city || "—"}</TableCell>
                         <TableCell className="text-xs">{r.raw.state || "—"}</TableCell>
-                        <TableCell className="text-xs">{r.raw.country || "—"}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1 max-w-md">
                             {r.issues.map((iss, idx) => (
@@ -285,7 +281,7 @@ export function LeadImportDialog({ open, onOpenChange }: Props) {
                   })}
                   {filteredRows.length > 500 && (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-xs text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center text-xs text-muted-foreground">
                         Showing first 500 of {filteredRows.length} rows. All rows will be processed on import.
                       </TableCell>
                     </TableRow>
@@ -297,7 +293,7 @@ export function LeadImportDialog({ open, onOpenChange }: Props) {
             <div className="flex flex-wrap justify-between gap-2 pt-3 border-t">
               <Button variant="outline" onClick={() => handleClose(false)}>Cancel Import</Button>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => downloadLeadErrorRows(rows)} disabled={!stats.invalid}>
+                <Button variant="outline" onClick={() => downloadErrorRows(rows)} disabled={!stats.invalid}>
                   <Download className="mr-2 h-4 w-4" /> Download Error Rows
                 </Button>
                 <Button onClick={() => importMutation.mutate()} disabled={!stats.valid || importMutation.isPending}>
