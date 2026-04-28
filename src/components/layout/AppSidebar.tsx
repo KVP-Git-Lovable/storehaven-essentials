@@ -273,6 +273,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedChange }: AppSidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { hasPermission, isAdmin, loading } = usePermissions();
   const { profile } = useAuth();
