@@ -427,9 +427,15 @@ Deno.serve(async (req) => {
     //    request) flow instead of the product template.
     const isAssistanceIntent = ASSISTANCE_INTENT_RE.test(body);
 
-    // 2a) Order history intent — deterministic phrase match. Fetch last 3
+    // 2a) Order history intent — regex-based detection. Fetch last 3
     //     orders for the customer matched on phone and reply via TwiML.
-    if (!isAssistanceIntent && ORDER_HISTORY_INTENT_RE.test(body)) {
+    const orderIntentDetected = !isAssistanceIntent && isOrderHistoryIntent(body);
+    console.log("[whatsapp-inbound] intent", {
+      bodyPreview: body.slice(0, 120),
+      isAssistanceIntent,
+      orderIntentDetected,
+    });
+    if (orderIntentDetected) {
       await logMessages(false);
       let reply = NO_ORDERS_REPLY;
       try {
