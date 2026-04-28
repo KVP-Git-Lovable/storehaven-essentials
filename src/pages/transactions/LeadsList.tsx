@@ -159,6 +159,18 @@ export default function LeadsList() {
         </div>
       </div>
 
+      <EntityListViewsBar
+        entity="leads"
+        activeViewId={activeViewId}
+        onApply={(id, filters, selectedFields, columnOrder) => {
+          setActiveViewId(id);
+          setActiveFilters(filters);
+          setActiveSelectedFields(selectedFields || []);
+          setActiveColumnOrder(columnOrder || []);
+          setPage(0);
+        }}
+      />
+
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -176,22 +188,17 @@ export default function LeadsList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>City</TableHead>
-              <TableHead>State</TableHead>
-              <TableHead>Country</TableHead>
-              <TableHead>Address</TableHead>
-              <TableHead>Status</TableHead>
+              {displayColumns.map((col) => (
+                <TableHead key={col}>{col === "is_converted" ? "Status" : fieldLabel(col)}</TableHead>
+              ))}
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
             ) : (data?.rows || []).length === 0 ? (
-              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No leads found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">No leads found.</TableCell></TableRow>
             ) : (
               data!.rows.map((l) => (
                 <TableRow
@@ -202,22 +209,11 @@ export default function LeadsList() {
                   )}
                   onClick={() => { setSelected(l); setMode("view"); setFormOpen(true); }}
                 >
-                  <TableCell className="font-medium">{l.name || "—"}</TableCell>
-                  <TableCell className="text-xs">{l.email || "—"}</TableCell>
-                  <TableCell>{l.phone}</TableCell>
-                  <TableCell>{l.city || "—"}</TableCell>
-                  <TableCell>{l.state || "—"}</TableCell>
-                  <TableCell>{l.country || "—"}</TableCell>
-                  <TableCell className="max-w-[200px] truncate text-xs">{l.address || "—"}</TableCell>
-                  <TableCell>
-                    {l.is_converted ? (
-                      <Badge variant="secondary" className="gap-1">
-                        <CheckCircle2 className="h-3 w-3" /> Converted
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline">New</Badge>
-                    )}
-                  </TableCell>
+                  {displayColumns.map((col) => (
+                    <TableCell key={col} className={col === "address" ? "max-w-[200px] truncate" : undefined}>
+                      {renderCell(col, l)}
+                    </TableCell>
+                  ))}
                   <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1">
                       {l.is_converted ? (
