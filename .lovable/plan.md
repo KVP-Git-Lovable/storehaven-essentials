@@ -1,42 +1,56 @@
-Plan to fix the mobile sidebar click behavior
+## Goal
 
-I checked the current sidebar and compared it with [Staging - Quickapp](/projects/b8852e08-a40a-4eb2-aee8-025d6468b172). The main difference is that the working project closes the Sheet using one simple controlled state handler directly on every navigation item. The current project has a more complex sidebar with nested menus and a custom Sheet wrapper, so I will make the close behavior deterministic at the sidebar level instead of relying on Radix focus behavior.
+Add a "Leads" entity to the List Views system so users can:
+1. Create / manage saved List Views on the Leads page (same UX as Customers / Orders / Products).
+2. Use those Leads list views as audience sources in the Journey Builder, just like Customers list views.
 
-What I will change
+## Changes
 
-1. Make mobile close immediate and centralized
-- Update `src/components/layout/AppSidebar.tsx` so every actual route click calls one dedicated close handler.
-- Use the same simple pattern as the reference project: `onOpenChange(false)` directly from the click handler.
-- Keep desktop behavior unchanged.
+### 1. Register `leads` as a list-view entity
 
-2. Close from the earliest reliable mobile event
-- Add close handling to navigation links in a way that fires immediately on mobile tap, before Radix Sheet focus/propagation timing can delay it.
-- Apply this to:
-  - top-level direct menu items
-  - submenu route links like WhatsApp, Voice, E-mail, Journey Builder, Calendar
-  - nested admin subsection links
-  - collapsed/mobile route links, if rendered
+**`src/lib/listViewSchema.ts`**
+- Add `"leads"` to `EntityKey`.
+- Add a `leads` entry to `ENTITY_SCHEMAS` with:
+  - `table: "leads"`, `isAudienceSource: true`, `contactKey: "phone"`
+  - Fields: `id`, `name`, `phone`, `email`, `city`, `state`, `country`, `address`, `is_converted` (boolean), `converted_at` (date), `created_at` (date)
 
-3. Handle same-route clicks
-- If the user taps the menu item for the current route, close the Sheet anyway.
-- If needed, dispatch the same-route navigation refresh event requested earlier so the UI responds even when `location.pathname` does not change.
+### 2. Mirror that registration in the backend resolvers
 
-4. Keep route-change close as backup
-- Preserve the existing `useEffect` route-change close fallback.
-- This ensures the sidebar also closes after programmatic navigation or browser navigation on mobile.
+So saved Leads list views work for counts, previews, and journey enrollment.
 
-5. Remove fragile close hacks
-- Do not use `setTimeout` or delayed close logic.
-- Do not depend on clicking outside the sidebar.
-- Avoid changing desktop collapse behavior.
+**`supabase/functions/list-view-resolve/index.ts`**
+- Add `leads: { table: "leads", isAudienceSource: true, contactKey: "phone" }` to `ALLOWED_ENTITIES`.
 
-6. Align Sheet content with the working project where safe
-- Review the custom `SheetContent` wrapper interaction with the sidebar.
-- If the wrapper’s internal scroll container is contributing to delayed clicks, adjust only the sidebar usage so mobile nav taps are not trapped by the Sheet/ScrollArea structure.
+**`supabase/functions/_shared/journey-schedule.ts`**
+- Add the same `leads` entry to its `ALLOWED_ENTITIES` map.
+- In `resolveAudience` / count helpers, add a branch for `entity_type === "leads"`: treat each lead row like a customer row (use its `phone`, `name`, `email`, `city` to upsert into `journey_contacts` with `segment_type: "lead"`), reusing the existing `upsertContactsFromCustomers` helper (or a thin wrapper that maps lead rows to the same shape).
 
-Expected result
+This makes a Leads list view enroll contacts into journeys exactly like a Customers list view does today.
 
-- In mobile preview, tapping any actual menu/submenu route closes the sidebar immediately.
-- Communication Center submenu items such as WhatsApp, Voice, E-mail, Journey Builder, and Calendar close smoothly on the first tap.
-- Same-route taps also close the sidebar.
-- Desktop behavior remains unchanged.
+### 3. Add the List Views bar to the Leads page
+
+**`src/pages/transactions/LeadsList.tsx`**
+- Import `EntityListViewsBar` (exported as `n`) from `src/components/transactions/EntityListViewsBar.tsx`, same way Customers / Orders / Products do.
+- Add state: `activeViewId`, `viewFilters`, `viewSelectedFields`, `viewColumnOrder`.
+- Render the bar above the table with `entity="leads"`.
+- When a view is applied, run the query through `executeListView` (from `src/lib/listViewExecutor.ts`) instead of the current static `supabase.from("leads")...` query, so saved filters and selected fields take effect (mirroring CustomersList behavior).
+- Keep the existing search box, pagination, Import Leads button, and row actions intact.
+
+### 4. Expose Leads list views to Journey Builder
+
+**`src/components/journey/AudienceBuilder.tsx`** (line 41)
+- Change the filter from:
+  ```
+  v.entity_type === "customers" || v.entity_type === "orders"
+  ```
+  to also include `"leads"`. Saved Leads views will then appear in the Entry node's audience picker exactly like Customers views.
+
+### 5. (No DB migration needed)
+
+The `leads` table already exists with the right columns and RLS, and `list_views.entity_type` is a free text column (existing values include `customers`, `orders`, `products`), so no schema change is required.
+
+## How the user will experience it
+
+- On `/transactions/leads`: a new "List Views" bar appears at the top with the same dropdown / New / Edit / Duplicate / Delete controls used on Customers. They can build views like "Unconverted leads created in last 30 days" or "Leads in Bengaluru".
+- In the Journey Builder Entry node's audience picker, those Leads views show up alongside Customers and Orders views and can be combined with the same union / intersection / difference logic.
+- When a journey runs, leads matched by the view get enrolled by phone into `journey_contacts` (tagged `segment_type: "lead"`) and receive WhatsApp / SMS / Email messages just like customers.
