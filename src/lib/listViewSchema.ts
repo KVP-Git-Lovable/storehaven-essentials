@@ -22,7 +22,7 @@ export interface EntityDef {
   fields: FieldDef[];
 }
 
-export type EntityKey = "customers" | "orders" | "revenue" | "products" | "items" | "schemes";
+export type EntityKey = "customers" | "leads" | "orders" | "revenue" | "products" | "items" | "schemes";
 
 export const ENTITY_SCHEMAS: Record<EntityKey, EntityDef> = {
   customers: {
