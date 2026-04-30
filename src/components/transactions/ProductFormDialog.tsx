@@ -70,18 +70,38 @@ export function ProductFormDialog({ open, onOpenChange, product = null, mode = "
         brand: form.brand,
         model: form.model || "N/A",
         warranty: form.warranty || "N/A",
-        price: Number(form.price) || 0,
-        stock_qty: form.stock_qty ? Number(form.stock_qty) : 0,
+        selling_price: Number(form.price) || 0,
+        unit_cost: 0,
+        unit: "pcs",
+        min_stock: 0,
+        status: "active",
       };
       const query = isEdit
-        ? supabase.from("products").update(payload).eq("id", product!.id)
-        : supabase.from("products").insert(payload);
-      const { error } = await query;
+        ? supabase.from("inventory_items").update(payload).eq("id", product!.id)
+        : supabase.from("inventory_items").insert(payload).select("id").single();
+      const { data: result, error } = await query as any;
       if (error) throw error;
+
+      // For new items with an opening stock quantity, write a single ledger entry
+      const newId = isEdit ? product!.id : result?.id;
+      const openingQty = form.stock_qty ? Number(form.stock_qty) : 0;
+      if (!isEdit && newId && openingQty > 0) {
+        await supabase.from("stock_ledger").insert({
+          item_id: newId,
+          location_type: "global",
+          transaction_type: "opening_balance",
+          quantity_change: openingQty,
+          unit_cost: 0,
+          reference_type: "product_form",
+          notes: "Opening stock from Products form",
+          created_by: "product-form",
+        } as any);
+      }
     },
     onSuccess: () => {
       toast.success(isEdit ? "Product updated" : "Product created");
       qc.invalidateQueries({ queryKey: ["transactions-products"] });
+      qc.invalidateQueries({ queryKey: ["inventory-stock-map"] });
       onOpenChange(false);
       setForm(emptyForm);
     },
