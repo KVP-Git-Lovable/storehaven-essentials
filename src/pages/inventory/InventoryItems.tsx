@@ -773,17 +773,28 @@ export default function InventoryItems() {
                       <div className="text-sm">Min: {item.min_stock}</div>
                       <div className="text-xs text-muted-foreground">Max: {item.max_stock || '-'}</div>
                     </TableCell>
-                    <TableCell>
-                      <span
-                        className={cn(
-                          "font-semibold",
-                          outOfStock && "text-destructive",
-                          !outOfStock && lowStock && "text-amber-600"
-                        )}
+                    <TableCell onClick={(e) => { e.stopPropagation(); setStockEditItem(item); }}>
+                      <button
+                        type="button"
+                        className="group inline-flex flex-col items-start text-left hover:underline"
+                        title="Click to update stock"
                       >
-                        {currentStock}
-                      </span>
-                      <span className="text-xs text-muted-foreground"> {item.unit}</span>
+                        <span
+                          className={cn(
+                            "font-semibold",
+                            outOfStock && "text-destructive",
+                            !outOfStock && lowStock && "text-amber-600"
+                          )}
+                        >
+                          {currentStock}
+                          <span className="text-xs text-muted-foreground font-normal"> {item.unit}</span>
+                        </span>
+                        {outOfStock ? (
+                          <span className="text-[11px] text-primary group-hover:underline">Set opening stock</span>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground group-hover:text-primary">Update</span>
+                        )}
+                      </button>
                     </TableCell>
                     <TableCell>
                       <Badge variant={item.status === 'active' ? 'default' : 'secondary'}>
@@ -796,12 +807,13 @@ export default function InventoryItems() {
                           <Eye className="h-4 w-4" />
                         </Button>
                         <Button
-                          variant="ghost"
-                          size="icon"
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
                           title="Edit Stock"
                           onClick={() => setStockEditItem(item)}
                         >
-                          <Package className="h-4 w-4" />
+                          <Package className="h-4 w-4 mr-1" /> Edit Stock
                         </Button>
                         <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
                           <Edit className="h-4 w-4" />
@@ -899,6 +911,20 @@ export default function InventoryItems() {
               <div className="border-t pt-4">
                 <h4 className="font-medium mb-3">Stock Levels</h4>
                 <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1 col-span-2">
+                    <p className="text-sm text-muted-foreground">Current Stock</p>
+                    <div className="flex items-center gap-3">
+                      <p className="font-semibold text-lg">
+                        {(stockMap[viewItem.id] ?? 0)} <span className="text-sm font-normal text-muted-foreground">{viewItem.unit}</span>
+                      </p>
+                      <Button
+                        size="sm"
+                        onClick={() => { const it = viewItem; setViewItem(null); setStockEditItem(it); }}
+                      >
+                        <Package className="h-4 w-4 mr-1" /> Update Current Stock
+                      </Button>
+                    </div>
+                  </div>
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">Minimum Stock</p>
                     <p className="font-medium">{viewItem.min_stock} {viewItem.unit}</p>

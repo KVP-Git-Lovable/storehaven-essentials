@@ -1,76 +1,55 @@
-## Add stock visibility + manual stock adjustment on Inventory Items
+## Answers to your questions
 
-### Important context (what already exists, do not duplicate)
+### 1. How is "Current Stock" calculated today, and where is it used?
 
-The previous refactor already delivered most of this spec — verified against the codebase:
+- **Source of truth:** the `stock_ledger` table. There is no `current_stock` column on `inventory_items` — stock is always derived by summing `quantity_change` for each item.
+- **Helper:** `src/lib/inventoryStock.ts → getInventoryStockMap(itemIds)` runs `SELECT item_id, quantity_change FROM stock_ledger WHERE item_id IN (...)` and aggregates it client-side. There is also a SECURITY DEFINER SQL function `public.get_inventory_stock_map` that does the same on the server.
+- **Where it is consumed today:**
+  - `src/pages/inventory/InventoryItems.tsx` — the "Current Stock" column (via `useInventoryStockMap`).
+  - `src/pages/transactions/ProductsList.tsx` — the "Stock" column on Products.
+  - `src/pages/inventory/LowStockAlerts.tsx`, `ExpiryManagement.tsx` — low-stock / expiry logic.
+  - `src/pages/pos/PointOfSale.tsx` and `OrderFormDialog` — checks availability (`assertStockAvailable`) and writes negative ledger rows on order completion (`recordSaleLedger`).
+- **Why every item shows 0 today:** no ledger rows exist yet for these items (no GRNs, no manual openings, no sales). Until a row is written to `stock_ledger`, the sum is 0.
 
-- **Orders use `inventory_items` as product source** — `OrderFormDialog.tsx` queries `inventory_items` and the dropdown label is already `"Name — ₹price (Stock: N)"`.
-- **Out-of-stock disables selection** — `disabled: stock <= 0` on the dropdown options.
-- **Stock guard on order placement** — `assertStockAvailable()` rejects with `"Insufficient stock — …"` before insert.
-- **Stock decrement on order placement** — `recordSaleLedger()` writes negative `stock_ledger` rows tagged `transaction_type='sale'`, `reference_type='order'`, `reference_id=order.id`. This is the equivalent of the `inventory_movements` table the spec describes — already audited, signed, and joined to the order.
-- **Real-time stock map** — `getInventoryStockMap` + `useInventoryStockMap` hook already aggregate the ledger.
+### 2. Edit Stock from Inventory Items — current state
 
-What's actually missing is **only on the Inventory Items page**: the Stock column and the Edit Stock modal.
+The plumbing is already in place:
+- `EditStockDialog` (`src/components/inventory/EditStockDialog.tsx`) supports both "Adjust by ±" and "Set exact value", validates against negative stock, and writes a `manual_adjustment` (or `opening_balance`) row via `recordManualAdjustment`.
+- `InventoryItems.tsx` already renders an "Edit Stock" icon button (the `Package` icon, `title="Edit Stock"`) in the Actions column that opens this dialog.
 
-### Decision: keep `stock_ledger`, do NOT add a `stock_quantity` column or a parallel `inventory_movements` table
+So functionally the update path exists, but the entry point is **not discoverable** — it's an unlabeled package icon next to View/Edit/Delete. That's almost certainly why you couldn't find it. Fix is a UX surface change, not new logic.
 
-The spec asks for a `stock_quantity` column and an `inventory_movements` audit table. The codebase already implements both concepts via `stock_ledger` (sum of `quantity_change` = current stock; every row is a fully-attributed movement with `reference_type`/`reference_id`/`created_by`/`created_at`). Adding a denormalised column would create drift; adding `inventory_movements` would duplicate `stock_ledger`. Both would also break the working order flow.
+### 3. Products page should be view-only
 
-If you'd prefer the literal column + separate table approach, say so and I'll re-plan — but it's a net regression vs. what's already shipped.
+Currently `/transactions/products` lets users create / edit / delete products and writes back to the same `inventory_items` table. This duplicates `/inventory/items` and is the source of the confusion.
 
-### Changes
+---
 
-#### 1. `src/pages/inventory/InventoryItems.tsx` — add Stock column
+## Plan
 
-- Use `useInventoryStockMap(items.map(i => i.id))` to fetch current stock for all listed items.
-- Insert a new "Stock" column in the items table between "Unit" (or wherever appropriate) and the actions column. Show the integer; render `0` in muted red when ≤ 0 and below `min_stock` in amber.
-- Add an "Edit Stock" action (Package icon button) in the row actions, alongside Edit/Delete.
+### A. Make "Edit Stock" obvious on Inventory Items
+- Replace the icon-only Package button with a clearly labelled action: a small **"Edit Stock"** button (icon + text) in the Actions column.
+- In the row's "Current Stock" cell, make the number itself clickable → opens the same `EditStockDialog`. Add a subtle "Update" affordance on hover.
+- In the View Item side-sheet ("Stock Levels" section), add a primary **"Update Current Stock"** button that opens the same dialog, plus show the live current stock value (it currently only shows Min/Max, not the actual on-hand).
+- Add an "Update Stock" quick action when current stock is 0 (small inline link in the cell saying "Set opening stock") so first-time setup is one click.
 
-#### 2. New component `src/components/inventory/EditStockDialog.tsx`
+No DB schema changes needed — `EditStockDialog` and `recordManualAdjustment` already do the work and write to `stock_ledger` with `transaction_type = manual_adjustment` (or `opening_balance` when current is 0).
 
-Props: `{ open, onOpenChange, item: { id, name, unit, unit_cost } }`.
+### B. Make `/transactions/products` view-only
+- Remove the **New Product** button, the **Edit** (Pencil) button, and the **Delete** (Trash) button from `ProductsList.tsx`.
+- Keep the **View** (Eye) button → opens `ProductFormDialog` in `mode="view"` (already supported).
+- Add a small banner / helper text at the top: *"Products are managed in Inventory → Items. This view is read-only."* with a link/button **"Manage in Inventory Items"** that navigates to `/inventory/items`.
+- Drop the unused `ProductFormDialog` create/edit imports' wiring and the `deleteProductSafely` mutation from this page (file kept for use elsewhere if referenced, otherwise leave the helper module alone).
+- Leave the underlying data source unchanged (still reads `inventory_items` joined with `stock_ledger`), so the view stays accurate.
 
-UI:
-- Read-only "Current Stock" line (from `getInventoryStockMap([item.id])`, refetched on open).
-- Mode toggle (segmented control): **Adjust by ± / Set to exact value**.
-- Quantity input (integer, can be negative in Adjust mode).
-- Optional "Reason / Notes" text input.
-- Live preview: "New stock will be: X".
-- Block submit if resulting stock would be negative.
+### C. Small consistency tweaks
+- On Inventory Items, format Current Stock as red when 0, amber when ≤ min, green otherwise — already partly done; keep behaviour but ensure the new "Edit Stock" button is always visible (not just on hover) so updating is one click from the list.
+- No changes to routes, sidebar entries, or permissions — only UI behaviour on the two pages.
 
-On submit, insert one row into `stock_ledger`:
-- `item_id`: item.id
-- `location_type`: `'global'`, `location_id`: null (matches the order-flow convention when no store context exists).
-- `transaction_type`: `'manual_adjustment'` (Adjust mode) or `'opening_balance'` (Set mode when current stock is 0) / `'manual_adjustment'` (Set mode when non-zero, with `quantity_change = target - current`).
-- `quantity_change`: signed delta.
-- `unit_cost`: item.unit_cost ?? 0.
-- `reference_type`: `'manual'`, `reference_id`: null.
-- `notes`: user-entered reason.
-- `created_by`: current `auth.uid()` (or `'manual-adjustment'` fallback).
+### Files to change
+- `src/pages/inventory/InventoryItems.tsx` — relabel/expose Edit Stock button, make Current Stock cell clickable, add Update Stock CTA in the View sheet.
+- `src/pages/transactions/ProductsList.tsx` — strip create/edit/delete UI, add "view-only" banner with link to Inventory Items.
 
-After success: `qc.invalidateQueries({ queryKey: ["inventory-stock-map"] })`, refetch items, toast success, close dialog.
-
-#### 3. Small helper additions to `src/lib/inventoryStock.ts`
-
-Add `recordManualAdjustment({ itemId, delta, unitCost, notes })` so the dialog doesn't have to know the ledger schema. Keeps the abstraction consistent with `recordSaleLedger`.
-
-### What we explicitly will NOT do
-
-- Add a `stock_quantity` column to `inventory_items`.
-- Create an `inventory_movements` table (would duplicate `stock_ledger`).
-- Touch `OrderFormDialog`, `PointOfSale`, or any order-side flow — already correct.
-- Drop the `products` table.
-
-### Files
-
-- Edit: `src/pages/inventory/InventoryItems.tsx`
-- New: `src/components/inventory/EditStockDialog.tsx`
-- Edit: `src/lib/inventoryStock.ts` (add `recordManualAdjustment`)
-
-### Verification after build
-
-1. Open `/inventory/items` → confirm Stock column is visible and matches `stock_ledger` sums.
-2. Click Edit Stock on an item → set to 10 → save → row shows 10.
-3. Adjust by -3 → row shows 7.
-4. Try to adjust by -100 → submit blocked with "Stock cannot go negative".
-5. Open `/transactions/orders` → New Order → that item shows `(Stock: 7)` and is selectable; create order qty 2 → row shows 5; order qty 99 → rejected with "Insufficient stock — …".
+### Files NOT changed
+- `src/lib/inventoryStock.ts`, `src/components/inventory/EditStockDialog.tsx`, `src/hooks/useInventoryStock.ts` — already correct.
+- Database — no migrations needed; `stock_ledger` and `get_inventory_stock_map` are sufficient.
