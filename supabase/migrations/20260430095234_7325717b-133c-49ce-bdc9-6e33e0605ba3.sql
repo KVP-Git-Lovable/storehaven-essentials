@@ -1,0 +1,2 @@
+ALTER TABLE public.customers DROP CONSTRAINT IF EXISTS customers_customer_code_format_chk;
+ALTER TABLE public.customers ADD CONSTRAINT customers_customer_code_format_chk CHECK (customer_code ~ '^[A-Za-z0-9 _-]+$');
