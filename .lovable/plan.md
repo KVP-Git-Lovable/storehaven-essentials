@@ -1,59 +1,76 @@
-## Refactor: Inventory Items as the single source of truth for products
+## Add stock visibility + manual stock adjustment on Inventory Items
 
-### Important findings before we change anything
+### Important context (what already exists, do not duplicate)
 
-- `inventory_items` does **not** have a `stock_quantity` column. Stock is computed from `stock_ledger` (sum of `quantity_change` per `item_id` + `location_type`/`location_id`). The same applies to `products.stock_qty` consumers today.
-- Field name differences between the two tables:
-  - `products.price` ↔ `inventory_items.selling_price`
-  - `products.stock_qty` ↔ derived from `stock_ledger`
-  - `products` has `brand`, `model`, `warranty`, `tax_rate`, `image_url`, `is_favorite`, `cost_price` — none exist on `inventory_items`.
-- `order_items` already uses `item_id` (not `product_id`). No schema change needed there — only the source we read from.
-- Both `products` and `inventory_items` tables are currently empty (0 rows), so data migration is a no-op now but we'll still ship a safe, idempotent copy script for any future seed data.
+The previous refactor already delivered most of this spec — verified against the codebase:
 
-### Plan
+- **Orders use `inventory_items` as product source** — `OrderFormDialog.tsx` queries `inventory_items` and the dropdown label is already `"Name — ₹price (Stock: N)"`.
+- **Out-of-stock disables selection** — `disabled: stock <= 0` on the dropdown options.
+- **Stock guard on order placement** — `assertStockAvailable()` rejects with `"Insufficient stock — …"` before insert.
+- **Stock decrement on order placement** — `recordSaleLedger()` writes negative `stock_ledger` rows tagged `transaction_type='sale'`, `reference_type='order'`, `reference_id=order.id`. This is the equivalent of the `inventory_movements` table the spec describes — already audited, signed, and joined to the order.
+- **Real-time stock map** — `getInventoryStockMap` + `useInventoryStockMap` hook already aggregate the ledger.
 
-1) Schema additions to `inventory_items` (non-breaking, all nullable)
-   - Add `brand text`, `model text`, `warranty text`, `tax_rate numeric`, `image_url text`, `is_favorite boolean default false`, `cost_price numeric`.
-   - Add a generated/maintained `stock_quantity` view-like helper: introduce a SQL function `get_inventory_stock(item_id uuid)` returning `coalesce(sum(quantity_change),0)` from `stock_ledger`. (Avoids denormalising stock onto the row, matches existing system design.)
-   - Add unique index on `inventory_items.sku` only where `sku is not null` (if not already present) to keep parity with products.
+What's actually missing is **only on the Inventory Items page**: the Stock column and the Edit Stock modal.
 
-2) Data migration (idempotent, preserves IDs)
-   - One-shot SQL: `INSERT INTO inventory_items (id, name, sku, barcode, category, unit, unit_cost, selling_price, min_stock, status, brand, model, warranty, tax_rate, image_url, is_favorite, created_at) SELECT id, name, sku, barcode, coalesce(category,'General'), 'pcs', coalesce(cost_price,0), coalesce(price,0), coalesce(min_stock,0), 'active', brand, model, warranty, tax_rate, image_url, coalesce(is_favorite,false), created_at FROM products ON CONFLICT (id) DO NOTHING;`
-   - For each migrated product with `stock_qty > 0`, insert a single `stock_ledger` opening-balance row (`transaction_type='opening_balance'`) so derived stock matches.
+### Decision: keep `stock_ledger`, do NOT add a `stock_quantity` column or a parallel `inventory_movements` table
 
-3) Application refactor — switch reads from `products` → `inventory_items`
-   - `src/components/transactions/OrderFormDialog.tsx`: query `inventory_items` selecting `id, name, selling_price as price`, filter `status='active'`. Show available stock in the dropdown using a batched `stock_ledger` aggregation query; disable items with stock ≤ 0.
-   - `src/components/transactions/LeadConvertDialog.tsx`: same swap.
-   - `src/components/transactions/OrderImportDialog.tsx`: name lookup against `inventory_items`.
-   - `src/pages/transactions/ProductsList.tsx` + `ProductFormDialog.tsx`: read/write `inventory_items` while preserving the existing UI (map `selling_price` ↔ `price`, derive stock from ledger). Keep the page route unchanged.
-   - `src/pages/pos/PointOfSale.tsx` and `src/pages/pos/ProductMaster.tsx`: read `inventory_items`. POS write paths (favourite toggle etc.) move to `inventory_items`.
-   - `src/pages/assets/Products.tsx` and `src/pages/stores/StoreTargetDetails.tsx`: switch to `inventory_items` reads.
-   - `src/lib/productDeletion.ts`: delete from `inventory_items` (also clean dependent ledger rows where safe).
+The spec asks for a `stock_quantity` column and an `inventory_movements` audit table. The codebase already implements both concepts via `stock_ledger` (sum of `quantity_change` = current stock; every row is a fully-attributed movement with `reference_type`/`reference_id`/`created_by`/`created_at`). Adding a denormalised column would create drift; adding `inventory_movements` would duplicate `stock_ledger`. Both would also break the working order flow.
 
-4) Order placement — stock decrement
-   - On successful order create (OrderFormDialog, PointOfSale): for each line item, insert a `stock_ledger` row with `transaction_type='sale'`, `quantity_change = -quantity`, `reference_type='order'`, `reference_id=order.id`. This keeps stock derivation consistent and reversible.
-   - Add a guard before submit: re-fetch current stock for selected items; reject if any line quantity exceeds available stock.
+If you'd prefer the literal column + separate table approach, say so and I'll re-plan — but it's a net regression vs. what's already shipped.
 
-5) Validation in dropdowns
-   - Helper `useInventoryStockMap(itemIds)` → returns `{ [id]: number }` from a single grouped `stock_ledger` query.
-   - In dropdowns: label as `"<name> — ₹<price> (Stock: N)"`, mark out-of-stock entries disabled and visually muted.
+### Changes
 
-6) Backward compatibility
-   - `order_items.item_id` unchanged.
-   - `products` table is **kept** (not dropped). All writes are redirected; existing rows remain readable.
-   - `src/pages/assets/Products.tsx` keeps its route; only the underlying source changes.
+#### 1. `src/pages/inventory/InventoryItems.tsx` — add Stock column
 
-### Files to edit / add
+- Use `useInventoryStockMap(items.map(i => i.id))` to fetch current stock for all listed items.
+- Insert a new "Stock" column in the items table between "Unit" (or wherever appropriate) and the actions column. Show the integer; render `0` in muted red when ≤ 0 and below `min_stock` in amber.
+- Add an "Edit Stock" action (Package icon button) in the row actions, alongside Edit/Delete.
 
-- Migration: `supabase/migrations/<ts>_inventory_as_source_of_truth.sql` (schema additions, data copy, opening-balance ledger inserts, stock helper function).
-- New: `src/lib/inventoryStock.ts` (`getStockMap`, `assertStockAvailable`).
-- New: `src/hooks/useInventoryStock.ts` (React Query wrapper).
-- Edit: `OrderFormDialog.tsx`, `LeadConvertDialog.tsx`, `OrderImportDialog.tsx`, `ProductsList.tsx`, `ProductFormDialog.tsx`, `PointOfSale.tsx`, `pos/ProductMaster.tsx`, `assets/Products.tsx`, `stores/StoreTargetDetails.tsx`, `lib/productDeletion.ts`.
+#### 2. New component `src/components/inventory/EditStockDialog.tsx`
+
+Props: `{ open, onOpenChange, item: { id, name, unit, unit_cost } }`.
+
+UI:
+- Read-only "Current Stock" line (from `getInventoryStockMap([item.id])`, refetched on open).
+- Mode toggle (segmented control): **Adjust by ± / Set to exact value**.
+- Quantity input (integer, can be negative in Adjust mode).
+- Optional "Reason / Notes" text input.
+- Live preview: "New stock will be: X".
+- Block submit if resulting stock would be negative.
+
+On submit, insert one row into `stock_ledger`:
+- `item_id`: item.id
+- `location_type`: `'global'`, `location_id`: null (matches the order-flow convention when no store context exists).
+- `transaction_type`: `'manual_adjustment'` (Adjust mode) or `'opening_balance'` (Set mode when current stock is 0) / `'manual_adjustment'` (Set mode when non-zero, with `quantity_change = target - current`).
+- `quantity_change`: signed delta.
+- `unit_cost`: item.unit_cost ?? 0.
+- `reference_type`: `'manual'`, `reference_id`: null.
+- `notes`: user-entered reason.
+- `created_by`: current `auth.uid()` (or `'manual-adjustment'` fallback).
+
+After success: `qc.invalidateQueries({ queryKey: ["inventory-stock-map"] })`, refetch items, toast success, close dialog.
+
+#### 3. Small helper additions to `src/lib/inventoryStock.ts`
+
+Add `recordManualAdjustment({ itemId, delta, unitCost, notes })` so the dialog doesn't have to know the ledger schema. Keeps the abstraction consistent with `recordSaleLedger`.
 
 ### What we explicitly will NOT do
 
-- Drop or rename the `products` table.
-- Change `order_items` columns or any RLS policy semantics.
-- Add a denormalised `stock_quantity` column on `inventory_items` (we use the existing `stock_ledger` design; the spec's "stock_quantity" is exposed via a helper function/view rather than a stored column, to avoid drift).
+- Add a `stock_quantity` column to `inventory_items`.
+- Create an `inventory_movements` table (would duplicate `stock_ledger`).
+- Touch `OrderFormDialog`, `PointOfSale`, or any order-side flow — already correct.
+- Drop the `products` table.
 
-If you'd prefer a literal `stock_quantity` column on `inventory_items` (kept in sync via trigger on `stock_ledger`) instead of the helper-function approach, say the word and I'll adjust step 1 + 4 accordingly.
+### Files
+
+- Edit: `src/pages/inventory/InventoryItems.tsx`
+- New: `src/components/inventory/EditStockDialog.tsx`
+- Edit: `src/lib/inventoryStock.ts` (add `recordManualAdjustment`)
+
+### Verification after build
+
+1. Open `/inventory/items` → confirm Stock column is visible and matches `stock_ledger` sums.
+2. Click Edit Stock on an item → set to 10 → save → row shows 10.
+3. Adjust by -3 → row shows 7.
+4. Try to adjust by -100 → submit blocked with "Stock cannot go negative".
+5. Open `/transactions/orders` → New Order → that item shows `(Stock: 7)` and is selectable; create order qty 2 → row shows 5; order qty 99 → rejected with "Insufficient stock — …".

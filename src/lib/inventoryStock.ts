@@ -82,3 +82,33 @@ export async function recordSaleLedger(params: {
   const { error } = await supabase.from("stock_ledger").insert(rows as any);
   if (error) throw error;
 }
+
+/**
+ * Records a manual stock adjustment (positive or negative) as a single ledger row.
+ * Use for the "Edit Stock" UI on Inventory Items.
+ */
+export async function recordManualAdjustment(params: {
+  itemId: string;
+  delta: number;
+  unitCost?: number;
+  notes?: string;
+  transactionType?: "manual_adjustment" | "opening_balance";
+}): Promise<void> {
+  if (!params.itemId || !params.delta) return;
+  const { data: { user } } = await supabase.auth.getUser();
+  const { error } = await supabase.from("stock_ledger").insert([
+    {
+      item_id: params.itemId,
+      location_type: "global",
+      location_id: null,
+      transaction_type: params.transactionType ?? "manual_adjustment",
+      quantity_change: Math.trunc(params.delta),
+      unit_cost: params.unitCost ?? 0,
+      reference_type: "manual",
+      reference_id: null,
+      notes: params.notes ?? null,
+      created_by: user?.id ?? "manual-adjustment",
+    },
+  ] as any);
+  if (error) throw error;
+}
