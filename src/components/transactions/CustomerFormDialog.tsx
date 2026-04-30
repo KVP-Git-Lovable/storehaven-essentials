@@ -138,6 +138,18 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
         </DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="col-span-2">
+            <Label>Customer Code *</Label>
+            <Input
+              value={form.customer_code}
+              disabled={isView}
+              onChange={(e) => setForm({ ...form, customer_code: e.target.value })}
+              placeholder="e.g. CUST-001"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Alphanumeric only (letters, digits, "_" or "-"). Must be unique.
+            </p>
+          </div>
+          <div className="col-span-2">
             <Label>Name</Label>
             <Input value={form.name} disabled={isView} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </div>
@@ -168,6 +180,39 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
           <div className="col-span-2">
             <Label>Anniversary</Label>
             <Input type="date" disabled={isView} value={form.anniversary_date} onChange={(e) => setForm({ ...form, anniversary_date: e.target.value })} />
+          </div>
+          <div>
+            <Label>City</Label>
+            <Input
+              value={form.city}
+              disabled={isView}
+              onChange={(e) => setForm({ ...form, city: e.target.value })}
+              placeholder="e.g. Mumbai"
+            />
+          </div>
+          <div>
+            <Label>State</Label>
+            <Select
+              value={form.state || undefined}
+              onValueChange={(v) => setForm({ ...form, state: v })}
+              disabled={isView}
+            >
+              <SelectTrigger><SelectValue placeholder="Select state / UT" /></SelectTrigger>
+              <SelectContent className="max-h-72">
+                {INDIAN_STATES.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="col-span-2">
+            <Label>Country</Label>
+            <Input
+              value={form.country}
+              disabled={isView}
+              onChange={(e) => setForm({ ...form, country: e.target.value })}
+              placeholder="e.g. India"
+            />
           </div>
         </div>
 
