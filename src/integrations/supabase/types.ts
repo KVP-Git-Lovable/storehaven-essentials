@@ -8810,7 +8810,7 @@ export type Database = {
           expiry_date: string | null
           id: string
           item_id: string
-          location_id: string
+          location_id: string | null
           location_type: string
           notes: string | null
           quantity_change: number
@@ -8826,7 +8826,7 @@ export type Database = {
           expiry_date?: string | null
           id?: string
           item_id: string
-          location_id: string
+          location_id?: string | null
           location_type: string
           notes?: string | null
           quantity_change: number
@@ -8842,7 +8842,7 @@ export type Database = {
           expiry_date?: string | null
           id?: string
           item_id?: string
-          location_id?: string
+          location_id?: string | null
           location_type?: string
           notes?: string | null
           quantity_change?: number
