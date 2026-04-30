@@ -248,9 +248,10 @@ export default function PointOfSale() {
   // Create new customer - name is now optional
   const createCustomerMutation = useMutation({
     mutationFn: async ({ phone, name }: { phone: string; name?: string }) => {
+      const { generateCustomerCode } = await import("@/lib/customerCode");
       const { data, error } = await supabase
         .from("customers")
-        .insert({ phone, name: name || null })
+        .insert({ phone, name: name || null, customer_code: generateCustomerCode() })
         .select()
         .single();
       if (error) throw error;
