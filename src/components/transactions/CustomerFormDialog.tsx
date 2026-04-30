@@ -11,29 +11,39 @@ import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { OrderFormDialog } from "@/components/transactions/OrderFormDialog";
+import { INDIAN_STATES } from "@/lib/indianStates";
+import { CUSTOMER_CODE_REGEX, generateCustomerCode } from "@/lib/customerCode";
 
 interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   customer?: {
     id: string;
+    customer_code?: string | null;
     name: string | null;
     phone: string;
     email: string | null;
     tier: string | null;
     date_of_birth: string | null;
     anniversary_date: string | null;
+    city?: string | null;
+    state?: string | null;
+    country?: string | null;
   } | null;
   mode?: "create" | "edit" | "view";
 }
 
 const emptyForm = {
+  customer_code: "",
   name: "",
   phone: "",
   email: "",
   tier: "bronze",
   date_of_birth: "",
   anniversary_date: "",
+  city: "",
+  state: "",
+  country: "India",
 };
 
 const inr = (n: number) =>
@@ -52,17 +62,22 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
 
     if (customer) {
       setForm({
+        customer_code: customer.customer_code || "",
         name: customer.name || "",
         phone: customer.phone || "",
         email: customer.email || "",
         tier: customer.tier || "bronze",
         date_of_birth: customer.date_of_birth || "",
         anniversary_date: customer.anniversary_date || "",
+        city: (customer as any).city || "",
+        state: (customer as any).state || "",
+        country: (customer as any).country || "India",
       });
       return;
     }
 
-    setForm(emptyForm);
+    // Auto-suggest a code on create
+    setForm({ ...emptyForm, customer_code: generateCustomerCode() });
   }, [open, customer]);
 
   const { data: orders, isLoading: ordersLoading } = useQuery({
@@ -81,13 +96,22 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
 
   const createMut = useMutation({
     mutationFn: async () => {
+      const codeTrim = form.customer_code.trim();
+      if (!codeTrim) throw new Error("Customer code is required");
+      if (!CUSTOMER_CODE_REGEX.test(codeTrim)) {
+        throw new Error("Customer code must be alphanumeric (letters, digits, _ or -)");
+      }
       const payload: any = {
+        customer_code: codeTrim,
         name: form.name || null,
         phone: form.phone,
         email: form.email || null,
         tier: form.tier,
         date_of_birth: form.date_of_birth || null,
         anniversary_date: form.anniversary_date || null,
+        city: form.city || null,
+        state: form.state || null,
+        country: form.country || null,
       };
       const query = isEdit
         ? supabase.from("customers").update(payload).eq("id", customer!.id)
