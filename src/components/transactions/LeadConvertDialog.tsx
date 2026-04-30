@@ -13,6 +13,8 @@ import { Plus, Trash2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { LeadRow } from "./LeadFormDialog";
+import { assertStockAvailable, recordSaleLedger } from "@/lib/inventoryStock";
+import { useInventoryStockMap } from "@/hooks/useInventoryStock";
 
 interface Props {
   open: boolean;
@@ -33,10 +35,22 @@ export function LeadConvertDialog({ open, onOpenChange, lead }: Props) {
     queryKey: ["lead-convert-products"],
     enabled: open,
     queryFn: async () => {
-      const { data } = await supabase.from("products").select("id, name, price").order("name").limit(500);
-      return data || [];
+      const { data } = await supabase
+        .from("inventory_items")
+        .select("id, name, selling_price, status")
+        .eq("status", "active")
+        .order("name")
+        .limit(1000);
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        price: Number(row.selling_price) || 0,
+      }));
     },
   });
+
+  const productIds = useMemo(() => products.map((p: any) => p.id), [products]);
+  const { data: stockMap = {} } = useInventoryStockMap(productIds, open);
 
   // Duplicate detection — by phone or email (case-insensitive)
   const { data: duplicate, isFetching: dupLoading } = useQuery({
@@ -86,11 +100,15 @@ export function LeadConvertDialog({ open, onOpenChange, lead }: Props) {
           const p = products.find((x: any) => x.id === it.productId);
           const qty = Math.max(1, Number(it.quantity) || 1);
           const price = Number(p?.price) || 0;
-          return { productId: it.productId, qty, price, line: qty * price };
+          return { productId: it.productId, qty, price, line: qty * price, name: p?.name as string | undefined };
         })
         .filter((x) => x.productId && x.price > 0);
 
       if (validItems.length === 0) throw new Error("Add at least one product");
+
+      await assertStockAvailable(
+        validItems.map((i) => ({ item_id: i.productId, quantity: i.qty, name: i.name }))
+      );
 
       // Resolve customer id — link existing or create new
       let customerId: string;
@@ -147,6 +165,11 @@ export function LeadConvertDialog({ open, onOpenChange, lead }: Props) {
       );
       if (itemErr) throw itemErr;
 
+      await recordSaleLedger({
+        orderId: createdOrder.id,
+        lines: validItems.map((i) => ({ item_id: i.productId, quantity: i.qty, unit_cost: i.price })),
+      });
+
       // Mark lead converted
       const { error: leadErr } = await supabase
         .from("leads")
@@ -163,6 +186,7 @@ export function LeadConvertDialog({ open, onOpenChange, lead }: Props) {
       qc.invalidateQueries({ queryKey: ["transactions-leads"] });
       qc.invalidateQueries({ queryKey: ["transactions-customers"] });
       qc.invalidateQueries({ queryKey: ["transactions-orders"] });
+      qc.invalidateQueries({ queryKey: ["inventory-stock-map"] });
       onOpenChange(false);
     },
     onError: (e: any) => toast.error(e.message),
@@ -249,7 +273,14 @@ export function LeadConvertDialog({ open, onOpenChange, lead }: Props) {
                     <SearchableSelect
                       value={it.productId}
                       onValueChange={(v) => updateItem(i, { productId: v })}
-                      options={products.map((p: any) => ({ value: p.id, label: `${p.name} — ${inr(Number(p.price) || 0)}` }))}
+                      options={products.map((p: any) => {
+                        const stock = stockMap[p.id] ?? 0;
+                        return {
+                          value: p.id,
+                          label: `${p.name} — ${inr(Number(p.price) || 0)} (Stock: ${stock})`,
+                          disabled: stock <= 0,
+                        };
+                      })}
                       placeholder="Select product..."
                     />
                   </div>
