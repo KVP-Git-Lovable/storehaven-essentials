@@ -368,6 +368,21 @@ export default function PointOfSale() {
 
       if (itemsError) throw itemsError;
 
+      // Decrement inventory stock for each sold item
+      try {
+        await recordSaleLedger({
+          orderId: order.id,
+          storeId: selectedStore || null,
+          lines: cart.map((item) => ({
+            item_id: item.itemId,
+            quantity: item.quantity,
+            unit_cost: item.unitPrice,
+          })),
+        });
+      } catch (e) {
+        console.error("Stock ledger update failed", e);
+      }
+
       // Create order payments for split payments
       if (payments && payments.length > 0) {
         const orderPayments = payments.map((p) => ({
