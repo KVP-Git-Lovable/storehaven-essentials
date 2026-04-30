@@ -481,6 +481,8 @@ export default function PointOfSale() {
       setIsSplitPaymentOpen(false);
       setIsOrderCompleteDialogOpen(true);
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["pos-products"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-stock-map"] });
       
       if (pointsToEarn > 0 && customer) {
         toast.success(`${pointsToEarn} loyalty points earned!`);
