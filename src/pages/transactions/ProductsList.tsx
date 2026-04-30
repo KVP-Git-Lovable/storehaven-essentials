@@ -1,42 +1,29 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Plus, Eye, Pencil, Trash2 } from "lucide-react";
+import { Search, Eye, Info, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar";
 import { ProductFormDialog } from "@/components/transactions/ProductFormDialog";
 import { executeListView } from "@/lib/listViewExecutor";
-import { deleteProductSafely } from "@/lib/productDeletion";
 import type { FilterCondition } from "@/lib/listViewSchema";
 import { getInventoryStockMap } from "@/lib/inventoryStock";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { toast } from "sonner";
 
 const inr = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
 
 export default function ProductsList() {
-  const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<FilterCondition[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
-  const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("create");
-  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("view");
 
   const usingListView = activeFilters.length > 0;
 
@@ -76,28 +63,26 @@ export default function ProductsList() {
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (productId: string) => {
-      await deleteProductSafely(productId);
-    },
-    onSuccess: () => {
-      toast.success("Product deleted");
-      qc.invalidateQueries({ queryKey: ["transactions-products"] });
-      setDeleteTarget(null);
-    },
-    onError: (error: any) => toast.error(error.message || "Failed to delete product"),
-  });
-
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Products</h1>
-          <p className="text-muted-foreground">Catalogue of available products.</p>
+          <p className="text-muted-foreground">Read-only catalogue of products. Manage items and stock in Inventory.</p>
         </div>
-        <Button onClick={() => { setSelectedProduct(null); setDialogMode("create"); setCreateOpen(true); }}>
-          <Plus className="mr-2 h-4 w-4" /> New Product
+        <Button asChild>
+          <Link to="/inventory/items">
+            Manage in Inventory Items <ArrowRight className="ml-2 h-4 w-4" />
+          </Link>
         </Button>
+      </div>
+
+      <div className="flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+        <Info className="h-4 w-4 mt-0.5 shrink-0" />
+        <span>
+          Products are managed in <Link to="/inventory/items" className="underline text-foreground">Inventory → Items</Link>.
+          This view is read-only — use it to browse the catalogue and current stock.
+        </span>
       </div>
 
       <EntityListViewsBar
@@ -135,7 +120,11 @@ export default function ProductsList() {
               <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No products found.</TableCell></TableRow>
             ) : (
               rows.map((p: any) => (
-                <TableRow key={p.id}>
+                <TableRow
+                  key={p.id}
+                  className="cursor-pointer"
+                  onClick={() => { setSelectedProduct(p); setDialogMode("view"); setCreateOpen(true); }}
+                >
                   <TableCell className="font-mono text-xs">{p.sku || "—"}</TableCell>
                   <TableCell className="font-medium">{p.name}</TableCell>
                   <TableCell><Badge variant="outline">{p.category || "—"}</Badge></TableCell>
@@ -143,16 +132,10 @@ export default function ProductsList() {
                   <TableCell className="text-right font-medium">{inr(Number(p.price))}</TableCell>
                   <TableCell className="text-right">{p.stock_qty ?? 0}</TableCell>
                   <TableCell className="text-xs">{p.created_at ? format(new Date(p.created_at), "dd MMM yyyy") : "—"}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1">
                       <Button variant="outline" size="icon" onClick={() => { setSelectedProduct(p); setDialogMode("view"); setCreateOpen(true); }}>
                         <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="icon" onClick={() => { setSelectedProduct(p); setDialogMode("edit"); setCreateOpen(true); }}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="icon" onClick={() => setDeleteTarget(p)}>
-                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </TableCell>
@@ -164,23 +147,6 @@ export default function ProductsList() {
       </Card>
 
       <ProductFormDialog open={createOpen} onOpenChange={setCreateOpen} product={selectedProduct} mode={dialogMode} />
-
-      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete product?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove {deleteTarget?.name || "this product"}.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}>
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
