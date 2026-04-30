@@ -48,6 +48,7 @@ import { GiftCardInput } from "@/components/pos/GiftCardInput";
 import { PersonalizedOffers } from "@/components/pos/PersonalizedOffers";
 import { usePOSSchemes } from "@/hooks/usePOSSchemes";
 import { useAuth } from "@/hooks/useAuth";
+import { recordSaleLedger, getInventoryStockMap } from "@/lib/inventoryStock";
 
 interface CartItem {
   id: string;
@@ -163,11 +164,19 @@ export default function PointOfSale() {
     queryKey: ["pos-products"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("products")
+        .from("inventory_items")
         .select("*")
+        .eq("status", "active")
         .order("name");
       if (error) throw error;
-      return data;
+      const rows = data || [];
+      const stockMap = await getInventoryStockMap(rows.map((r: any) => r.id));
+      // Normalise to the legacy product shape consumed across this page
+      return rows.map((r: any) => ({
+        ...r,
+        price: Number(r.selling_price ?? 0),
+        stock_qty: stockMap[r.id] ?? 0,
+      }));
     },
   });
 
