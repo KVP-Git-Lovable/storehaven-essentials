@@ -1,0 +1,2 @@
+ALTER TABLE public.order_items DROP CONSTRAINT IF EXISTS order_items_item_id_fkey;
+ALTER TABLE public.order_items ADD CONSTRAINT order_items_item_id_fkey FOREIGN KEY (item_id) REFERENCES public.inventory_items(id) ON DELETE RESTRICT;
