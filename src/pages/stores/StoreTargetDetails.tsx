@@ -78,11 +78,12 @@ export default function StoreTargetDetails() {
     queryKey: ["products"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("products")
+        .from("inventory_items")
         .select("*")
+        .eq("status", "active")
         .order("name");
       if (error) throw error;
-      return data;
+      return (data || []).map((r: any) => ({ ...r, price: Number(r.selling_price ?? 0) }));
     },
   });
 
