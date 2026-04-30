@@ -280,7 +280,18 @@ export default function InventoryItems() {
     item.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const categories = ["Electronics", "Consumables", "Fixtures", "Displays", "Office Supplies", "Cleaning", "Packaging"];
+  const { data: categories = [] } = useQuery({
+    queryKey: ["inventory-item-categories"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("categories")
+        .select("id, name, type")
+        .in("type", ["product", "spare-parts"])
+        .order("name");
+      if (error) throw error;
+      return (data || []).map((c: any) => c.name as string);
+    },
+  });
   const units = ["pcs", "kg", "ltr", "box", "pack", "set", "meter", "roll"];
 
   return (
