@@ -285,28 +285,32 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
 
     return navigation
       .map((item) => {
-        // Check if user has access to this module
-        if (item.moduleKey && !isAdmin && !hasPermission(item.moduleKey, "view")) {
-          // Check if any children are accessible
-          if (item.children) {
-            const accessibleChildren = item.children.filter(
-              (child) => !child.moduleKey || hasPermission(child.moduleKey, "view")
-            );
-            if (accessibleChildren.length === 0) return null;
-            return { ...item, children: accessibleChildren };
-          }
-          return null;
-        }
-
-        // Filter children
+        // Filter children/sub-sections strictly by Permission Set (no admin bypass for sidebar visibility)
         if (item.children) {
-          const accessibleChildren = item.children.filter(
-            (child) => !child.moduleKey || isAdmin || hasPermission(child.moduleKey, "view")
-          );
+          const accessibleChildren = item.children
+            .map((child) => {
+              if (child.isSubSection && child.subChildren) {
+                const accessibleSubs = child.subChildren.filter(
+                  (sub) => !sub.moduleKey || hasPermission(sub.moduleKey, "view")
+                );
+                if (accessibleSubs.length === 0) return null;
+                return { ...child, subChildren: accessibleSubs };
+              }
+              if (child.moduleKey && !hasPermission(child.moduleKey, "view")) {
+                return null;
+              }
+              return child;
+            })
+            .filter(Boolean) as NavChild[];
+
           if (accessibleChildren.length === 0 && !item.href) return null;
           return { ...item, children: accessibleChildren };
         }
 
+        // Leaf item
+        if (item.moduleKey && !hasPermission(item.moduleKey, "view")) {
+          return null;
+        }
         return item;
       })
       .filter(Boolean) as NavItem[];

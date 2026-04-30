@@ -33,6 +33,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, username: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  refreshPermissions: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -99,6 +100,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  const refreshPermissions = async () => {
+    if (user?.id) {
+      await fetchUserPermissions(user.id);
+    }
+  };
+
   useEffect(() => {
     // Set up auth state listener FIRST
     const {
@@ -134,6 +141,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Live-refresh permissions when role/group permission tables change for this user.
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`perm-refresh-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "role_permissions" },
+        () => fetchUserPermissions(user.id)
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "permission_set_group_permissions" },
+        () => fetchUserPermissions(user.id)
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "user_permission_set_groups" },
+        () => fetchUserPermissions(user.id)
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
 
   const signIn = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -218,6 +253,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         signUp,
         signOut,
         refreshProfile,
+        refreshPermissions,
       }}
     >
       {children}

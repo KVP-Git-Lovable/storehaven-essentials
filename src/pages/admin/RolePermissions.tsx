@@ -21,6 +21,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { modules, parentModules, getChildModules } from "@/lib/modules";
 import { PermissionSetGroupsList } from "@/components/admin/PermissionSetGroupsList";
 import { PermissionSetGroupConfig } from "@/components/admin/PermissionSetGroupConfig";
@@ -48,6 +49,7 @@ export default function RolePermissions() {
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [groupRefreshTrigger, setGroupRefreshTrigger] = useState(0);
   const { toast } = useToast();
+  const { profile, refreshPermissions } = useAuth();
 
   useEffect(() => {
     fetchRoles();
@@ -191,6 +193,12 @@ export default function RolePermissions() {
       title: "Permissions Saved",
       description: "Role permissions have been updated successfully.",
     });
+
+    // If the saved role belongs to the current user, refresh their permissions immediately
+    if (profile?.role_id === selectedRoleId) {
+      await refreshPermissions();
+    }
+
     setIsSaving(false);
   };
 
@@ -242,6 +250,8 @@ export default function RolePermissions() {
 
   const handleGroupRefresh = () => {
     setGroupRefreshTrigger((prev) => prev + 1);
+    // Refresh current user's permissions in case they belong to the affected group
+    refreshPermissions();
   };
 
   return (
