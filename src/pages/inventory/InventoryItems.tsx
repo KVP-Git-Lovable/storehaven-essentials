@@ -49,6 +49,8 @@ import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useInventoryStockMap } from "@/hooks/useInventoryStock";
+import { EditStockDialog } from "@/components/inventory/EditStockDialog";
 
 const itemSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -113,6 +115,7 @@ export default function InventoryItems() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [viewItem, setViewItem] = useState<InventoryItem | null>(null);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [stockEditItem, setStockEditItem] = useState<InventoryItem | null>(null);
 
   const defaultFormValues = {
     name: "",
@@ -280,6 +283,8 @@ export default function InventoryItems() {
     item.barcode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const { data: stockMap = {} } = useInventoryStockMap(filteredItems.map((i) => i.id));
 
   const { data: categories = [] } = useQuery({
     queryKey: ["inventory-item-categories"],
@@ -722,6 +727,7 @@ export default function InventoryItems() {
                 <TableHead>Unit Cost</TableHead>
                 <TableHead>Selling Price</TableHead>
                 <TableHead>Stock Levels</TableHead>
+                <TableHead>Current Stock</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -729,16 +735,20 @@ export default function InventoryItems() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">Loading...</TableCell>
+                  <TableCell colSpan={9} className="text-center py-8">Loading...</TableCell>
                 </TableRow>
               ) : filteredItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                     No items found. Add your first inventory item.
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredItems.map((item) => (
+                filteredItems.map((item) => {
+                  const currentStock = stockMap[item.id] ?? 0;
+                  const lowStock = currentStock > 0 && currentStock <= (item.min_stock || 0);
+                  const outOfStock = currentStock <= 0;
+                  return (
                   <TableRow 
                     key={item.id} 
                     className="cursor-pointer hover:bg-muted/50"
@@ -764,6 +774,18 @@ export default function InventoryItems() {
                       <div className="text-xs text-muted-foreground">Max: {item.max_stock || '-'}</div>
                     </TableCell>
                     <TableCell>
+                      <span
+                        className={cn(
+                          "font-semibold",
+                          outOfStock && "text-destructive",
+                          !outOfStock && lowStock && "text-amber-600"
+                        )}
+                      >
+                        {currentStock}
+                      </span>
+                      <span className="text-xs text-muted-foreground"> {item.unit}</span>
+                    </TableCell>
+                    <TableCell>
                       <Badge variant={item.status === 'active' ? 'default' : 'secondary'}>
                         {item.status}
                       </Badge>
@@ -772,6 +794,14 @@ export default function InventoryItems() {
                       <div className="flex justify-end gap-1">
                         <Button variant="ghost" size="icon" onClick={() => setViewItem(item)}>
                           <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Edit Stock"
+                          onClick={() => setStockEditItem(item)}
+                        >
+                          <Package className="h-4 w-4" />
                         </Button>
                         <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
                           <Edit className="h-4 w-4" />
@@ -798,7 +828,8 @@ export default function InventoryItems() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -897,6 +928,12 @@ export default function InventoryItems() {
           )}
         </SheetContent>
       </Sheet>
+
+      <EditStockDialog
+        open={!!stockEditItem}
+        onOpenChange={(o) => !o && setStockEditItem(null)}
+        item={stockEditItem ? { id: stockEditItem.id, name: stockEditItem.name, unit: stockEditItem.unit, unit_cost: stockEditItem.unit_cost } : null}
+      />
     </div>
   );
 }
