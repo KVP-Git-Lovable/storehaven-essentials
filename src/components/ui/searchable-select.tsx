@@ -23,6 +23,7 @@ export type SearchableSelectOption = {
   value: string;
   label: string;
   subtitle?: string;
+  disabled?: boolean;
 };
 
 interface SearchableSelectProps {
@@ -116,11 +117,14 @@ export function SearchableSelect({
                 <CommandItem
                   key={option.value}
                   value={option.label}
+                  disabled={option.disabled}
                   onSelect={() => {
+                    if (option.disabled) return;
                     onValueChange(option.value);
                     setOpen(false);
                   }}
                   data-value={option.value}
+                  className={cn(option.disabled && "opacity-50 cursor-not-allowed")}
                 >
                   <Check
                     className={cn(
