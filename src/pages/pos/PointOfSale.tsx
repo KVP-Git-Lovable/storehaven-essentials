@@ -48,6 +48,7 @@ import { GiftCardInput } from "@/components/pos/GiftCardInput";
 import { PersonalizedOffers } from "@/components/pos/PersonalizedOffers";
 import { usePOSSchemes } from "@/hooks/usePOSSchemes";
 import { useAuth } from "@/hooks/useAuth";
+import { recordSaleLedger, getInventoryStockMap } from "@/lib/inventoryStock";
 
 interface CartItem {
   id: string;
@@ -163,11 +164,19 @@ export default function PointOfSale() {
     queryKey: ["pos-products"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("products")
+        .from("inventory_items")
         .select("*")
+        .eq("status", "active")
         .order("name");
       if (error) throw error;
-      return data;
+      const rows = data || [];
+      const stockMap = await getInventoryStockMap(rows.map((r: any) => r.id));
+      // Normalise to the legacy product shape consumed across this page
+      return rows.map((r: any) => ({
+        ...r,
+        price: Number(r.selling_price ?? 0),
+        stock_qty: stockMap[r.id] ?? 0,
+      }));
     },
   });
 
@@ -359,6 +368,21 @@ export default function PointOfSale() {
 
       if (itemsError) throw itemsError;
 
+      // Decrement inventory stock for each sold item
+      try {
+        await recordSaleLedger({
+          orderId: order.id,
+          storeId: selectedStore || null,
+          lines: cart.map((item) => ({
+            item_id: item.itemId,
+            quantity: item.quantity,
+            unit_cost: item.unitPrice,
+          })),
+        });
+      } catch (e) {
+        console.error("Stock ledger update failed", e);
+      }
+
       // Create order payments for split payments
       if (payments && payments.length > 0) {
         const orderPayments = payments.map((p) => ({
@@ -457,6 +481,8 @@ export default function PointOfSale() {
       setIsSplitPaymentOpen(false);
       setIsOrderCompleteDialogOpen(true);
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["pos-products"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-stock-map"] });
       
       if (pointsToEarn > 0 && customer) {
         toast.success(`${pointsToEarn} loyalty points earned!`);

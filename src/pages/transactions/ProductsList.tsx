@@ -13,6 +13,7 @@ import { ProductFormDialog } from "@/components/transactions/ProductFormDialog";
 import { executeListView } from "@/lib/listViewExecutor";
 import { deleteProductSafely } from "@/lib/productDeletion";
 import type { FilterCondition } from "@/lib/listViewSchema";
+import { getInventoryStockMap } from "@/lib/inventoryStock";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,24 +43,36 @@ export default function ProductsList() {
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["transactions-products", search, activeViewId, activeFilters],
     queryFn: async () => {
+      let raw: any[] = [];
       if (usingListView) {
         const result = await executeListView({ entity_type: "products", filters: activeFilters }, { limit: 1000 });
-        let r = result.rows;
-        if (search.trim()) {
-          const s = search.toLowerCase();
-          r = r.filter((p: any) =>
-            (p.name || "").toLowerCase().includes(s) ||
-            (p.sku || "").toLowerCase().includes(s) ||
-            (p.category || "").toLowerCase().includes(s)
-          );
-        }
-        return r;
+        raw = result.rows;
+      } else {
+        let q = supabase.from("inventory_items").select("*").order("selling_price", { ascending: false });
+        if (search.trim()) q = q.or(`name.ilike.%${search}%,sku.ilike.%${search}%,category.ilike.%${search}%`);
+        const { data, error } = await q;
+        if (error) throw error;
+        raw = data || [];
       }
-      let q = supabase.from("products").select("*").order("price", { ascending: false });
-      if (search.trim()) q = q.or(`name.ilike.%${search}%,sku.ilike.%${search}%,category.ilike.%${search}%`);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data || [];
+
+      // Normalise inventory_items rows to the legacy product shape used by this page
+      let normalised = raw.map((r: any) => ({
+        ...r,
+        price: Number(r.selling_price ?? r.price ?? 0),
+        stock_qty: 0, // filled below from stock_ledger
+      }));
+
+      if (search.trim() && usingListView) {
+        const s = search.toLowerCase();
+        normalised = normalised.filter((p: any) =>
+          (p.name || "").toLowerCase().includes(s) ||
+          (p.sku || "").toLowerCase().includes(s) ||
+          (p.category || "").toLowerCase().includes(s)
+        );
+      }
+
+      const stockMap = await getInventoryStockMap(normalised.map((r) => r.id));
+      return normalised.map((r) => ({ ...r, stock_qty: stockMap[r.id] ?? 0 }));
     },
   });
 

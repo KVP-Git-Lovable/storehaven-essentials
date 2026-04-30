@@ -76,27 +76,39 @@ export default function Products() {
 
   const fetchProducts = async () => {
     const { data, error } = await supabase
-      .from("products")
+      .from("inventory_items")
       .select("*")
       .order("created_at", { ascending: false });
 
     if (error) {
       toast({ title: "Error", description: "Failed to load products", variant: "destructive" });
     } else {
-      setProducts(data || []);
+      setProducts((data || []).map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        category: r.category,
+        brand: r.brand || "",
+        model: r.model || "",
+        warranty: r.warranty || "",
+        price: Number(r.selling_price ?? 0),
+      })));
     }
     setLoading(false);
   };
 
   const onSubmit = async (data: ProductFormData) => {
-    const { error } = await supabase.from("products").insert({
+    const { error } = await supabase.from("inventory_items").insert({
       name: data.name,
       category: data.category,
       brand: data.brand,
       model: data.model,
       warranty: data.warranty,
-      price: data.price,
-    });
+      selling_price: data.price,
+      unit_cost: 0,
+      unit: "pcs",
+      min_stock: 0,
+      status: "active",
+    } as any);
 
     if (error) {
       toast({ title: "Error", description: "Failed to add product", variant: "destructive" });

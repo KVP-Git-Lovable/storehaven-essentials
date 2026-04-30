@@ -2783,62 +2783,83 @@ export type Database = {
         Row: {
           asset_master_id: string | null
           barcode: string | null
+          brand: string | null
           category: string
+          cost_price: number | null
           created_at: string
           expiry_tracking: boolean | null
           id: string
+          image_url: string | null
+          is_favorite: boolean
           max_stock: number | null
           min_stock: number
+          model: string | null
           name: string
           rate_validity_date: string | null
           rate_validity_days: number | null
           selling_price: number
           sku: string | null
           status: string
+          tax_rate: number | null
           unit: string
           unit_cost: number
           updated_at: string
           vendor_id: string | null
+          warranty: string | null
         }
         Insert: {
           asset_master_id?: string | null
           barcode?: string | null
+          brand?: string | null
           category: string
+          cost_price?: number | null
           created_at?: string
           expiry_tracking?: boolean | null
           id?: string
+          image_url?: string | null
+          is_favorite?: boolean
           max_stock?: number | null
           min_stock?: number
+          model?: string | null
           name: string
           rate_validity_date?: string | null
           rate_validity_days?: number | null
           selling_price?: number
           sku?: string | null
           status?: string
+          tax_rate?: number | null
           unit?: string
           unit_cost?: number
           updated_at?: string
           vendor_id?: string | null
+          warranty?: string | null
         }
         Update: {
           asset_master_id?: string | null
           barcode?: string | null
+          brand?: string | null
           category?: string
+          cost_price?: number | null
           created_at?: string
           expiry_tracking?: boolean | null
           id?: string
+          image_url?: string | null
+          is_favorite?: boolean
           max_stock?: number | null
           min_stock?: number
+          model?: string | null
           name?: string
           rate_validity_date?: string | null
           rate_validity_days?: number | null
           selling_price?: number
           sku?: string | null
           status?: string
+          tax_rate?: number | null
           unit?: string
           unit_cost?: number
           updated_at?: string
           vendor_id?: string | null
+          warranty?: string | null
         }
         Relationships: [
           {
@@ -11058,6 +11079,14 @@ export type Database = {
       get_hierarchy_accessible_users: {
         Args: { _user_id: string }
         Returns: string[]
+      }
+      get_inventory_stock: { Args: { _item_id: string }; Returns: number }
+      get_inventory_stock_map: {
+        Args: { _item_ids: string[] }
+        Returns: {
+          item_id: string
+          stock: number
+        }[]
       }
       get_role_permissions_for_user: {
         Args: { _user_id: string }

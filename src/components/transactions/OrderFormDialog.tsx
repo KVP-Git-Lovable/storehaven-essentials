@@ -11,6 +11,8 @@ import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { assertStockAvailable, recordSaleLedger } from "@/lib/inventoryStock";
+import { useInventoryStockMap } from "@/hooks/useInventoryStock";
 
 interface Props {
   open: boolean;
@@ -50,10 +52,22 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     queryKey: ["order-form-products"],
     enabled: open,
     queryFn: async () => {
-      const { data } = await supabase.from("products").select("id, name, price").order("name").limit(500);
-      return data || [];
+      const { data } = await supabase
+        .from("inventory_items")
+        .select("id, name, selling_price, status")
+        .eq("status", "active")
+        .order("name")
+        .limit(1000);
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        price: Number(row.selling_price) || 0,
+      }));
     },
   });
+
+  const productIds = useMemo(() => products.map((p: any) => p.id), [products]);
+  const { data: stockMap = {} } = useInventoryStockMap(productIds, open);
 
   const { data: existingOrderItems = [] } = useQuery({
     queryKey: ["order-form-items", order?.id],
@@ -100,12 +114,20 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
             quantity,
             unitPrice,
             lineTotal: quantity * unitPrice,
+            name: product?.name as string | undefined,
           };
         })
         .filter((item) => item.productId && item.unitPrice > 0);
 
       if (!customerId) throw new Error("Customer is required");
       if (validItems.length === 0) throw new Error("Add at least one product");
+
+      // Stock guard — only enforce on new orders to avoid double-counting on edits
+      if (!isEdit) {
+        await assertStockAvailable(
+          validItems.map((i) => ({ item_id: i.productId, quantity: i.quantity, name: i.name }))
+        );
+      }
 
       const subtotal = validItems.reduce((sum, item) => sum + item.lineTotal, 0);
       const taxAmount = 0;
@@ -172,11 +194,18 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
         })) as any
       );
       if (itemErr) throw itemErr;
+
+      // Decrement stock via ledger entries
+      await recordSaleLedger({
+        orderId: createdOrder.id,
+        lines: validItems.map((i) => ({ item_id: i.productId, quantity: i.quantity, unit_cost: i.unitPrice })),
+      });
     },
     onSuccess: () => {
       toast.success(isEdit ? "Order updated" : "Order created");
       qc.invalidateQueries({ queryKey: ["transactions-orders"] });
       qc.invalidateQueries({ queryKey: ["transactions-customers"] });
+      qc.invalidateQueries({ queryKey: ["inventory-stock-map"] });
       onOpenChange(false);
       setCustomerId("");
       setStatus("completed");
@@ -270,7 +299,14 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                       <SearchableSelect
                         value={item.productId}
                         onValueChange={(value) => updateLineItem(index, { productId: value })}
-                        options={products.map((p: any) => ({ value: p.id, label: `${p.name} — ₹${Number(p.price).toLocaleString("en-IN")}` }))}
+                        options={products.map((p: any) => {
+                          const stock = stockMap[p.id] ?? 0;
+                          return {
+                            value: p.id,
+                            label: `${p.name} — ₹${Number(p.price).toLocaleString("en-IN")} (Stock: ${stock})`,
+                            disabled: !isEdit && stock <= 0,
+                          };
+                        })}
                         placeholder="Select product..."
                         disabled={isView}
                       />

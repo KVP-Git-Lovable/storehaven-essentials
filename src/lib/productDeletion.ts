@@ -43,6 +43,10 @@ export async function deleteProductSafely(productId: string) {
     throw new Error(blockMessage);
   }
 
-  const { error } = await supabase.from("products").delete().eq("id", productId);
-  if (error) throw error;
+  // Inventory Items is now the source of truth. Best-effort cleanup of the
+  // legacy products row too, so manual entries created before the migration
+  // are removed from both tables.
+  const { error: invErr } = await supabase.from("inventory_items").delete().eq("id", productId);
+  if (invErr) throw invErr;
+  await supabase.from("products").delete().eq("id", productId);
 }

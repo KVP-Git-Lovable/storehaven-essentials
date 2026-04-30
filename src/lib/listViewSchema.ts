@@ -104,15 +104,14 @@ export const ENTITY_SCHEMAS: Record<EntityKey, EntityDef> = {
   products: {
     key: "products",
     label: "Products",
-    table: "products",
+    table: "inventory_items",
     isAudienceSource: false,
     fields: [
       { key: "id", label: "ID", type: "string" },
       { key: "name", label: "Name", type: "string" },
       { key: "sku", label: "SKU", type: "string" },
       { key: "category", label: "Category", type: "string" },
-      { key: "price", label: "Price", type: "number" },
-      { key: "stock_quantity", label: "Stock", type: "number" },
+      { key: "selling_price", label: "Price", type: "number" },
       { key: "status", label: "Status", type: "string" },
       { key: "created_at", label: "Created", type: "date" },
     ],
