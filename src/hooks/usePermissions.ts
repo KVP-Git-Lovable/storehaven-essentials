@@ -22,9 +22,13 @@ const defaultPermissions = {
 export function usePermissions() {
   const { permissions, isAdmin, loading } = useAuth();
 
-  const hasPermission = (moduleKey: string, action: "view" | "create" | "edit" | "delete" = "view"): boolean => {
-    // Admins have all permissions
-    if (isAdmin) return true;
+  const hasPermission = (
+    moduleKey: string,
+    action: "view" | "create" | "edit" | "delete" = "view",
+    options: { ignoreAdmin?: boolean } = {}
+  ): boolean => {
+    // Admins have all permissions (unless caller explicitly opts out, e.g. sidebar visibility)
+    if (isAdmin && !options.ignoreAdmin) return true;
 
     // Find permission for this module
     const permission = permissions.find((p) => p.module_key === moduleKey);

@@ -291,12 +291,12 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
             .map((child) => {
               if (child.isSubSection && child.subChildren) {
                 const accessibleSubs = child.subChildren.filter(
-                  (sub) => !sub.moduleKey || hasPermission(sub.moduleKey, "view")
+                  (sub) => !sub.moduleKey || hasPermission(sub.moduleKey, "view", { ignoreAdmin: true })
                 );
                 if (accessibleSubs.length === 0) return null;
                 return { ...child, subChildren: accessibleSubs };
               }
-              if (child.moduleKey && !hasPermission(child.moduleKey, "view")) {
+              if (child.moduleKey && !hasPermission(child.moduleKey, "view", { ignoreAdmin: true })) {
                 return null;
               }
               return child;
@@ -308,7 +308,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
         }
 
         // Leaf item
-        if (item.moduleKey && !hasPermission(item.moduleKey, "view")) {
+        if (item.moduleKey && !hasPermission(item.moduleKey, "view", { ignoreAdmin: true })) {
           return null;
         }
         return item;
