@@ -75,11 +75,11 @@ export default function ProductMaster() {
     queryKey: ["pos-products"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("products")
+        .from("inventory_items")
         .select("*")
         .order("name");
       if (error) throw error;
-      return data;
+      return (data || []).map((r: any) => ({ ...r, price: Number(r.selling_price ?? 0) }));
     },
   });
 
@@ -90,10 +90,16 @@ export default function ProductMaster() {
         category: data.category,
         brand: data.brand,
         model: data.model || "",
-        warranty: "", // Required field, set as empty
-        price: data.price,
+        warranty: "",
+        selling_price: data.price,
+        unit_cost: (data as any).cost_price ?? 0,
+        unit: "pcs",
+        min_stock: 0,
+        status: data.status || "active",
+        sku: (data as any).sku || null,
+        barcode: (data as any).barcode || null,
       };
-      const { error } = await supabase.from("products").insert([insertData]);
+      const { error } = await supabase.from("inventory_items").insert([insertData] as any);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -115,9 +121,13 @@ export default function ProductMaster() {
         category: updateData.category,
         brand: updateData.brand,
         model: updateData.model || "",
-        price: updateData.price,
+        selling_price: updateData.price,
+        unit_cost: (updateData as any).cost_price ?? 0,
+        sku: (updateData as any).sku || null,
+        barcode: (updateData as any).barcode || null,
+        status: updateData.status || "active",
       };
-      const { error } = await supabase.from("products").update(dbData).eq("id", id);
+      const { error } = await supabase.from("inventory_items").update(dbData as any).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
