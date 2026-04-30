@@ -33,6 +33,7 @@ export const ENTITY_SCHEMAS: Record<EntityKey, EntityDef> = {
     contactKey: "phone",
     fields: [
       { key: "id", label: "ID", type: "string" },
+      { key: "customer_code", label: "Customer Code", type: "string" },
       { key: "name", label: "Name", type: "string" },
       { key: "phone", label: "Phone", type: "string" },
       { key: "email", label: "Email", type: "string" },
@@ -42,6 +43,9 @@ export const ENTITY_SCHEMAS: Record<EntityKey, EntityDef> = {
       { key: "store_credit", label: "Store Credit", type: "number" },
       { key: "total_orders", label: "Total Orders", type: "number" },
       { key: "total_spent", label: "Total Spent", type: "number" },
+      { key: "city", label: "City", type: "string" },
+      { key: "state", label: "State", type: "string" },
+      { key: "country", label: "Country", type: "string" },
       { key: "date_of_birth", label: "Date of Birth", type: "date", recurring: true },
       { key: "anniversary_date", label: "Anniversary", type: "date", recurring: true },
       { key: "created_at", label: "Created Date", type: "date" },
