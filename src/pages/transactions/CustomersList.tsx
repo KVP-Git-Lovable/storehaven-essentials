@@ -6,11 +6,19 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Search, ChevronLeft, ChevronRight, Plus, Eye, Pencil, Trash2 } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Plus, Eye, Pencil, Trash2, Upload, Download, FileSpreadsheet } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar";
 import { CustomerFormDialog } from "@/components/transactions/CustomerFormDialog";
+import { CustomerImportDialog } from "@/components/transactions/CustomerImportDialog";
+import { exportCustomersCSV, exportCustomersXLSX } from "@/lib/customerImport";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { executeListView } from "@/lib/listViewExecutor";
 import { ENTITY_SCHEMAS, type FilterCondition } from "@/lib/listViewSchema";
 type SearchColumn = {
@@ -22,9 +30,13 @@ type SearchColumn = {
 
 const SEARCH_COLUMNS: SearchColumn[] = [
   { key: "all", label: "All fields", type: "text" },
+  { key: "customer_code", label: "Customer Code", type: "text" },
   { key: "name", label: "Name", type: "text" },
   { key: "phone", label: "Phone", type: "text" },
   { key: "email", label: "Email", type: "text" },
+  { key: "city", label: "City", type: "text" },
+  { key: "state", label: "State", type: "text" },
+  { key: "country", label: "Country", type: "text" },
   { key: "tier", label: "Tier", type: "enum", options: ["bronze", "silver", "gold", "platinum"] },
   { key: "total_orders", label: "Total Orders", type: "number" },
   { key: "total_spent", label: "Total Spent", type: "number" },
@@ -56,6 +68,8 @@ export default function CustomersList() {
   const [activeSelectedFields, setActiveSelectedFields] = useState<string[]>([]);
   const [activeColumnOrder, setActiveColumnOrder] = useState<string[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("create");
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
@@ -72,7 +86,7 @@ export default function CustomersList() {
     customerEntity.fields.find((f) => f.key === key)?.label || key;
 
   const DEFAULT_COLUMNS = [
-    "name", "phone", "email", "tier", "total_orders",
+    "customer_code", "name", "phone", "email", "tier", "city", "state", "total_orders",
     "total_spent", "loyalty_points", "store_credit",
     "created_at", "date_of_birth", "anniversary_date",
   ];
@@ -83,6 +97,8 @@ export default function CustomersList() {
   const renderCell = (col: string, c: any) => {
     const v = c[col];
     switch (col) {
+      case "customer_code":
+        return <span className="font-mono text-xs">{v || "—"}</span>;
       case "name":
         return <span className="font-medium">{v || "—"}</span>;
       case "tier":
@@ -151,7 +167,9 @@ export default function CustomersList() {
       let q: any = supabase.from("customers").select("*", { count: "exact" }).order("total_spent", { ascending: false });
       if (search.trim()) {
         if (searchColumn === "all") {
-          q = q.or(`name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`);
+          q = q.or(
+            `name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%,customer_code.ilike.%${search}%,city.ilike.%${search}%`,
+          );
         } else if (activeColumn.type === "date") {
           // exact day match
           q = q.eq(searchColumn, search);
@@ -186,6 +204,29 @@ export default function CustomersList() {
 
   const totalPages = Math.ceil((data?.count || 0) / PAGE_SIZE);
 
+  const handleExport = async (kind: "csv" | "xlsx") => {
+    try {
+      setExporting(true);
+      const { data: all, error } = await supabase
+        .from("customers")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(10000);
+      if (error) throw error;
+      if (!all || !all.length) {
+        toast.message("No customers to export");
+        return;
+      }
+      if (kind === "csv") exportCustomersCSV(all);
+      else exportCustomersXLSX(all);
+      toast.success(`Exported ${all.length} customers`);
+    } catch (e: any) {
+      toast.error(e.message || "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -193,9 +234,29 @@ export default function CustomersList() {
           <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
           <p className="text-muted-foreground">All registered customers, sortable by spend.</p>
         </div>
-        <Button onClick={() => { setSelectedCustomer(null); setDialogMode("create"); setCreateOpen(true); }} className="shrink-0">
-          <Plus className="mr-2 h-4 w-4" /> <span className="whitespace-nowrap">New Customer</span>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" /> <span className="whitespace-nowrap">Import</span>
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={exporting}>
+                <Download className="mr-2 h-4 w-4" /> <span className="whitespace-nowrap">{exporting ? "Exporting..." : "Export"}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleExport("csv")}>
+                <Download className="mr-2 h-4 w-4" /> CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("xlsx")}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" /> Excel (.xlsx)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button onClick={() => { setSelectedCustomer(null); setDialogMode("create"); setCreateOpen(true); }}>
+            <Plus className="mr-2 h-4 w-4" /> <span className="whitespace-nowrap">New Customer</span>
+          </Button>
+        </div>
       </div>
 
       <EntityListViewsBar
@@ -311,6 +372,7 @@ export default function CustomersList() {
       </div>
 
       <CustomerFormDialog open={createOpen} onOpenChange={setCreateOpen} customer={selectedCustomer} mode={dialogMode} />
+      <CustomerImportDialog open={importOpen} onOpenChange={setImportOpen} />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
