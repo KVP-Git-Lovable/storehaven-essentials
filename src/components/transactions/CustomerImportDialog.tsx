@@ -9,16 +9,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CheckCircle2, AlertTriangle, XCircle, Download, Upload, FileSpreadsheet, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  downloadTemplateCSV,
-  downloadTemplateXLSX,
-  parseFile,
-  validateRows,
-  downloadErrorRows,
-  generateOrderNumber,
-  type ValidatedRow,
-} from "@/lib/orderImport";
-import { generateCustomerCode } from "@/lib/customerCode";
-import { format } from "date-fns";
+  downloadCustomerTemplateCSV,
+  downloadCustomerTemplateXLSX,
+  parseCustomerFile,
+  validateCustomerRows,
+  downloadCustomerErrorRows,
+  type ValidatedCustomerRow,
+} from "@/lib/customerImport";
 
 type Step = "download" | "upload" | "validate";
 type FilterMode = "all" | "valid" | "warnings" | "invalid";
@@ -30,12 +27,12 @@ interface Props {
 
 const CHUNK = 50;
 
-export function OrderImportDialog({ open, onOpenChange }: Props) {
+export function CustomerImportDialog({ open, onOpenChange }: Props) {
   const qc = useQueryClient();
   const [step, setStep] = useState<Step>("download");
   const [fileName, setFileName] = useState<string>("");
   const [validating, setValidating] = useState(false);
-  const [rows, setRows] = useState<ValidatedRow[]>([]);
+  const [rows, setRows] = useState<ValidatedCustomerRow[]>([]);
   const [filter, setFilter] = useState<FilterMode>("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -79,37 +76,29 @@ export function OrderImportDialog({ open, onOpenChange }: Props) {
     setFileName(file.name);
     setValidating(true);
     try {
-      const parsed = await parseFile(file);
+      const parsed = await parseCustomerFile(file);
       if (parsed.length > 10000) throw new Error("File exceeds 10,000 row hard limit");
       if (parsed.length > 5000) toast.warning(`Large file (${parsed.length} rows) — validation may take a moment`);
 
-      // Pre-fetch lookups
-      const phones = Array.from(new Set(parsed.map((r) => String(r.customer_phone ?? "").replace(/\s+/g, "")).filter(Boolean)));
-      const productNames = Array.from(new Set(parsed.map((r) => String(r.product_name ?? "").trim().toLowerCase()).filter(Boolean)));
-      const orderIds = Array.from(new Set(parsed.map((r) => String(r.order_id ?? "").trim()).filter(Boolean)));
+      const phones = Array.from(new Set(parsed.map((r) => String(r.phone ?? "").replace(/\s+/g, "")).filter(Boolean)));
+      const codes = Array.from(new Set(parsed.map((r) => String(r.customer_code ?? "").trim()).filter(Boolean)));
 
-      const [custRes, prodRes, ordRes] = await Promise.all([
-        phones.length ? supabase.from("customers").select("id, name, phone").in("phone", phones) : Promise.resolve({ data: [], error: null } as any),
-        productNames.length ? supabase.from("products").select("id, name") : Promise.resolve({ data: [], error: null } as any),
-        orderIds.length ? supabase.from("orders").select("order_number").in("order_number", orderIds) : Promise.resolve({ data: [], error: null } as any),
+      const [byPhoneRes, byCodeRes] = await Promise.all([
+        phones.length
+          ? supabase.from("customers").select("id, phone, customer_code").in("phone", phones)
+          : Promise.resolve({ data: [], error: null } as any),
+        codes.length
+          ? supabase.from("customers").select("customer_code").in("customer_code", codes)
+          : Promise.resolve({ data: [], error: null } as any),
       ]);
+      if (byPhoneRes.error) throw byPhoneRes.error;
+      if (byCodeRes.error) throw byCodeRes.error;
 
-      if (custRes.error) throw custRes.error;
-      if (prodRes.error) throw prodRes.error;
-      if (ordRes.error) throw ordRes.error;
+      const byPhone = new Map<string, { id: string; customer_code: string | null }>();
+      (byPhoneRes.data || []).forEach((c: any) => byPhone.set(c.phone, { id: c.id, customer_code: c.customer_code }));
+      const existingCodes = new Set<string>((byCodeRes.data || []).map((c: any) => c.customer_code).filter(Boolean));
 
-      const customerMap = new Map<string, { id: string; name: string | null }>();
-      (custRes.data || []).forEach((c: any) => customerMap.set(c.phone, { id: c.id, name: c.name }));
-
-      const productMap = new Map<string, string>();
-      (prodRes.data || []).forEach((p: any) => {
-        const k = (p.name || "").toLowerCase();
-        if (!productMap.has(k)) productMap.set(k, p.id);
-      });
-
-      const orderSet = new Set<string>((ordRes.data || []).map((o: any) => o.order_number));
-
-      const validated = validateRows(parsed, customerMap, productMap, orderSet);
+      const validated = validateCustomerRows(parsed, byPhone, existingCodes);
       setRows(validated);
       setStep("validate");
     } catch (e: any) {
@@ -123,87 +112,48 @@ export function OrderImportDialog({ open, onOpenChange }: Props) {
     mutationFn: async () => {
       const validRows = rows.filter((r) => r.resolved);
       if (!validRows.length) throw new Error("No valid rows to import");
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData.user?.id;
 
       let success = 0;
       const failures: { row: number; errors: string[] }[] = [];
 
-      // process in chunks
       for (let i = 0; i < validRows.length; i += CHUNK) {
         const batch = validRows.slice(i, i + CHUNK);
         for (const r of batch) {
           try {
             const res = r.resolved!;
-            let customerId = res.customer_id;
-            if (!customerId && res.create_customer) {
-              const { data: newCust, error: cErr } = await supabase
-                .from("customers")
-                .insert({
-                  phone: res.create_customer.phone,
-                  name: res.create_customer.name,
-                  customer_code: generateCustomerCode(),
-                })
-                .select("id")
-                .single();
-              if (cErr) throw cErr;
-              customerId = newCust.id;
+            const payload: any = {
+              customer_code: res.customer_code,
+              name: res.name,
+              phone: res.phone,
+              email: res.email,
+              tier: res.tier,
+              city: res.city,
+              state: res.state,
+              country: res.country,
+              date_of_birth: res.date_of_birth,
+              anniversary_date: res.anniversary_date,
+            };
+            if (res.existingId) {
+              const { error } = await supabase.from("customers").update(payload).eq("id", res.existingId);
+              if (error) throw error;
+            } else {
+              const { error } = await supabase.from("customers").insert(payload);
+              if (error) throw error;
             }
-            const subtotal = res.quantity * res.unit_price;
-            const orderNumber = res.order_number || generateOrderNumber();
-            const { data: newOrder, error: oErr } = await supabase
-              .from("orders")
-              .insert({
-                order_number: orderNumber,
-                customer_id: customerId,
-                subtotal,
-                total_amount: subtotal,
-                payment_method: "import",
-                payment_status: res.status === "completed" ? "paid" : "pending",
-                status: res.status,
-                created_by: "Bulk Import",
-                created_at: res.order_date.toISOString(),
-              })
-              .select("id")
-              .single();
-            if (oErr) throw oErr;
-            const { error: iErr } = await supabase.from("order_items").insert({
-              order_id: newOrder.id,
-              item_id: res.product_id,
-              quantity: res.quantity,
-              unit_price: res.unit_price,
-              total_amount: subtotal,
-            });
-            if (iErr) throw iErr;
             success++;
           } catch (e: any) {
             failures.push({ row: r.rowNumber, errors: [e.message || "Insert failed"] });
           }
         }
       }
-
-      // Log
-      try {
-        await supabase.from("order_import_logs").insert({
-          file_name: fileName,
-          total_rows: rows.length,
-          success_count: success,
-          failure_count: rows.length - success,
-          warning_count: stats.warnings,
-          imported_by: userId,
-          error_summary: failures as any,
-        });
-      } catch { /* logging is best-effort */ }
-
       return { success, failures };
     },
     onSuccess: ({ success, failures }) => {
-      qc.invalidateQueries({ queryKey: ["transactions-orders"] });
       qc.invalidateQueries({ queryKey: ["transactions-customers"] });
       if (failures.length) {
-        toast.warning(`Imported ${success} orders. ${failures.length} failed during insertion.`);
+        toast.warning(`Imported ${success} customers. ${failures.length} failed during insertion.`);
       } else {
-        toast.success(`Successfully imported ${success} orders`);
+        toast.success(`Successfully imported ${success} customers`);
       }
       handleClose(false);
     },
@@ -214,7 +164,7 @@ export function OrderImportDialog({ open, onOpenChange }: Props) {
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh]">
         <DialogHeader>
-          <DialogTitle>Import Orders</DialogTitle>
+          <DialogTitle>Import Customers</DialogTitle>
           <DialogDescription>
             Step {step === "download" ? 1 : step === "upload" ? 2 : 3} of 3 ·{" "}
             {step === "download" ? "Download template" : step === "upload" ? "Upload file" : "Validate & confirm"}
@@ -224,13 +174,13 @@ export function OrderImportDialog({ open, onOpenChange }: Props) {
         {step === "download" && (
           <div className="space-y-4 py-2">
             <p className="text-sm text-muted-foreground">
-              Download the template, fill in your order data, and upload it for validation. Required columns: customer_phone, product_name, quantity, unit_price, order_date.
+              Download the template, fill in your customer data, and upload it for validation. Required column: <strong>phone</strong>. If <strong>customer_code</strong> is left blank, it will be auto-generated. Customers with an existing phone will be updated.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={downloadTemplateCSV} variant="outline">
+              <Button onClick={downloadCustomerTemplateCSV} variant="outline">
                 <Download className="mr-2 h-4 w-4" /> Download CSV Template
               </Button>
-              <Button onClick={downloadTemplateXLSX} variant="outline">
+              <Button onClick={downloadCustomerTemplateXLSX} variant="outline">
                 <FileSpreadsheet className="mr-2 h-4 w-4" /> Download Excel Template
               </Button>
             </div>
@@ -245,7 +195,7 @@ export function OrderImportDialog({ open, onOpenChange }: Props) {
           <div className="space-y-4 py-2">
             <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground flex items-start gap-2">
               <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-warning" />
-              <span><strong>Important:</strong> Delete the sample row from the template before uploading. Only your actual order data should remain.</span>
+              <span><strong>Important:</strong> Delete the sample row from the template before uploading. Only your actual customer data should remain.</span>
             </div>
             <Card
               className="border-dashed border-2 p-10 text-center cursor-pointer hover:bg-muted/30"
@@ -272,10 +222,10 @@ export function OrderImportDialog({ open, onOpenChange }: Props) {
               />
             </Card>
             <div className="flex flex-wrap gap-2">
-              <Button variant="ghost" size="sm" onClick={downloadTemplateCSV}>
+              <Button variant="ghost" size="sm" onClick={downloadCustomerTemplateCSV}>
                 <Download className="mr-2 h-3 w-3" /> Template (CSV)
               </Button>
-              <Button variant="ghost" size="sm" onClick={downloadTemplateXLSX}>
+              <Button variant="ghost" size="sm" onClick={downloadCustomerTemplateXLSX}>
                 <FileSpreadsheet className="mr-2 h-3 w-3" /> Template (Excel)
               </Button>
             </div>
@@ -288,7 +238,6 @@ export function OrderImportDialog({ open, onOpenChange }: Props) {
 
         {step === "validate" && (
           <div className="flex flex-col gap-3 min-h-0">
-            {/* Summary banner */}
             <Card className="p-3 flex flex-wrap items-center gap-3 text-sm bg-muted/30">
               <span className="font-medium">{fileName}</span>
               <Badge variant="secondary">Total: {stats.total}</Badge>
@@ -311,12 +260,11 @@ export function OrderImportDialog({ open, onOpenChange }: Props) {
                   <TableRow>
                     <TableHead className="w-12">#</TableHead>
                     <TableHead className="w-12">Status</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Product</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
-                    <TableHead className="text-right">Price</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Order Status</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>City / State</TableHead>
                     <TableHead>Issues</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -332,23 +280,11 @@ export function OrderImportDialog({ open, onOpenChange }: Props) {
                             : hasWarn ? <AlertTriangle className="h-4 w-4 text-yellow-500" />
                             : <CheckCircle2 className="h-4 w-4 text-green-600" />}
                         </TableCell>
-                        <TableCell className="text-xs">
-                          <div>{r.raw.customer_phone || "—"}</div>
-                          <div className="text-muted-foreground">{r.raw.customer_name || ""}</div>
-                        </TableCell>
-                        <TableCell className="text-xs">{r.raw.product_name || "—"}</TableCell>
-                        <TableCell className="text-xs text-right">{String(r.raw.quantity ?? "")}</TableCell>
-                        <TableCell className="text-xs text-right">{String(r.raw.unit_price ?? "")}</TableCell>
-                        <TableCell className="text-xs">
-                          {(() => {
-                            try {
-                              const d = r.resolved?.order_date;
-                              if (d) return format(d, "dd MMM yyyy");
-                              return String(r.raw.order_date ?? "");
-                            } catch { return String(r.raw.order_date ?? ""); }
-                          })()}
-                        </TableCell>
-                        <TableCell className="text-xs capitalize">{r.raw.status || "completed"}</TableCell>
+                        <TableCell className="text-xs font-mono">{r.resolved?.customer_code || r.raw.customer_code || "—"}</TableCell>
+                        <TableCell className="text-xs">{r.raw.name || "—"}</TableCell>
+                        <TableCell className="text-xs">{r.raw.phone || "—"}</TableCell>
+                        <TableCell className="text-xs">{r.raw.email || "—"}</TableCell>
+                        <TableCell className="text-xs">{[r.raw.city, r.raw.state].filter(Boolean).join(", ") || "—"}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1 max-w-md">
                             {r.issues.map((iss, idx) => (
@@ -364,7 +300,7 @@ export function OrderImportDialog({ open, onOpenChange }: Props) {
                   })}
                   {filteredRows.length > 500 && (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-xs text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center text-xs text-muted-foreground">
                         Showing first 500 of {filteredRows.length} rows. All rows will be processed on import.
                       </TableCell>
                     </TableRow>
@@ -376,7 +312,7 @@ export function OrderImportDialog({ open, onOpenChange }: Props) {
             <div className="flex flex-wrap justify-between gap-2 pt-3 border-t">
               <Button variant="outline" onClick={() => handleClose(false)}>Cancel Import</Button>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => downloadErrorRows(rows)} disabled={!stats.invalid}>
+                <Button variant="outline" onClick={() => downloadCustomerErrorRows(rows)} disabled={!stats.invalid}>
                   <Download className="mr-2 h-4 w-4" /> Download Error Rows
                 </Button>
                 <Button onClick={() => importMutation.mutate()} disabled={!stats.valid || importMutation.isPending}>
