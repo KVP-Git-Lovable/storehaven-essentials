@@ -90,7 +90,7 @@ export function OrderImportDialog({ open, onOpenChange }: Props) {
 
       const [custRes, prodRes, ordRes] = await Promise.all([
         phones.length ? supabase.from("customers").select("id, name, phone").in("phone", phones) : Promise.resolve({ data: [], error: null } as any),
-        productNames.length ? supabase.from("products").select("id, name") : Promise.resolve({ data: [], error: null } as any),
+        productNames.length ? supabase.from("inventory_items").select("id, name").eq("status", "active") : Promise.resolve({ data: [], error: null } as any),
         orderIds.length ? supabase.from("orders").select("order_number").in("order_number", orderIds) : Promise.resolve({ data: [], error: null } as any),
       ]);
 
