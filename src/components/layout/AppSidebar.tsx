@@ -283,33 +283,8 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
   const filteredNavigation = useMemo(() => {
     if (loading) return [];
 
-    // Visibility allow-list: only these top-level menus should appear in the sidebar.
-    // Children for "Employee" are further restricted below.
-    const allowedTopLevel = new Set<string>([
-      "Home",
-      "Transactions",
-      "Employee",
-      "Communication Center",
-      "Admin",
-      "Inventory",
-    ]);
-    const allowedEmployeeChildren = new Set<string>([
-      "Employees",
-      "Leave Management",
-    ]);
-
     return navigation
-      .filter((item) => allowedTopLevel.has(item.title))
       .map((item) => {
-        // Special handling for Employee module - restrict to allowed children only
-        if (item.title === "Employee" && item.children) {
-          const filteredChildren = item.children.filter((child) =>
-            allowedEmployeeChildren.has(child.title)
-          );
-          if (filteredChildren.length === 0) return null;
-          return { ...item, children: filteredChildren };
-        }
-
         // Check if user has access to this module
         if (item.moduleKey && !isAdmin && !hasPermission(item.moduleKey, "view")) {
           // Check if any children are accessible
