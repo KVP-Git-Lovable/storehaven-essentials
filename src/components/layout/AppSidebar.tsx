@@ -291,6 +291,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
       "Employee",
       "Communication Center",
       "Admin",
+      "Inventory",
     ]);
     const allowedEmployeeChildren = new Set<string>([
       "Employees",
