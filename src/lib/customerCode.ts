@@ -8,4 +8,4 @@ export function generateCustomerCode(): string {
   return `CUST-${ts}${rnd}`;
 }
 
-export const CUSTOMER_CODE_REGEX = /^[A-Za-z0-9_-]+$/;
+export const CUSTOMER_CODE_REGEX = /^[A-Za-z0-9 _-]+$/;
