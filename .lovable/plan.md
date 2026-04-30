@@ -1,56 +1,58 @@
-## Goal
+## Problem
 
-Add a "Leads" entity to the List Views system so users can:
-1. Create / manage saved List Views on the Leads page (same UX as Customers / Orders / Products).
-2. Use those Leads list views as audience sources in the Journey Builder, just like Customers list views.
+Two distinct bugs cause Permission Set changes to not affect what the admin sees:
 
-## Changes
+1. **Admin bypass.** In `src/components/layout/AppSidebar.tsx` and `src/hooks/usePermissions.ts`, admins are short-circuited to "see everything" (`isAdmin || hasPermission(...)`). So unticking "Point of Sale" for the Admin role has no visible effect — POS still appears.
+2. **Stale permissions in memory.** Permissions are loaded once in `AuthProvider` on login / auth state change. Saving in `/admin/permissions` writes to the DB but the in-memory `permissions` array in `AuthProvider` is never refreshed, so the sidebar wouldn't update even after fix #1 — a hard refresh is currently required.
 
-### 1. Register `leads` as a list-view entity
+## Plan
 
-**`src/lib/listViewSchema.ts`**
-- Add `"leads"` to `EntityKey`.
-- Add a `leads` entry to `ENTITY_SCHEMAS` with:
-  - `table: "leads"`, `isAudienceSource: true`, `contactKey: "phone"`
-  - Fields: `id`, `name`, `phone`, `email`, `city`, `state`, `country`, `address`, `is_converted` (boolean), `converted_at` (date), `created_at` (date)
+### 1. Stop bypassing permissions for admins in the sidebar
 
-### 2. Mirror that registration in the backend resolvers
+In `src/components/layout/AppSidebar.tsx`, change the filter logic in `filteredNavigation` so that admins are filtered by the same `hasPermission(...)` checks as everyone else.
 
-So saved Leads list views work for counts, previews, and journey enrollment.
+- Remove the `!isAdmin &&` short-circuit on the parent-module check.
+- Remove the `isAdmin ||` short-circuit on the children filter.
+- Apply the same change to the sub-section / sub-children filtering further down in the same file (the Admin > Master Data / Task Management / User Management / Company nested sections).
 
-**`supabase/functions/list-view-resolve/index.ts`**
-- Add `leads: { table: "leads", isAudienceSource: true, contactKey: "phone" }` to `ALLOWED_ENTITIES`.
+Effect: if an admin's role has POS unticked, the POS top-level item disappears. Admins still keep full functional access via routes/pages — this only changes sidebar visibility, matching the user's expectation that the Permission Set drives the menu.
 
-**`supabase/functions/_shared/journey-schedule.ts`**
-- Add the same `leads` entry to its `ALLOWED_ENTITIES` map.
-- In `resolveAudience` / count helpers, add a branch for `entity_type === "leads"`: treat each lead row like a customer row (use its `phone`, `name`, `email`, `city` to upsert into `journey_contacts` with `segment_type: "lead"`), reusing the existing `upsertContactsFromCustomers` helper (or a thin wrapper that maps lead rows to the same shape).
+Note: We do NOT change `usePermissions.hasPermission` itself (that would also block route access and other PermissionGate uses). We only stop the sidebar from ignoring it. If the user later wants the same behavior on direct URL access, that can be a follow-up.
 
-This makes a Leads list view enroll contacts into journeys exactly like a Customers list view does today.
+### 2. Live refresh of permissions after Save
 
-### 3. Add the List Views bar to the Leads page
+Expose a way to re-fetch permissions from `AuthProvider` and call it after saving in `RolePermissions.tsx`. Two coordinated changes:
 
-**`src/pages/transactions/LeadsList.tsx`**
-- Import `EntityListViewsBar` (exported as `n`) from `src/components/transactions/EntityListViewsBar.tsx`, same way Customers / Orders / Products do.
-- Add state: `activeViewId`, `viewFilters`, `viewSelectedFields`, `viewColumnOrder`.
-- Render the bar above the table with `entity="leads"`.
-- When a view is applied, run the query through `executeListView` (from `src/lib/listViewExecutor.ts`) instead of the current static `supabase.from("leads")...` query, so saved filters and selected fields take effect (mirroring CustomersList behavior).
-- Keep the existing search box, pagination, Import Leads button, and row actions intact.
+**a. `src/components/auth/AuthProvider.tsx`**
+- Add a new method `refreshPermissions()` to `AuthContextType` that re-runs `fetchUserPermissions(user.id)`.
+- Include it in the context `value`.
+- Update the default context in `src/hooks/useAuth.ts` to include a no-op `refreshPermissions`.
 
-### 4. Expose Leads list views to Journey Builder
+**b. `src/pages/admin/RolePermissions.tsx`**
+- Pull `refreshPermissions` and current `profile` from `useAuth()`.
+- After a successful save in `handleSaveRolePermissions`, if the saved `selectedRoleId` matches the current user's `profile.role_id`, call `await refreshPermissions()` before showing the success toast.
+- Do the same in the Permission Set Group save path: pass an `onSaved` callback into `PermissionSetGroupConfig` (or invoke refresh through `handleGroupRefresh`) so that when the current user is a member of the saved group, their permissions reload.
 
-**`src/components/journey/AudienceBuilder.tsx`** (line 41)
-- Change the filter from:
-  ```
-  v.entity_type === "customers" || v.entity_type === "orders"
-  ```
-  to also include `"leads"`. Saved Leads views will then appear in the Entry node's audience picker exactly like Customers views.
+**c. Realtime for other tabs/sessions (lightweight)**
+- In `AuthProvider`, after the initial load, subscribe to Postgres changes on `role_permissions` (filtered by the user's `role_id`) and `permission_set_group_permissions` / `user_permission_set_groups` (filtered by the user's `id`). On any change, call `fetchUserPermissions(user.id)`.
+- Unsubscribe on cleanup. This makes permission changes propagate even when the change is made by another admin in another session, without a page refresh.
 
-### 5. (No DB migration needed)
+### 3. Verify (after build)
 
-The `leads` table already exists with the right columns and RLS, and `list_views.entity_type` is a free text column (existing values include `customers`, `orders`, `products`), so no schema change is required.
+- As `abhishek.kvp2979@gmail.com` (Admin), open `/admin/permissions`, untick all POS rows for Admin, click Save Permissions.
+- Sidebar should immediately drop the "Point of Sale" group without a refresh.
+- Re-tick POS and Save → group reappears immediately.
+- Confirm other modules still work (Transactions, Admin > Permission Set itself remains reachable since we ensure usermanagement.permissions stays ticked; if an admin unticks their own access to Permission Set, document that they'd need another admin to restore it).
 
-## How the user will experience it
+## Files to change
 
-- On `/transactions/leads`: a new "List Views" bar appears at the top with the same dropdown / New / Edit / Duplicate / Delete controls used on Customers. They can build views like "Unconverted leads created in last 30 days" or "Leads in Bengaluru".
-- In the Journey Builder Entry node's audience picker, those Leads views show up alongside Customers and Orders views and can be combined with the same union / intersection / difference logic.
-- When a journey runs, leads matched by the view get enrolled by phone into `journey_contacts` (tagged `segment_type: "lead"`) and receive WhatsApp / SMS / Email messages just like customers.
+- `src/components/layout/AppSidebar.tsx` — remove admin bypass in nav filtering (top-level, children, and Admin sub-section filtering).
+- `src/components/auth/AuthProvider.tsx` — add `refreshPermissions`, add realtime subscription for permission tables.
+- `src/hooks/useAuth.ts` — add `refreshPermissions: async () => {}` to default context.
+- `src/pages/admin/RolePermissions.tsx` — call `refreshPermissions()` after Save when affecting current user; wire group save path similarly.
+- (If needed) `src/components/admin/PermissionSetGroupConfig.tsx` — accept/forward an `onSaved` callback so refresh fires after group permission saves.
+
+## Out of scope
+
+- Changing route-level access for admins (admins keep full access if they navigate by URL).
+- Restructuring the modules registry or adding new permission keys.
