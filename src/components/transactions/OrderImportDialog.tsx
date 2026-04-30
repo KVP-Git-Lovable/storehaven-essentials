@@ -17,6 +17,7 @@ import {
   generateOrderNumber,
   type ValidatedRow,
 } from "@/lib/orderImport";
+import { generateCustomerCode } from "@/lib/customerCode";
 import { format } from "date-fns";
 
 type Step = "download" | "upload" | "validate";
@@ -138,7 +139,11 @@ export function OrderImportDialog({ open, onOpenChange }: Props) {
             if (!customerId && res.create_customer) {
               const { data: newCust, error: cErr } = await supabase
                 .from("customers")
-                .insert({ phone: res.create_customer.phone, name: res.create_customer.name })
+                .insert({
+                  phone: res.create_customer.phone,
+                  name: res.create_customer.name,
+                  customer_code: generateCustomerCode(),
+                })
                 .select("id")
                 .single();
               if (cErr) throw cErr;
