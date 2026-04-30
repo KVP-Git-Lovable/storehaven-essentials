@@ -1190,7 +1190,10 @@ export type Database = {
       customers: {
         Row: {
           anniversary_date: string | null
+          city: string | null
+          country: string | null
           created_at: string
+          customer_code: string
           customer_segment: string | null
           date_of_birth: string | null
           email: string | null
@@ -1199,6 +1202,7 @@ export type Database = {
           name: string | null
           phone: string
           preferences: Json | null
+          state: string | null
           store_credit: number | null
           tier: string | null
           total_orders: number | null
@@ -1207,7 +1211,10 @@ export type Database = {
         }
         Insert: {
           anniversary_date?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string
+          customer_code: string
           customer_segment?: string | null
           date_of_birth?: string | null
           email?: string | null
@@ -1216,6 +1223,7 @@ export type Database = {
           name?: string | null
           phone: string
           preferences?: Json | null
+          state?: string | null
           store_credit?: number | null
           tier?: string | null
           total_orders?: number | null
@@ -1224,7 +1232,10 @@ export type Database = {
         }
         Update: {
           anniversary_date?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string
+          customer_code?: string
           customer_segment?: string | null
           date_of_birth?: string | null
           email?: string | null
@@ -1233,6 +1244,7 @@ export type Database = {
           name?: string | null
           phone?: string
           preferences?: Json | null
+          state?: string | null
           store_credit?: number | null
           tier?: string | null
           total_orders?: number | null
