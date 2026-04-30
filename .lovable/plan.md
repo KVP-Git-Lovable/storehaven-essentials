@@ -1,58 +1,59 @@
-## Problem
+## Refactor: Inventory Items as the single source of truth for products
 
-Two distinct bugs cause Permission Set changes to not affect what the admin sees:
+### Important findings before we change anything
 
-1. **Admin bypass.** In `src/components/layout/AppSidebar.tsx` and `src/hooks/usePermissions.ts`, admins are short-circuited to "see everything" (`isAdmin || hasPermission(...)`). So unticking "Point of Sale" for the Admin role has no visible effect — POS still appears.
-2. **Stale permissions in memory.** Permissions are loaded once in `AuthProvider` on login / auth state change. Saving in `/admin/permissions` writes to the DB but the in-memory `permissions` array in `AuthProvider` is never refreshed, so the sidebar wouldn't update even after fix #1 — a hard refresh is currently required.
+- `inventory_items` does **not** have a `stock_quantity` column. Stock is computed from `stock_ledger` (sum of `quantity_change` per `item_id` + `location_type`/`location_id`). The same applies to `products.stock_qty` consumers today.
+- Field name differences between the two tables:
+  - `products.price` ↔ `inventory_items.selling_price`
+  - `products.stock_qty` ↔ derived from `stock_ledger`
+  - `products` has `brand`, `model`, `warranty`, `tax_rate`, `image_url`, `is_favorite`, `cost_price` — none exist on `inventory_items`.
+- `order_items` already uses `item_id` (not `product_id`). No schema change needed there — only the source we read from.
+- Both `products` and `inventory_items` tables are currently empty (0 rows), so data migration is a no-op now but we'll still ship a safe, idempotent copy script for any future seed data.
 
-## Plan
+### Plan
 
-### 1. Stop bypassing permissions for admins in the sidebar
+1) Schema additions to `inventory_items` (non-breaking, all nullable)
+   - Add `brand text`, `model text`, `warranty text`, `tax_rate numeric`, `image_url text`, `is_favorite boolean default false`, `cost_price numeric`.
+   - Add a generated/maintained `stock_quantity` view-like helper: introduce a SQL function `get_inventory_stock(item_id uuid)` returning `coalesce(sum(quantity_change),0)` from `stock_ledger`. (Avoids denormalising stock onto the row, matches existing system design.)
+   - Add unique index on `inventory_items.sku` only where `sku is not null` (if not already present) to keep parity with products.
 
-In `src/components/layout/AppSidebar.tsx`, change the filter logic in `filteredNavigation` so that admins are filtered by the same `hasPermission(...)` checks as everyone else.
+2) Data migration (idempotent, preserves IDs)
+   - One-shot SQL: `INSERT INTO inventory_items (id, name, sku, barcode, category, unit, unit_cost, selling_price, min_stock, status, brand, model, warranty, tax_rate, image_url, is_favorite, created_at) SELECT id, name, sku, barcode, coalesce(category,'General'), 'pcs', coalesce(cost_price,0), coalesce(price,0), coalesce(min_stock,0), 'active', brand, model, warranty, tax_rate, image_url, coalesce(is_favorite,false), created_at FROM products ON CONFLICT (id) DO NOTHING;`
+   - For each migrated product with `stock_qty > 0`, insert a single `stock_ledger` opening-balance row (`transaction_type='opening_balance'`) so derived stock matches.
 
-- Remove the `!isAdmin &&` short-circuit on the parent-module check.
-- Remove the `isAdmin ||` short-circuit on the children filter.
-- Apply the same change to the sub-section / sub-children filtering further down in the same file (the Admin > Master Data / Task Management / User Management / Company nested sections).
+3) Application refactor — switch reads from `products` → `inventory_items`
+   - `src/components/transactions/OrderFormDialog.tsx`: query `inventory_items` selecting `id, name, selling_price as price`, filter `status='active'`. Show available stock in the dropdown using a batched `stock_ledger` aggregation query; disable items with stock ≤ 0.
+   - `src/components/transactions/LeadConvertDialog.tsx`: same swap.
+   - `src/components/transactions/OrderImportDialog.tsx`: name lookup against `inventory_items`.
+   - `src/pages/transactions/ProductsList.tsx` + `ProductFormDialog.tsx`: read/write `inventory_items` while preserving the existing UI (map `selling_price` ↔ `price`, derive stock from ledger). Keep the page route unchanged.
+   - `src/pages/pos/PointOfSale.tsx` and `src/pages/pos/ProductMaster.tsx`: read `inventory_items`. POS write paths (favourite toggle etc.) move to `inventory_items`.
+   - `src/pages/assets/Products.tsx` and `src/pages/stores/StoreTargetDetails.tsx`: switch to `inventory_items` reads.
+   - `src/lib/productDeletion.ts`: delete from `inventory_items` (also clean dependent ledger rows where safe).
 
-Effect: if an admin's role has POS unticked, the POS top-level item disappears. Admins still keep full functional access via routes/pages — this only changes sidebar visibility, matching the user's expectation that the Permission Set drives the menu.
+4) Order placement — stock decrement
+   - On successful order create (OrderFormDialog, PointOfSale): for each line item, insert a `stock_ledger` row with `transaction_type='sale'`, `quantity_change = -quantity`, `reference_type='order'`, `reference_id=order.id`. This keeps stock derivation consistent and reversible.
+   - Add a guard before submit: re-fetch current stock for selected items; reject if any line quantity exceeds available stock.
 
-Note: We do NOT change `usePermissions.hasPermission` itself (that would also block route access and other PermissionGate uses). We only stop the sidebar from ignoring it. If the user later wants the same behavior on direct URL access, that can be a follow-up.
+5) Validation in dropdowns
+   - Helper `useInventoryStockMap(itemIds)` → returns `{ [id]: number }` from a single grouped `stock_ledger` query.
+   - In dropdowns: label as `"<name> — ₹<price> (Stock: N)"`, mark out-of-stock entries disabled and visually muted.
 
-### 2. Live refresh of permissions after Save
+6) Backward compatibility
+   - `order_items.item_id` unchanged.
+   - `products` table is **kept** (not dropped). All writes are redirected; existing rows remain readable.
+   - `src/pages/assets/Products.tsx` keeps its route; only the underlying source changes.
 
-Expose a way to re-fetch permissions from `AuthProvider` and call it after saving in `RolePermissions.tsx`. Two coordinated changes:
+### Files to edit / add
 
-**a. `src/components/auth/AuthProvider.tsx`**
-- Add a new method `refreshPermissions()` to `AuthContextType` that re-runs `fetchUserPermissions(user.id)`.
-- Include it in the context `value`.
-- Update the default context in `src/hooks/useAuth.ts` to include a no-op `refreshPermissions`.
+- Migration: `supabase/migrations/<ts>_inventory_as_source_of_truth.sql` (schema additions, data copy, opening-balance ledger inserts, stock helper function).
+- New: `src/lib/inventoryStock.ts` (`getStockMap`, `assertStockAvailable`).
+- New: `src/hooks/useInventoryStock.ts` (React Query wrapper).
+- Edit: `OrderFormDialog.tsx`, `LeadConvertDialog.tsx`, `OrderImportDialog.tsx`, `ProductsList.tsx`, `ProductFormDialog.tsx`, `PointOfSale.tsx`, `pos/ProductMaster.tsx`, `assets/Products.tsx`, `stores/StoreTargetDetails.tsx`, `lib/productDeletion.ts`.
 
-**b. `src/pages/admin/RolePermissions.tsx`**
-- Pull `refreshPermissions` and current `profile` from `useAuth()`.
-- After a successful save in `handleSaveRolePermissions`, if the saved `selectedRoleId` matches the current user's `profile.role_id`, call `await refreshPermissions()` before showing the success toast.
-- Do the same in the Permission Set Group save path: pass an `onSaved` callback into `PermissionSetGroupConfig` (or invoke refresh through `handleGroupRefresh`) so that when the current user is a member of the saved group, their permissions reload.
+### What we explicitly will NOT do
 
-**c. Realtime for other tabs/sessions (lightweight)**
-- In `AuthProvider`, after the initial load, subscribe to Postgres changes on `role_permissions` (filtered by the user's `role_id`) and `permission_set_group_permissions` / `user_permission_set_groups` (filtered by the user's `id`). On any change, call `fetchUserPermissions(user.id)`.
-- Unsubscribe on cleanup. This makes permission changes propagate even when the change is made by another admin in another session, without a page refresh.
+- Drop or rename the `products` table.
+- Change `order_items` columns or any RLS policy semantics.
+- Add a denormalised `stock_quantity` column on `inventory_items` (we use the existing `stock_ledger` design; the spec's "stock_quantity" is exposed via a helper function/view rather than a stored column, to avoid drift).
 
-### 3. Verify (after build)
-
-- As `abhishek.kvp2979@gmail.com` (Admin), open `/admin/permissions`, untick all POS rows for Admin, click Save Permissions.
-- Sidebar should immediately drop the "Point of Sale" group without a refresh.
-- Re-tick POS and Save → group reappears immediately.
-- Confirm other modules still work (Transactions, Admin > Permission Set itself remains reachable since we ensure usermanagement.permissions stays ticked; if an admin unticks their own access to Permission Set, document that they'd need another admin to restore it).
-
-## Files to change
-
-- `src/components/layout/AppSidebar.tsx` — remove admin bypass in nav filtering (top-level, children, and Admin sub-section filtering).
-- `src/components/auth/AuthProvider.tsx` — add `refreshPermissions`, add realtime subscription for permission tables.
-- `src/hooks/useAuth.ts` — add `refreshPermissions: async () => {}` to default context.
-- `src/pages/admin/RolePermissions.tsx` — call `refreshPermissions()` after Save when affecting current user; wire group save path similarly.
-- (If needed) `src/components/admin/PermissionSetGroupConfig.tsx` — accept/forward an `onSaved` callback so refresh fires after group permission saves.
-
-## Out of scope
-
-- Changing route-level access for admins (admins keep full access if they navigate by URL).
-- Restructuring the modules registry or adding new permission keys.
+If you'd prefer a literal `stock_quantity` column on `inventory_items` (kept in sync via trigger on `stock_ledger`) instead of the helper-function approach, say the word and I'll adjust step 1 + 4 accordingly.
