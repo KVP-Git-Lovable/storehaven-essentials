@@ -27,41 +27,15 @@ interface AppHeaderProps {
   onMenuClick: () => void;
 }
 
-// Mock notifications - in production these would come from a database/API
-const mockNotifications = [
-  {
-    id: "1",
-    title: "New Service Ticket",
-    message: "A new high-priority service ticket has been created for Store #42",
-    timestamp: new Date(Date.now() - 1000 * 60 * 5), // 5 mins ago
-    read: false,
-    type: "alert" as const,
-  },
-  {
-    id: "2",
-    title: "Budget Approved",
-    message: "Your monthly budget for January has been approved",
-    timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 mins ago
-    read: false,
-    type: "success" as const,
-  },
-  {
-    id: "3",
-    title: "Low Stock Alert",
-    message: "5 items are running low on stock at Central Warehouse",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-    read: false,
-    type: "warning" as const,
-  },
-  {
-    id: "4",
-    title: "Task Reminder",
-    message: "Store compliance check is due tomorrow",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-    read: true,
-    type: "info" as const,
-  },
-];
+// Notifications paused - empty until real notification system is implemented
+const mockNotifications: Array<{
+  id: string;
+  title: string;
+  message: string;
+  timestamp: Date;
+  read: boolean;
+  type: "alert" | "success" | "warning" | "info";
+}> = [];
 
 export function AppHeader({ onMenuClick }: AppHeaderProps) {
   const isMobile = useIsMobile();
