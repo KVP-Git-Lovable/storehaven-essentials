@@ -79,8 +79,7 @@ async function runScheduleSweep(supabase: any): Promise<{ triggered: number; err
 
       const audience = await resolveAudience(supabase, journey);
       const canvas = journey.canvas_data as any;
-      const entryNode = canvas?.nodes?.find((n: any) => n.type === "entry");
-      const firstNodeId = entryNode?.id || canvas?.nodes?.[0]?.id;
+      const firstNodeId = getInitialJourneyNodeId(canvas);
 
       if (audience.contactIds.length > 0 && firstNodeId) {
         const enrollments = audience.contactIds.map((cid: string) => ({
@@ -241,6 +240,16 @@ const ENROLLMENT_BATCH_SIZE = 20;
 const MAX_RETRIES = 3;
 // Backoff delay (ms) added to next_action_at for retryable failures.
 const RETRY_BACKOFF_MS = 5 * 60 * 1000;
+
+function getInitialJourneyNodeId(canvas: any): string | null {
+  const entryNode = canvas?.nodes?.find((n: any) => n.type === "entry");
+  if (entryNode) {
+    const firstEdge = canvas?.edges?.find((e: any) => e.source === entryNode.id);
+    if (firstEdge?.target) return firstEdge.target;
+    return entryNode.id;
+  }
+  return canvas?.nodes?.[0]?.id || null;
+}
 
 interface ProcessCtx {
   supabase: any;
@@ -547,12 +556,20 @@ async function processEnrollment(
     return { processed: true, sent: 0 };
   }
 
-  // Entry / unknown -> advance
+  // Entry -> advance and immediately process the next node in the same run.
   const nextEdge = canvas.edges.find((e: any) => e.source === currentNode.id);
   if (nextEdge) {
     await supabase.from("journey_enrollments")
       .update({ current_node_id: nextEdge.target, next_action_at: new Date().toISOString() })
       .eq("id", enrollment.id);
+    if (nodeType === "entry") {
+      return processEnrollment(
+        { ...enrollment, current_node_id: nextEdge.target, next_action_at: new Date().toISOString() },
+        journey,
+        canvas,
+        ctx,
+      );
+    }
   }
   return { processed: true, sent: 0 };
 }

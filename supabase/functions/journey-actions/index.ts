@@ -18,6 +18,16 @@ const corsHeaders = {
 const PREVIEW_CACHE = new Map<string, { ids: string[]; expiresAt: number }>();
 const PREVIEW_TTL_MS = 60_000;
 
+function getInitialJourneyNodeId(canvas: any): string | null {
+  const entryNode = canvas?.nodes?.find((n: any) => n.type === "entry");
+  if (entryNode) {
+    const firstEdge = canvas?.edges?.find((e: any) => e.source === entryNode.id);
+    if (firstEdge?.target) return firstEdge.target;
+    return entryNode.id;
+  }
+  return canvas?.nodes?.[0]?.id || null;
+}
+
 async function getSegmentIdsCached(supabase: any, listViewId: string): Promise<string[]> {
   const now = Date.now();
   const cached = PREVIEW_CACHE.get(listViewId);
@@ -122,10 +132,9 @@ Deno.serve(async (req) => {
       const firstError = result.firstError;
 
       const canvas = journey.canvas_data as any;
-      const entryNode = canvas?.nodes?.find((n: any) => n.type === "entry");
-      const firstNodeId = entryNode?.id || canvas?.nodes?.[0]?.id;
+      const firstNodeId = getInitialJourneyNodeId(canvas);
 
-      if (contactIds.length > 0) {
+      if (contactIds.length > 0 && firstNodeId) {
         const enrollments = contactIds.map((cid) => ({
           journey_id,
           contact_id: cid,
