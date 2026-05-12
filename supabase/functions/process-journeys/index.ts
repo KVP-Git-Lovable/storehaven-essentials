@@ -79,8 +79,7 @@ async function runScheduleSweep(supabase: any): Promise<{ triggered: number; err
 
       const audience = await resolveAudience(supabase, journey);
       const canvas = journey.canvas_data as any;
-      const entryNode = canvas?.nodes?.find((n: any) => n.type === "entry");
-      const firstNodeId = entryNode?.id || canvas?.nodes?.[0]?.id;
+      const firstNodeId = getInitialJourneyNodeId(canvas);
 
       if (audience.contactIds.length > 0 && firstNodeId) {
         const enrollments = audience.contactIds.map((cid: string) => ({
