@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { MessageSquare, MessagesSquare, Settings } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BackButton } from "@/components/shared/BackButton";
+import { WalletBalanceCard } from "@/components/communication/WalletBalanceCard";
 import whatsappLogo from "@/assets/whatsapp-logo.png";
 
 const cards = [
@@ -40,6 +41,8 @@ const WhatsAppCenter = () => {
         </div>
         <img src={whatsappLogo} alt="WhatsApp" className="h-10 w-10 object-contain" />
       </div>
+
+      <WalletBalanceCard />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {cards.map((card) => (
