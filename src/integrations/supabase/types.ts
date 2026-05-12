@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_cache: {
+        Row: {
+          expires_at: string
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          expires_at: string
+          key: string
+          updated_at?: string
+          value: Json
+        }
+        Update: {
+          expires_at?: string
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       asset_definition_fields: {
         Row: {
           category_id: string
