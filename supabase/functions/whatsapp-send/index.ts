@@ -4,6 +4,41 @@ import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
 
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/twilio';
 
+function collectActionUrls(contentTypes: unknown): string[] {
+  if (!contentTypes || typeof contentTypes !== 'object') return [];
+  const urls: string[] = [];
+  for (const config of Object.values(contentTypes as Record<string, any>)) {
+    const actions = Array.isArray(config?.actions) ? config.actions : [];
+    for (const action of actions) {
+      if (typeof action?.url === 'string') urls.push(action.url);
+    }
+  }
+  return urls;
+}
+
+function normalizeUrlTemplateVariables(
+  filled: Record<string, string>,
+  actionUrls: string[],
+  toNumber: string,
+) {
+  const recipientDigits = toNumber.replace(/\D/g, '');
+  for (const url of actionUrls) {
+    const re = /([?&])([^=&?#]+)=\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(url)) !== null) {
+      const paramName = match[2].toLowerCase();
+      const variableKey = match[3];
+      if (paramName.includes('phone') || paramName.includes('mobile') || paramName.includes('whatsapp')) {
+        filled[variableKey] = recipientDigits;
+        continue;
+      }
+
+      const value = filled[variableKey];
+      if (value && /\s/.test(value)) filled[variableKey] = encodeURIComponent(value);
+    }
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -145,6 +180,8 @@ serve(async (req) => {
       for (const [k, v] of Object.entries(incoming)) {
         if (!(k in filled) && v != null) filled[k] = String(v);
       }
+
+      normalizeUrlTemplateVariables(filled, collectActionUrls(template.twilio_content_types), to_number);
 
       // Media-template guardrail: if the template uses a variable-driven media
       // URL and the caller did NOT supply that variable, fail fast with a clear
