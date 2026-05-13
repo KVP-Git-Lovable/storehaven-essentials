@@ -173,6 +173,27 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+/**
+ * Fetch every row matching the given filters, paginated past PostgREST's 1000-row cap.
+ */
+async function fetchAllRows(supabase: any, table: string, filters: any[]): Promise<any[]> {
+  const PAGE = 1000;
+  const all: any[] = [];
+  let from = 0;
+  while (true) {
+    let q = supabase.from(table).select("*").range(from, from + PAGE - 1);
+    for (const cond of filters || []) q = applyFilter(q, cond);
+    const { data, error } = await q;
+    if (error) throw error;
+    const batch = data || [];
+    all.push(...batch);
+    if (batch.length < PAGE) break;
+    from += PAGE;
+    if (from > 100000) break;
+  }
+  return all;
+}
+
 export type UpsertResult = {
   contactIds: string[];
   matched: number;
