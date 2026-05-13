@@ -167,6 +167,12 @@ function normalizeE164(raw: string | null | undefined, defaultCc = "91"): string
   return `+${defaultCc}${digits}`;
 }
 
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 export type UpsertResult = {
   contactIds: string[];
   matched: number;
