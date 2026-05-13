@@ -25,34 +25,57 @@ export async function executeListView(
   const serverFilters = (def.filters || []).filter((c) => c.operator !== "upcoming_anniversary_n_days");
   const hasRecurring = recurringFilters.length > 0;
 
-  // When we have recurring filters, we must fetch rows to post-filter — count won't be exact pre-filter.
-  let q: any = supabase.from(schema.table as any).select(fields, {
-    count: hasRecurring ? undefined : "exact",
-    head: !hasRecurring && !!opts.countOnly,
-  });
+  // Build a query factory so we can paginate beyond PostgREST's 1000-row cap.
+  const buildQuery = (rangeFrom: number, rangeTo: number, withCount: boolean) => {
+    let q: any = supabase.from(schema.table as any).select(fields, {
+      count: withCount ? "exact" : undefined,
+      head: false,
+    });
+    for (const cond of serverFilters) {
+      const meta = fieldMap.get(cond.field);
+      if (!meta) continue;
+      q = applyFilter(q, cond, meta);
+    }
+    for (const cond of recurringFilters) {
+      q = q.not(cond.field, "is", null);
+    }
+    return q.range(rangeFrom, rangeTo);
+  };
 
-  for (const cond of serverFilters) {
-    const meta = fieldMap.get(cond.field);
-    if (!meta) continue;
-    q = applyFilter(q, cond, meta);
+  // Head-only count fast path (no recurring filters).
+  if (!hasRecurring && opts.countOnly) {
+    let q: any = supabase.from(schema.table as any).select(fields, { count: "exact", head: true });
+    for (const cond of serverFilters) {
+      const meta = fieldMap.get(cond.field);
+      if (!meta) continue;
+      q = applyFilter(q, cond, meta);
+    }
+    const { error, count } = await q;
+    if (error) throw error;
+    return { rows: [], count: count || 0 };
   }
 
-  // For recurring filters, ensure the field is not null on the server
-  for (const cond of recurringFilters) {
-    q = q.not(cond.field, "is", null);
+  // Determine target row count to fetch.
+  // Recurring filters require fetching all candidate rows to post-filter accurately.
+  const target = hasRecurring ? Number.POSITIVE_INFINITY : (opts.limit ?? 25);
+  const PAGE = 1000;
+
+  let rows: any[] = [];
+  let serverCount = 0;
+  let from = 0;
+  while (rows.length < target) {
+    const to = from + PAGE - 1;
+    const { data, error, count } = await buildQuery(from, to, from === 0);
+    if (error) throw error;
+    if (from === 0 && typeof count === "number") serverCount = count;
+    const batch = (data as any[]) || [];
+    rows.push(...batch);
+    if (batch.length < PAGE) break; // no more rows
+    from += PAGE;
+    // Safety cap to avoid runaway fetches
+    if (from > 100000) break;
   }
 
-  if (hasRecurring) {
-    // Need rows to post-filter; cap at a reasonable upper bound
-    q = q.limit(1000);
-  } else if (!opts.countOnly) {
-    q = q.limit(opts.limit ?? 25);
-  }
-
-  const { data, error, count } = await q;
-  if (error) throw error;
-
-  let rows: any[] = data || [];
   if (hasRecurring) {
     for (const cond of recurringFilters) {
       const days = Number(cond.value) || 0;
@@ -63,7 +86,8 @@ export async function executeListView(
     return { rows: opts.countOnly ? [] : rows, count: total };
   }
 
-  return { rows, count: count || 0 };
+  if (rows.length > (opts.limit ?? 25)) rows = rows.slice(0, opts.limit ?? 25);
+  return { rows, count: serverCount || rows.length };
 }
 
 /**

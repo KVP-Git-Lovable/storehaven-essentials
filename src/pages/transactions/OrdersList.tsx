@@ -100,7 +100,7 @@ export default function OrdersList() {
     queryKey: ["transactions-orders", search, searchColumn, page, activeViewId, activeFilters],
     queryFn: async () => {
       if (usingListView) {
-        const result = await executeListView({ entity_type: "orders", filters: activeFilters }, { limit: 1000 });
+        const result = await executeListView({ entity_type: "orders", filters: activeFilters }, { limit: 100000 });
         let rows = result.rows;
         // Hydrate customer info first so client-side search on customer fields works
         const customerIds = Array.from(new Set(rows.map((r: any) => r.customer_id).filter(Boolean)));
