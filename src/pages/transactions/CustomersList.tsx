@@ -157,7 +157,7 @@ export default function CustomersList() {
       if (usingListView) {
         const result = await executeListView(
           { entity_type: "customers", filters: activeFilters },
-          { limit: 1000 }
+          { limit: 100000 }
         );
         const rows = applyClientSearch(result.rows);
         const count = rows.length;

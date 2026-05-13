@@ -32,7 +32,7 @@ export default function ProductsList() {
     queryFn: async () => {
       let raw: any[] = [];
       if (usingListView) {
-        const result = await executeListView({ entity_type: "products", filters: activeFilters }, { limit: 1000 });
+        const result = await executeListView({ entity_type: "products", filters: activeFilters }, { limit: 100000 });
         raw = result.rows;
       } else {
         let q = supabase.from("inventory_items").select("*").order("selling_price", { ascending: false });
