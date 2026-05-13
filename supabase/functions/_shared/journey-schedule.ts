@@ -287,11 +287,7 @@ export async function resolveListViewContacts(
     throw new Error("Selected list view's entity isn't an audience source. Use a Customers, Leads, or Orders view.");
   }
 
-  let q = supabase.from(entity.table).select("*");
-  for (const cond of lv.filters || []) q = applyFilter(q, cond);
-  q = q.limit(10000);
-  const { data: rows, error } = await q;
-  if (error) throw error;
+  const rows = await fetchAllRows(supabase, entity.table, lv.filters || []);
 
   if (lv.entity_type === "customers") {
     const res = await upsertContactsFromCustomers(supabase, rows || []);
@@ -305,14 +301,15 @@ export async function resolveListViewContacts(
   }
 
   if (lv.entity_type === "orders") {
-    const customerIds = Array.from(new Set((rows || []).map((r: any) => r.customer_id).filter(Boolean)));
+    const customerIds = Array.from(new Set(rows.map((r: any) => r.customer_id).filter(Boolean)));
     if (customerIds.length === 0) return { contactIds: [], matched: 0, skipped: 0, warning: "No orders with customers matched" };
-    const { data: customers, error: cErr } = await supabase
-      .from("customers")
-      .select("*")
-      .in("id", customerIds);
-    if (cErr) throw cErr;
-    const res = await upsertContactsFromCustomers(supabase, customers || []);
+    const customers: any[] = [];
+    for (const chunk of chunkArray(customerIds, 200)) {
+      const { data, error: cErr } = await supabase.from("customers").select("*").in("id", chunk);
+      if (cErr) throw cErr;
+      if (data) customers.push(...data);
+    }
+    const res = await upsertContactsFromCustomers(supabase, customers);
     return res;
   }
 
@@ -341,11 +338,7 @@ export async function resolveListViewContactIdsReadOnly(
     return { contactIds: [], matched: 0 };
   }
 
-  let q = supabase.from(entity.table).select("*");
-  for (const cond of lv.filters || []) q = applyFilter(q, cond);
-  q = q.limit(10000);
-  const { data: rows, error } = await q;
-  if (error) throw error;
+  const rows = await fetchAllRows(supabase, entity.table, lv.filters || []);
 
   // Resolve phones (customers directly, or via order.customer_id → customers)
   let customers: any[] = [];
@@ -354,14 +347,13 @@ export async function resolveListViewContactIdsReadOnly(
   } else if (lv.entity_type === "leads") {
     customers = rows || [];
   } else if (lv.entity_type === "orders") {
-    const customerIds = Array.from(new Set((rows || []).map((r: any) => r.customer_id).filter(Boolean)));
+    const customerIds = Array.from(new Set(rows.map((r: any) => r.customer_id).filter(Boolean)));
     if (customerIds.length === 0) return { contactIds: [], matched: 0 };
-    const { data: cs, error: cErr } = await supabase
-      .from("customers")
-      .select("id, phone")
-      .in("id", customerIds);
-    if (cErr) throw cErr;
-    customers = cs || [];
+    for (const chunk of chunkArray(customerIds, 200)) {
+      const { data, error: cErr } = await supabase.from("customers").select("id, phone").in("id", chunk);
+      if (cErr) throw cErr;
+      if (data) customers.push(...data);
+    }
   }
 
   const phones = new Set<string>();
