@@ -202,13 +202,15 @@ export async function upsertContactsFromCustomers(
   let firstError: string | undefined;
   let skipped = invalidPhoneCount;
 
-  const { data: existing, error: selErr } = await supabase
-    .from("journey_contacts")
-    .select("id, phone")
-    .in("phone", phones);
-  if (selErr) throw new Error(`Failed to read journey_contacts: ${selErr.message}`);
   const existingByPhone = new Map<string, string>();
-  for (const e of existing || []) existingByPhone.set(e.phone, e.id);
+  for (const chunk of chunkArray(phones, 200)) {
+    const { data: existing, error: selErr } = await supabase
+      .from("journey_contacts")
+      .select("id, phone")
+      .in("phone", chunk);
+    if (selErr) throw new Error(`Failed to read journey_contacts: ${selErr.message}`);
+    for (const e of existing || []) existingByPhone.set(e.phone, e.id);
+  }
 
   for (const p of phones) {
     if (existingByPhone.has(p)) continue;
@@ -240,14 +242,18 @@ export async function upsertContactsFromCustomers(
     }
   }
 
-  const { data: refetched, error: refErr } = await supabase
-    .from("journey_contacts")
-    .select("id, phone, opted_out")
-    .in("phone", phones);
-  if (refErr) throw new Error(`Failed to refetch journey_contacts: ${refErr.message}`);
+  const refetched: any[] = [];
+  for (const chunk of chunkArray(phones, 200)) {
+    const { data, error: refErr } = await supabase
+      .from("journey_contacts")
+      .select("id, phone, opted_out")
+      .in("phone", chunk);
+    if (refErr) throw new Error(`Failed to refetch journey_contacts: ${refErr.message}`);
+    if (data) refetched.push(...data);
+  }
   const finalIds: string[] = [];
   const seen = new Set<string>();
-  for (const r of refetched || []) {
+  for (const r of refetched) {
     if (r.opted_out) continue;
     if (seen.has(r.phone)) continue;
     seen.add(r.phone);
@@ -360,11 +366,16 @@ export async function resolveListViewContactIdsReadOnly(
   const matched = phones.size;
   if (matched === 0) return { contactIds: [], matched: 0 };
 
-  const { data: existing, error: exErr } = await supabase
-    .from("journey_contacts")
-    .select("id, phone, opted_out")
-    .in("phone", Array.from(phones));
-  if (exErr) throw exErr;
+  const phoneList = Array.from(phones);
+  const existing: any[] = [];
+  for (const chunk of chunkArray(phoneList, 200)) {
+    const { data, error: exErr } = await supabase
+      .from("journey_contacts")
+      .select("id, phone, opted_out")
+      .in("phone", chunk);
+    if (exErr) throw exErr;
+    if (data) existing.push(...data);
+  }
 
   // For preview, use phone as the stable identity (avoids inserts), so set logic
   // still gives correct counts even if some contacts haven't been inserted yet.
@@ -373,7 +384,7 @@ export async function resolveListViewContactIdsReadOnly(
   // Include all matched phones (whether or not they exist in journey_contacts) so the
   // preview reflects what *would* be enrolled at activation time.
   const optedOutPhones = new Set<string>(
-    (existing || []).filter((e: any) => e.opted_out).map((e: any) => e.phone),
+    existing.filter((e: any) => e.opted_out).map((e: any) => e.phone),
   );
   for (const p of phones) {
     if (optedOutPhones.has(p)) continue;
