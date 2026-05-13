@@ -157,7 +157,7 @@ export function AudienceBuilder({ value, onChange }: Props) {
                 options={lvOptions}
                 placeholder="Select a list view..."
                 searchPlaceholder="Search list views..."
-                emptyMessage="No customer or order list views yet"
+                emptyMessage="No customer, lead, or order list views yet"
               />
               {seg.list_view_id && preview?.perSegment[seg.key] !== undefined && (
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -269,7 +269,7 @@ export function AudienceBuilder({ value, onChange }: Props) {
       )}
 
       <p className="text-xs text-muted-foreground">
-        Segments must use Customers or Orders list views. Final audience is deduplicated — each contact receives the journey only once.
+        Segments must use Customers, Leads, or Orders list views. Final audience is deduplicated — each contact receives the journey only once.
       </p>
     </div>
   );

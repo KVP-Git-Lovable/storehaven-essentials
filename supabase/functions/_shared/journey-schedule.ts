@@ -167,6 +167,33 @@ function normalizeE164(raw: string | null | undefined, defaultCc = "91"): string
   return `+${defaultCc}${digits}`;
 }
 
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/**
+ * Fetch every row matching the given filters, paginated past PostgREST's 1000-row cap.
+ */
+async function fetchAllRows(supabase: any, table: string, filters: any[]): Promise<any[]> {
+  const PAGE = 1000;
+  const all: any[] = [];
+  let from = 0;
+  while (true) {
+    let q = supabase.from(table).select("*").range(from, from + PAGE - 1);
+    for (const cond of filters || []) q = applyFilter(q, cond);
+    const { data, error } = await q;
+    if (error) throw error;
+    const batch = data || [];
+    all.push(...batch);
+    if (batch.length < PAGE) break;
+    from += PAGE;
+    if (from > 100000) break;
+  }
+  return all;
+}
+
 export type UpsertResult = {
   contactIds: string[];
   matched: number;
@@ -202,13 +229,15 @@ export async function upsertContactsFromCustomers(
   let firstError: string | undefined;
   let skipped = invalidPhoneCount;
 
-  const { data: existing, error: selErr } = await supabase
-    .from("journey_contacts")
-    .select("id, phone")
-    .in("phone", phones);
-  if (selErr) throw new Error(`Failed to read journey_contacts: ${selErr.message}`);
   const existingByPhone = new Map<string, string>();
-  for (const e of existing || []) existingByPhone.set(e.phone, e.id);
+  for (const chunk of chunkArray(phones, 200)) {
+    const { data: existing, error: selErr } = await supabase
+      .from("journey_contacts")
+      .select("id, phone")
+      .in("phone", chunk);
+    if (selErr) throw new Error(`Failed to read journey_contacts: ${selErr.message}`);
+    for (const e of existing || []) existingByPhone.set(e.phone, e.id);
+  }
 
   for (const p of phones) {
     if (existingByPhone.has(p)) continue;
@@ -240,14 +269,18 @@ export async function upsertContactsFromCustomers(
     }
   }
 
-  const { data: refetched, error: refErr } = await supabase
-    .from("journey_contacts")
-    .select("id, phone, opted_out")
-    .in("phone", phones);
-  if (refErr) throw new Error(`Failed to refetch journey_contacts: ${refErr.message}`);
+  const refetched: any[] = [];
+  for (const chunk of chunkArray(phones, 200)) {
+    const { data, error: refErr } = await supabase
+      .from("journey_contacts")
+      .select("id, phone, opted_out")
+      .in("phone", chunk);
+    if (refErr) throw new Error(`Failed to refetch journey_contacts: ${refErr.message}`);
+    if (data) refetched.push(...data);
+  }
   const finalIds: string[] = [];
   const seen = new Set<string>();
-  for (const r of refetched || []) {
+  for (const r of refetched) {
     if (r.opted_out) continue;
     if (seen.has(r.phone)) continue;
     seen.add(r.phone);
@@ -275,11 +308,7 @@ export async function resolveListViewContacts(
     throw new Error("Selected list view's entity isn't an audience source. Use a Customers, Leads, or Orders view.");
   }
 
-  let q = supabase.from(entity.table).select("*");
-  for (const cond of lv.filters || []) q = applyFilter(q, cond);
-  q = q.limit(10000);
-  const { data: rows, error } = await q;
-  if (error) throw error;
+  const rows = await fetchAllRows(supabase, entity.table, lv.filters || []);
 
   if (lv.entity_type === "customers") {
     const res = await upsertContactsFromCustomers(supabase, rows || []);
@@ -293,14 +322,15 @@ export async function resolveListViewContacts(
   }
 
   if (lv.entity_type === "orders") {
-    const customerIds = Array.from(new Set((rows || []).map((r: any) => r.customer_id).filter(Boolean)));
+    const customerIds = Array.from(new Set(rows.map((r: any) => r.customer_id).filter(Boolean)));
     if (customerIds.length === 0) return { contactIds: [], matched: 0, skipped: 0, warning: "No orders with customers matched" };
-    const { data: customers, error: cErr } = await supabase
-      .from("customers")
-      .select("*")
-      .in("id", customerIds);
-    if (cErr) throw cErr;
-    const res = await upsertContactsFromCustomers(supabase, customers || []);
+    const customers: any[] = [];
+    for (const chunk of chunkArray(customerIds, 200)) {
+      const { data, error: cErr } = await supabase.from("customers").select("*").in("id", chunk);
+      if (cErr) throw cErr;
+      if (data) customers.push(...data);
+    }
+    const res = await upsertContactsFromCustomers(supabase, customers);
     return res;
   }
 
@@ -329,11 +359,7 @@ export async function resolveListViewContactIdsReadOnly(
     return { contactIds: [], matched: 0 };
   }
 
-  let q = supabase.from(entity.table).select("*");
-  for (const cond of lv.filters || []) q = applyFilter(q, cond);
-  q = q.limit(10000);
-  const { data: rows, error } = await q;
-  if (error) throw error;
+  const rows = await fetchAllRows(supabase, entity.table, lv.filters || []);
 
   // Resolve phones (customers directly, or via order.customer_id → customers)
   let customers: any[] = [];
@@ -342,14 +368,13 @@ export async function resolveListViewContactIdsReadOnly(
   } else if (lv.entity_type === "leads") {
     customers = rows || [];
   } else if (lv.entity_type === "orders") {
-    const customerIds = Array.from(new Set((rows || []).map((r: any) => r.customer_id).filter(Boolean)));
+    const customerIds = Array.from(new Set(rows.map((r: any) => r.customer_id).filter(Boolean)));
     if (customerIds.length === 0) return { contactIds: [], matched: 0 };
-    const { data: cs, error: cErr } = await supabase
-      .from("customers")
-      .select("id, phone")
-      .in("id", customerIds);
-    if (cErr) throw cErr;
-    customers = cs || [];
+    for (const chunk of chunkArray(customerIds, 200)) {
+      const { data, error: cErr } = await supabase.from("customers").select("id, phone").in("id", chunk);
+      if (cErr) throw cErr;
+      if (data) customers.push(...data);
+    }
   }
 
   const phones = new Set<string>();
@@ -360,11 +385,16 @@ export async function resolveListViewContactIdsReadOnly(
   const matched = phones.size;
   if (matched === 0) return { contactIds: [], matched: 0 };
 
-  const { data: existing, error: exErr } = await supabase
-    .from("journey_contacts")
-    .select("id, phone, opted_out")
-    .in("phone", Array.from(phones));
-  if (exErr) throw exErr;
+  const phoneList = Array.from(phones);
+  const existing: any[] = [];
+  for (const chunk of chunkArray(phoneList, 200)) {
+    const { data, error: exErr } = await supabase
+      .from("journey_contacts")
+      .select("id, phone, opted_out")
+      .in("phone", chunk);
+    if (exErr) throw exErr;
+    if (data) existing.push(...data);
+  }
 
   // For preview, use phone as the stable identity (avoids inserts), so set logic
   // still gives correct counts even if some contacts haven't been inserted yet.
@@ -373,7 +403,7 @@ export async function resolveListViewContactIdsReadOnly(
   // Include all matched phones (whether or not they exist in journey_contacts) so the
   // preview reflects what *would* be enrolled at activation time.
   const optedOutPhones = new Set<string>(
-    (existing || []).filter((e: any) => e.opted_out).map((e: any) => e.phone),
+    existing.filter((e: any) => e.opted_out).map((e: any) => e.phone),
   );
   for (const p of phones) {
     if (optedOutPhones.has(p)) continue;
