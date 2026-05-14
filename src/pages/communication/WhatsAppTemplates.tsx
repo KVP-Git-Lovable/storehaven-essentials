@@ -420,6 +420,13 @@ export default function WhatsAppTemplates() {
             <SelectItem value="AUTHENTICATION">Authentication</SelectItem>
           </SelectContent>
         </Select>
+        <Button
+          variant={showAll ? "default" : "outline"}
+          size="sm"
+          onClick={() => setShowAll((v) => !v)}
+        >
+          {showAll ? "Show Mine" : "Show All"}
+        </Button>
       </div>
 
       <Card>
