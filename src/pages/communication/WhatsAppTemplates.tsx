@@ -78,9 +78,11 @@ const initialForm = {
 export default function WhatsAppTemplates() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [showAll, setShowAll] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [mediaUploading, setMediaUploading] = useState(false);
   const [mediaTab, setMediaTab] = useState<"url" | "upload">("url");
