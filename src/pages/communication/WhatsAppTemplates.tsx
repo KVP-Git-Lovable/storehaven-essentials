@@ -24,6 +24,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { toast } from "sonner";
 import { Plus, RefreshCw, Eye, Trash2, MessageSquare, Download, ChevronDown, Info, AlertTriangle, CheckCircle2, Clock, XCircle, Circle, Image as ImageIcon, Link2, Phone, Upload, X, FileText, MessageCircle, Copy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import { BackButton } from "@/components/shared/BackButton";
 import { format } from "date-fns";
 import {
@@ -77,9 +78,11 @@ const initialForm = {
 export default function WhatsAppTemplates() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [showAll, setShowAll] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [mediaUploading, setMediaUploading] = useState(false);
   const [mediaTab, setMediaTab] = useState<"url" | "upload">("url");
@@ -250,6 +253,7 @@ export default function WhatsAppTemplates() {
   });
 
   const filteredTemplates = templates.filter((t) => {
+    if (!showAll && t.created_by !== user?.id) return false;
     if (filterStatus !== "all" && t.status !== filterStatus) return false;
     if (filterCategory !== "all" && t.category !== filterCategory) return false;
     return true;
@@ -416,6 +420,13 @@ export default function WhatsAppTemplates() {
             <SelectItem value="AUTHENTICATION">Authentication</SelectItem>
           </SelectContent>
         </Select>
+        <Button
+          variant={showAll ? "default" : "outline"}
+          size="sm"
+          onClick={() => setShowAll((v) => !v)}
+        >
+          {showAll ? "Show Mine" : "Show All"}
+        </Button>
       </div>
 
       <Card>
