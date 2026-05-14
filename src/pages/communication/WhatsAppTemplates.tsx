@@ -253,6 +253,7 @@ export default function WhatsAppTemplates() {
   });
 
   const filteredTemplates = templates.filter((t) => {
+    if (!showAll && t.created_by !== user?.id) return false;
     if (filterStatus !== "all" && t.status !== filterStatus) return false;
     if (filterCategory !== "all" && t.category !== filterCategory) return false;
     return true;
