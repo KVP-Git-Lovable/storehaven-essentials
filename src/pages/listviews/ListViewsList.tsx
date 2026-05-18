@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +11,7 @@ import { Plus, Copy, Trash2, Pencil, Download } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ENTITY_SCHEMAS, type EntityKey } from "@/lib/listViewSchema";
+import { NewListViewDialog } from "@/components/listviews/NewListViewDialog";
 
 function downloadCustomersTemplate() {
   const headers = [
@@ -39,6 +41,7 @@ export default function ListViewsList() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const [createOpen, setCreateOpen] = useState(false);
 
   const { data: views = [], isLoading } = useQuery({
     queryKey: ["list-views"],
@@ -96,11 +99,17 @@ export default function ListViewsList() {
           <Button variant="outline" onClick={downloadCustomersTemplate}>
             <Download className="mr-2 h-4 w-4" /> Customers Template
           </Button>
-          <Button onClick={() => navigate("/list-views/new")}>
+          <Button onClick={() => setCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" /> New List View
           </Button>
         </div>
       </div>
+
+      <NewListViewDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={(id) => navigate(`/list-views/${id}`)}
+      />
 
       <Card>
         <Table>
