@@ -1,36 +1,120 @@
-# Bring WhatsApp Center to parity with Store Ops App
+# Redesign List View Create Flow (Salesforce-style)
 
-## Findings
+## Goal
 
-I compared this project to `Store Ops App` (project `39a77380-...`). The pages and edge functions for WhatsApp templates, conversations, and configuration are already in place here and effectively match the source — including the WhatsApp "From" sender number flow in `whatsapp-config` (Twilio Senders → IncomingPhoneNumbers fallback) and the editable sender number on the Configuration screen.
+Replace the single monolithic `/list-views/new` page (Definition + Fields + Filters + Preview) with:
 
-The only piece missing is the **Twilio Wallet Balance** card that appears on the WhatsApp Center landing screen in the source project. That requires a small backend (cached balance endpoint), a UI component, and a place to store the cache.
+1. A minimal **Create modal** (Definition only).
+2. A **Saved List View page** that shows the table, with **Gear** and **Filter** icons in the top-right that open the existing Fields / Filters / Visibility / Rename / Duplicate flows in dialogs.
 
-## Changes
+No backend, schema, query, filter engine, permissions, or rendering logic changes — UI reorganization only.
 
-### 1. Database — add `app_cache` table
-A simple key/value cache table used by the balance endpoint to throttle Twilio calls (3-minute TTL).
+---
 
-Columns: `key` (PK, text), `value` (jsonb), `expires_at` (timestamptz), `updated_at` (timestamptz).
+## Step 1 — New Create Modal
 
-RLS enabled; no public policies (only the service role / edge function reads & writes it).
+Trigger: "New List View" button in `ListViewsList.tsx` and `EntityListViewsBar.tsx`.
 
-### 2. New edge function — `supabase/functions/twilio-balance/index.ts`
-Mirrors the source project. Calls Twilio `/Balance.json` through the Lovable connector gateway using `LOVABLE_API_KEY` + `TWILIO_API_KEY` (both already configured), caches the result in `app_cache` for 180s, and supports `?force=1` to bypass the cache. Returns `{ balance, currency, account_sid, fetched_at, cached }`.
+Instead of `navigate("/list-views/new")`, open a new component `<NewListViewDialog />`.
 
-### 3. New component — `src/components/communication/WalletBalanceCard.tsx`
-Card with a wallet icon, formatted balance + currency, "Updated …" timestamp, and a refresh button. Uses React Query (`twilio-balance` key) and calls the edge function via `supabase.functions.invoke`.
+Fields (Definition only):
 
-### 4. Update — `src/pages/communication/WhatsAppCenter.tsx`
-Render `<WalletBalanceCard />` between the page header and the three tiles (Templates / Conversations / View Configuration), exactly as in the source project.
+- Name (required)
+- Description
+- Entity (locked if opened from an entity bar)
+- Visibility — radio group (Private / Shared) styled like the reference screenshot
+- Tags (comma-separated)
 
-### Out of scope (already aligned, no changes)
-- `WhatsAppConfig.tsx` — sender number input, save button, status, webhook URL, last synced (already matches).
-- `WhatsAppTemplates.tsx`, `WhatsAppTemplateDetails.tsx`, `WhatsAppConversations.tsx` — already present and aligned.
-- `whatsapp-config` edge function — already returns the same shape and uses the same Twilio fallback logic.
+Buttons: **Cancel** / **Save**.
 
-## Technical notes
+On Save:
 
-- No changes will be made in the `Store Ops App` project.
-- No edits to unrelated files.
-- Uses existing secrets (`LOVABLE_API_KEY`, `TWILIO_API_KEY`) — no new secrets needed.
+- Insert into `list_views` with `selected_fields: []`, `filters: []`, `column_order: []`, `created_by: user.id` (same payload shape as today).
+- Close modal, `navigate(\`/list-views/{newId})`(or`/list-views/{newId}?entity=...` when launched from an entity page).
+- Invalidate `["list-views"]` and `["list-views-by-entity", entity]`.
+
+---
+
+## Step 2 — Saved List View Page
+
+Rework `src/pages/listviews/ListViewBuilder.tsx` when `!isNew`:
+
+Replace the 3-card layout (Definition / Fields / Filters / Preview) with:
+
+```text
+┌─────────────────────────────────────────────────────┐
+│  ← [List View Name]            [⚙ Gear] [⛛ Filter] │
+│  Description • Entity • Visibility badge            │
+├─────────────────────────────────────────────────────┤
+│  Data Table (uses existing executeListView + cols)  │
+└─────────────────────────────────────────────────────┘
+```
+
+Reuse the existing `executeListView` call, column ordering, and `Table` rendering already in the file — just move it to be the primary content and drop the Definition/Fields/Filters cards from the page body.
+
+When `isNew` (legacy `/list-views/new` URL): redirect to the listing page and open the Create modal, so the old route still works.
+
+---
+
+## Header Actions
+
+### Gear dropdown (`DropdownMenu`)
+
+- **Duplicate** — same insert logic already in `ListViewsList.tsx duplicateMutation`, then navigate to the new id.
+- **Rename** — small dialog with a Name input → `update({ name })`.
+- **Select Fields to Display** — opens `<FieldPickerDialog />` (see below).
+- **Sharing** — dialog with the existing Visibility select (Private / Shared) → `update({ visibility })`.
+- **Delete** (keep for parity) — confirm + delete + navigate back.
+
+### Filter icon button
+
+- Opens `<FiltersDialog />` containing the existing `FilterRow` list, "Add filter" button, and the field-availability rules already in `ListViewBuilder.tsx` (filters limited to selected fields, auto-prune on deselect).
+- Save → `update({ filters })` and refetch the table.quic
+
+---
+
+## FieldPickerDialog (two-pane shuttle)
+
+Matches the attached screenshot:
+
+```text
+Available Fields           Visible Fields
+┌──────────────┐  [ > ]   ┌──────────────┐
+│ field a      │  [ < ]   │ field x      │
+│ field b      │  [ >> ]  │ field y      │
+│ ...          │  [ << ]  │ ...          │
+└──────────────┘          └──────────────┘
+              [Cancel] [Save]
+```
+
+- Source: `ENTITY_SCHEMAS[entity].fields`.
+- Left = fields not in `selected_fields`. Right = `selected_fields` in `column_order` order.
+- Arrow controls move single / all between panes; up/down reorder visible side (keeps the existing drag-reorder behavior elsewhere).
+- Save → `update({ selected_fields, column_order })`; table re-renders with new columns.
+
+---
+
+## Files to Change
+
+- `src/pages/listviews/ListViewBuilder.tsx` — keep create logic only as a fallback; rewrite the edit/view layout to: header + actions + table. Extract Fields, Filters, Rename, Sharing, FieldPicker into dialogs.
+- `src/pages/listviews/ListViewsList.tsx` — "New List View" button opens `<NewListViewDialog />` instead of navigating.
+- `src/components/transactions/EntityListViewsBar.tsx` — same change for "New List View" button.
+- New: `src/components/listviews/NewListViewDialog.tsx`
+- New: `src/components/listviews/FieldPickerDialog.tsx`
+- New: `src/components/listviews/FiltersDialog.tsx`
+- New: `src/components/listviews/RenameListViewDialog.tsx`
+- New: `src/components/listviews/SharingDialog.tsx`
+
+## What is NOT Touched
+
+- `src/lib/listViewExecutor.ts`, `src/lib/listViewSchema.ts`
+- Supabase tables / RLS / edge functions
+- `FilterRow` component internals
+- Entity list pages (`LeadsList`, `CustomersList`, …) and their query logic
+- Permissions / `useAuth`
+
+## UX Notes
+
+- All transitions via shadcn `Dialog` / `DropdownMenu` — no full reloads.
+- Existing React Query keys reused; mutations call `invalidateQueries` to refresh without remount.
+- Responsive: header collapses to icon-only buttons on small screens; dialogs already use `max-h-[90vh]` + sticky footer pattern per project memory.
