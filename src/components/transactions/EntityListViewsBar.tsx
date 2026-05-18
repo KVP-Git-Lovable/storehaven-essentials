@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, MoreVertical, Pencil, Copy, Trash2, ListFilter } from "lucide-react";
 import { toast } from "sonner";
 import type { EntityKey, FilterCondition } from "@/lib/listViewSchema";
+import { NewListViewDialog } from "@/components/listviews/NewListViewDialog";
 
 interface Props {
   entity: EntityKey;
@@ -24,6 +25,7 @@ interface Props {
 export function EntityListViewsBar({ entity, activeViewId, onApply }: Props) {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [createOpen, setCreateOpen] = useState(false);
 
   const { data: views = [] } = useQuery({
     queryKey: ["list-views-by-entity", entity],
@@ -134,11 +136,18 @@ export function EntityListViewsBar({ entity, activeViewId, onApply }: Props) {
         ) : null}
       </div>
 
-      <Button size="sm" variant="ghost" onClick={() => navigate(`/list-views/new?entity=${entity}`)}>
+      <Button size="sm" variant="ghost" onClick={() => setCreateOpen(true)}>
         <Plus className="mr-1 h-3 w-3" /> New List View
       </Button>
 
       {views.length === 0 && <Badge variant="secondary" className="text-xs">No saved views yet</Badge>}
+
+      <NewListViewDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        lockedEntity={entity}
+        onCreated={(id) => navigate(`/list-views/${id}?entity=${entity}`)}
+      />
     </div>
   );
 }
