@@ -4,35 +4,26 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Plus, Save, RotateCcw } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ArrowLeft, Settings, Filter as FilterIcon, Copy, Pencil, Columns3, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { ENTITY_LIST, ENTITY_SCHEMAS, type EntityKey, type FilterCondition } from "@/lib/listViewSchema";
-import { FilterRow } from "@/components/listviews/FilterRow";
+import { ENTITY_SCHEMAS, type EntityKey, type FilterCondition } from "@/lib/listViewSchema";
 import { executeListView } from "@/lib/listViewExecutor";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  horizontalListSortingStrategy,
-  sortableKeyboardCoordinates,
-} from "@dnd-kit/sortable";
-import { SortablePreviewHeader } from "@/components/listviews/SortablePreviewHeader";
+import { NewListViewDialog } from "@/components/listviews/NewListViewDialog";
+import { FieldPickerDialog } from "@/components/listviews/FieldPickerDialog";
+import { FiltersDialog } from "@/components/listviews/FiltersDialog";
+import { RenameListViewDialog } from "@/components/listviews/RenameListViewDialog";
+import { SharingDialog } from "@/components/listviews/SharingDialog";
 
 export default function ListViewBuilder() {
   const { id } = useParams<{ id: string }>();
@@ -43,330 +34,309 @@ export default function ListViewBuilder() {
   const [searchParams] = useSearchParams();
   const entityFromQuery = searchParams.get("entity") as EntityKey | null;
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [entityType, setEntityType] = useState<EntityKey>(entityFromQuery || "customers");
-  const [selectedFields, setSelectedFields] = useState<string[]>([]);
-  const [columnOrder, setColumnOrder] = useState<string[]>([]);
-  const [filters, setFilters] = useState<FilterCondition[]>([]);
-  const [visibility, setVisibility] = useState<"private" | "shared">("private");
-  const [tags, setTags] = useState<string>("");
+  // Legacy /list-views/new → open create modal on the listing page
+  const [createOpen, setCreateOpen] = useState(isNew);
+  useEffect(() => {
+    if (isNew) setCreateOpen(true);
+  }, [isNew]);
 
-  const entity = ENTITY_SCHEMAS[entityType];
+  const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [sharingOpen, setSharingOpen] = useState(false);
 
-  // Load existing view
-  const { data: existing } = useQuery({
+  const { data: existing, isLoading } = useQuery({
     queryKey: ["list-view", id],
     enabled: !isNew,
     queryFn: async () => {
-      const { data, error } = await supabase.from("list_views" as any).select("*").eq("id", id).maybeSingle();
+      const { data, error } = await supabase
+        .from("list_views" as any)
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
       if (error) throw error;
       return data as any;
     },
   });
 
-  useEffect(() => {
-    if (existing) {
-      setName(existing.name);
-      setDescription(existing.description || "");
-      setEntityType(existing.entity_type);
-      const loadedFields: string[] = existing.selected_fields || [];
-      const loadedFilters: FilterCondition[] = existing.filters || [];
-      // Auto-add fields referenced by filters but missing from selected_fields (backwards-compat)
-      const filterFieldKeys = loadedFilters.map((f) => f.field).filter(Boolean);
-      const merged = Array.from(new Set([...loadedFields, ...filterFieldKeys]));
-      setSelectedFields(merged);
-      setFilters(loadedFilters);
-      const savedOrder: string[] = existing.column_order || [];
-      const validSaved = savedOrder.filter((k) => loadedFields.includes(k));
-      const missing = loadedFields.filter((k) => !validSaved.includes(k));
-      setColumnOrder(validSaved.length ? [...validSaved, ...missing] : loadedFields);
-      setVisibility(existing.visibility);
-      setTags((existing.tags || []).join(", "));
-    }
-  }, [existing]);
+  const entityType: EntityKey = (existing?.entity_type as EntityKey) || "customers";
+  const entity = ENTITY_SCHEMAS[entityType];
+  const selectedFields: string[] = existing?.selected_fields || [];
+  const filters: FilterCondition[] = existing?.filters || [];
+  const savedOrder: string[] = existing?.column_order || [];
 
-  // Keep columnOrder in sync with selectedFields (append new, remove deselected)
-  useEffect(() => {
-    setColumnOrder((prev) => {
-      const filtered = prev.filter((k) => selectedFields.includes(k));
-      const additions = selectedFields.filter((k) => !filtered.includes(k));
-      const next = [...filtered, ...additions];
-      // Avoid no-op state updates
-      if (next.length === prev.length && next.every((v, i) => v === prev[i])) return prev;
-      return next;
-    });
-  }, [selectedFields]);
+  const columnOrder = useMemo(() => {
+    const valid = savedOrder.filter((k) => selectedFields.includes(k));
+    const missing = selectedFields.filter((k) => !valid.includes(k));
+    return valid.length ? [...valid, ...missing] : selectedFields;
+  }, [savedOrder, selectedFields]);
 
-  // Fields available for filtering = currently selected fields
+  const displayColumns = columnOrder.length
+    ? columnOrder
+    : entity.fields.slice(0, 5).map((f) => f.key);
+
   const availableFilterFields = useMemo(
     () => entity.fields.filter((f) => selectedFields.includes(f.key)),
     [entity, selectedFields]
   );
 
-  // Auto-prune filter rows whose field was deselected
-  useEffect(() => {
-    const allowed = new Set(availableFilterFields.map((f) => f.key));
-    setFilters((prev) => {
-      const next = prev.filter((c) => allowed.has(c.field));
-      if (next.length !== prev.length) {
-        toast.info(`Removed ${prev.length - next.length} filter(s) on unselected field(s)`);
-      }
-      return next;
-    });
-  }, [availableFilterFields]);
-
-  // Live preview
-  const previewQuery = useQuery({
-    queryKey: ["list-view-preview", entityType, selectedFields, filters],
-    queryFn: () => executeListView({ entity_type: entityType, selected_fields: selectedFields, filters }, { limit: 25 }),
+  const dataQuery = useQuery({
+    queryKey: ["list-view-data", id, entityType, selectedFields, filters],
+    enabled: !isNew && !!existing,
+    queryFn: () =>
+      executeListView(
+        { entity_type: entityType, selected_fields: selectedFields, filters },
+        { limit: 100000 }
+      ),
   });
 
-  const saveMutation = useMutation({
+  const updateMut = useMutation({
+    mutationFn: async (patch: Record<string, any>) => {
+      const { error } = await supabase
+        .from("list_views" as any)
+        .update(patch as any)
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["list-view", id] });
+      queryClient.invalidateQueries({ queryKey: ["list-views"] });
+      queryClient.invalidateQueries({ queryKey: ["list-views-by-entity"] });
+      toast.success("Updated");
+    },
+    onError: (e: any) => toast.error(e.message || "Update failed"),
+  });
+
+  const duplicateMut = useMutation({
     mutationFn: async () => {
-      const payload = {
-        name,
-        description: description || null,
-        entity_type: entityType,
-        selected_fields: selectedFields,
-        column_order: columnOrder,
-        filters,
-        visibility,
-        tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
-      };
-      if (isNew) {
-        const { data, error } = await supabase.from("list_views" as any).insert({ ...payload, created_by: user?.id } as any).select().single();
-        if (error) throw error;
-        return data as any;
-      } else {
-        const { data, error } = await supabase.from("list_views" as any).update(payload as any).eq("id", id).select().single();
-        if (error) throw error;
-        return data as any;
-      }
+      if (!existing) throw new Error("No list view loaded");
+      const { data, error } = await supabase
+        .from("list_views" as any)
+        .insert({
+          name: `${existing.name} (Copy)`,
+          description: existing.description,
+          entity_type: existing.entity_type,
+          selected_fields: existing.selected_fields,
+          column_order: existing.column_order,
+          filters: existing.filters,
+          visibility: existing.visibility,
+          tags: existing.tags,
+          created_by: user?.id,
+        } as any)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as any;
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["list-views"] });
-      queryClient.invalidateQueries({ queryKey: ["list-views-by-entity"] });
-      toast.success(isNew ? "List view created" : "List view updated");
-      if (entityFromQuery) {
-        navigate(`/transactions/${entityFromQuery}`);
-      } else {
-        navigate(`/list-views/${data.id}`, { replace: true });
-      }
+      toast.success("Duplicated");
+      navigate(`/list-views/${data.id}`);
     },
-    onError: (e: any) => toast.error(e.message || "Save failed"),
+    onError: (e: any) => toast.error(e.message || "Failed to duplicate"),
   });
 
-  const previewColumns = useMemo(() => {
-    if (columnOrder.length) return columnOrder;
-    if (selectedFields.length) return selectedFields;
-    return entity.fields.slice(0, 5).map((f) => f.key);
-  }, [columnOrder, selectedFields, entity]);
+  const deleteMut = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("list_views" as any).delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["list-views"] });
+      toast.success("Deleted");
+      navigate("/list-views");
+    },
+    onError: (e: any) => toast.error(e.message || "Failed to delete"),
+  });
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  const isReorderable = columnOrder.length > 0;
-  const isOrderModified =
-    columnOrder.length === selectedFields.length &&
-    columnOrder.some((k, i) => k !== selectedFields[i]);
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    setColumnOrder((items) => {
-      const oldIndex = items.indexOf(String(active.id));
-      const newIndex = items.indexOf(String(over.id));
-      if (oldIndex < 0 || newIndex < 0) return items;
-      return arrayMove(items, oldIndex, newIndex);
-    });
+  // Legacy /list-views/new route — show only the create modal over the listing
+  if (isNew) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/list-views")}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="text-2xl font-bold tracking-tight">New List View</h1>
+        </div>
+        <NewListViewDialog
+          open={createOpen}
+          onOpenChange={(o) => {
+            setCreateOpen(o);
+            if (!o) {
+              if (entityFromQuery) navigate(`/transactions/${entityFromQuery}`);
+              else navigate("/list-views");
+            }
+          }}
+          lockedEntity={entityFromQuery}
+          onCreated={(newId) => {
+            if (entityFromQuery) navigate(`/transactions/${entityFromQuery}`);
+            else navigate(`/list-views/${newId}`, { replace: true });
+          }}
+        />
+      </div>
+    );
   }
 
+  if (isLoading || !existing) {
+    return <div className="p-6 text-sm text-muted-foreground">Loading...</div>;
+  }
+
+  const rows = dataQuery.data?.rows || [];
+  const count = dataQuery.data?.count ?? 0;
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/list-views")}><ArrowLeft className="h-4 w-4" /></Button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">{isNew ? "New List View" : "Edit List View"}</h1>
-            <p className="text-muted-foreground text-sm">Define filters across an entity to build a reusable audience.</p>
-          </div>
-        </div>
-        <Button onClick={() => saveMutation.mutate()} disabled={!name || saveMutation.isPending}>
-          <Save className="mr-2 h-4 w-4" /> {saveMutation.isPending ? "Saving..." : "Save"}
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-1">
-          <CardHeader><CardTitle>Definition</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label>Name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., High Value Customers" />
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3 min-w-0">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/list-views")}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight truncate">{existing.name}</h1>
+            <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
+              <Badge variant="outline">{entity.label}</Badge>
+              <Badge variant="outline" className="capitalize">{existing.visibility}</Badge>
+              <span>{count.toLocaleString("en-IN")} matching</span>
+              {existing.description && <span className="truncate">• {existing.description}</span>}
             </div>
-            <div>
-              <Label>Description</Label>
-              <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
-            </div>
-            <div>
-              <Label>Entity</Label>
-              <Select
-                value={entityType}
-                onValueChange={(v) => { setEntityType(v as EntityKey); setSelectedFields([]); setColumnOrder([]); setFilters([]); }}
-                disabled={!!entityFromQuery}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {ENTITY_LIST
-                    .filter((e) => ["customers", "products", "orders"].includes(e.key))
-                    .map((e) => (
-                      <SelectItem key={e.key} value={e.key}>{e.label}</SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              {entityFromQuery && (
-                <p className="text-xs text-muted-foreground mt-1">Entity is locked to {entity.label} for this list view.</p>
-              )}
-            </div>
-            <div>
-              <Label>Visibility</Label>
-              <Select value={visibility} onValueChange={(v) => setVisibility(v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="private">Private (only me)</SelectItem>
-                  <SelectItem value="shared">Shared (everyone)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Tags</Label>
-              <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="marketing, retention" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="lg:col-span-2 space-y-6">
-          <Card>
-            <CardHeader><CardTitle>Fields</CardTitle></CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {entity.fields.map((f) => (
-                  <label key={f.key} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={selectedFields.includes(f.key)}
-                      onCheckedChange={(c) =>
-                        setSelectedFields((prev) =>
-                          c ? [...prev, f.key] : prev.filter((k) => k !== f.key)
-                        )
-                      }
-                    />
-                    {f.label}
-                  </label>
+            {(existing.tags || []).length > 0 && (
+              <div className="flex gap-1 flex-wrap mt-1">
+                {(existing.tags || []).map((t: string) => (
+                  <Badge key={t} variant="secondary" className="text-xs">{t}</Badge>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Filters</CardTitle>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={availableFilterFields.length === 0}
-                title={availableFilterFields.length === 0 ? "Select at least one field first" : undefined}
-                onClick={() =>
-                  setFilters([
-                    ...filters,
-                    { field: availableFilterFields[0].key, operator: "eq", value: "" },
-                  ])
-                }
-              >
-                <Plus className="mr-2 h-4 w-4" /> Add filter
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 self-start">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setFiltersOpen(true)}
+            disabled={availableFilterFields.length === 0}
+            title={availableFilterFields.length === 0 ? "Add fields first (Gear → Select Fields to Display)" : "Filters"}
+          >
+            <FilterIcon className="h-4 w-4 mr-1" />
+            Filters
+            {filters.length > 0 && (
+              <Badge variant="secondary" className="ml-2">{filters.length}</Badge>
+            )}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" aria-label="List view settings">
+                <Settings className="h-4 w-4" />
               </Button>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {availableFilterFields.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Select fields above to start filtering.</p>
-              ) : filters.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No filters — all rows will match.</p>
-              ) : (
-                filters.map((f, idx) => (
-                  <FilterRow
-                    key={idx}
-                    fields={availableFilterFields}
-                    value={f}
-                    onChange={(next) => setFilters(filters.map((x, i) => (i === idx ? next : x)))}
-                    onRemove={() => setFilters(filters.filter((_, i) => i !== idx))}
-                  />
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CardTitle>Preview</CardTitle>
-                {isReorderable && (
-                  <span className="text-xs text-muted-foreground hidden sm:inline">
-                    Drag column headers to reorder
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {isOrderModified && (
-                  <Button size="sm" variant="ghost" onClick={() => setColumnOrder([...selectedFields])}>
-                    <RotateCcw className="mr-1 h-3 w-3" /> Reset order
-                  </Button>
-                )}
-                <Badge variant="secondary">
-                  {previewQuery.isLoading ? "Loading..." : previewQuery.error ? "Error" : `${previewQuery.data?.count ?? 0} matching`}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {previewQuery.error ? (
-                <p className="text-sm text-destructive">{(previewQuery.error as any).message}</p>
-              ) : (
-                <div className="overflow-auto max-h-[400px]">
-                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <SortableContext items={previewColumns} strategy={horizontalListSortingStrategy}>
-                            {previewColumns.map((c) => {
-                              const label = entity.fields.find((f) => f.key === c)?.label || c;
-                              return isReorderable ? (
-                                <SortablePreviewHeader key={c} id={c} label={label} />
-                              ) : (
-                                <TableHead key={c}>{label}</TableHead>
-                              );
-                            })}
-                          </SortableContext>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(previewQuery.data?.rows || []).map((row: any, i: number) => (
-                          <TableRow key={i}>
-                            {previewColumns.map((c) => <TableCell key={c} className="text-xs">{formatValue(row[c])}</TableCell>)}
-                          </TableRow>
-                        ))}
-                        {(!previewQuery.data?.rows || previewQuery.data.rows.length === 0) && !previewQuery.isLoading && (
-                          <TableRow><TableCell colSpan={previewColumns.length} className="text-center text-muted-foreground py-6">No matching rows</TableCell></TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </DndContext>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>List view</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => duplicateMut.mutate()}>
+                <Copy className="mr-2 h-4 w-4" /> Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setRenameOpen(true)}>
+                <Pencil className="mr-2 h-4 w-4" /> Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFieldsOpen(true)}>
+                <Columns3 className="mr-2 h-4 w-4" /> Select Fields to Display
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSharingOpen(true)}>
+                <Share2 className="mr-2 h-4 w-4" /> Sharing
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() => {
+                  if (confirm(`Delete list view "${existing.name}"?`)) deleteMut.mutate();
+                }}
+              >
+                <Trash2 className="mr-2 h-4 w-4" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
+
+      <Card>
+        <div className="overflow-auto max-h-[70vh]">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {displayColumns.map((c) => {
+                  const label = entity.fields.find((f) => f.key === c)?.label || c;
+                  return <TableHead key={c}>{label}</TableHead>;
+                })}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {dataQuery.isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={displayColumns.length} className="text-center py-8 text-muted-foreground">
+                    Loading...
+                  </TableCell>
+                </TableRow>
+              ) : dataQuery.error ? (
+                <TableRow>
+                  <TableCell colSpan={displayColumns.length} className="text-center py-8 text-destructive">
+                    {(dataQuery.error as any).message}
+                  </TableCell>
+                </TableRow>
+              ) : rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={displayColumns.length} className="text-center py-8 text-muted-foreground">
+                    {selectedFields.length === 0
+                      ? "No fields selected. Use the gear menu → Select Fields to Display."
+                      : "No matching rows"}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                rows.map((row: any, i: number) => (
+                  <TableRow key={i}>
+                    {displayColumns.map((c) => (
+                      <TableCell key={c} className="text-xs">{formatValue(row[c])}</TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
+
+      <FieldPickerDialog
+        open={fieldsOpen}
+        onOpenChange={setFieldsOpen}
+        allFields={entity.fields}
+        initialSelected={selectedFields}
+        initialOrder={columnOrder}
+        onSave={(sel, order) =>
+          updateMut.mutate({ selected_fields: sel, column_order: order })
+        }
+      />
+
+      <FiltersDialog
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        availableFields={availableFilterFields}
+        initialFilters={filters}
+        onSave={(next) => updateMut.mutate({ filters: next })}
+      />
+
+      <RenameListViewDialog
+        open={renameOpen}
+        onOpenChange={setRenameOpen}
+        initialName={existing.name}
+        initialDescription={existing.description || ""}
+        initialTags={existing.tags || []}
+        onSave={(next) => updateMut.mutate(next)}
+      />
+
+      <SharingDialog
+        open={sharingOpen}
+        onOpenChange={setSharingOpen}
+        initialVisibility={existing.visibility}
+        onSave={(v) => updateMut.mutate({ visibility: v })}
+      />
     </div>
   );
 }
