@@ -1,120 +1,76 @@
-# Redesign List View Create Flow (Salesforce-style)
+# Hierarchical Insert Variable Picker
 
-## Goal
+Refactor the **Insert Variable** control inside the Create/Edit WhatsApp Template modal (`/communication/templates`) into a 3-level drill-down picker. Strictly a UI/UX change — no backend, no Twilio, no schema, no variable-syntax changes.
 
-Replace the single monolithic `/list-views/new` page (Definition + Fields + Filters + Preview) with:
+## Scope
 
-1. A minimal **Create modal** (Definition only).
-2. A **Saved List View page** that shows the table, with **Gear** and **Filter** icons in the top-right that open the existing Fields / Filters / Visibility / Rename / Duplicate flows in dialogs.
+- **File changed:** `src/pages/communication/WhatsAppTemplates.tsx` — replace the existing `DropdownMenu` block that lists `VARIABLE_GROUPS` flat.
+- **File added:** `src/components/communication/InsertVariablePicker.tsx` — the new hierarchical Popover component.
+- **File extended:** `src/lib/whatsappVariables.ts` — add a new `VARIABLE_REGISTRY` constant (Entity → Category → Variables). The existing `VARIABLE_GROUPS`, `ALL_VARIABLES`, `extractFriendlyVariables`, `transformFriendlyToTwilio`, `parseStoredBody`, `validateFriendlyBody`, and marker logic stay untouched so Twilio mapping and send/preview behavior are identical.
 
-No backend, schema, query, filter engine, permissions, or rendering logic changes — UI reorganization only.
+## New registry shape (frontend-only)
 
----
-
-## Step 1 — New Create Modal
-
-Trigger: "New List View" button in `ListViewsList.tsx` and `EntityListViewsBar.tsx`.
-
-Instead of `navigate("/list-views/new")`, open a new component `<NewListViewDialog />`.
-
-Fields (Definition only):
-
-- Name (required)
-- Description
-- Entity (locked if opened from an entity bar)
-- Visibility — radio group (Private / Shared) styled like the reference screenshot
-- Tags (comma-separated)
-
-Buttons: **Cancel** / **Save**.
-
-On Save:
-
-- Insert into `list_views` with `selected_fields: []`, `filters: []`, `column_order: []`, `created_by: user.id` (same payload shape as today).
-- Close modal, `navigate(\`/list-views/{newId})`(or`/list-views/{newId}?entity=...` when launched from an entity page).
-- Invalidate `["list-views"]` and `["list-views-by-entity", entity]`.
-
----
-
-## Step 2 — Saved List View Page
-
-Rework `src/pages/listviews/ListViewBuilder.tsx` when `!isNew`:
-
-Replace the 3-card layout (Definition / Fields / Filters / Preview) with:
-
-```text
-┌─────────────────────────────────────────────────────┐
-│  ← [List View Name]            [⚙ Gear] [⛛ Filter] │
-│  Description • Entity • Visibility badge            │
-├─────────────────────────────────────────────────────┤
-│  Data Table (uses existing executeListView + cols)  │
-└─────────────────────────────────────────────────────┘
+```ts
+// whatsappVariables.ts (added, existing exports preserved)
+export type VariableEntity = {
+  key: string;         // "customer", "lead", "order", ...
+  label: string;       // "Customer"
+  categories: {
+    key: string;       // "name", "contact", "date", "address", "financial", "order", "custom"
+    label: string;     // "Name Fields"
+    variables: { name: string; label: string }[]; // name is the friendly token used in {{...}}
+  }[];
+};
+export const VARIABLE_REGISTRY: VariableEntity[] = [ /* see below */ ];
 ```
 
-Reuse the existing `executeListView` call, column ordering, and `Table` rendering already in the file — just move it to be the primary content and drop the Definition/Fields/Filters cards from the page body.
+Initial entities seeded: **Customer, Lead, Visitor, Order, Order Item, Product, Retailer, Employee, Journey, Journey Event, Store**. Each entity carries the category buckets the user listed (Name / Contact / Date / Address / Financial / Order / Custom). Variable tokens preserve the existing dot-friendly convention already accepted by `extractFriendlyVariables` (regex `[a-zA-Z_][a-zA-Z0-9_]*` — note: current regex does NOT allow dots, so tokens will be of the form `customer_first_name`, `order_last_amount`, etc., matching the existing flat set's style). This keeps the Twilio numeric remap working with zero engine changes.
 
-When `isNew` (legacy `/list-views/new` URL): redirect to the listing page and open the Create modal, so the old route still works.
+> The user's example `{{customer.first_name}}` would break the existing regex/marker contract. We will use `{{customer_first_name}}` style to stay compliant with the "do not modify variable syntax/parser" constraint. Will be called out in the closing message.
 
----
+## Component design — `InsertVariablePicker`
 
-## Header Actions
-
-### Gear dropdown (`DropdownMenu`)
-
-- **Duplicate** — same insert logic already in `ListViewsList.tsx duplicateMutation`, then navigate to the new id.
-- **Rename** — small dialog with a Name input → `update({ name })`.
-- **Select Fields to Display** — opens `<FieldPickerDialog />` (see below).
-- **Sharing** — dialog with the existing Visibility select (Private / Shared) → `update({ visibility })`.
-- **Delete** (keep for parity) — confirm + delete + navigate back.
-
-### Filter icon button
-
-- Opens `<FiltersDialog />` containing the existing `FilterRow` list, "Add filter" button, and the field-availability rules already in `ListViewBuilder.tsx` (filters limited to selected fields, auto-prune on deselect).
-- Save → `update({ filters })` and refetch the table.quic
-
----
-
-## FieldPickerDialog (two-pane shuttle)
-
-Matches the attached screenshot:
+A single `Popover` (replaces the existing `DropdownMenu`) that internally manages a 3-step view via local state `step: "entity" | "category" | "variable"`.
 
 ```text
-Available Fields           Visible Fields
-┌──────────────┐  [ > ]   ┌──────────────┐
-│ field a      │  [ < ]   │ field x      │
-│ field b      │  [ >> ]  │ field y      │
-│ ...          │  [ << ]  │ ...          │
-└──────────────┘          └──────────────┘
-              [Cancel] [Save]
++-------------------- Popover (w-72) --------------------+
+| < Back   [crumb: Customer > Date Fields]        [x]   |
+| [ Search... ]                                          |
+| ----------------------------------------------------- |
+| Step 1: list of entities  (Command list, scrollable)  |
+| Step 2: list of categories for chosen entity          |
+| Step 3: list of variables for chosen category         |
++--------------------------------------------------------+
 ```
 
-- Source: `ENTITY_SCHEMAS[entity].fields`.
-- Left = fields not in `selected_fields`. Right = `selected_fields` in `column_order` order.
-- Arrow controls move single / all between panes; up/down reorder visible side (keeps the existing drag-reorder behavior elsewhere).
-- Save → `update({ selected_fields, column_order })`; table re-renders with new columns.
+- Built with existing `Popover` + `Command`/`CommandInput`/`CommandList`/`CommandItem` (shadcn) for searchable lists at each level — matches the pattern already used in `HierarchicalCategorySelector`.
+- Search box is scoped to the current step (entity names, category labels, or variable labels/tokens).
+- Breadcrumb shows the trail; clicking a crumb (or the Back chevron) returns to that step.
+- Step 3 `onSelect` calls the existing `insertVariableAtCursor(varName)` (unchanged), then closes the popover.
+- Compact: `w-72`, `max-h-80 overflow-auto`. Works on mobile (popover auto-positions; uses `align="end"`).
+- **Lazy rendering:** only the current step's list is rendered. Variables for a category are only mapped when step 3 is active.
+- **Remember last entity:** persisted in `localStorage` under key `wa.insertVar.lastEntity`. On open, picker starts at step 2 with that entity preselected (Back returns to step 1). Falls back to step 1 if absent.
 
----
+## WhatsAppTemplates.tsx edit
 
-## Files to Change
+Replace lines ~727–759 (the `TooltipProvider > Tooltip > DropdownMenu...` block) with:
 
-- `src/pages/listviews/ListViewBuilder.tsx` — keep create logic only as a fallback; rewrite the edit/view layout to: header + actions + table. Extract Fields, Filters, Rename, Sharing, FieldPicker into dialogs.
-- `src/pages/listviews/ListViewsList.tsx` — "New List View" button opens `<NewListViewDialog />` instead of navigating.
-- `src/components/transactions/EntityListViewsBar.tsx` — same change for "New List View" button.
-- New: `src/components/listviews/NewListViewDialog.tsx`
-- New: `src/components/listviews/FieldPickerDialog.tsx`
-- New: `src/components/listviews/FiltersDialog.tsx`
-- New: `src/components/listviews/RenameListViewDialog.tsx`
-- New: `src/components/listviews/SharingDialog.tsx`
+```tsx
+<InsertVariablePicker onInsert={insertVariableAtCursor} />
+```
 
-## What is NOT Touched
+The tooltip explaining auto-mapping moves inside the new component's trigger to preserve the existing hint. Nothing else in the modal, validation, save flow, or preview is touched.
 
-- `src/lib/listViewExecutor.ts`, `src/lib/listViewSchema.ts`
-- Supabase tables / RLS / edge functions
-- `FilterRow` component internals
-- Entity list pages (`LeadsList`, `CustomersList`, …) and their query logic
-- Permissions / `useAuth`
+## What is NOT changed
 
-## UX Notes
+- `insertVariableAtCursor` body, textarea ref, `form.body` state.
+- `VARIABLE_GROUPS`, `ALL_VARIABLES`, marker regex, `buildStoredBody`, `parseStoredBody`, `stripMarker`, `validateFriendlyBody`.
+- `whatsapp-send` edge function, Twilio payload, template DB schema, preview rendering, `WhatsAppTemplateDetails`.
+- Show-All/Show-Mine toggle and any other recent template page behavior.
 
-- All transitions via shadcn `Dialog` / `DropdownMenu` — no full reloads.
-- Existing React Query keys reused; mutations call `invalidateQueries` to refresh without remount.
-- Responsive: header collapses to icon-only buttons on small screens; dialogs already use `max-h-[90vh]` + sticky footer pattern per project memory.
+## Acceptance
+
+- Clicking **Insert Variable** opens a small popover showing only entities (or the remembered entity's categories).
+- Each step has its own search and a Back/breadcrumb.
+- Choosing a variable inserts the same `{{token}}` string that the existing flat picker would have inserted for that token, and the Twilio submission still produces identical `{{1}}, {{2}}` output.
+- No edge-function or DB migration required; build passes.

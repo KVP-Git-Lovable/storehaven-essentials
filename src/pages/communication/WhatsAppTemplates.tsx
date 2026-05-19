@@ -35,6 +35,7 @@ import {
   parseStoredBody,
   transformTwilioToFriendly,
 } from "@/lib/whatsappVariables";
+import { InsertVariablePicker } from "@/components/communication/InsertVariablePicker";
 
 interface WhatsAppTemplate {
   id: string;
@@ -724,39 +725,7 @@ export default function WhatsAppTemplates() {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <Label>Message Body</Label>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button type="button" variant="outline" size="sm">
-                            <Plus className="h-3 w-3 mr-1" />
-                            Insert Variable
-                            <ChevronDown className="h-3 w-3 ml-1" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56 max-h-80 overflow-y-auto bg-popover">
-                          {Object.entries(VARIABLE_GROUPS).map(([group, vars], idx) => (
-                            <div key={group}>
-                              {idx > 0 && <DropdownMenuSeparator />}
-                              <DropdownMenuLabel className="text-xs text-muted-foreground">{group}</DropdownMenuLabel>
-                              <DropdownMenuGroup>
-                                {vars.map((v) => (
-                                  <DropdownMenuItem key={v} onClick={() => insertVariableAtCursor(v)}>
-                                    <code className="text-xs">{`{{${v}}}`}</code>
-                                  </DropdownMenuItem>
-                                ))}
-                              </DropdownMenuGroup>
-                            </div>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TooltipTrigger>
-                    <TooltipContent side="left">
-                      <p className="text-xs">Variables are automatically mapped to WhatsApp format on submission</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <InsertVariablePicker onInsert={insertVariableAtCursor} />
               </div>
               <Textarea
                 ref={textareaRef}
