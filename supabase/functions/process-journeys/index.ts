@@ -371,7 +371,30 @@ async function processEnrollment(
         if (!fromNumber) throw new Error("No active WhatsApp sender configured (whatsapp_config.sender_number)");
         if (!contact?.phone) throw new Error("Contact phone missing");
 
-        const variables = resolveVariables(variablesMap as Record<string, string>, contact);
+        // Load template body so we can read the numeric→friendly marker
+        // (e.g. <!--vars:{"1":"customer_name","2":"customer_dob"}-->) and
+        // resolve numeric slots positionally instead of grabbing the first
+        // non-empty friendly sibling.
+        let numericToFriendly: Record<string, string> = {};
+        try {
+          const { data: tmplRow } = await supabase
+            .from("whatsapp_templates")
+            .select("body")
+            .eq("id", templateId)
+            .maybeSingle();
+          const body: string = tmplRow?.body || "";
+          const m = body.match(/<!--vars:(\{[^}]*\})-->/);
+          if (m) {
+            const parsed = JSON.parse(m[1]);
+            if (parsed && typeof parsed === "object") numericToFriendly = parsed;
+          }
+        } catch (_) { /* ignore — fall back to plain resolution */ }
+
+        const variables = resolveVariables(
+          variablesMap as Record<string, string>,
+          contact,
+          numericToFriendly,
+        );
         if (!variables["1"]) {
           variables["1"] = (contact?.name && String(contact.name).trim()) || "Customer";
         }
