@@ -160,6 +160,24 @@ function resolveContactPath(contact: any, rawPath: string): string {
     return meta == null ? "" : String(meta);
   }
 
+  // DOB aliases — journey_contacts uses `date_of_birth`, but tokens may
+  // reference customer_dob / dob / birthday based on the source entity.
+  if (path === "customer_dob" || path === "dob" || path === "birthday" || path === "date_of_birth") {
+    const raw = contact.date_of_birth
+      ?? getNested(contact.metadata, "date_of_birth")
+      ?? getNested(contact.metadata, "customer_dob")
+      ?? getNested(contact.metadata, "dob");
+    if (raw == null || raw === "") return "";
+    // Format as dd MMM yyyy if it parses as a date; otherwise return as-is.
+    const d = new Date(String(raw));
+    if (!isNaN(d.getTime())) {
+      const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const dd = String(d.getUTCDate()).padStart(2, "0");
+      return `${dd} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+    }
+    return String(raw);
+  }
+
   // Direct column lookup
   const direct = getNested(contact, path);
   if (direct != null && direct !== "") return String(direct);
