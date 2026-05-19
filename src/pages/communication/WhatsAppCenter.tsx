@@ -20,7 +20,7 @@ const cards = [
   },
   {
     title: "View Configuration",
-    description: "Manage Twilio WhatsApp configuration, credentials, and webhooks",
+    description: "Manage API WhatsApp configuration, credentials, and webhooks",
     icon: Settings,
     href: "/communication/whatsapp/config",
   },
@@ -36,7 +36,7 @@ const WhatsAppCenter = () => {
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold">WhatsApp Center</h1>
           <p className="text-muted-foreground mt-1">
-            Manage your WhatsApp communication including templates, senders, and configuration through Twilio integration.
+            Manage your WhatsApp communication including templates, senders, and configuration through API integration.
           </p>
         </div>
         <img src={whatsappLogo} alt="WhatsApp" className="h-10 w-10 object-contain" />

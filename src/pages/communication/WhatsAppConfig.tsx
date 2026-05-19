@@ -100,7 +100,7 @@ const WhatsAppConfig = () => {
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold">WhatsApp Configuration</h1>
           <p className="text-muted-foreground mt-1">
-            Live view of your Twilio WhatsApp sender setup.
+            Live view of your API WhatsApp sender setup.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
