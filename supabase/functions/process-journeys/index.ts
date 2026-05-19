@@ -160,6 +160,24 @@ function resolveContactPath(contact: any, rawPath: string): string {
     return meta == null ? "" : String(meta);
   }
 
+  // DOB aliases — journey_contacts uses `date_of_birth`, but tokens may
+  // reference customer_dob / dob / birthday based on the source entity.
+  if (path === "customer_dob" || path === "dob" || path === "birthday" || path === "date_of_birth") {
+    const raw = contact.date_of_birth
+      ?? getNested(contact.metadata, "date_of_birth")
+      ?? getNested(contact.metadata, "customer_dob")
+      ?? getNested(contact.metadata, "dob");
+    if (raw == null || raw === "") return "";
+    // Format as dd MMM yyyy if it parses as a date; otherwise return as-is.
+    const d = new Date(String(raw));
+    if (!isNaN(d.getTime())) {
+      const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const dd = String(d.getUTCDate()).padStart(2, "0");
+      return `${dd} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+    }
+    return String(raw);
+  }
+
   // Direct column lookup
   const direct = getNested(contact, path);
   if (direct != null && direct !== "") return String(direct);
@@ -183,6 +201,7 @@ function resolveSingleToken(token: string, contact: any): string {
 function resolveVariables(
   mapping: Record<string, string> | undefined,
   contact: any,
+  numericToFriendly?: Record<string, string>,
 ): Record<string, string> {
   const out: Record<string, string> = {};
   if (!mapping || typeof mapping !== "object") return out;
@@ -214,12 +233,19 @@ function resolveVariables(
     // friendly sibling key whose value resolves and use that.
     const isNumericKey = /^\d+$/.test(key);
     if (isNumericKey && (!resolved || !resolved.trim())) {
-      for (const [otherKey, otherSource] of Object.entries(mapping)) {
-        if (otherKey === key || /^\d+$/.test(otherKey)) continue;
-        const otherResolved = tryResolve(otherSource);
-        if (otherResolved && otherResolved.trim() && otherResolved !== `{{${key}}}`) {
-          resolved = otherResolved;
-          break;
+      // Prefer the friendly key mapped to this slot via the template marker
+      // (e.g. {"1": "customer_name", "2": "customer_dob"}). This preserves
+      // positional intent — without it, slot "2" could grab slot "1"'s value.
+      const friendlyKey = numericToFriendly?.[key];
+      if (friendlyKey && mapping[friendlyKey] != null) {
+        const fromFriendly = tryResolve(mapping[friendlyKey]);
+        if (fromFriendly && fromFriendly.trim()) {
+          resolved = fromFriendly;
+        } else {
+          // Friendly source exists but didn't resolve — also try the
+          // friendly key as a direct contact path (e.g. customer_dob).
+          const direct = resolveContactPath(contact, friendlyKey);
+          if (direct && direct.trim()) resolved = direct;
         }
       }
     }
@@ -345,7 +371,30 @@ async function processEnrollment(
         if (!fromNumber) throw new Error("No active WhatsApp sender configured (whatsapp_config.sender_number)");
         if (!contact?.phone) throw new Error("Contact phone missing");
 
-        const variables = resolveVariables(variablesMap as Record<string, string>, contact);
+        // Load template body so we can read the numeric→friendly marker
+        // (e.g. <!--vars:{"1":"customer_name","2":"customer_dob"}-->) and
+        // resolve numeric slots positionally instead of grabbing the first
+        // non-empty friendly sibling.
+        let numericToFriendly: Record<string, string> = {};
+        try {
+          const { data: tmplRow } = await supabase
+            .from("whatsapp_templates")
+            .select("body")
+            .eq("id", templateId)
+            .maybeSingle();
+          const body: string = tmplRow?.body || "";
+          const m = body.match(/<!--vars:(\{[^}]*\})-->/);
+          if (m) {
+            const parsed = JSON.parse(m[1]);
+            if (parsed && typeof parsed === "object") numericToFriendly = parsed;
+          }
+        } catch (_) { /* ignore — fall back to plain resolution */ }
+
+        const variables = resolveVariables(
+          variablesMap as Record<string, string>,
+          contact,
+          numericToFriendly,
+        );
         if (!variables["1"]) {
           variables["1"] = (contact?.name && String(contact.name).trim()) || "Customer";
         }
