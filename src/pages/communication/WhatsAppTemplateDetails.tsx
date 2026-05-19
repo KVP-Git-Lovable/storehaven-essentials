@@ -288,7 +288,7 @@ export default function WhatsAppTemplateDetails() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-          <CardTitle className="text-lg">Twilio Content Definition</CardTitle>
+          <CardTitle className="text-lg">API Content Definition</CardTitle>
           {isMobile && (
             <Button variant="ghost" size="sm" onClick={() => setShowTwilioDef((v) => !v)}>
               {showTwilioDef ? <><ChevronUp className="h-4 w-4 mr-1" />Hide</> : <><ChevronDown className="h-4 w-4 mr-1" />Show</>}
@@ -315,7 +315,7 @@ export default function WhatsAppTemplateDetails() {
                       </code>
                     ) : (
                       <p className="text-xs text-destructive">
-                        No media URL is bound on this template in Twilio. WhatsApp will reject sends with error 63019.
+                        No media URL is bound on this template in API. WhatsApp will reject sends with error 63019.
                       </p>
                     )}
                   </div>
@@ -327,12 +327,12 @@ export default function WhatsAppTemplateDetails() {
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Last synced from Twilio: {format(new Date(twilioSyncedAt), "MMM d, yyyy HH:mm")}
+                  Last synced from API: {format(new Date(twilioSyncedAt), "MMM d, yyyy HH:mm")}
                 </p>
               </>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Twilio Content metadata not yet synced. Click <strong>Refresh Status</strong> above to pull the live definition (template type, media URL, required variables) from Twilio.
+                API Content metadata not yet synced. Click <strong>Refresh Status</strong> above to pull the live definition (template type, media URL, required variables) from API.
               </p>
             )}
           </CardContent>
@@ -351,7 +351,7 @@ export default function WhatsAppTemplateDetails() {
         {(!isMobile || showMediaTest) && (
           <CardContent className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              Verify that any media URL referenced by this template is publicly downloadable by Twilio/Meta. A 403 here is the most common cause of media-template delivery failures.
+              Verify that any media URL referenced by this template is publicly downloadable by API/Meta. A 403 here is the most common cause of media-template delivery failures.
             </p>
             <div className="flex flex-col sm:flex-row gap-2">
               <Input
