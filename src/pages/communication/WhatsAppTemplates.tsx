@@ -379,12 +379,12 @@ export default function WhatsAppTemplates() {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-lg md:text-2xl font-bold">WhatsApp Templates</h1>
-          <p className="text-xs md:text-sm text-muted-foreground">Create and manage WhatsApp message templates via Twilio</p>
+          <p className="text-xs md:text-sm text-muted-foreground">Create and manage WhatsApp message templates via API</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" className="md:h-10 md:px-4" onClick={() => importMutation.mutate()} disabled={importMutation.isPending}>
             <Download className={`h-4 w-4 sm:mr-2 ${importMutation.isPending ? "animate-spin" : ""}`} />
-            <span className="hidden sm:inline">Import from Twilio</span>
+            <span className="hidden sm:inline">Import from API</span>
           </Button>
           <Button variant="outline" size="sm" className="md:h-10 md:px-4" onClick={() => bulkSyncMutation.mutate()} disabled={bulkSyncMutation.isPending}>
             <RefreshCw className={`h-4 w-4 sm:mr-2 ${bulkSyncMutation.isPending ? "animate-spin" : ""}`} />
@@ -736,7 +736,7 @@ export default function WhatsAppTemplates() {
               />
               <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                 <Info className="h-3 w-3" />
-                Click "Insert Variable" to add named variables — they get auto-mapped to {"{{1}}, {{2}}"} for Twilio.
+                Click "Insert Variable" to add named variables — they get auto-mapped to {"{{1}}, {{2}}"} for API.
               </p>
 
               {validation.warnings.length > 0 && (
@@ -888,7 +888,7 @@ export default function WhatsAppTemplates() {
                 <Tabs defaultValue="friendly" className="mt-1">
                   <TabsList className="grid w-full grid-cols-2 h-8">
                     <TabsTrigger value="friendly" className="text-xs">WhatsApp preview</TabsTrigger>
-                    <TabsTrigger value="twilio" className="text-xs">Twilio format</TabsTrigger>
+                    <TabsTrigger value="twilio" className="text-xs">API format</TabsTrigger>
                   </TabsList>
                   <TabsContent value="friendly">
                     <div className="rounded-md border bg-[#e5ddd5] dark:bg-muted/50 p-3">
