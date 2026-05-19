@@ -33,7 +33,7 @@ export function WalletBalanceCard() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-              Twilio Wallet Balance
+              API Wallet Balance
             </p>
             {isLoading ? (
               <Skeleton className="h-7 w-32 mt-1" />
