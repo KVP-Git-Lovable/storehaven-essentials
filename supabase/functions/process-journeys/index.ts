@@ -201,6 +201,7 @@ function resolveSingleToken(token: string, contact: any): string {
 function resolveVariables(
   mapping: Record<string, string> | undefined,
   contact: any,
+  numericToFriendly?: Record<string, string>,
 ): Record<string, string> {
   const out: Record<string, string> = {};
   if (!mapping || typeof mapping !== "object") return out;
@@ -232,12 +233,19 @@ function resolveVariables(
     // friendly sibling key whose value resolves and use that.
     const isNumericKey = /^\d+$/.test(key);
     if (isNumericKey && (!resolved || !resolved.trim())) {
-      for (const [otherKey, otherSource] of Object.entries(mapping)) {
-        if (otherKey === key || /^\d+$/.test(otherKey)) continue;
-        const otherResolved = tryResolve(otherSource);
-        if (otherResolved && otherResolved.trim() && otherResolved !== `{{${key}}}`) {
-          resolved = otherResolved;
-          break;
+      // Prefer the friendly key mapped to this slot via the template marker
+      // (e.g. {"1": "customer_name", "2": "customer_dob"}). This preserves
+      // positional intent — without it, slot "2" could grab slot "1"'s value.
+      const friendlyKey = numericToFriendly?.[key];
+      if (friendlyKey && mapping[friendlyKey] != null) {
+        const fromFriendly = tryResolve(mapping[friendlyKey]);
+        if (fromFriendly && fromFriendly.trim()) {
+          resolved = fromFriendly;
+        } else {
+          // Friendly source exists but didn't resolve — also try the
+          // friendly key as a direct contact path (e.g. customer_dob).
+          const direct = resolveContactPath(contact, friendlyKey);
+          if (direct && direct.trim()) resolved = direct;
         }
       }
     }
