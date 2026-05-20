@@ -183,7 +183,7 @@ export function JourneyScheduleDialog({ open, onOpenChange, journeyId, journeyNa
           {/* Type segmented control */}
           <div>
             <Label>Type</Label>
-            <div className="mt-1 inline-flex rounded-md border border-input p-1">
+            <div className="mt-1 inline-flex flex-wrap rounded-md border border-input p-1">
               <button
                 type="button"
                 onClick={() => setType("one_time")}
@@ -203,6 +203,16 @@ export function JourneyScheduleDialog({ open, onOpenChange, journeyId, journeyNa
                 )}
               >
                 Recurring
+              </button>
+              <button
+                type="button"
+                onClick={() => setType("relative")}
+                className={cn(
+                  "px-3 py-1.5 text-sm rounded-sm transition-colors",
+                  type === "relative" ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+                )}
+              >
+                Relative Date
               </button>
             </div>
           </div>
