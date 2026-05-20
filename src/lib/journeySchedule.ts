@@ -1,8 +1,11 @@
 // Pure helpers for Journey Schedules. All times treated as IST (Asia/Kolkata, UTC+5:30).
 // No DB / no UI imports here so this can be shared with future scheduler & calendar.
 
-export type ScheduleType = "one_time" | "recurring";
+export type ScheduleType = "one_time" | "recurring" | "relative";
 export type ScheduleFrequency = "daily" | "weekly" | "monthly" | "quarterly";
+export type RelativeRule = "before" | "after" | "on";
+export type RelativeUnit = "days" | "weeks" | "months";
+export type RetriggerMode = "once" | "on_change" | "repeat";
 
 export interface JourneySchedule {
   id?: string;
@@ -16,6 +19,13 @@ export interface JourneySchedule {
   month_of_quarter: number | null; // 1..3 — 1=first month of quarter (Jan/Apr/Jul/Oct)
   timezone?: string;
   next_run_at?: string | null;
+  // Relative date scheduling
+  relative_entity?: string | null;
+  relative_field?: string | null;
+  relative_rule?: RelativeRule | null;
+  relative_offset?: number | null;
+  relative_unit?: RelativeUnit | null;
+  retrigger_mode?: RetriggerMode | null;
 }
 
 const IST_OFFSET_MIN = 330; // +05:30
@@ -82,6 +92,26 @@ export function summarizeSchedule(s: JourneySchedule | null | undefined): string
     return `Runs on ${dateLabel} at ${timeStr}`;
   }
 
+  if (s.type === "relative") {
+    if (!s.relative_entity || !s.relative_field || !s.relative_rule) return "Relative date schedule";
+    const entLabel = s.relative_entity.charAt(0).toUpperCase() + s.relative_entity.slice(1);
+    const fieldLabel = s.relative_field;
+    let core: string;
+    if (s.relative_rule === "on") {
+      core = `On ${entLabel} · ${fieldLabel}`;
+    } else {
+      const n = s.relative_offset ?? 0;
+      const unit = s.relative_unit || "days";
+      const unitLabel = n === 1 ? unit.slice(0, -1) : unit;
+      core = `${n} ${unitLabel} ${s.relative_rule} ${entLabel} · ${fieldLabel}`;
+    }
+    const retrig =
+      s.retrigger_mode === "repeat" ? " · repeat allowed"
+      : s.retrigger_mode === "on_change" ? " · re-fires when field changes"
+      : " · once per record";
+    return `${core} at ${timeStr}${retrig}`;
+  }
+
   switch (s.frequency) {
     case "daily":
       return `Runs daily at ${timeStr}`;
@@ -103,6 +133,7 @@ export function summarizeSchedule(s: JourneySchedule | null | undefined): string
 /** Compute next run as a UTC Date based on IST wall clock. Returns null if invalid. */
 export function computeNextRun(s: JourneySchedule | null | undefined, fromDate: Date = new Date()): Date | null {
   if (!s || !s.execution_time) return null;
+  if (s.type === "relative") return null; // per-record evaluation lives server-side
   const { h, m } = parseHM(s.execution_time);
 
   if (s.type === "one_time") {
