@@ -322,9 +322,105 @@ export function JourneyScheduleDialog({ open, onOpenChange, journeyId, journeyNa
             </div>
           )}
 
+          {type === "relative" && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Base entity</Label>
+                  <Select value={relEntity} onValueChange={(v) => { setRelEntity(v as EntityKey); setRelField(""); }}>
+                    <SelectTrigger><SelectValue placeholder="Select entity" /></SelectTrigger>
+                    <SelectContent>
+                      {ENTITY_LIST.map((e) => (
+                        <SelectItem key={e.key} value={e.key}>{e.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Date field</Label>
+                  <Select value={relField} onValueChange={setRelField} disabled={!relEntity}>
+                    <SelectTrigger><SelectValue placeholder={relEntity ? "Select date field" : "Pick entity first"} /></SelectTrigger>
+                    <SelectContent>
+                      {relEntity && ENTITY_SCHEMAS[relEntity as EntityKey].fields
+                        .filter((f) => f.type === "date")
+                        .map((f) => (
+                          <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <Label>Rule</Label>
+                <div className="mt-1 inline-flex flex-wrap rounded-md border border-input p-1">
+                  {(["before", "on", "after"] as RelativeRule[]).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setRelRule(r)}
+                      className={cn(
+                        "px-3 py-1.5 text-sm rounded-sm transition-colors capitalize",
+                        relRule === r ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+                      )}
+                    >
+                      {r === "on" ? "On exact day" : r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {relRule !== "on" && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Offset</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={relOffset}
+                      onChange={(e) => setRelOffset(Math.max(0, parseInt(e.target.value || "0", 10)))}
+                    />
+                  </div>
+                  <div>
+                    <Label>Unit</Label>
+                    <Select value={relUnit} onValueChange={(v) => setRelUnit(v as RelativeUnit)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="days">Days</SelectItem>
+                        <SelectItem value="weeks">Weeks</SelectItem>
+                        <SelectItem value="months">Months</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <Label>Time (IST)</Label>
+                <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+              </div>
+
+              <div>
+                <Label>Retrigger</Label>
+                <Select value={retrigger} onValueChange={(v) => setRetrigger(v as RetriggerMode)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="once">Only once per record</SelectItem>
+                    <SelectItem value="on_change">Every time the field changes</SelectItem>
+                    <SelectItem value="repeat">Repeat allowed (re-fires each occurrence)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
           <div className="rounded-md border bg-muted/30 p-3 text-sm">
             <p className="font-medium">{summary || "—"}</p>
-            <p className="text-xs text-muted-foreground mt-1">Next run: {formatIst(nextRun)}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {type === "relative"
+                ? "Evaluated continuously — fires per record when the configured offset is reached."
+                : `Next run: ${formatIst(nextRun)}`}
+            </p>
           </div>
         </div>
 
