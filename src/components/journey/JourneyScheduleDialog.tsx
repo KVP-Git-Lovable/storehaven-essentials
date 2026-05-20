@@ -17,11 +17,15 @@ import {
   type JourneySchedule,
   type ScheduleFrequency,
   type ScheduleType,
+  type RelativeRule,
+  type RelativeUnit,
+  type RetriggerMode,
   computeNextRun,
   formatIst,
   summarizeSchedule,
   WEEKDAY_SHORT,
 } from "@/lib/journeySchedule";
+import { ENTITY_LIST, ENTITY_SCHEMAS, type EntityKey } from "@/lib/listViewSchema";
 
 interface Props {
   open: boolean;
@@ -44,6 +48,13 @@ export function JourneyScheduleDialog({ open, onOpenChange, journeyId, journeyNa
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>([]);
   const [dayOfMonth, setDayOfMonth] = useState<number>(1);
   const [monthOfQuarter, setMonthOfQuarter] = useState<number>(1);
+  // Relative
+  const [relEntity, setRelEntity] = useState<EntityKey | "">("");
+  const [relField, setRelField] = useState<string>("");
+  const [relRule, setRelRule] = useState<RelativeRule>("after");
+  const [relOffset, setRelOffset] = useState<number>(0);
+  const [relUnit, setRelUnit] = useState<RelativeUnit>("days");
+  const [retrigger, setRetrigger] = useState<RetriggerMode>("once");
 
   // Hydrate from existing
   useEffect(() => {
@@ -56,6 +67,12 @@ export function JourneyScheduleDialog({ open, onOpenChange, journeyId, journeyNa
       setDaysOfWeek(existing.days_of_week || []);
       setDayOfMonth(existing.day_of_month || 1);
       setMonthOfQuarter(existing.month_of_quarter || 1);
+      setRelEntity(((existing.relative_entity as EntityKey) || "") as EntityKey | "");
+      setRelField(existing.relative_field || "");
+      setRelRule((existing.relative_rule as RelativeRule) || "after");
+      setRelOffset(existing.relative_offset ?? 0);
+      setRelUnit((existing.relative_unit as RelativeUnit) || "days");
+      setRetrigger((existing.retrigger_mode as RetriggerMode) || "once");
     } else {
       setType("one_time");
       setFrequency("daily");
@@ -64,19 +81,31 @@ export function JourneyScheduleDialog({ open, onOpenChange, journeyId, journeyNa
       setDaysOfWeek([]);
       setDayOfMonth(1);
       setMonthOfQuarter(1);
+      setRelEntity("");
+      setRelField("");
+      setRelRule("after");
+      setRelOffset(0);
+      setRelUnit("days");
+      setRetrigger("once");
     }
   }, [open, existing]);
 
   const draft: JourneySchedule = useMemo(() => ({
     journey_id: journeyId,
     type,
-    frequency: type === "one_time" ? null : frequency,
+    frequency: type === "recurring" ? frequency : null,
     execution_date: type === "one_time" && date ? format(date, "yyyy-MM-dd") : null,
     execution_time: time || null,
     days_of_week: type === "recurring" && frequency === "weekly" ? daysOfWeek : null,
     day_of_month: type === "recurring" && (frequency === "monthly" || frequency === "quarterly") ? dayOfMonth : null,
     month_of_quarter: type === "recurring" && frequency === "quarterly" ? monthOfQuarter : null,
-  }), [journeyId, type, frequency, date, time, daysOfWeek, dayOfMonth, monthOfQuarter]);
+    relative_entity: type === "relative" ? (relEntity || null) : null,
+    relative_field: type === "relative" ? (relField || null) : null,
+    relative_rule: type === "relative" ? relRule : null,
+    relative_offset: type === "relative" && relRule !== "on" ? relOffset : null,
+    relative_unit: type === "relative" && relRule !== "on" ? relUnit : null,
+    retrigger_mode: type === "relative" ? retrigger : null,
+  }), [journeyId, type, frequency, date, time, daysOfWeek, dayOfMonth, monthOfQuarter, relEntity, relField, relRule, relOffset, relUnit, retrigger]);
 
   const summary = summarizeSchedule(draft);
   const nextRun = computeNextRun(draft);
@@ -88,6 +117,11 @@ export function JourneyScheduleDialog({ open, onOpenChange, journeyId, journeyNa
     if (type === "recurring" && (frequency === "monthly" || frequency === "quarterly") && (dayOfMonth < 1 || dayOfMonth > 31)) {
       return "Day of month must be between 1 and 31";
     }
+    if (type === "relative") {
+      if (!relEntity) return "Select a base entity";
+      if (!relField) return "Select a date field";
+      if (relRule !== "on" && (relOffset < 0 || !Number.isFinite(relOffset))) return "Offset must be a non-negative number";
+    }
     return null;
   };
 
@@ -98,7 +132,11 @@ export function JourneyScheduleDialog({ open, onOpenChange, journeyId, journeyNa
       const payload = {
         ...draft,
         timezone: "Asia/Kolkata",
-        next_run_at: nextRun ? nextRun.toISOString() : null,
+        // Relative schedules need a non-null next_run_at so the sweep picks them up;
+        // process-journeys re-arms it to now()+1h on every sweep.
+        next_run_at: type === "relative"
+          ? new Date().toISOString()
+          : (nextRun ? nextRun.toISOString() : null),
         created_by: user?.id || null,
       };
       const { error } = await (supabase as any)
