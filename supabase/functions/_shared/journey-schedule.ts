@@ -2,8 +2,11 @@
 // Mirrors src/lib/journeySchedule.ts (computeNextRun) and the audience-resolution
 // logic from supabase/functions/journey-actions/index.ts.
 
-export type ScheduleType = "one_time" | "recurring";
+export type ScheduleType = "one_time" | "recurring" | "relative";
 export type ScheduleFrequency = "daily" | "weekly" | "monthly" | "quarterly";
+export type RelativeRule = "before" | "after" | "on";
+export type RelativeUnit = "days" | "weeks" | "months";
+export type RetriggerMode = "once" | "on_change" | "repeat";
 
 export interface JourneySchedule {
   id?: string;
@@ -17,6 +20,12 @@ export interface JourneySchedule {
   month_of_quarter: number | null;
   timezone?: string;
   next_run_at?: string | null;
+  relative_entity?: string | null;
+  relative_field?: string | null;
+  relative_rule?: RelativeRule | null;
+  relative_offset?: number | null;
+  relative_unit?: RelativeUnit | null;
+  retrigger_mode?: RetriggerMode | null;
 }
 
 const IST_OFFSET_MIN = 330;
@@ -55,6 +64,7 @@ export function computeNextRun(
   fromDate: Date = new Date(),
 ): Date | null {
   if (!s || !s.execution_time) return null;
+  if (s.type === "relative") return null;
   const { h, m } = parseHM(s.execution_time);
 
   if (s.type === "one_time") {
