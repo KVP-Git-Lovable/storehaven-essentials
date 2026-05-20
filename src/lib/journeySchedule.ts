@@ -133,6 +133,7 @@ export function summarizeSchedule(s: JourneySchedule | null | undefined): string
 /** Compute next run as a UTC Date based on IST wall clock. Returns null if invalid. */
 export function computeNextRun(s: JourneySchedule | null | undefined, fromDate: Date = new Date()): Date | null {
   if (!s || !s.execution_time) return null;
+  if (s.type === "relative") return null; // per-record evaluation lives server-side
   const { h, m } = parseHM(s.execution_time);
 
   if (s.type === "one_time") {
