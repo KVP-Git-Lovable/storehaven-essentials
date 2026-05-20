@@ -1,76 +1,101 @@
-# Hierarchical Insert Variable Picker
+# Relative Date Scheduling for Journeys
 
-Refactor the **Insert Variable** control inside the Create/Edit WhatsApp Template modal (`/communication/templates`) into a 3-level drill-down picker. Strictly a UI/UX change — no backend, no Twilio, no schema, no variable-syntax changes.
+Extend the existing Journey Schedule dialog to support a third scheduling mode — **Relative Date** — driven by date/datetime fields on the journey's audience entity. Fixed-date (One-time) and Recurring flows remain untouched.
 
-## Scope
+## UX changes (`src/components/journey/JourneyScheduleDialog.tsx`)
 
-- **File changed:** `src/pages/communication/WhatsAppTemplates.tsx` — replace the existing `DropdownMenu` block that lists `VARIABLE_GROUPS` flat.
-- **File added:** `src/components/communication/InsertVariablePicker.tsx` — the new hierarchical Popover component.
-- **File extended:** `src/lib/whatsappVariables.ts` — add a new `VARIABLE_REGISTRY` constant (Entity → Category → Variables). The existing `VARIABLE_GROUPS`, `ALL_VARIABLES`, `extractFriendlyVariables`, `transformFriendlyToTwilio`, `parseStoredBody`, `validateFriendlyBody`, and marker logic stay untouched so Twilio mapping and send/preview behavior are identical.
-
-## New registry shape (frontend-only)
-
-```ts
-// whatsappVariables.ts (added, existing exports preserved)
-export type VariableEntity = {
-  key: string;         // "customer", "lead", "order", ...
-  label: string;       // "Customer"
-  categories: {
-    key: string;       // "name", "contact", "date", "address", "financial", "order", "custom"
-    label: string;     // "Name Fields"
-    variables: { name: string; label: string }[]; // name is the friendly token used in {{...}}
-  }[];
-};
-export const VARIABLE_REGISTRY: VariableEntity[] = [ /* see below */ ];
-```
-
-Initial entities seeded: **Customer, Lead, Visitor, Order, Order Item, Product, Retailer, Employee, Journey, Journey Event, Store**. Each entity carries the category buckets the user listed (Name / Contact / Date / Address / Financial / Order / Custom). Variable tokens preserve the existing dot-friendly convention already accepted by `extractFriendlyVariables` (regex `[a-zA-Z_][a-zA-Z0-9_]*` — note: current regex does NOT allow dots, so tokens will be of the form `customer_first_name`, `order_last_amount`, etc., matching the existing flat set's style). This keeps the Twilio numeric remap working with zero engine changes.
-
-> The user's example `{{customer.first_name}}` would break the existing regex/marker contract. We will use `{{customer_first_name}}` style to stay compliant with the "do not modify variable syntax/parser" constraint. Will be called out in the closing message.
-
-## Component design — `InsertVariablePicker`
-
-A single `Popover` (replaces the existing `DropdownMenu`) that internally manages a 3-step view via local state `step: "entity" | "category" | "variable"`.
+Top-level "Type" segmented control becomes 3 tabs:
 
 ```text
-+-------------------- Popover (w-72) --------------------+
-| < Back   [crumb: Customer > Date Fields]        [x]   |
-| [ Search... ]                                          |
-| ----------------------------------------------------- |
-| Step 1: list of entities  (Command list, scrollable)  |
-| Step 2: list of categories for chosen entity          |
-| Step 3: list of variables for chosen category         |
-+--------------------------------------------------------+
+[ One-time ]  [ Recurring ]  [ Relative Date ]
 ```
 
-- Built with existing `Popover` + `Command`/`CommandInput`/`CommandList`/`CommandItem` (shadcn) for searchable lists at each level — matches the pattern already used in `HierarchicalCategorySelector`.
-- Search box is scoped to the current step (entity names, category labels, or variable labels/tokens).
-- Breadcrumb shows the trail; clicking a crumb (or the Back chevron) returns to that step.
-- Step 3 `onSelect` calls the existing `insertVariableAtCursor(varName)` (unchanged), then closes the popover.
-- Compact: `w-72`, `max-h-80 overflow-auto`. Works on mobile (popover auto-positions; uses `align="end"`).
-- **Lazy rendering:** only the current step's list is rendered. Variables for a category are only mapped when step 3 is active.
-- **Remember last entity:** persisted in `localStorage` under key `wa.insertVar.lastEntity`. On open, picker starts at step 2 with that entity preselected (Back returns to step 1). Falls back to step 1 if absent.
+- **One-time** — unchanged (Date + Time IST).
+- **Recurring** — unchanged (Frequency / DoW / DoM / MoQ + Time IST).
+- **Relative Date** — new panel:
+  - **Base Entity** (Select) — populated from `ENTITY_SCHEMAS` in `src/lib/listViewSchema.ts`, pre-filled from the journey's `list_view.entity_type` when present.
+  - **Date Field** (Select) — only fields where `type === "date"` for that entity (date/datetime/timestamp). Lazy-loaded from the schema; nothing renders until entity is picked.
+  - **Rule** segmented control: `Before` / `On exact day` / `After`.
+  - **Offset** row (hidden when rule = "On exact day"): number input + unit select (`Days` / `Weeks` / `Months`).
+  - **Time (IST)** picker — same component as other modes.
+  - **Retrigger policy** (radio group):
+    - `Only once per record` (default)
+    - `Every time the field changes`
+    - `Repeat allowed` (re-fires every time the computed date is reached again — e.g. annual recurrence on a birthday field)
+  - **Preview text** block (replaces existing "One-time schedule" summary). Examples:
+    - `15 days after Customer · Last Purchase Date at 9:00 AM IST`
+    - `On Customer · Date of Birth at 9:00 AM IST · repeats yearly`
+    - `3 days before Order · Created Date at 6:00 PM IST · once per record`
+  - Next-run line shows `Evaluated daily — first matches within next 24h: <count>` (optional best-effort read-only count via a lightweight query; see Technical section, can be added in a follow-up if needed).
 
-## WhatsAppTemplates.tsx edit
+All existing dialog plumbing (Cancel / Save / Delete schedule, validation toasts, mutation invalidation) is reused. Save button disabled unless: entity + field + time set; offset ≥ 0; unit chosen when rule ≠ "on exact day".
 
-Replace lines ~727–759 (the `TooltipProvider > Tooltip > DropdownMenu...` block) with:
+## Data model
 
-```tsx
-<InsertVariablePicker onInsert={insertVariableAtCursor} />
-```
+New schedule type `relative` added alongside `one_time` / `recurring`. New nullable columns on `journey_schedules`:
 
-The tooltip explaining auto-mapping moves inside the new component's trigger to preserve the existing hint. Nothing else in the modal, validation, save flow, or preview is touched.
+| Column | Type | Purpose |
+| --- | --- | --- |
+| `relative_entity` | text | e.g. `customers`, `orders` |
+| `relative_field` | text | column name on entity table |
+| `relative_rule` | text | `before` \| `after` \| `on` |
+| `relative_offset` | integer | non-negative, ignored when rule = `on` |
+| `relative_unit` | text | `days` \| `weeks` \| `months` |
+| `retrigger_mode` | text | `once` \| `on_change` \| `repeat` |
 
-## What is NOT changed
+`type` CHECK relaxed to allow `relative`. Validation trigger `validate_journey_schedule()` updated:
+- `relative` requires `relative_entity`, `relative_field`, `relative_rule`, `execution_time`, `retrigger_mode`; requires `relative_offset` + `relative_unit` when rule ≠ `on`.
+- `relative` forbids `execution_date`, `frequency`, `days_of_week`, `day_of_month`, `month_of_quarter`.
 
-- `insertVariableAtCursor` body, textarea ref, `form.body` state.
-- `VARIABLE_GROUPS`, `ALL_VARIABLES`, marker regex, `buildStoredBody`, `parseStoredBody`, `stripMarker`, `validateFriendlyBody`.
-- `whatsapp-send` edge function, Twilio payload, template DB schema, preview rendering, `WhatsAppTemplateDetails`.
-- Show-All/Show-Mine toggle and any other recent template page behavior.
+New table `journey_relative_fires` to support retrigger semantics:
 
-## Acceptance
+| Column | Type |
+| --- | --- |
+| `id` | uuid pk |
+| `journey_id` | uuid fk |
+| `record_id` | text (entity row id) |
+| `last_field_value` | timestamptz |
+| `last_fired_at` | timestamptz |
 
-- Clicking **Insert Variable** opens a small popover showing only entities (or the remembered entity's categories).
-- Each step has its own search and a Back/breadcrumb.
-- Choosing a variable inserts the same `{{token}}` string that the existing flat picker would have inserted for that token, and the Twilio submission still produces identical `{{1}}, {{2}}` output.
-- No edge-function or DB migration required; build passes.
+Unique `(journey_id, record_id)`. RLS: same authenticated read/write pattern as other journey tables.
+
+## Frontend lib (`src/lib/journeySchedule.ts`)
+
+- Extend `ScheduleType = "one_time" | "recurring" | "relative"`.
+- Extend `JourneySchedule` interface with the new optional fields above.
+- `summarizeSchedule` — new branch produces the human preview strings shown in the dialog.
+- `computeNextRun` — for `relative`, return `null` (per-record evaluation lives server-side); summary takes precedence in the UI's "Next run" line.
+
+## Backend (`supabase/functions/process-journeys/index.ts` + `_shared/journey-schedule.ts`)
+
+- Shared `JourneySchedule` interface mirrors the new fields.
+- `runScheduleSweep` gains a new branch when `sched.type === "relative"`:
+  1. Resolve the journey's audience entity rows via the existing list-view filter pipeline (reuses `fetchAllRows`).
+  2. For each row, compute `target = row[relative_field] ± offset/unit @ execution_time IST`.
+  3. Look up `journey_relative_fires` for `(journey_id, row.id)`.
+  4. Decide whether to fire:
+     - `once`: fire only if no prior fire row.
+     - `on_change`: fire if no prior row OR `last_field_value` differs from current field value.
+     - `repeat`: fire if `target` is in the past relative to last fire (or no prior fire) and within the sweep window.
+  5. Window check: `target <= now` AND (`target > last_fired_at` OR `last_fired_at IS NULL`) AND `target >= now - 24h` (guards against backfilling years of history).
+  6. On fire: enroll the resolved contact (re-using `upsertContactsFromCustomers` / contactKey logic) and upsert into `journey_relative_fires` with new `last_field_value` and `last_fired_at`.
+- For `relative` schedules `next_run_at` is set to `now() + 1 hour` (sweep cadence) on every sweep so the row stays eligible for re-evaluation. No "fire once and stop" semantics like `one_time`.
+- Cron cadence (existing pg_cron job invoking `process-journeys`) is unchanged; it already runs frequently enough to catch the 24h window.
+
+## Field discovery
+
+Schema-driven. The dialog reads `ENTITY_SCHEMAS` and filters `fields` where `type === "date"`. No DB introspection — keeps it deterministic and matches what the List View builder already exposes. Future entity additions automatically appear.
+
+## Out of scope
+
+- No changes to fixed One-time or Recurring scheduling logic.
+- No changes to JourneyBuilder canvas, AudienceBuilder, message rendering, or List View builder.
+- No DB introspection / dynamic schema crawl — relies on existing `listViewSchema.ts` registry.
+
+## File touch-list
+
+- `src/components/journey/JourneyScheduleDialog.tsx` — new tab + Relative panel + preview.
+- `src/lib/journeySchedule.ts` — type extensions, summary branch.
+- `supabase/functions/_shared/journey-schedule.ts` — shared type extension + relative resolver helper.
+- `supabase/functions/process-journeys/index.ts` — sweep branch for relative.
+- New migration: extend `journey_schedules`, update validator, create `journey_relative_fires` with RLS.
