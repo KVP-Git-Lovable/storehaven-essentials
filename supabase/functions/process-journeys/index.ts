@@ -171,6 +171,304 @@ async function runScheduleSweep(supabase: any): Promise<{ triggered: number; err
   return { triggered, errors };
 }
 
+// ============= Relative date scheduling =============
+
+const IST_OFFSET_MIN = 330;
+
+function istWallclockToUtc(year: number, month0: number, day: number, h: number, m: number): Date {
+  return new Date(Date.UTC(year, month0, day, h, m) - IST_OFFSET_MIN * 60_000);
+}
+
+/**
+ * Shift a base date (interpreted as a calendar date) by the configured offset,
+ * then anchor it at the IST execution time.
+ */
+function computeRelativeTarget(
+  baseRaw: string,
+  rule: "before" | "after" | "on",
+  offset: number,
+  unit: "days" | "weeks" | "months",
+  hour: number,
+  minute: number,
+): Date | null {
+  const base = new Date(baseRaw);
+  if (isNaN(base.getTime())) return null;
+  // Work in UTC components — we only care about the calendar date.
+  let y = base.getUTCFullYear();
+  let m0 = base.getUTCMonth();
+  let d = base.getUTCDate();
+
+  const sign = rule === "before" ? -1 : rule === "after" ? 1 : 0;
+  if (sign !== 0) {
+    if (unit === "days") d += sign * offset;
+    else if (unit === "weeks") d += sign * offset * 7;
+    else if (unit === "months") m0 += sign * offset;
+  }
+  // Normalize via UTC date constructor.
+  const norm = new Date(Date.UTC(y, m0, d));
+  return istWallclockToUtc(
+    norm.getUTCFullYear(),
+    norm.getUTCMonth(),
+    norm.getUTCDate(),
+    hour,
+    minute,
+  );
+}
+
+/**
+ * For "repeat" retrigger mode: if the original target is far in the past,
+ * advance the year so the schedule fires annually (birthdays/anniversaries).
+ */
+function advanceAnnually(target: Date, now: Date): Date {
+  let t = target;
+  // Catch-up window: if more than 30 days in the past, advance years
+  // until we're within [now-30d, now+~365d].
+  const lower = now.getTime() - 30 * 86400_000;
+  let guard = 0;
+  while (t.getTime() < lower && guard < 200) {
+    t = new Date(Date.UTC(
+      t.getUTCFullYear() + 1,
+      t.getUTCMonth(),
+      t.getUTCDate(),
+      t.getUTCHours(),
+      t.getUTCMinutes(),
+    ));
+    guard++;
+  }
+  return t;
+}
+
+async function fetchAllRowsWithFilters(supabase: any, table: string, filters: any[]): Promise<any[]> {
+  const PAGE = 1000;
+  const all: any[] = [];
+  let from = 0;
+  while (true) {
+    let q = supabase.from(table).select("*").range(from, from + PAGE - 1);
+    for (const cond of filters || []) {
+      const { field, operator, value } = cond;
+      switch (operator) {
+        case "eq": q = q.eq(field, value); break;
+        case "neq": q = q.neq(field, value); break;
+        case "gt": q = q.gt(field, value); break;
+        case "gte": q = q.gte(field, value); break;
+        case "lt": q = q.lt(field, value); break;
+        case "lte": q = q.lte(field, value); break;
+        case "ilike": q = q.ilike(field, `%${value}%`); break;
+        case "starts_with": q = q.ilike(field, `${value}%`); break;
+        case "is_null": q = q.is(field, null); break;
+        case "is_not_null": q = q.not(field, "is", null); break;
+        case "is_true": q = q.eq(field, true); break;
+        case "is_false": q = q.eq(field, false); break;
+      }
+    }
+    const { data, error } = await q;
+    if (error) throw error;
+    const batch = data || [];
+    all.push(...batch);
+    if (batch.length < PAGE) break;
+    from += PAGE;
+    if (from > 100000) break;
+  }
+  return all;
+}
+
+function getInitialJourneyNodeId(canvas: any): string | null {
+  if (!canvas) return null;
+  const nodes = canvas.nodes || [];
+  const edges = canvas.edges || [];
+  const entry = nodes.find((n: any) => n.type === "entry");
+  if (!entry) return nodes[0]?.id || null;
+  const out = edges.find((e: any) => e.source === entry.id);
+  return out?.target || null;
+}
+
+async function runRelativeBranch(
+  supabase: any,
+  sched: JourneySchedule,
+  journey: any,
+): Promise<{ evaluated: number; enrolled: number; firstError?: string }> {
+  if (!sched.relative_entity || !sched.relative_field || !sched.relative_rule || !sched.execution_time) {
+    return { evaluated: 0, enrolled: 0, firstError: "Incomplete relative schedule config" };
+  }
+  const cfg = ALLOWED_ENTITIES[sched.relative_entity];
+  if (!cfg) return { evaluated: 0, enrolled: 0, firstError: `Unknown entity ${sched.relative_entity}` };
+
+  // Use the journey's list view filters when entities align; otherwise no filters.
+  let filters: any[] = [];
+  if (journey.list_view_id) {
+    const { data: lv } = await supabase
+      .from("list_views")
+      .select("entity_type, filters")
+      .eq("id", journey.list_view_id)
+      .maybeSingle();
+    if (lv && lv.entity_type === sched.relative_entity) filters = lv.filters || [];
+  }
+
+  const rows = await fetchAllRowsWithFilters(supabase, cfg.table, filters);
+  const [eh, em] = (sched.execution_time || "09:00").split(":").map((v) => parseInt(v, 10));
+  const now = new Date();
+  const horizonPast = now.getTime() - 24 * 3600_000;
+
+  // Pre-fetch fire history for this journey.
+  const recordIds = rows.map((r: any) => String(r.id)).filter(Boolean);
+  const firesByRecord = new Map<string, any>();
+  for (let i = 0; i < recordIds.length; i += 500) {
+    const chunk = recordIds.slice(i, i + 500);
+    const { data: existing } = await supabase
+      .from("journey_relative_fires")
+      .select("record_id, last_field_value, last_fired_at")
+      .eq("journey_id", journey.id)
+      .in("record_id", chunk);
+    for (const e of existing || []) firesByRecord.set(e.record_id, e);
+  }
+
+  const canvas = journey.canvas_data as any;
+  const firstNodeId = getInitialJourneyNodeId(canvas);
+  if (!firstNodeId) return { evaluated: rows.length, enrolled: 0, firstError: "Journey has no entry node" };
+
+  let evaluated = 0;
+  let enrolled = 0;
+  let firstError: string | undefined;
+
+  // Collect rows that should fire (so we can do contact upsert in batch for customers/leads).
+  const fires: Array<{ row: any; target: Date }> = [];
+
+  for (const row of rows) {
+    evaluated++;
+    const raw = row[sched.relative_field];
+    if (!raw) continue;
+
+    let target = computeRelativeTarget(
+      String(raw),
+      sched.relative_rule,
+      sched.relative_offset ?? 0,
+      (sched.relative_unit as any) || "days",
+      eh || 0,
+      em || 0,
+    );
+    if (!target) continue;
+
+    if (sched.retrigger_mode === "repeat") {
+      target = advanceAnnually(target, now);
+    }
+
+    // Must be within the firing window: target reached, not too old to backfill.
+    if (target.getTime() > now.getTime()) continue;
+    if (target.getTime() < horizonPast) continue;
+
+    const rid = String(row.id);
+    const prev = firesByRecord.get(rid);
+
+    let shouldFire = false;
+    if (sched.retrigger_mode === "once") {
+      shouldFire = !prev;
+    } else if (sched.retrigger_mode === "on_change") {
+      const rawIso = new Date(raw).toISOString();
+      shouldFire = !prev || (prev.last_field_value !== rawIso);
+    } else if (sched.retrigger_mode === "repeat") {
+      // Fire if no prior fire, or last fire is older than this target occurrence.
+      shouldFire = !prev || (new Date(prev.last_fired_at).getTime() < target.getTime() - 60_000);
+    }
+    if (!shouldFire) continue;
+
+    fires.push({ row, target });
+  }
+
+  if (fires.length === 0) return { evaluated, enrolled: 0 };
+
+  // Resolve to journey_contacts. Reuse upsertContactsFromCustomers for customers/leads
+  // and the customer-from-order path for orders.
+  let customers: any[] = [];
+  let customerByRowId = new Map<string, any>();
+
+  if (sched.relative_entity === "customers" || sched.relative_entity === "leads") {
+    for (const f of fires) {
+      customers.push(f.row);
+      customerByRowId.set(String(f.row.id), f.row);
+    }
+  } else if (sched.relative_entity === "orders") {
+    const cIds = Array.from(new Set(fires.map((f) => f.row.customer_id).filter(Boolean)));
+    for (let i = 0; i < cIds.length; i += 200) {
+      const chunk = cIds.slice(i, i + 200);
+      const { data } = await supabase.from("customers").select("*").in("id", chunk);
+      for (const c of data || []) {
+        customers.push(c);
+        // Map each order row to its customer
+        for (const f of fires) {
+          if (f.row.customer_id === c.id) customerByRowId.set(String(f.row.id), c);
+        }
+      }
+    }
+  } else {
+    return { evaluated, enrolled: 0, firstError: `Entity ${sched.relative_entity} is not an audience source` };
+  }
+
+  const upsertRes = await upsertContactsFromCustomers(supabase, customers);
+  if (upsertRes.firstError) firstError = upsertRes.firstError;
+
+  // Build phone → contact_id map
+  const { data: contactRows } = await supabase
+    .from("journey_contacts")
+    .select("id, phone, opted_out")
+    .in("id", upsertRes.contactIds);
+  const contactByPhone = new Map<string, string>();
+  for (const c of contactRows || []) {
+    if (c.opted_out) continue;
+    contactByPhone.set(String(c.phone), c.id);
+  }
+
+  function normalize(raw: any): string | null {
+    if (!raw) return null;
+    const s = String(raw).trim();
+    const digits = s.startsWith("+") ? s.slice(1).replace(/\D/g, "") : s.replace(/\D/g, "");
+    if (!digits) return null;
+    if (s.startsWith("+") || digits.length > 10) return `+${digits}`;
+    return `+91${digits}`;
+  }
+
+  const nowIso = new Date().toISOString();
+  const enrollmentRows: any[] = [];
+  const fireRows: any[] = [];
+
+  for (const f of fires) {
+    const cust = customerByRowId.get(String(f.row.id));
+    if (!cust) continue;
+    const phone = normalize(cust.phone);
+    if (!phone) continue;
+    const cid = contactByPhone.get(phone);
+    if (!cid) continue;
+
+    enrollmentRows.push({
+      journey_id: journey.id,
+      contact_id: cid,
+      current_node_id: firstNodeId,
+      status: "active",
+      next_action_at: nowIso,
+    });
+    fireRows.push({
+      journey_id: journey.id,
+      record_id: String(f.row.id),
+      last_field_value: new Date(f.row[sched.relative_field!]).toISOString(),
+      last_fired_at: nowIso,
+    });
+  }
+
+  if (enrollmentRows.length > 0) {
+    const { error: enrErr } = await supabase.from("journey_enrollments").insert(enrollmentRows);
+    if (enrErr && !firstError) firstError = `enroll: ${enrErr.message}`;
+    else enrolled = enrollmentRows.length;
+  }
+
+  if (fireRows.length > 0) {
+    const { error: upErr } = await supabase
+      .from("journey_relative_fires")
+      .upsert(fireRows, { onConflict: "journey_id,record_id" });
+    if (upErr && !firstError) firstError = `fire-log: ${upErr.message}`;
+  }
+
+  return { evaluated, enrolled, firstError };
+}
+
 function getNested(obj: any, path: string): any {
   if (!obj || !path) return undefined;
   const parts = path.split(".");
