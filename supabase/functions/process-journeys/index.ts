@@ -272,16 +272,6 @@ async function fetchAllRowsWithFilters(supabase: any, table: string, filters: an
   return all;
 }
 
-function getInitialJourneyNodeId(canvas: any): string | null {
-  if (!canvas) return null;
-  const nodes = canvas.nodes || [];
-  const edges = canvas.edges || [];
-  const entry = nodes.find((n: any) => n.type === "entry");
-  if (!entry) return nodes[0]?.id || null;
-  const out = edges.find((e: any) => e.source === entry.id);
-  return out?.target || null;
-}
-
 async function runRelativeBranch(
   supabase: any,
   sched: JourneySchedule,
