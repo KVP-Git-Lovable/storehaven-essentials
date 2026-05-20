@@ -1,5 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { computeNextRun, resolveAudience, type JourneySchedule } from "../_shared/journey-schedule.ts";
+import {
+  computeNextRun,
+  resolveAudience,
+  upsertContactsFromCustomers,
+  ALLOWED_ENTITIES,
+  type JourneySchedule,
+} from "../_shared/journey-schedule.ts";
 import {
   renderFreeformBody,
   sendWhatsAppFreeform,
@@ -47,15 +53,27 @@ async function runScheduleSweep(supabase: any): Promise<{ triggered: number; err
       days_of_week: sched.days_of_week,
       day_of_month: sched.day_of_month,
       month_of_quarter: sched.month_of_quarter,
+      relative_entity: sched.relative_entity,
+      relative_field: sched.relative_field,
+      relative_rule: sched.relative_rule,
+      relative_offset: sched.relative_offset,
+      relative_unit: sched.relative_unit,
+      retrigger_mode: sched.retrigger_mode,
     };
 
     // Compute next run BEFORE doing work, then claim atomically by updating
     // next_run_at to that future value. If the update affects 0 rows another
     // worker already claimed it.
-    const next = computeNextRun(scheduleRow, new Date());
-    const nextIso = sched.type === "one_time"
-      ? null // one-time schedules don't refire
-      : (next ? next.toISOString() : null);
+    let nextIso: string | null;
+    if (sched.type === "one_time") {
+      nextIso = null;
+    } else if (sched.type === "relative") {
+      // Re-arm every hour so the sweep keeps re-evaluating per-record targets.
+      nextIso = new Date(Date.now() + 60 * 60_000).toISOString();
+    } else {
+      const next = computeNextRun(scheduleRow, new Date());
+      nextIso = next ? next.toISOString() : null;
+    }
 
     const { data: claimed, error: claimErr } = await supabase
       .from("journey_schedules")
@@ -70,6 +88,28 @@ async function runScheduleSweep(supabase: any): Promise<{ triggered: number; err
     if (!claimed || claimed.length === 0) continue; // someone else got it
 
     try {
+      if (sched.type === "relative") {
+        const result = await runRelativeBranch(supabase, scheduleRow, journey);
+        await supabase.from("journey_message_log").insert({
+          journey_id: journey.id,
+          enrollment_id: null,
+          node_id: null,
+          contact_id: null,
+          channel: "system",
+          status: result.enrolled > 0 ? "scheduled_enrolled" : "scheduled_no_audience",
+          template_body: JSON.stringify({
+            schedule_id: sched.id,
+            mode: "relative",
+            evaluated: result.evaluated,
+            enrolled: result.enrolled,
+            reason: result.firstError || null,
+          }),
+        });
+        triggered++;
+        console.log(`[schedule-sweep] relative journey=${journey.id} evaluated=${result.evaluated} enrolled=${result.enrolled}`);
+        continue;
+      }
+
       // Refresh enrollments so dynamic audiences re-evaluate
       await supabase
         .from("journey_enrollments")
