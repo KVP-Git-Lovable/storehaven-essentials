@@ -3186,6 +3186,44 @@ export type Database = {
           },
         ]
       }
+      journey_relative_fires: {
+        Row: {
+          created_at: string
+          id: string
+          journey_id: string
+          last_field_value: string | null
+          last_fired_at: string
+          record_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          journey_id: string
+          last_field_value?: string | null
+          last_fired_at?: string
+          record_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          journey_id?: string
+          last_field_value?: string | null
+          last_fired_at?: string
+          record_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journey_relative_fires_journey_id_fkey"
+            columns: ["journey_id"]
+            isOneToOne: false
+            referencedRelation: "journeys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       journey_schedules: {
         Row: {
           created_at: string
@@ -3199,6 +3237,12 @@ export type Database = {
           journey_id: string
           month_of_quarter: number | null
           next_run_at: string | null
+          relative_entity: string | null
+          relative_field: string | null
+          relative_offset: number | null
+          relative_rule: string | null
+          relative_unit: string | null
+          retrigger_mode: string | null
           timezone: string
           type: string
           updated_at: string
@@ -3215,6 +3259,12 @@ export type Database = {
           journey_id: string
           month_of_quarter?: number | null
           next_run_at?: string | null
+          relative_entity?: string | null
+          relative_field?: string | null
+          relative_offset?: number | null
+          relative_rule?: string | null
+          relative_unit?: string | null
+          retrigger_mode?: string | null
           timezone?: string
           type: string
           updated_at?: string
@@ -3231,6 +3281,12 @@ export type Database = {
           journey_id?: string
           month_of_quarter?: number | null
           next_run_at?: string | null
+          relative_entity?: string | null
+          relative_field?: string | null
+          relative_offset?: number | null
+          relative_rule?: string | null
+          relative_unit?: string | null
+          retrigger_mode?: string | null
           timezone?: string
           type?: string
           updated_at?: string
