@@ -68,8 +68,8 @@ async function runScheduleSweep(supabase: any): Promise<{ triggered: number; err
     if (sched.type === "one_time") {
       nextIso = null;
     } else if (sched.type === "relative") {
-      // Re-arm every hour so the sweep keeps re-evaluating per-record targets.
-      nextIso = new Date(Date.now() + 60 * 60_000).toISOString();
+      // Re-arm every minute so short-offset relative targets are not skipped between sweeps.
+      nextIso = new Date(Date.now() + 60_000).toISOString();
     } else {
       const next = computeNextRun(scheduleRow, new Date());
       nextIso = next ? next.toISOString() : null;
@@ -351,7 +351,9 @@ async function runRelativeBranch(
 
     let shouldFire = false;
     if (sched.retrigger_mode === "once") {
-      shouldFire = !prev;
+      // Once per record for the current target occurrence. If the schedule is edited
+      // from an earlier target to a later one, allow the new occurrence to fire.
+      shouldFire = !prev || (new Date(prev.last_fired_at).getTime() < target.getTime() - 60_000);
     } else if (sched.retrigger_mode === "on_change") {
       const rawIso = new Date(raw).toISOString();
       shouldFire = !prev || (prev.last_field_value !== rawIso);
