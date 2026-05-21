@@ -351,7 +351,9 @@ async function runRelativeBranch(
 
     let shouldFire = false;
     if (sched.retrigger_mode === "once") {
-      shouldFire = !prev;
+      // Once per record for the current target occurrence. If the schedule is edited
+      // from an earlier target to a later one, allow the new occurrence to fire.
+      shouldFire = !prev || (new Date(prev.last_fired_at).getTime() < target.getTime() - 60_000);
     } else if (sched.retrigger_mode === "on_change") {
       const rawIso = new Date(raw).toISOString();
       shouldFire = !prev || (prev.last_field_value !== rawIso);
