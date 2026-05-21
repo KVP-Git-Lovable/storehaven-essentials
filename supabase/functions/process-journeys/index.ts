@@ -25,11 +25,15 @@ const corsHeaders = {
 async function runScheduleSweep(supabase: any): Promise<{ triggered: number; errors: string[] }> {
   const errors: string[] = [];
   let triggered = 0;
-  const nowIso = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const staleRelativeAfter = now.getTime() + 2 * 60_000;
 
-  const { data: dueSchedules, error: schedErr } = await supabase
+  const scheduleSelect = "*, journeys!inner(id, status, approval_status, list_view_id, segment_type, filters, canvas_data)";
+
+  const { data: timedSchedules, error: schedErr } = await supabase
     .from("journey_schedules")
-    .select("*, journeys!inner(id, status, approval_status, list_view_id, segment_type, filters, canvas_data)")
+    .select(scheduleSelect)
     .lte("next_run_at", nowIso)
     .not("next_run_at", "is", null)
     .eq("journeys.status", "active")
@@ -39,7 +43,22 @@ async function runScheduleSweep(supabase: any): Promise<{ triggered: number; err
     console.error("[schedule-sweep] failed to fetch due schedules:", schedErr);
     return { triggered: 0, errors: [schedErr.message] };
   }
-  if (!dueSchedules || dueSchedules.length === 0) return { triggered: 0, errors: [] };
+  const { data: relativeSchedules, error: relSchedErr } = await supabase
+    .from("journey_schedules")
+    .select(scheduleSelect)
+    .eq("type", "relative")
+    .eq("journeys.status", "active")
+    .eq("journeys.approval_status", "approved");
+
+  if (relSchedErr) {
+    console.error("[schedule-sweep] failed to fetch relative schedules:", relSchedErr);
+    return { triggered: 0, errors: [relSchedErr.message] };
+  }
+
+  const dueSchedules = Array.from(
+    new Map([...(timedSchedules || []), ...(relativeSchedules || [])].map((s: any) => [s.id, s])).values(),
+  );
+  if (dueSchedules.length === 0) return { triggered: 0, errors: [] };
 
   for (const sched of dueSchedules) {
     const journey = sched.journeys;
@@ -68,19 +87,29 @@ async function runScheduleSweep(supabase: any): Promise<{ triggered: number; err
     if (sched.type === "one_time") {
       nextIso = null;
     } else if (sched.type === "relative") {
-      // Re-arm every minute so short-offset relative targets are not skipped between sweeps.
-      nextIso = new Date(Date.now() + 60_000).toISOString();
+      const currentNext = sched.next_run_at ? new Date(sched.next_run_at).getTime() : 0;
+      const recentlyClaimed = currentNext > now.getTime() && currentNext <= staleRelativeAfter;
+      if (recentlyClaimed) continue;
+      // Re-arm just long enough to prevent duplicate overlapping cron claims.
+      // The next minute's cron will be due, while stale future values from older deployments are corrected.
+      nextIso = new Date(Date.now() + 30_000).toISOString();
     } else {
       const next = computeNextRun(scheduleRow, new Date());
       nextIso = next ? next.toISOString() : null;
     }
 
-    const { data: claimed, error: claimErr } = await supabase
+    let claimQuery = supabase
       .from("journey_schedules")
       .update({ next_run_at: nextIso })
       .eq("id", sched.id)
-      .lte("next_run_at", nowIso)
       .select("id");
+    if (sched.type === "relative") {
+      if (sched.next_run_at) claimQuery = claimQuery.eq("next_run_at", sched.next_run_at);
+      else claimQuery = claimQuery.is("next_run_at", null);
+    } else {
+      claimQuery = claimQuery.lte("next_run_at", nowIso);
+    }
+    const { data: claimed, error: claimErr } = await claimQuery;
     if (claimErr) {
       errors.push(`claim ${sched.id}: ${claimErr.message}`);
       continue;
