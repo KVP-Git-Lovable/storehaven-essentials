@@ -68,8 +68,8 @@ async function runScheduleSweep(supabase: any): Promise<{ triggered: number; err
     if (sched.type === "one_time") {
       nextIso = null;
     } else if (sched.type === "relative") {
-      // Re-arm every hour so the sweep keeps re-evaluating per-record targets.
-      nextIso = new Date(Date.now() + 60 * 60_000).toISOString();
+      // Re-arm every minute so short-offset relative targets are not skipped between sweeps.
+      nextIso = new Date(Date.now() + 60_000).toISOString();
     } else {
       const next = computeNextRun(scheduleRow, new Date());
       nextIso = next ? next.toISOString() : null;
