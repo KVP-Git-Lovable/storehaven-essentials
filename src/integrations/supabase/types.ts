@@ -2186,6 +2186,39 @@ export type Database = {
         }
         Relationships: []
       }
+      fx_rates: {
+        Row: {
+          created_at: string
+          fetched_at: string
+          from_currency: string
+          id: string
+          is_active: boolean
+          rate: number
+          source: string
+          to_currency: string
+        }
+        Insert: {
+          created_at?: string
+          fetched_at?: string
+          from_currency?: string
+          id?: string
+          is_active?: boolean
+          rate: number
+          source?: string
+          to_currency?: string
+        }
+        Update: {
+          created_at?: string
+          fetched_at?: string
+          from_currency?: string
+          id?: string
+          is_active?: boolean
+          rate?: number
+          source?: string
+          to_currency?: string
+        }
+        Relationships: []
+      }
       gift_card_transactions: {
         Row: {
           amount: number
@@ -3051,6 +3084,38 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      journey_cost_settings: {
+        Row: {
+          created_at: string
+          entry_point_type: string
+          estimated_in_window_pct: number
+          journey_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          entry_point_type?: string
+          estimated_in_window_pct?: number
+          journey_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          entry_point_type?: string
+          estimated_in_window_pct?: number
+          journey_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journey_cost_settings_journey_id_fkey"
+            columns: ["journey_id"]
+            isOneToOne: true
+            referencedRelation: "journeys"
             referencedColumns: ["id"]
           },
         ]
@@ -11032,6 +11097,48 @@ export type Database = {
           },
         ]
       }
+      whatsapp_pricing_config: {
+        Row: {
+          category: string
+          created_at: string
+          effective_from: string
+          id: string
+          is_active: boolean
+          meta_fee_usd: number
+          notes: string | null
+          region: string
+          service_window: string
+          twilio_fee_usd: number
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          effective_from?: string
+          id?: string
+          is_active?: boolean
+          meta_fee_usd?: number
+          notes?: string | null
+          region?: string
+          service_window?: string
+          twilio_fee_usd?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          effective_from?: string
+          id?: string
+          is_active?: boolean
+          meta_fee_usd?: number
+          notes?: string | null
+          region?: string
+          service_window?: string
+          twilio_fee_usd?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       whatsapp_requests: {
         Row: {
           city: string | null
@@ -11190,6 +11297,10 @@ export type Database = {
         }[]
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_in_service_window: {
+        Args: { _at: string; _phone: string }
+        Returns: boolean
+      }
       is_subordinate: {
         Args: { _manager_id: string; _user_id: string }
         Returns: boolean
