@@ -1,101 +1,89 @@
-# Relative Date Scheduling for Journeys
 
-Extend the existing Journey Schedule dialog to support a third scheduling mode — **Relative Date** — driven by date/datetime fields on the journey's audience entity. Fixed-date (One-time) and Recurring flows remain untouched.
+## Journey Cost Analytics — Additive enhancement
 
-## UX changes (`src/components/journey/JourneyScheduleDialog.tsx`)
+Adds a new "Journey Cost Analytics" section to `/communication/journeys/:id/analytics`. No changes to scheduling, sending, Twilio, templates, wallet, or existing analytics.
 
-Top-level "Type" segmented control becomes 3 tabs:
+### 1. Pricing & FX configuration (DB)
 
-```text
-[ One-time ]  [ Recurring ]  [ Relative Date ]
-```
+New tables (admin-editable, future-ready):
 
-- **One-time** — unchanged (Date + Time IST).
-- **Recurring** — unchanged (Frequency / DoW / DoM / MoQ + Time IST).
-- **Relative Date** — new panel:
-  - **Base Entity** (Select) — populated from `ENTITY_SCHEMAS` in `src/lib/listViewSchema.ts`, pre-filled from the journey's `list_view.entity_type` when present.
-  - **Date Field** (Select) — only fields where `type === "date"` for that entity (date/datetime/timestamp). Lazy-loaded from the schema; nothing renders until entity is picked.
-  - **Rule** segmented control: `Before` / `On exact day` / `After`.
-  - **Offset** row (hidden when rule = "On exact day"): number input + unit select (`Days` / `Weeks` / `Months`).
-  - **Time (IST)** picker — same component as other modes.
-  - **Retrigger policy** (radio group):
-    - `Only once per record` (default)
-    - `Every time the field changes`
-    - `Repeat allowed` (re-fires every time the computed date is reached again — e.g. annual recurrence on a birthday field)
-  - **Preview text** block (replaces existing "One-time schedule" summary). Examples:
-    - `15 days after Customer · Last Purchase Date at 9:00 AM IST`
-    - `On Customer · Date of Birth at 9:00 AM IST · repeats yearly`
-    - `3 days before Order · Created Date at 6:00 PM IST · once per record`
-  - Next-run line shows `Evaluated daily — first matches within next 24h: <count>` (optional best-effort read-only count via a lightweight query; see Technical section, can be added in a follow-up if needed).
+- `whatsapp_pricing_config`
+  - `id`, `region` (default `IN`), `currency` (default `INR`)
+  - `category` enum: `MARKETING | UTILITY | AUTHENTICATION | FAILED_FEE`
+  - `service_window` enum: `inside | outside | n_a`
+  - `meta_fee_usd numeric`, `twilio_fee_usd numeric`, `total_usd numeric` (generated)
+  - `effective_from timestamptz`, `is_active boolean`
+  - Seeded with the defaults from the spec (Marketing 0.0094+0.005, Utility/Auth inside 0+0.005, outside 0.0034+0.005, Failed 0.001).
 
-All existing dialog plumbing (Cancel / Save / Delete schedule, validation toasts, mutation invalidation) is reused. Save button disabled unless: entity + field + time set; offset ≥ 0; unit chosen when rule ≠ "on exact day".
+- `fx_rates`
+  - `id`, `from_currency` (`USD`), `to_currency` (`INR`)
+  - `rate numeric`, `source text` (`manual | rbi | api`), `fetched_at`
+  - Seeded with `95` fallback. A small edge function `fx-refresh` (new, isolated) optionally refreshes daily from a public FX API; falls back to last stored value, then to 95.
 
-## Data model
+- `journey_cost_settings` (per-journey overrides, optional)
+  - `journey_id`, `estimated_in_window_pct int default 0` (admin assumption for projected utility/auth in-window split)
+  - `entry_point_type text default 'normal'` (`normal | click_to_whatsapp | customer_initiated`) — stored for future use, not yet wired into pricing.
 
-New schedule type `relative` added alongside `one_time` / `recurring`. New nullable columns on `journey_schedules`:
+RLS: authenticated read; admin write.
 
-| Column | Type | Purpose |
-| --- | --- | --- |
-| `relative_entity` | text | e.g. `customers`, `orders` |
-| `relative_field` | text | column name on entity table |
-| `relative_rule` | text | `before` \| `after` \| `on` |
-| `relative_offset` | integer | non-negative, ignored when rule = `on` |
-| `relative_unit` | text | `days` \| `weeks` \| `months` |
-| `retrigger_mode` | text | `once` \| `on_change` \| `repeat` |
+### 2. Service window detection (read-only, no send-path changes)
 
-`type` CHECK relaxed to allow `relative`. Validation trigger `validate_journey_schedule()` updated:
-- `relative` requires `relative_entity`, `relative_field`, `relative_rule`, `execution_time`, `retrigger_mode`; requires `relative_offset` + `relative_unit` when rule ≠ `on`.
-- `relative` forbids `execution_date`, `frequency`, `days_of_week`, `day_of_month`, `month_of_quarter`.
+Add a SQL function `public.is_in_service_window(_contact_id uuid, _at timestamptz)`:
+- Returns true if there is an inbound WhatsApp message from that contact in `whatsapp_inbound_messages` (or equivalent existing inbound table — verified at implementation) within 24h before `_at`.
+- Used only by analytics queries; never invoked by the sender.
 
-New table `journey_relative_fires` to support retrigger semantics:
+If no inbound-messages table exists, fall back to: any `journey_message_log` row where `provider_metadata->>'direction' = 'inbound'`. Decision finalized while reading code, not in this plan.
 
-| Column | Type |
-| --- | --- |
-| `id` | uuid pk |
-| `journey_id` | uuid fk |
-| `record_id` | text (entity row id) |
-| `last_field_value` | timestamptz |
-| `last_fired_at` | timestamptz |
+### 3. Cost computation (client-side, lazy)
 
-Unique `(journey_id, record_id)`. RLS: same authenticated read/write pattern as other journey tables.
+A new hook `useJourneyCostAnalytics(journeyId)`:
+- Loads pricing config + active FX rate (TanStack Query, `staleTime: 1h`).
+- Loads enrollments, message log (already fetched on the page — reused via shared query keys), template categories, and per-message service-window flag (single RPC).
+- Computes:
+  - **Projected**: per node — recipients × category rate. Utility/Auth split by `estimated_in_window_pct`. Marketing always at outside rate.
+  - **Actual**: per delivered message → category × in/outside. Failed → failed fee. Undelivered → 0.
+- Returns totals, per-category, per-step, and time-series buckets (day/week/month) for recurring journeys.
 
-## Frontend lib (`src/lib/journeySchedule.ts`)
+All formatting via existing `en-IN` locale conventions; show INR primary, USD secondary.
 
-- Extend `ScheduleType = "one_time" | "recurring" | "relative"`.
-- Extend `JourneySchedule` interface with the new optional fields above.
-- `summarizeSchedule` — new branch produces the human preview strings shown in the dialog.
-- `computeNextRun` — for `relative`, return `null` (per-record evaluation lives server-side); summary takes precedence in the UI's "Next run" line.
+### 4. UI — `JourneyCostAnalytics.tsx`
 
-## Backend (`supabase/functions/process-journeys/index.ts` + `_shared/journey-schedule.ts`)
+New component rendered inside `src/pages/communication/JourneyAnalytics.tsx`, lazy-loaded via `React.lazy` with a `Suspense` skeleton so the existing page renders immediately.
 
-- Shared `JourneySchedule` interface mirrors the new fields.
-- `runScheduleSweep` gains a new branch when `sched.type === "relative"`:
-  1. Resolve the journey's audience entity rows via the existing list-view filter pipeline (reuses `fetchAllRows`).
-  2. For each row, compute `target = row[relative_field] ± offset/unit @ execution_time IST`.
-  3. Look up `journey_relative_fires` for `(journey_id, row.id)`.
-  4. Decide whether to fire:
-     - `once`: fire only if no prior fire row.
-     - `on_change`: fire if no prior row OR `last_field_value` differs from current field value.
-     - `repeat`: fire if `target` is in the past relative to last fire (or no prior fire) and within the sweep window.
-  5. Window check: `target <= now` AND (`target > last_fired_at` OR `last_fired_at IS NULL`) AND `target >= now - 24h` (guards against backfilling years of history).
-  6. On fire: enroll the resolved contact (re-using `upsertContactsFromCustomers` / contactKey logic) and upsert into `journey_relative_fires` with new `last_field_value` and `last_fired_at`.
-- For `relative` schedules `next_run_at` is set to `now() + 1 hour` (sweep cadence) on every sweep so the row stays eligible for re-evaluation. No "fire once and stop" semantics like `one_time`.
-- Cron cadence (existing pg_cron job invoking `process-journeys`) is unchanged; it already runs frequently enough to catch the 24h window.
+Sections:
 
-## Field discovery
+1. **Summary cards** — Projected Spend, Actual Spend, Delivered, Failed, Cost/Delivered, Cost/Recipient. Each amount shows `₹X,XXX` with `($Y.YY)` below.
+2. **Category breakdown** — Marketing (orange), Utility (blue), Authentication (green) badges + amounts + count.
+3. **Step costing table** — Step name, category, delivered, in-window/out, cost.
+4. **Wallet impact** — Reuses existing `WalletBalanceCard` query (`twilio-balance`) + FX rate; shows `Wallet`, `Projected Remaining`, `Actual Remaining`. Informational only.
+5. **Cost trends** — Recharts line/bar with daily/weekly/monthly toggle. Only shown when journey has >1 day of history.
+6. **Disclaimer footer** — "Projected spend is estimated…" copy from spec.
 
-Schema-driven. The dialog reads `ENTITY_SCHEMAS` and filters `fields` where `type === "date"`. No DB introspection — keeps it deterministic and matches what the List View builder already exposes. Future entity additions automatically appear.
+### 5. Admin config UI (small)
 
-## Out of scope
+Inside the same analytics page header for the cost section, a "Settings" popover (admin-gated via `is_admin`):
+- Edit `estimated_in_window_pct` for this journey.
+- Link/button "Edit global pricing" → routes to a new admin sub-page `/admin/whatsapp-pricing` showing the `whatsapp_pricing_config` table with inline edit + FX rate override. Admin-only via RLS + `PermissionGate`.
 
-- No changes to fixed One-time or Recurring scheduling logic.
-- No changes to JourneyBuilder canvas, AudienceBuilder, message rendering, or List View builder.
-- No DB introspection / dynamic schema crawl — relies on existing `listViewSchema.ts` registry.
+### 6. Files to add
 
-## File touch-list
+- `supabase/migrations/<ts>_journey_cost_analytics.sql` — tables, seed, RLS, `is_in_service_window` fn.
+- `supabase/functions/fx-refresh/index.ts` — optional cron-driven FX refresh.
+- `src/lib/journeyCost.ts` — pure cost math + types.
+- `src/hooks/useJourneyCostAnalytics.ts` — data + computation.
+- `src/components/journey/JourneyCostAnalytics.tsx` — UI.
+- `src/components/journey/JourneyCostSettingsPopover.tsx` — per-journey assumption editor.
+- `src/pages/admin/WhatsAppPricing.tsx` — global pricing editor (registered in `App.tsx` + sidebar/admin nav).
+- Edit `src/pages/communication/JourneyAnalytics.tsx` — lazy mount `<JourneyCostAnalytics journeyId={id} />` below existing sections.
 
-- `src/components/journey/JourneyScheduleDialog.tsx` — new tab + Relative panel + preview.
-- `src/lib/journeySchedule.ts` — type extensions, summary branch.
-- `supabase/functions/_shared/journey-schedule.ts` — shared type extension + relative resolver helper.
-- `supabase/functions/process-journeys/index.ts` — sweep branch for relative.
-- New migration: extend `journey_schedules`, update validator, create `journey_relative_fires` with RLS.
+### 7. Out of scope / explicitly untouched
+
+- `process-journeys`, `whatsapp-send*`, `journey-actions`, `twilio-balance`, schedule logic, message log writes, template APIs, wallet card.
+- Click-to-WhatsApp free-entry pricing — only the `entry_point_type` field is added, no pricing branch.
+
+### 8. Verification
+
+- Build passes.
+- Existing analytics page renders unchanged when the new section is collapsed/loading.
+- Seeded pricing matches spec totals (₹ values at FX=95).
+- Spot-check on the existing "Test Journey - 19th May": projected vs actual figures non-negative, undelivered excluded, failed billed at ₹0.095.
