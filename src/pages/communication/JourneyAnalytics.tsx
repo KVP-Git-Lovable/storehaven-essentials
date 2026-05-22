@@ -387,6 +387,12 @@ export default function JourneyAnalytics() {
             </TableBody>
           </Table>
         </Card>
+
+        {id && (
+          <Suspense fallback={<Card><CardContent className="py-8 text-center text-muted-foreground text-sm">Loading cost analytics…</CardContent></Card>}>
+            <JourneyCostAnalytics journeyId={id} />
+          </Suspense>
+        )}
       </div>
     </TooltipProvider>
   );
