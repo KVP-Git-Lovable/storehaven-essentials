@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ArrowLeft, Send, Eye, MousePointer, Target, Mail, MessageSquare, Link2, CheckCircle2, XCircle } from "lucide-react";
 import { WhatsAppIcon } from "@/components/communication/WhatsAppIcon";
 import { format } from "date-fns";
+
+const JourneyCostAnalytics = lazy(() => import("@/components/journey/JourneyCostAnalytics"));
 
 const SUCCESS_STATUSES = new Set(["sent", "delivered", "queued", "accepted", "scheduled", "sending"]);
 const FAIL_STATUSES = new Set(["failed", "undelivered"]);
