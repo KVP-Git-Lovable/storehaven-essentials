@@ -1,110 +1,70 @@
-# WhatsApp Engagement Scoring — Phase 1
+# Journey Analytics — Read Status
 
-Lightweight scoring layer on top of existing Journey Builder WhatsApp sends. **No changes** to Twilio sending, journey execution, templates, or message flow — only additive event capture, scoring, and analytics display.
+## Root cause of "Read = 0"
 
-## Scope
+Twilio is correctly sending WhatsApp read receipts and the webhook is correctly receiving them:
 
-Only WhatsApp messages sent through Journey Builder. Events tracked: `sent`, `delivered`, `read`, `clicked`.
+- `whatsapp-send` sets `StatusCallback=…/whatsapp-inbound?event=status`
+- `journey_message_log` already has rows with `status='read'` (1 row today)
+- Webhook also tries to insert into `journey_message_events`
 
-Excluded (future phases): sentiment, STOP/opt-out, AI intent, channel-wise scoring, email/SMS scoring, filtering UI.
+The real bug: **`journey_message_events` is empty** (0 rows for any event type). All current journey sends happened *before* the engagement-tracking code was deployed, so no `sent` rows exist — and the read upsert in the webhook ran but matched no prior context that the analytics UI cares about (and the UI was reading exclusively from `journey_message_events`).
 
-## 1. Database (migration)
+So the analytics summary said "Read = 0" because it was sourcing reads from an empty events table, while the actual read state lives on `journey_message_log.status`.
 
-### `journey_message_events` — audit log
+### Fix strategy
 
-- `id`, `journey_id`, `journey_step_id` (nullable), `person_id` (uuid, nullable), `entity_type` (text: `customer|lead|visitor`), `whatsapp_message_sid` (text), `template_id` (uuid, nullable), `event_type` (text: `sent|delivered|read|clicked`), `event_timestamp` (timestamptz), `metadata_json` (jsonb), `created_at`
-- Indexes on `(journey_id)`, `(person_id, entity_type)`, `(whatsapp_message_sid)`, `(event_type)`
-- Unique on `(whatsapp_message_sid, event_type)` to make webhook retries idempotent (clicked excluded — multiple clicks allowed)
-- RLS: authenticated read; service_role write (events written only by edge functions)
+Source the per-message **Read / Delivered / Failed** state directly from `journey_message_log.status` (the canonical, already-populated field updated by the webhook). Continue to feed `journey_message_events` for the engagement-scoring engine, but stop making the analytics UI depend on it being backfilled.
 
-### `person_engagement_scores` — cumulative
+Also add a small one-time backfill so historical rows show up in engagement metrics.
 
-- `id`, `person_id`, `entity_type`, `whatsapp_score` (int, default 0), `total_messages_sent`, `total_delivered`, `total_read`, `total_clicked`, `total_failed` (all int default 0), `last_engagement_at`, `created_at`, `updated_at`
-- Unique on `(person_id, entity_type)`
-- RLS: authenticated read; service_role write
+## Part 1 — Recent Messages table: add Read column
 
-### `whatsapp_tracked_links` — per-message link tokens
+`src/pages/communication/JourneyAnalytics.tsx`
 
-- `id`, `token` (text, unique, short random), `journey_id`, `journey_step_id`, `person_id`, `entity_type`, `template_id`, `original_url` (text), `whatsapp_message_sid` (nullable), `created_at`
-- Index on `token`
-- RLS: service_role only (resolved by edge function)
+- Add a `Read Status` column between `Status` and `Link Status`.
+- Per row, derive from `m.status` / `m.delivery_status`:
+  - `read` → green "Read" badge
+  - `delivered` (and not read) → muted "Not Read"
+  - `sent` / `queued` / `accepted` / `scheduled` / `sending` → "Pending"
+  - `failed` / `undelivered` → destructive "Failed"
+- Column visible for WhatsApp messages only; show "—" for SMS/email rows.
 
-### Scoring function
+## Part 2 — Summary cards: add Read
 
-`apply_engagement_event(_person_id, _entity_type, _event_type, _at)` — security definer. Upserts row in `person_engagement_scores`, increments matching counter and `whatsapp_score` by `{sent:+1, delivered:+2, read:+5, clicked:+10}`, updates `last_engagement_at`. Called from trigger on `journey_message_events` insert.
+`src/pages/communication/JourneyAnalytics.tsx` and `src/components/journey/JourneyEngagementSummary.tsx`
 
-Trigger `journey_message_events_score_trg` AFTER INSERT calls the function. Keeps scoring async-from-sender's perspective (sender just inserts the event).
+- Add a "Read" tile alongside Sent / Delivered / Clicked.
+- Source for the top "Live Send Progress" + main metric cards: count rows in `journey_message_log` for this journey where `status='read'` (reliable, no event-log dependency).
+- `JourneyEngagementSummary` already pulls from `journey_message_events`; extend it to also query `journey_message_log` so the Read tile is accurate even for historical sends. Click count continues to come from `journey_message_events.event_type='clicked'` (unchanged). Read is **not** inferred from clicks.
 
-## 2. Event capture (edge functions)
+## Part 3 — Webhook diagnostics & event integrity (small, safe)
 
-### `whatsapp-inbound` (status webhook) — additive only
+`supabase/functions/whatsapp-inbound/index.ts`
 
-Currently updates `journey_message_log.delivery_status`. Add: when status is `sent|delivered|read|undelivered`, look up the `journey_message_log` row by SID to get `journey_id`/`contact_id`, resolve `(person_id, entity_type)` from `journey_contacts`, and insert into `journey_message_events`. Wrapped in try/catch — failure must NOT break existing webhook handling.
+- Add structured log at status-callback entry:
+  `console.log("[wa-status]", { messageSid, status, errorCode, matchedJmlRows: jmlRows?.length ?? 0 })`
+- If `jmlRows.length === 0` for a known status, log a warning with the SID so SID-mapping issues are visible in edge logs.
+- No behavioural change to TwiML, sending, or enrollment advancement.
 
-`undelivered` maps to event_type `failed`. Idempotent via unique constraint.
+## Part 4 — Backfill migration (one-time)
 
-### `process-journeys` / wherever the send happens
+New migration to seed `journey_message_events` from existing `journey_message_log` so engagement scoring isn't blind to history:
 
-On successful Twilio accept (already logged to `journey_message_log` with sid), insert a `sent` event into `journey_message_events`. Single line addition, fire-and-forget.
+- Insert `sent` events for every `journey_message_log` row with a non-null `twilio_message_sid` (idempotent via existing unique `(whatsapp_message_sid, event_type)` index).
+- Insert `delivered` events for rows with `delivery_status='delivered'` or `status IN ('delivered','read')`.
+- Insert `read` events for rows with `status='read'`.
+- Insert `failed` events for rows with `delivery_status='failed'` or `status IN ('failed','undelivered')`.
+- All inserts use `ON CONFLICT DO NOTHING`. The existing `apply_engagement_event` trigger will roll scores into `person_engagement_scores` automatically.
 
-## 3. Tracked link rewriting
+## Out of scope (unchanged)
 
-### New edge function: `track-engagement-click`
+- Twilio sending logic, `whatsapp-send`, `process-journeys` send path, templates, scoring formula, link tracking, journey execution, scheduler.
 
-- `GET /track-engagement-click?t={token}` → look up token, insert `clicked` event, 302 redirect to `original_url`. No auth required (public).
-- Verifies token exists; on missing token redirects to a safe fallback (homepage) and logs.
+## Files touched
 
-### Link wrapping (in `process-journeys` before sending template)
-
-Before substituting URL variables into a template body for a recipient:
-
-1. Scan resolved variable values for `http(s)://...` URLs.
-2. For each, create a `whatsapp_tracked_links` row with short token (e.g. nanoid 10 chars).
-3. Replace the URL with `https://{project}.functions.supabase.co/track-engagement-click?t={token}` (or custom domain if configured later).
-4. Send the rewritten body to Twilio as usual.
-
-Done only for journey sends; freeform/template-direct sends untouched. Tracked link table holds the mapping so we know which person clicked.
-
-Note: existing `track-link-click` function (hardcoded SID, server-side attribution by phone) remains untouched — it serves the older specific-template flow. New function is the generic tokenized one.
-
-## 4. Journey Analytics UI
-
-In `src/pages/communication/JourneyAnalytics.tsx`, add new lazy section `<EngagementSummary journeyId={id} />`:
-
-**Engagement Summary card**
-
-- Counts: Sent / Delivered / Read / Clicked / Failed (from `journey_message_events` aggregated by event_type for this journey)
-- Average Engagement Score: average `whatsapp_score` across distinct recipients of this journey
-
-**Top Engaged Recipients table**
-
-- Top 10 by score among recipients of this journey
-- Cols: Name (from `journey_contacts`), Entity Type, Score, Delivered %, Read %, Click %
-- Percentages = count(event) / count(sent) per person for this journey
-
-New hook `useJourneyEngagement(journeyId)` does both queries with TanStack Query, 30s refetch while journey active.
-
-## 5. Optional person badge
-
-Small `<EngagementBadge personId entityType />` component — fetches score and shows `WhatsApp Engagement: N`. Add to customer/lead detail pages only if quick to slot in; otherwise defer to Phase 2.
-
-## 6. Performance notes
-
-- All scoring via trigger on insert — sender code adds only one INSERT per event.
-- Indexes cover the analytics aggregation paths.
-- Tracked-link rewrite is O(URLs per message), negligible.
-- Score table is one row per (person, entity), bounded by audience size.
-
-## Non-goals / unchanged code
-
-- `whatsapp-send`, `whatsapp-send-freeform`, `whatsapp-templates`, `whatsapp-config`, `journey-actions`, Twilio API calls, template approval, scheduler, wallet APIs, journey enrollment logic, existing `JourneyCostAnalytics`, existing `track-link-click`, existing `whatsapp_link_clicks` table.
-
-## Deliverables
-
-1. One migration: 3 tables + grants + RLS + scoring function + trigger.
-2. Edge function `track-engagement-click`.
-3. Edits: `whatsapp-inbound` (event insert on status), `process-journeys` (sent-event insert + link rewriting).
-4. New hook `useJourneyEngagement.ts` + component `JourneyEngagementSummary.tsx`.
-5. `JourneyAnalytics.tsx` mounts the new section.
-
-Confirm and I'll implement.
+- `src/pages/communication/JourneyAnalytics.tsx` — Read column + Read tile
+- `src/components/journey/JourneyEngagementSummary.tsx` — Read tile sourced from `journey_message_log`
+- `src/hooks/useJourneyEngagement.ts` — additional query for read counts
+- `supabase/functions/whatsapp-inbound/index.ts` — diagnostic logs only
+- New migration — backfill `journey_message_events` from `journey_message_log`
