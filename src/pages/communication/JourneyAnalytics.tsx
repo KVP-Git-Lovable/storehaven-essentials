@@ -12,6 +12,7 @@ import { WhatsAppIcon } from "@/components/communication/WhatsAppIcon";
 import { format } from "date-fns";
 
 const JourneyCostAnalytics = lazy(() => import("@/components/journey/JourneyCostAnalytics"));
+const JourneyEngagementSummary = lazy(() => import("@/components/journey/JourneyEngagementSummary"));
 
 const SUCCESS_STATUSES = new Set(["sent", "delivered", "queued", "accepted", "scheduled", "sending"]);
 const FAIL_STATUSES = new Set(["failed", "undelivered"]);
@@ -391,6 +392,12 @@ export default function JourneyAnalytics() {
         {id && (
           <Suspense fallback={<Card><CardContent className="py-8 text-center text-muted-foreground text-sm">Loading cost analytics…</CardContent></Card>}>
             <JourneyCostAnalytics journeyId={id} />
+          </Suspense>
+        )}
+
+        {id && (
+          <Suspense fallback={<Card><CardContent className="py-8 text-center text-muted-foreground text-sm">Loading engagement…</CardContent></Card>}>
+            <JourneyEngagementSummary journeyId={id} isActive={isActive} />
           </Suspense>
         )}
       </div>

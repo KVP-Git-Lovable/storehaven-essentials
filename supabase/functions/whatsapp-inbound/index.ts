@@ -273,7 +273,7 @@ Deno.serve(async (req) => {
         // also advance the matching enrollment.
         const { data: jmlRows } = await supabase
           .from("journey_message_log")
-          .select("id, journey_id, enrollment_id, node_id, delivery_status")
+          .select("id, journey_id, enrollment_id, node_id, delivery_status, contact_id")
           .eq("twilio_message_sid", messageSid);
 
         await supabase
@@ -319,6 +319,51 @@ Deno.serve(async (req) => {
               .update({ status: "failed" })
               .eq("id", jml.enrollment_id);
           }
+        }
+
+        // Engagement events (additive; isolated try/catch — must not break webhook).
+        try {
+          const EVENT_MAP: Record<string, string> = {
+            sent: "sent",
+            delivered: "delivered",
+            read: "read",
+            failed: "failed",
+            undelivered: "failed",
+          };
+          const evt = EVENT_MAP[status];
+          if (evt && (jmlRows?.length || 0) > 0) {
+            // Resolve contact -> entity_type from journey_contacts
+            const contactIds = Array.from(new Set((jmlRows || []).map((r: any) => r.contact_id).filter(Boolean)));
+            const contactMap: Record<string, string> = {};
+            if (contactIds.length > 0) {
+              const { data: contacts } = await supabase
+                .from("journey_contacts")
+                .select("id, segment_type")
+                .in("id", contactIds);
+              for (const c of contacts || []) {
+                contactMap[c.id] = c.segment_type || "customer";
+              }
+            }
+            const rows = (jmlRows || []).map((r: any) => ({
+              journey_id: r.journey_id,
+              journey_step_id: r.node_id,
+              person_id: r.contact_id,
+              entity_type: contactMap[r.contact_id] || "customer",
+              whatsapp_message_sid: messageSid,
+              event_type: evt,
+              event_timestamp: new Date().toISOString(),
+              metadata_json: { error_code: errorCode || null, error_message: errorMessage },
+            }));
+            if (rows.length > 0) {
+              // ignoreDuplicates so re-deliveries of same webhook are no-ops
+              const { error: evErr } = await supabase
+                .from("journey_message_events")
+                .upsert(rows, { onConflict: "whatsapp_message_sid,event_type", ignoreDuplicates: true });
+              if (evErr) console.error("[whatsapp-inbound] engagement event insert failed", evErr);
+            }
+          }
+        } catch (e) {
+          console.error("[whatsapp-inbound] engagement tracking error", e);
         }
       }
       return twiml();

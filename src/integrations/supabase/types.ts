@@ -3168,6 +3168,56 @@ export type Database = {
           },
         ]
       }
+      journey_message_events: {
+        Row: {
+          created_at: string
+          entity_type: string
+          event_timestamp: string
+          event_type: string
+          id: string
+          journey_id: string
+          journey_step_id: string | null
+          metadata_json: Json | null
+          person_id: string | null
+          template_id: string | null
+          whatsapp_message_sid: string | null
+        }
+        Insert: {
+          created_at?: string
+          entity_type?: string
+          event_timestamp?: string
+          event_type: string
+          id?: string
+          journey_id: string
+          journey_step_id?: string | null
+          metadata_json?: Json | null
+          person_id?: string | null
+          template_id?: string | null
+          whatsapp_message_sid?: string | null
+        }
+        Update: {
+          created_at?: string
+          entity_type?: string
+          event_timestamp?: string
+          event_type?: string
+          id?: string
+          journey_id?: string
+          journey_step_id?: string | null
+          metadata_json?: Json | null
+          person_id?: string | null
+          template_id?: string | null
+          whatsapp_message_sid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journey_message_events_journey_id_fkey"
+            columns: ["journey_id"]
+            isOneToOne: false
+            referencedRelation: "journeys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       journey_message_log: {
         Row: {
           channel: string
@@ -5946,6 +5996,51 @@ export type Database = {
           name?: string
           status?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      person_engagement_scores: {
+        Row: {
+          created_at: string
+          entity_type: string
+          id: string
+          last_engagement_at: string | null
+          person_id: string
+          total_clicked: number
+          total_delivered: number
+          total_failed: number
+          total_messages_sent: number
+          total_read: number
+          updated_at: string
+          whatsapp_score: number
+        }
+        Insert: {
+          created_at?: string
+          entity_type?: string
+          id?: string
+          last_engagement_at?: string | null
+          person_id: string
+          total_clicked?: number
+          total_delivered?: number
+          total_failed?: number
+          total_messages_sent?: number
+          total_read?: number
+          updated_at?: string
+          whatsapp_score?: number
+        }
+        Update: {
+          created_at?: string
+          entity_type?: string
+          id?: string
+          last_engagement_at?: string | null
+          person_id?: string
+          total_clicked?: number
+          total_delivered?: number
+          total_failed?: number
+          total_messages_sent?: number
+          total_read?: number
+          updated_at?: string
+          whatsapp_score?: number
         }
         Relationships: []
       }
@@ -11251,6 +11346,53 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_tracked_links: {
+        Row: {
+          created_at: string
+          entity_type: string
+          id: string
+          journey_id: string | null
+          journey_step_id: string | null
+          original_url: string
+          person_id: string | null
+          template_id: string | null
+          token: string
+          whatsapp_message_sid: string | null
+        }
+        Insert: {
+          created_at?: string
+          entity_type?: string
+          id?: string
+          journey_id?: string | null
+          journey_step_id?: string | null
+          original_url: string
+          person_id?: string | null
+          template_id?: string | null
+          token: string
+          whatsapp_message_sid?: string | null
+        }
+        Update: {
+          created_at?: string
+          entity_type?: string
+          id?: string
+          journey_id?: string | null
+          journey_step_id?: string | null
+          original_url?: string
+          person_id?: string | null
+          template_id?: string | null
+          token?: string
+          whatsapp_message_sid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_tracked_links_journey_id_fkey"
+            columns: ["journey_id"]
+            isOneToOne: false
+            referencedRelation: "journeys"
             referencedColumns: ["id"]
           },
         ]

@@ -758,6 +758,39 @@ async function processEnrollment(
           variables["1"] = (contact?.name && String(contact.name).trim()) || "Customer";
         }
 
+        // Engagement: wrap any URLs found in resolved variables with tracked-redirect tokens.
+        // Best-effort and isolated — failures here must never block the send.
+        try {
+          const urlRe = /(https?:\/\/[^\s<>"']+)/g;
+          const trackBase = `${supabaseUrl}/functions/v1/track-engagement-click`;
+          const segmentType = (contact?.segment_type as string) || "customer";
+          const linkRows: any[] = [];
+          for (const k of Object.keys(variables)) {
+            const v = variables[k];
+            if (typeof v !== "string" || !urlRe.test(v)) continue;
+            urlRe.lastIndex = 0;
+            const replaced = v.replace(urlRe, (match: string) => {
+              const token = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+              linkRows.push({
+                token,
+                journey_id: journey.id,
+                journey_step_id: currentNode.id,
+                person_id: enrollment.contact_id,
+                entity_type: segmentType,
+                template_id: templateId || null,
+                original_url: match,
+              });
+              return `${trackBase}?t=${token}`;
+            });
+            variables[k] = replaced;
+          }
+          if (linkRows.length > 0) {
+            await supabase.from("whatsapp_tracked_links").insert(linkRows);
+          }
+        } catch (e) {
+          console.error("[process-journeys] link-wrap error", e);
+        }
+
         const resp = await fetch(`${supabaseUrl}/functions/v1/whatsapp-send`, {
           method: "POST",
           headers: {
@@ -800,6 +833,41 @@ async function processEnrollment(
         .eq("enrollment_id", enrollment.id)
         .eq("node_id", currentNode.id)
         .eq("channel", channel);
+
+      // Engagement: log "sent" event for accepted sends. Idempotent via unique index on (sid, event_type).
+      if (sendAccepted && twilioSid) {
+        try {
+          await supabase.from("journey_message_events").upsert({
+            journey_id: journey.id,
+            journey_step_id: currentNode.id,
+            person_id: enrollment.contact_id,
+            entity_type: (contact?.segment_type as string) || "customer",
+            whatsapp_message_sid: twilioSid,
+            template_id: templateId || null,
+            event_type: "sent",
+            event_timestamp: new Date().toISOString(),
+          }, { onConflict: "whatsapp_message_sid,event_type", ignoreDuplicates: true });
+        } catch (e) {
+          console.error("[process-journeys] sent-event insert failed", e);
+        }
+      } else if (!sendAccepted && errorMessage) {
+        // Local failure (Twilio rejected before assigning a SID). Use synthetic sid to allow scoring.
+        try {
+          await supabase.from("journey_message_events").insert({
+            journey_id: journey.id,
+            journey_step_id: currentNode.id,
+            person_id: enrollment.contact_id,
+            entity_type: (contact?.segment_type as string) || "customer",
+            whatsapp_message_sid: null,
+            template_id: templateId || null,
+            event_type: "failed",
+            event_timestamp: new Date().toISOString(),
+            metadata_json: { error_message: errorMessage },
+          });
+        } catch (e) {
+          console.error("[process-journeys] failed-event insert failed", e);
+        }
+      }
 
       if (sendAccepted) {
         await supabase.from("journey_enrollments")
