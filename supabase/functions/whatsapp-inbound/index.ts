@@ -273,7 +273,7 @@ Deno.serve(async (req) => {
         // also advance the matching enrollment.
         const { data: jmlRows } = await supabase
           .from("journey_message_log")
-          .select("id, journey_id, enrollment_id, node_id, delivery_status")
+          .select("id, journey_id, enrollment_id, node_id, delivery_status, contact_id")
           .eq("twilio_message_sid", messageSid);
 
         await supabase
