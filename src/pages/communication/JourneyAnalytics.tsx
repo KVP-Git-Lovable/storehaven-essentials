@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowLeft, Send, Eye, MousePointer, Target, Mail, MessageSquare, Link2, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, Send, Eye, MousePointer, Target, Mail, MessageSquare, Link2, CheckCircle2, XCircle, BookOpen } from "lucide-react";
 import { WhatsAppIcon } from "@/components/communication/WhatsAppIcon";
 import { format } from "date-fns";
 
@@ -89,6 +89,23 @@ export default function JourneyAnalytics() {
         .eq("journey_id", id!);
       if (error) throw error;
       return data;
+    },
+    enabled: !!id,
+    refetchInterval: isActive ? 5000 : false,
+  });
+
+  // Live read count, sourced from journey_message_log.status='read'
+  // (canonical field updated by the Twilio status webhook).
+  const { data: readCount = 0 } = useQuery({
+    queryKey: ["journey-read-count", id],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("journey_message_log")
+        .select("id", { count: "exact", head: true })
+        .eq("journey_id", id!)
+        .eq("status", "read");
+      if (error) throw error;
+      return count || 0;
     },
     enabled: !!id,
     refetchInterval: isActive ? 5000 : false,
@@ -191,7 +208,7 @@ export default function JourneyAnalytics() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 <div className="rounded-lg border p-3">
                   <p className="text-xs text-muted-foreground">Total Enrolled</p>
                   <p className="text-2xl font-bold">{totalEnrolled.toLocaleString("en-IN")}</p>
@@ -208,6 +225,10 @@ export default function JourneyAnalytics() {
                   <p className="text-xs text-muted-foreground">Failed</p>
                   <p className="text-2xl font-bold text-destructive">{failedCount.toLocaleString("en-IN")}</p>
                 </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Read</p>
+                  <p className="text-2xl font-bold text-blue-600">{readCount.toLocaleString("en-IN")}</p>
+                </div>
               </div>
               <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                 <div
@@ -220,7 +241,7 @@ export default function JourneyAnalytics() {
           </Card>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
@@ -228,6 +249,17 @@ export default function JourneyAnalytics() {
                 <div>
                   <p className="text-sm text-muted-foreground">Messages Sent</p>
                   <p className="text-2xl font-bold">{totalSent}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-indigo-100"><BookOpen className="h-5 w-5 text-indigo-600" /></div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Read</p>
+                  <p className="text-2xl font-bold">{readCount}</p>
                 </div>
               </div>
             </CardContent>
@@ -331,6 +363,7 @@ export default function JourneyAnalytics() {
                 <TableHead>Contact</TableHead>
                 <TableHead>Channel</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Read Status</TableHead>
                 {hasTrackedTemplate && <TableHead>Link Status</TableHead>}
                 <TableHead>Reason</TableHead>
                 <TableHead>Sent</TableHead>
@@ -338,18 +371,47 @@ export default function JourneyAnalytics() {
             </TableHeader>
             <TableBody>
               {messages.length === 0 ? (
-                <TableRow><TableCell colSpan={hasTrackedTemplate ? 6 : 5} className="text-center py-8 text-muted-foreground">No messages sent yet</TableCell></TableRow>
+                <TableRow><TableCell colSpan={hasTrackedTemplate ? 7 : 6} className="text-center py-8 text-muted-foreground">No messages sent yet</TableCell></TableRow>
               ) : messages.map((m: any) => {
                 const reason = m.error_message || (m.status === "scheduled_no_audience" ? "No audience matched" : "");
                 const isTracked = m.whatsapp_templates?.twilio_content_sid === TRACKED_TEMPLATE_SID
                   || (journeyUsesTrackedTemplate && (m.channel === "whatsapp_template" || m.channel === "whatsapp"));
                 const phoneL10 = last10(m.journey_contacts?.phone);
                 const wasClicked = isTracked && phoneL10 && clickedPhonesLast10.has(phoneL10);
+                const isWa = m.channel === "whatsapp" || m.channel === "whatsapp_template";
+                const st = String(m.status || "").toLowerCase();
+                const ds = String(m.delivery_status || "").toLowerCase();
+                let readBadge: JSX.Element;
+                if (!isWa) {
+                  readBadge = <span className="text-xs text-muted-foreground">—</span>;
+                } else if (st === "read") {
+                  readBadge = (
+                    <Badge variant="outline" className="border-blue-600 text-blue-700 bg-blue-50">
+                      <BookOpen className="h-3 w-3 mr-1" />
+                      Read
+                    </Badge>
+                  );
+                } else if (st === "failed" || st === "undelivered" || ds === "failed") {
+                  readBadge = (
+                    <Badge variant="outline" className="border-destructive text-destructive bg-destructive/5">
+                      Failed
+                    </Badge>
+                  );
+                } else if (st === "delivered" || ds === "delivered") {
+                  readBadge = (
+                    <Badge variant="outline" className="text-muted-foreground">Not Read</Badge>
+                  );
+                } else {
+                  readBadge = (
+                    <Badge variant="outline" className="text-muted-foreground">Pending</Badge>
+                  );
+                }
                 return (
                   <TableRow key={m.id}>
                     <TableCell>{m.journey_contacts?.name || "—"}</TableCell>
                     <TableCell className="capitalize">{m.channel === "whatsapp_template" ? "WhatsApp" : m.channel}</TableCell>
                     <TableCell><Badge variant="outline" className="capitalize">{m.status}</Badge></TableCell>
+                    <TableCell>{readBadge}</TableCell>
                     {hasTrackedTemplate && (
                       <TableCell>
                         {isTracked ? (
