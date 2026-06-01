@@ -199,6 +199,7 @@ Deno.serve(async (req) => {
     let messageSid = "";
     let profileName = "";
     let messageStatus = "";
+    let messageStatusSource = "";
     let errorCode = "";
     let channelStatusMessage = "";
 
@@ -208,9 +209,17 @@ Deno.serve(async (req) => {
       body = params.get("Body") ?? "";
       from = params.get("From") ?? "";
       to = params.get("To") ?? "";
-      messageSid = params.get("MessageSid") ?? "";
+      messageSid = params.get("MessageSid") ?? params.get("SmsMessageSid") ?? params.get("SmsSid") ?? "";
       profileName = params.get("ProfileName") ?? "";
-      messageStatus = params.get("MessageStatus") ?? "";
+      const statusCandidates: Array<[string, string | null]> = [
+        ["MessageStatus", params.get("MessageStatus")],
+        ["SmsStatus", params.get("SmsStatus")],
+        ["messageStatus", params.get("messageStatus")],
+        ["status", params.get("status")],
+      ];
+      const matchedStatus = statusCandidates.find(([, value]) => value && value.trim());
+      messageStatus = matchedStatus?.[1] ?? "";
+      messageStatusSource = matchedStatus?.[0] ?? "missing";
       errorCode = params.get("ErrorCode") ?? "";
       channelStatusMessage = params.get("ChannelStatusMessage") ?? "";
     } else if (contentType.includes("application/json")) {
@@ -218,9 +227,17 @@ Deno.serve(async (req) => {
       body = json.Body ?? json.body ?? "";
       from = json.From ?? json.from ?? "";
       to = json.To ?? json.to ?? "";
-      messageSid = json.MessageSid ?? "";
+      messageSid = json.MessageSid ?? json.SmsMessageSid ?? json.SmsSid ?? "";
       profileName = json.ProfileName ?? "";
-      messageStatus = json.MessageStatus ?? json.messageStatus ?? "";
+      const statusCandidates: Array<[string, string | null]> = [
+        ["MessageStatus", json.MessageStatus ?? null],
+        ["SmsStatus", json.SmsStatus ?? null],
+        ["messageStatus", json.messageStatus ?? null],
+        ["status", json.status ?? null],
+      ];
+      const matchedStatus = statusCandidates.find(([, value]) => value && value.trim());
+      messageStatus = matchedStatus?.[1] ?? "";
+      messageStatusSource = matchedStatus?.[0] ?? "missing";
       errorCode = json.ErrorCode ?? json.errorCode ?? "";
       channelStatusMessage = json.ChannelStatusMessage ?? json.channelStatusMessage ?? "";
     }
@@ -279,6 +296,7 @@ Deno.serve(async (req) => {
         console.log("[wa-status]", {
           messageSid,
           status,
+          statusSource: messageStatusSource,
           errorCode: errorCode || null,
           matchedJmlRows: jmlRows?.length ?? 0,
         });
