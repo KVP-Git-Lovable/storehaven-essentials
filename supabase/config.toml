@@ -1,1 +1,4 @@
 project_id = "pdtasnfsdnfttayxibqy"
+
+[functions.track-engagement-click]
+verify_jwt = false
