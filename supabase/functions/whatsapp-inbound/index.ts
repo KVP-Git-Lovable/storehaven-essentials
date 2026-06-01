@@ -276,6 +276,16 @@ Deno.serve(async (req) => {
           .select("id, journey_id, enrollment_id, node_id, delivery_status, contact_id")
           .eq("twilio_message_sid", messageSid);
 
+        console.log("[wa-status]", {
+          messageSid,
+          status,
+          errorCode: errorCode || null,
+          matchedJmlRows: jmlRows?.length ?? 0,
+        });
+        if ((jmlRows?.length ?? 0) === 0) {
+          console.warn("[wa-status] no journey_message_log row matched", { messageSid, status });
+        }
+
         await supabase
           .from("journey_message_log")
           .update({
