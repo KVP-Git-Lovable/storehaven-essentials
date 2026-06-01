@@ -1,89 +1,110 @@
+# WhatsApp Engagement Scoring — Phase 1
 
-## Journey Cost Analytics — Additive enhancement
+Lightweight scoring layer on top of existing Journey Builder WhatsApp sends. **No changes** to Twilio sending, journey execution, templates, or message flow — only additive event capture, scoring, and analytics display.
 
-Adds a new "Journey Cost Analytics" section to `/communication/journeys/:id/analytics`. No changes to scheduling, sending, Twilio, templates, wallet, or existing analytics.
+## Scope
 
-### 1. Pricing & FX configuration (DB)
+Only WhatsApp messages sent through Journey Builder. Events tracked: `sent`, `delivered`, `read`, `clicked`.
 
-New tables (admin-editable, future-ready):
+Excluded (future phases): sentiment, STOP/opt-out, AI intent, channel-wise scoring, email/SMS scoring, filtering UI.
 
-- `whatsapp_pricing_config`
-  - `id`, `region` (default `IN`), `currency` (default `INR`)
-  - `category` enum: `MARKETING | UTILITY | AUTHENTICATION | FAILED_FEE`
-  - `service_window` enum: `inside | outside | n_a`
-  - `meta_fee_usd numeric`, `twilio_fee_usd numeric`, `total_usd numeric` (generated)
-  - `effective_from timestamptz`, `is_active boolean`
-  - Seeded with the defaults from the spec (Marketing 0.0094+0.005, Utility/Auth inside 0+0.005, outside 0.0034+0.005, Failed 0.001).
+## 1. Database (migration)
 
-- `fx_rates`
-  - `id`, `from_currency` (`USD`), `to_currency` (`INR`)
-  - `rate numeric`, `source text` (`manual | rbi | api`), `fetched_at`
-  - Seeded with `95` fallback. A small edge function `fx-refresh` (new, isolated) optionally refreshes daily from a public FX API; falls back to last stored value, then to 95.
+### `journey_message_events` — audit log
 
-- `journey_cost_settings` (per-journey overrides, optional)
-  - `journey_id`, `estimated_in_window_pct int default 0` (admin assumption for projected utility/auth in-window split)
-  - `entry_point_type text default 'normal'` (`normal | click_to_whatsapp | customer_initiated`) — stored for future use, not yet wired into pricing.
+- `id`, `journey_id`, `journey_step_id` (nullable), `person_id` (uuid, nullable), `entity_type` (text: `customer|lead|visitor`), `whatsapp_message_sid` (text), `template_id` (uuid, nullable), `event_type` (text: `sent|delivered|read|clicked`), `event_timestamp` (timestamptz), `metadata_json` (jsonb), `created_at`
+- Indexes on `(journey_id)`, `(person_id, entity_type)`, `(whatsapp_message_sid)`, `(event_type)`
+- Unique on `(whatsapp_message_sid, event_type)` to make webhook retries idempotent (clicked excluded — multiple clicks allowed)
+- RLS: authenticated read; service_role write (events written only by edge functions)
 
-RLS: authenticated read; admin write.
+### `person_engagement_scores` — cumulative
 
-### 2. Service window detection (read-only, no send-path changes)
+- `id`, `person_id`, `entity_type`, `whatsapp_score` (int, default 0), `total_messages_sent`, `total_delivered`, `total_read`, `total_clicked`, `total_failed` (all int default 0), `last_engagement_at`, `created_at`, `updated_at`
+- Unique on `(person_id, entity_type)`
+- RLS: authenticated read; service_role write
 
-Add a SQL function `public.is_in_service_window(_contact_id uuid, _at timestamptz)`:
-- Returns true if there is an inbound WhatsApp message from that contact in `whatsapp_inbound_messages` (or equivalent existing inbound table — verified at implementation) within 24h before `_at`.
-- Used only by analytics queries; never invoked by the sender.
+### `whatsapp_tracked_links` — per-message link tokens
 
-If no inbound-messages table exists, fall back to: any `journey_message_log` row where `provider_metadata->>'direction' = 'inbound'`. Decision finalized while reading code, not in this plan.
+- `id`, `token` (text, unique, short random), `journey_id`, `journey_step_id`, `person_id`, `entity_type`, `template_id`, `original_url` (text), `whatsapp_message_sid` (nullable), `created_at`
+- Index on `token`
+- RLS: service_role only (resolved by edge function)
 
-### 3. Cost computation (client-side, lazy)
+### Scoring function
 
-A new hook `useJourneyCostAnalytics(journeyId)`:
-- Loads pricing config + active FX rate (TanStack Query, `staleTime: 1h`).
-- Loads enrollments, message log (already fetched on the page — reused via shared query keys), template categories, and per-message service-window flag (single RPC).
-- Computes:
-  - **Projected**: per node — recipients × category rate. Utility/Auth split by `estimated_in_window_pct`. Marketing always at outside rate.
-  - **Actual**: per delivered message → category × in/outside. Failed → failed fee. Undelivered → 0.
-- Returns totals, per-category, per-step, and time-series buckets (day/week/month) for recurring journeys.
+`apply_engagement_event(_person_id, _entity_type, _event_type, _at)` — security definer. Upserts row in `person_engagement_scores`, increments matching counter and `whatsapp_score` by `{sent:+1, delivered:+2, read:+5, clicked:+10}`, updates `last_engagement_at`. Called from trigger on `journey_message_events` insert.
 
-All formatting via existing `en-IN` locale conventions; show INR primary, USD secondary.
+Trigger `journey_message_events_score_trg` AFTER INSERT calls the function. Keeps scoring async-from-sender's perspective (sender just inserts the event).
 
-### 4. UI — `JourneyCostAnalytics.tsx`
+## 2. Event capture (edge functions)
 
-New component rendered inside `src/pages/communication/JourneyAnalytics.tsx`, lazy-loaded via `React.lazy` with a `Suspense` skeleton so the existing page renders immediately.
+### `whatsapp-inbound` (status webhook) — additive only
 
-Sections:
+Currently updates `journey_message_log.delivery_status`. Add: when status is `sent|delivered|read|undelivered`, look up the `journey_message_log` row by SID to get `journey_id`/`contact_id`, resolve `(person_id, entity_type)` from `journey_contacts`, and insert into `journey_message_events`. Wrapped in try/catch — failure must NOT break existing webhook handling.
 
-1. **Summary cards** — Projected Spend, Actual Spend, Delivered, Failed, Cost/Delivered, Cost/Recipient. Each amount shows `₹X,XXX` with `($Y.YY)` below.
-2. **Category breakdown** — Marketing (orange), Utility (blue), Authentication (green) badges + amounts + count.
-3. **Step costing table** — Step name, category, delivered, in-window/out, cost.
-4. **Wallet impact** — Reuses existing `WalletBalanceCard` query (`twilio-balance`) + FX rate; shows `Wallet`, `Projected Remaining`, `Actual Remaining`. Informational only.
-5. **Cost trends** — Recharts line/bar with daily/weekly/monthly toggle. Only shown when journey has >1 day of history.
-6. **Disclaimer footer** — "Projected spend is estimated…" copy from spec.
+`undelivered` maps to event_type `failed`. Idempotent via unique constraint.
 
-### 5. Admin config UI (small)
+### `process-journeys` / wherever the send happens
 
-Inside the same analytics page header for the cost section, a "Settings" popover (admin-gated via `is_admin`):
-- Edit `estimated_in_window_pct` for this journey.
-- Link/button "Edit global pricing" → routes to a new admin sub-page `/admin/whatsapp-pricing` showing the `whatsapp_pricing_config` table with inline edit + FX rate override. Admin-only via RLS + `PermissionGate`.
+On successful Twilio accept (already logged to `journey_message_log` with sid), insert a `sent` event into `journey_message_events`. Single line addition, fire-and-forget.
 
-### 6. Files to add
+## 3. Tracked link rewriting
 
-- `supabase/migrations/<ts>_journey_cost_analytics.sql` — tables, seed, RLS, `is_in_service_window` fn.
-- `supabase/functions/fx-refresh/index.ts` — optional cron-driven FX refresh.
-- `src/lib/journeyCost.ts` — pure cost math + types.
-- `src/hooks/useJourneyCostAnalytics.ts` — data + computation.
-- `src/components/journey/JourneyCostAnalytics.tsx` — UI.
-- `src/components/journey/JourneyCostSettingsPopover.tsx` — per-journey assumption editor.
-- `src/pages/admin/WhatsAppPricing.tsx` — global pricing editor (registered in `App.tsx` + sidebar/admin nav).
-- Edit `src/pages/communication/JourneyAnalytics.tsx` — lazy mount `<JourneyCostAnalytics journeyId={id} />` below existing sections.
+### New edge function: `track-engagement-click`
 
-### 7. Out of scope / explicitly untouched
+- `GET /track-engagement-click?t={token}` → look up token, insert `clicked` event, 302 redirect to `original_url`. No auth required (public).
+- Verifies token exists; on missing token redirects to a safe fallback (homepage) and logs.
 
-- `process-journeys`, `whatsapp-send*`, `journey-actions`, `twilio-balance`, schedule logic, message log writes, template APIs, wallet card.
-- Click-to-WhatsApp free-entry pricing — only the `entry_point_type` field is added, no pricing branch.
+### Link wrapping (in `process-journeys` before sending template)
 
-### 8. Verification
+Before substituting URL variables into a template body for a recipient:
 
-- Build passes.
-- Existing analytics page renders unchanged when the new section is collapsed/loading.
-- Seeded pricing matches spec totals (₹ values at FX=95).
-- Spot-check on the existing "Test Journey - 19th May": projected vs actual figures non-negative, undelivered excluded, failed billed at ₹0.095.
+1. Scan resolved variable values for `http(s)://...` URLs.
+2. For each, create a `whatsapp_tracked_links` row with short token (e.g. nanoid 10 chars).
+3. Replace the URL with `https://{project}.functions.supabase.co/track-engagement-click?t={token}` (or custom domain if configured later).
+4. Send the rewritten body to Twilio as usual.
+
+Done only for journey sends; freeform/template-direct sends untouched. Tracked link table holds the mapping so we know which person clicked.
+
+Note: existing `track-link-click` function (hardcoded SID, server-side attribution by phone) remains untouched — it serves the older specific-template flow. New function is the generic tokenized one.
+
+## 4. Journey Analytics UI
+
+In `src/pages/communication/JourneyAnalytics.tsx`, add new lazy section `<EngagementSummary journeyId={id} />`:
+
+**Engagement Summary card**
+
+- Counts: Sent / Delivered / Read / Clicked / Failed (from `journey_message_events` aggregated by event_type for this journey)
+- Average Engagement Score: average `whatsapp_score` across distinct recipients of this journey
+
+**Top Engaged Recipients table**
+
+- Top 10 by score among recipients of this journey
+- Cols: Name (from `journey_contacts`), Entity Type, Score, Delivered %, Read %, Click %
+- Percentages = count(event) / count(sent) per person for this journey
+
+New hook `useJourneyEngagement(journeyId)` does both queries with TanStack Query, 30s refetch while journey active.
+
+## 5. Optional person badge
+
+Small `<EngagementBadge personId entityType />` component — fetches score and shows `WhatsApp Engagement: N`. Add to customer/lead detail pages only if quick to slot in; otherwise defer to Phase 2.
+
+## 6. Performance notes
+
+- All scoring via trigger on insert — sender code adds only one INSERT per event.
+- Indexes cover the analytics aggregation paths.
+- Tracked-link rewrite is O(URLs per message), negligible.
+- Score table is one row per (person, entity), bounded by audience size.
+
+## Non-goals / unchanged code
+
+- `whatsapp-send`, `whatsapp-send-freeform`, `whatsapp-templates`, `whatsapp-config`, `journey-actions`, Twilio API calls, template approval, scheduler, wallet APIs, journey enrollment logic, existing `JourneyCostAnalytics`, existing `track-link-click`, existing `whatsapp_link_clicks` table.
+
+## Deliverables
+
+1. One migration: 3 tables + grants + RLS + scoring function + trigger.
+2. Edge function `track-engagement-click`.
+3. Edits: `whatsapp-inbound` (event insert on status), `process-journeys` (sent-event insert + link rewriting).
+4. New hook `useJourneyEngagement.ts` + component `JourneyEngagementSummary.tsx`.
+5. `JourneyAnalytics.tsx` mounts the new section.
+
+Confirm and I'll implement.
