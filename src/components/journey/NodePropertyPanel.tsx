@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { X, Trash2, AlertTriangle } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import type { Node } from "@xyflow/react";
+import type { Edge, Node } from "@xyflow/react";
 import { parseStoredBody, transformTwilioToFriendly } from "@/lib/whatsappVariables";
 
 type FreeformChannel = "whatsapp" | "sms" | "email";
@@ -22,6 +22,8 @@ const FREEFORM_CHANNELS: { value: FreeformChannel; label: string }[] = [
 
 interface Props {
   node: Node;
+  nodes?: Node[];
+  edges?: Edge[];
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
@@ -48,7 +50,7 @@ const CONTACT_FIELD_SUGGESTIONS: { label: string; token: string }[] = [
   { label: "City", token: "{{contact.city}}" },
 ];
 
-export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) {
+export function NodePropertyPanel({ node, nodes = [], edges = [], onUpdate, onDelete, onClose }: Props) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const { data: approvedWhatsAppTemplates = [], isLoading: loadingWhatsAppTemplates } = useQuery({
