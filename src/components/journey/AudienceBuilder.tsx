@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, X, Users, Loader2 } from "lucide-react";
 import { ENTITY_SCHEMAS, type EntityKey } from "@/lib/listViewSchema";
 
-export type AudienceSegment = { key: string; label?: string; list_view_id: string };
+export type AudienceSegment = { key: string; label?: string; list_view_id: string; entity_type?: EntityKey };
 export type AudienceCombinator = "union" | "intersection" | "difference" | "only_a" | "only_b";
 export type AudienceConfig = {
   segments: AudienceSegment[];
@@ -23,6 +24,7 @@ interface Props {
 }
 
 const SEGMENT_KEYS = ["A", "B"];
+const AUDIENCE_ENTITIES: EntityKey[] = ["customers", "leads", "orders"];
 
 export function AudienceBuilder({ value, onChange }: Props) {
   const segments = value.segments || [];
@@ -46,7 +48,14 @@ export function AudienceBuilder({ value, onChange }: Props) {
     const next = [...segments];
     const key = SEGMENT_KEYS[idx];
     const lv = (listViews as any[]).find((v) => v.id === list_view_id);
-    next[idx] = { key, label: lv?.name, list_view_id };
+    next[idx] = { key, label: lv?.name, list_view_id, entity_type: lv?.entity_type };
+    onChange({ ...value, segments: next });
+  };
+
+  const setSegmentEntity = (idx: number, entity_type: EntityKey) => {
+    const next = [...segments.length === 0 ? [{ key: "A", list_view_id: "" }] : segments];
+    const key = SEGMENT_KEYS[idx];
+    next[idx] = { key, list_view_id: "", entity_type };
     onChange({ ...value, segments: next });
   };
 
@@ -122,10 +131,10 @@ export function AudienceBuilder({ value, onChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewKey]);
 
-  const lvOptions = (listViews as any[]).map((v) => ({
-    value: v.id,
-    label: `${v.name} (${ENTITY_SCHEMAS[v.entity_type as EntityKey]?.label || v.entity_type})`,
-  }));
+  const getOptionsForEntity = (entity?: EntityKey) =>
+    (listViews as any[])
+      .filter((v) => (entity ? v.entity_type === entity : false))
+      .map((v) => ({ value: v.id, label: v.name }));
 
   return (
     <div className="space-y-3">
@@ -144,21 +153,39 @@ export function AudienceBuilder({ value, onChange }: Props) {
           <div key={seg.key} className="flex items-start gap-2 rounded-md border p-2.5">
             <Badge variant="outline" className="mt-1.5 shrink-0 font-mono">{seg.key}</Badge>
             <div className="flex-1 space-y-1.5">
-              <SearchableSelect
-                value={seg.list_view_id}
-                onValueChange={(v) => {
-                  if (segments.length === 0) {
-                    const lv = (listViews as any[]).find((x) => x.id === v);
-                    onChange({ ...value, segments: [{ key: "A", list_view_id: v, label: lv?.name }] });
-                  } else {
-                    setSegment(idx, v);
-                  }
-                }}
-                options={lvOptions}
-                placeholder="Select a list view..."
-                searchPlaceholder="Search list views..."
-                emptyMessage="No customer, lead, or order list views yet"
-              />
+              <div className="flex gap-2">
+                <Select
+                  value={seg.entity_type || ""}
+                  onValueChange={(v) => setSegmentEntity(idx, v as EntityKey)}
+                >
+                  <SelectTrigger className="w-[140px] shrink-0">
+                    <SelectValue placeholder="Object..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AUDIENCE_ENTITIES.map((e) => (
+                      <SelectItem key={e} value={e}>{ENTITY_SCHEMAS[e].label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex-1">
+                  <SearchableSelect
+                    value={seg.list_view_id}
+                    onValueChange={(v) => {
+                      if (segments.length === 0) {
+                        const lv = (listViews as any[]).find((x) => x.id === v);
+                        onChange({ ...value, segments: [{ key: "A", list_view_id: v, label: lv?.name, entity_type: lv?.entity_type }] });
+                      } else {
+                        setSegment(idx, v);
+                      }
+                    }}
+                    options={getOptionsForEntity(seg.entity_type)}
+                    placeholder={seg.entity_type ? "Select a list view..." : "Select an object first"}
+                    searchPlaceholder="Search list views..."
+                    emptyMessage={seg.entity_type ? `No ${ENTITY_SCHEMAS[seg.entity_type].label} list views yet` : "Select an object first"}
+                    disabled={!seg.entity_type}
+                  />
+                </div>
+              </div>
               {seg.list_view_id && preview?.perSegment[seg.key] !== undefined && (
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Users className="h-3 w-3" />
