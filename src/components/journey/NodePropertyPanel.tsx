@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { X, Trash2, AlertTriangle } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import type { Node } from "@xyflow/react";
+import type { Edge, Node } from "@xyflow/react";
 import { parseStoredBody, transformTwilioToFriendly } from "@/lib/whatsappVariables";
 
 type FreeformChannel = "whatsapp" | "sms" | "email";
@@ -22,6 +22,8 @@ const FREEFORM_CHANNELS: { value: FreeformChannel; label: string }[] = [
 
 interface Props {
   node: Node;
+  nodes?: Node[];
+  edges?: Edge[];
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
@@ -48,7 +50,7 @@ const CONTACT_FIELD_SUGGESTIONS: { label: string; token: string }[] = [
   { label: "City", token: "{{contact.city}}" },
 ];
 
-export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) {
+export function NodePropertyPanel({ node, nodes = [], edges = [], onUpdate, onDelete, onClose }: Props) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const { data: approvedWhatsAppTemplates = [], isLoading: loadingWhatsAppTemplates } = useQuery({
@@ -455,18 +457,110 @@ export function NodePropertyPanel({ node, onUpdate, onDelete, onClose }: Props) 
         </>
       )}
 
-      {node.type === "decision" && (
-        <div><Label>Condition</Label>
-          <Select value={String(node.data.condition || "opened")} onValueChange={(v) => update("condition", v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="opened">Email Opened</SelectItem>
-              <SelectItem value="clicked">Link Clicked</SelectItem>
-              <SelectItem value="purchased">Purchased</SelectItem>
-            </SelectContent>
-         </Select>
-        </div>
-      )}
+      {node.type === "decision" && (() => {
+        // Walk upstream to find the nearest message node
+        const findUpstreamMessage = (): Node | null => {
+          const visited = new Set<string>();
+          const queue: string[] = [node.id];
+          while (queue.length) {
+            const cur = queue.shift()!;
+            if (visited.has(cur)) continue;
+            visited.add(cur);
+            const incoming = edges.filter((e) => e.target === cur);
+            for (const e of incoming) {
+              const src = nodes.find((n) => n.id === e.source);
+              if (!src) continue;
+              if (src.type === "message") return src;
+              queue.push(src.id);
+            }
+          }
+          return null;
+        };
+        const upstream = findUpstreamMessage();
+        const msgData: any = upstream?.data || {};
+        const messageType = String(msgData.message_type || "template");
+        // Resolve effective channels for the upstream message
+        let channels: string[] = [];
+        if (messageType === "template") {
+          channels = ["whatsapp"];
+        } else if (Array.isArray(msgData.freeform_channels) && msgData.freeform_channels.length) {
+          channels = msgData.freeform_channels as string[];
+        } else {
+          channels = ["email"]; // legacy default
+        }
+        const has = (c: string) => channels.includes(c);
+
+        // Channel-specific decision options
+        type Opt = { value: string; label: string };
+        const options: Opt[] = [];
+        const seen = new Set<string>();
+        const add = (o: Opt) => { if (!seen.has(o.value)) { seen.add(o.value); options.push(o); } };
+
+        if (has("whatsapp")) {
+          add({ value: "wa_delivered", label: "WhatsApp Delivered" });
+          add({ value: "wa_read", label: "WhatsApp Read" });
+          add({ value: "wa_link_clicked", label: "WhatsApp Link Clicked" });
+          add({ value: "wa_replied", label: "WhatsApp Replied" });
+          add({ value: "wa_failed", label: "WhatsApp Failed / Undelivered" });
+        }
+        if (has("email")) {
+          add({ value: "email_delivered", label: "Email Delivered" });
+          add({ value: "email_opened", label: "Email Opened" });
+          add({ value: "email_link_clicked", label: "Email Link Clicked" });
+          add({ value: "email_replied", label: "Email Replied" });
+          add({ value: "email_bounced", label: "Email Bounced" });
+        }
+        if (has("sms")) {
+          add({ value: "sms_delivered", label: "SMS Delivered" });
+          add({ value: "sms_link_clicked", label: "SMS Link Clicked" });
+          add({ value: "sms_failed", label: "SMS Failed / Undelivered" });
+        }
+        // Generic outcomes always available
+        add({ value: "purchased", label: "Purchased" });
+        add({ value: "no_response", label: "No Response" });
+
+        const current = String(node.data.condition || options[0]?.value || "");
+        // If current value no longer in options (channel changed), keep showing but allow reset
+        const currentInList = options.some((o) => o.value === current);
+
+        return (
+          <div className="space-y-3">
+            <div className="rounded-md border bg-muted/40 p-2 text-[11px] text-muted-foreground">
+              {upstream ? (
+                <>
+                  Upstream message:{" "}
+                  <span className="font-medium text-foreground">
+                    {messageType === "template"
+                      ? `WhatsApp Template${msgData.whatsapp_template_name ? ` — ${msgData.whatsapp_template_name}` : ""}`
+                      : `Free-form (${channels.join(", ")})`}
+                  </span>
+                </>
+              ) : (
+                <>Connect a Message node before this Decision to see channel-specific options.</>
+              )}
+            </div>
+            <div>
+              <Label>Condition</Label>
+              <Select value={current} onValueChange={(v) => update("condition", v)}>
+                <SelectTrigger><SelectValue placeholder="Select a condition" /></SelectTrigger>
+                <SelectContent>
+                  {!currentInList && current && (
+                    <SelectItem value={current}>
+                      {current} (not valid for current channel)
+                    </SelectItem>
+                  )}
+                  {options.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                The branch is taken when this event occurs for the upstream message.
+              </p>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="pt-4 border-t">
         <Button variant="destructive" size="sm" className="w-full" onClick={() => setConfirmOpen(true)}>

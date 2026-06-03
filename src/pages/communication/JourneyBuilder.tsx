@@ -254,6 +254,8 @@ export default function JourneyBuilder() {
         {selectedNode && (
           <NodePropertyPanel
             node={selectedNode}
+            nodes={nodes}
+            edges={edges}
             onUpdate={updateNodeData}
             onDelete={deleteNode}
             onClose={() => setSelectedNode(null)}
