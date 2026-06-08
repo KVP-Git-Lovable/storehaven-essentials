@@ -1,3 +1,11 @@
+function normalizePhone(p: any): string | null {
+  if (!p) return null;
+  const digits = String(p).replace(/\D/g, "");
+  if (!digits) return null;
+  // Match backend normalizeE164 loosely: keep last 10-15 digits
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -55,14 +63,34 @@ export function MultiSegmentPreviewDialog({ open, onOpenChange, audienceConfig }
         const perSegmentIds: Record<string, string[]> = {};
         const rowsById: Record<string, any> = {};
         for (const seg of audienceConfig.segments!) {
+          // Fetch the list view definition so we can request ALL columns (selected_fields
+          // on the saved list view may exclude phone/id needed for combining).
+          const { data: lv, error: lvErr } = await supabase
+            .from("list_views")
+            .select("entity_type, filters")
+            .eq("id", seg.list_view_id)
+            .maybeSingle();
+          if (lvErr) throw lvErr;
+          if (!lv) throw new Error(`List view ${seg.key} not found`);
           const { data, error } = await supabase.functions.invoke("list-view-resolve", {
-            body: { list_view_id: seg.list_view_id, mode: "rows" },
+            body: {
+              definition: { entity_type: lv.entity_type, filters: lv.filters || [], selected_fields: [] },
+              mode: "rows",
+            },
           });
           if (error) throw error;
           if (data?.error) throw new Error(data.error);
           const segRows: any[] = data?.rows || [];
-          perSegmentIds[seg.key] = segRows.map((r) => r.id).filter(Boolean);
-          for (const r of segRows) if (r?.id) rowsById[r.id] = r;
+          const keys: string[] = [];
+          for (const r of segRows) {
+            // Prefer phone as the combine key (matches backend audience-preview counts).
+            // Fallback to id if phone is missing (e.g., orders list views).
+            const key = normalizePhone(r?.phone) || (r?.id ? `id:${r.id}` : null);
+            if (!key) continue;
+            keys.push(key);
+            if (!rowsById[key]) rowsById[key] = r;
+          }
+          perSegmentIds[seg.key] = keys;
         }
         const finalIds = combine(perSegmentIds, audienceConfig);
         const finalRows = finalIds.map((id) => rowsById[id]).filter(Boolean);
