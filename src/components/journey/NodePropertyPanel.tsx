@@ -27,6 +27,7 @@ interface Props {
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
+  journeyStatus?: string;
 }
 
 interface WhatsAppTemplateOption {
@@ -50,7 +51,7 @@ const CONTACT_FIELD_SUGGESTIONS: { label: string; token: string }[] = [
   { label: "City", token: "{{contact.city}}" },
 ];
 
-export function NodePropertyPanel({ node, nodes = [], edges = [], onUpdate, onDelete, onClose }: Props) {
+export function NodePropertyPanel({ node, nodes = [], edges = [], onUpdate, onDelete, onClose, journeyStatus }: Props) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const { data: approvedWhatsAppTemplates = [], isLoading: loadingWhatsAppTemplates } = useQuery({
@@ -200,9 +201,14 @@ export function NodePropertyPanel({ node, nodes = [], edges = [], onUpdate, onDe
   return (
     <div className="w-72 border-l bg-background p-4 space-y-4 overflow-y-auto">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-sm capitalize">{String(node.type)} Properties</h3>
+        <h3 className="font-semibold text-sm capitalize">Edit {String(node.type)}</h3>
         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}><X className="h-4 w-4" /></Button>
       </div>
+      <p className="text-[11px] text-muted-foreground -mt-2">
+        {journeyStatus === "active" || journeyStatus === "paused"
+          ? "Changes apply to future executions only. Click Save in the header to persist."
+          : "Changes are persisted when you click Save in the header."}
+      </p>
 
       {node.type === "entry" && (
         (node.data as any).audience_config ? (

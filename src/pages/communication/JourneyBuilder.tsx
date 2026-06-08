@@ -24,8 +24,9 @@ import { ExitNode } from "@/components/journey/ExitNode";
 import { NodePropertyPanel } from "@/components/journey/NodePropertyPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Save, Play, Pause, Users, Mail, Clock, GitBranch, LogOut, BarChart3, MessageCircleMore } from "lucide-react";
+import { ArrowLeft, Save, Play, Pause, Users, Mail, Clock, GitBranch, LogOut, BarChart3, MessageCircleMore, Pencil, MousePointerClick } from "lucide-react";
 import { toast } from "sonner";
+import { EditJourneyDetailsDialog } from "@/components/journey/EditJourneyDetailsDialog";
 
 const nodeTypes = {
   entry: EntryNode,
@@ -45,6 +46,7 @@ export default function JourneyBuilder() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [editDetailsOpen, setEditDetailsOpen] = useState(false);
   const initialized = useRef(false);
 
   const { data: journey, isLoading } = useQuery({
@@ -199,6 +201,9 @@ export default function JourneyBuilder() {
           <Button variant="outline" size="sm" onClick={() => navigate(`/communication/journeys/${id}/analytics`)}>
             <BarChart3 className="mr-1 h-4 w-4" /> Analytics
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setEditDetailsOpen(true)}>
+            <Pencil className="mr-1 h-4 w-4" /> Edit Journey
+          </Button>
           <Button variant="outline" size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
             <Save className="mr-1 h-4 w-4" /> Save
           </Button>
@@ -216,6 +221,11 @@ export default function JourneyBuilder() {
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1">
+          {(journey?.status === "active" || journey?.status === "paused") && (
+            <div className="px-4 py-2 text-[12px] bg-orange-50 border-b border-orange-200 text-orange-800">
+              You're editing a {journey?.status} journey. Edits to nodes apply to future executions only — already-processed contacts are not affected.
+            </div>
+          )}
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -248,6 +258,14 @@ export default function JourneyBuilder() {
                 </Button>
               </div>
             </Panel>
+            {!selectedNode && nodes.length > 0 && (
+              <Panel position="top-right">
+                <div className="flex items-center gap-1.5 bg-background/90 border rounded-md px-2 py-1 shadow-sm text-[11px] text-muted-foreground">
+                  <MousePointerClick className="h-3 w-3" />
+                  Click any node to edit its properties
+                </div>
+              </Panel>
+            )}
           </ReactFlow>
         </div>
 
@@ -259,9 +277,16 @@ export default function JourneyBuilder() {
             onUpdate={updateNodeData}
             onDelete={deleteNode}
             onClose={() => setSelectedNode(null)}
+            journeyStatus={journey?.status}
           />
         )}
       </div>
+
+      <EditJourneyDetailsDialog
+        open={editDetailsOpen}
+        onOpenChange={setEditDetailsOpen}
+        journey={journey}
+      />
     </div>
   );
 }
