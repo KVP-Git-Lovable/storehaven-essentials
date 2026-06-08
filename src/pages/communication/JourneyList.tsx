@@ -1070,6 +1070,11 @@ export default function JourneyList() {
           existing={scheduleJourney.schedule || null}
         />
       )}
+      <EditJourneyDetailsDialog
+        open={!!editJourney}
+        onOpenChange={(o) => { if (!o) setEditJourney(null); }}
+        journey={editJourney}
+      />
     </div>
   );
 }
