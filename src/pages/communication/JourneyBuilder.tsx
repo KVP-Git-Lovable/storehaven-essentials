@@ -277,6 +277,7 @@ export default function JourneyBuilder() {
             onUpdate={updateNodeData}
             onDelete={deleteNode}
             onClose={() => setSelectedNode(null)}
+            journeyStatus={journey?.status}
           />
         )}
       </div>
