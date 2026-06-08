@@ -27,6 +27,7 @@ import { executeListView } from "@/lib/listViewExecutor";
 import { ENTITY_SCHEMAS, type FilterCondition } from "@/lib/listViewSchema";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { formatDOB } from "@/components/shared/GenderSelect";
 
 const PAGE_SIZE = 50;
 
@@ -51,7 +52,7 @@ export default function LeadsList() {
 
   const leadsEntity = ENTITY_SCHEMAS.leads;
   const fieldLabel = (key: string) => leadsEntity.fields.find((f) => f.key === key)?.label || key;
-  const DEFAULT_COLUMNS = ["name", "email", "phone", "city", "state", "country", "address", "is_converted"];
+  const DEFAULT_COLUMNS = ["name", "email", "phone", "city", "state", "country", "date_of_birth", "gender", "is_converted"];
   const viewColumns = (activeColumnOrder.length ? activeColumnOrder : activeSelectedFields).filter((k) => k !== "id");
   const displayColumns = usingListView && viewColumns.length ? viewColumns : DEFAULT_COLUMNS;
 
@@ -111,6 +112,10 @@ export default function LeadsList() {
       case "created_at":
       case "converted_at":
         return v ? format(new Date(v), "dd MMM yyyy") : "—";
+      case "date_of_birth":
+        return formatDOB(v);
+      case "gender":
+        return v || "—";
       default:
         if (v === null || v === undefined || v === "") return "—";
         return String(v);
