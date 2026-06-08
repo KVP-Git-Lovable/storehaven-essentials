@@ -248,6 +248,13 @@ export function CandidateDetailsSheet({
               <div><span className="text-muted-foreground">Expected CTC:</span> {candidate.expected_salary ? `₹${candidate.expected_salary.toLocaleString()}` : "—"}</div>
               <div><span className="text-muted-foreground">Notice:</span> {candidate.notice_period_days ? `${candidate.notice_period_days} days` : "—"}</div>
               <div><span className="text-muted-foreground">Source:</span> {candidate.source || "—"}</div>
+              <div><span className="text-muted-foreground">DOB:</span> {(() => {
+                const v = (candidate as any).date_of_birth;
+                if (!v) return "—";
+                const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+                return m ? `${m[3]}-${m[2]}-${m[1]}` : String(v);
+              })()}</div>
+              <div><span className="text-muted-foreground">Gender:</span> {(candidate as any).gender || "—"}</div>
             </div>
           </div>
 
