@@ -8,7 +8,7 @@ import { Loader2 } from "lucide-react";
 type Segment = { key: string; label?: string; list_view_id: string };
 type AudienceConfig = {
   segments?: Segment[];
-  combinator?: "union" | "intersection" | "difference" | "only_a" | "only_b";
+  combinator?: string;
   primary?: string;
 };
 
