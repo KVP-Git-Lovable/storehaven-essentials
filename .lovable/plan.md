@@ -1,47 +1,63 @@
 ## Goal
+Standardize DOB and Gender capture across all person-oriented entities, without touching existing workflows.
 
-Make it obvious and easy to edit any existing journey (Draft, Active, or Paused) — both its top-level details and every node on the canvas — without deleting and recreating components. Execution logic, scheduling APIs, and enrollment behavior are untouched; edits affect only future processing.
+## Scope — person-oriented tables
+| Entity | Table | DOB today | Gender today | Action |
+|---|---|---|---|---|
+| Leads | `leads` | ❌ | ❌ | add both |
+| Customers | `customers` | ✅ `date_of_birth` | ❌ | add `gender` |
+| Contacts | `journey_contacts` | ✅ `date_of_birth` | ❌ | add `gender` |
+| Candidates | `candidates` | ❌ | ❌ | add both |
+| Employees | `employees` | ✅ `date_of_birth` | ✅ `gender` | UI parity only |
+| Visitors | — | — | — | no dedicated table found; skip unless you point one out |
 
-## What's already in place (so we don't duplicate)
+All columns nullable → existing rows unaffected; no API/automation impact.
 
-- `NodePropertyPanel` already supports editing all node types (Message template/free-form, Decision condition, Delay duration/unit, Entry audience hint). Clicking a node on the canvas opens it.
-- `JourneyBuilder` already lets users `Save` the canvas regardless of status.
-- The problem is purely UX/discoverability: there is no "Edit Journey" entry point from the list, and inside the builder the only way to edit a node is to discover that nodes are clickable.
+## 1. Database migration (single migration)
+```sql
+-- Leads
+ALTER TABLE public.leads
+  ADD COLUMN date_of_birth date,
+  ADD COLUMN gender text CHECK (gender IN ('Male','Female','Other'));
 
-## Changes
+-- Customers
+ALTER TABLE public.customers
+  ADD COLUMN gender text CHECK (gender IN ('Male','Female','Other'));
 
-### 1. JourneyList (`src/pages/communication/JourneyList.tsx`)
+-- Journey Contacts
+ALTER TABLE public.journey_contacts
+  ADD COLUMN gender text CHECK (gender IN ('Male','Female','Other'));
 
-- Add an **"Edit Journey"** action button (pencil icon) in the row action column, visible for journeys with status `draft`, `active`, or `paused`. Clicking it routes to `/communication/journeys/:id` (the builder) with an `?edit=1` query flag.
-- Add an **"Edit Details"** option that opens a small dialog to edit the journey's **Name**, **Description**, and **Audience** (re-uses existing `AudienceBuilder`). On save it updates the `journeys` row — no change to canvas / schedule / execution.
-- Keep all existing Play/Pause/Schedule/Analytics/Delete buttons.
+-- Candidates
+ALTER TABLE public.candidates
+  ADD COLUMN date_of_birth date,
+  ADD COLUMN gender text CHECK (gender IN ('Male','Female','Other'));
+```
+No data backfill. No RLS / grant changes (existing policies cover new columns). No trigger or function changes.
 
-### 2. JourneyBuilder header (`src/pages/communication/JourneyBuilder.tsx`)
+## 2. Shared UI helper
+Add `src/components/shared/GenderSelect.tsx` — a 3-option Select (`Male`, `Female`, `Other`) reused everywhere.
 
-- Add an **"Edit Journey"** button next to `Analytics` / `Save` / `Pause|Activate`. It opens the same **Edit Details** dialog described above (name, description, audience). Available for `draft`, `active`, and `paused`.
-- Show a small status-aware banner when the journey is `active` or `paused`:
-  > "You're editing a live journey. Changes apply to future executions only — already-processed contacts are not affected."
-- Add a subtle hint on the canvas (small Panel chip): "Click any node to edit its properties." Shown only when no node is currently selected.
+DOB inputs: use existing shadcn Popover + Calendar pattern (already used elsewhere) with display format `dd-MM-yyyy` via `date-fns/format`. Stored as ISO `date` in DB. No new dependency.
 
-### 3. Node editing UX (`src/components/journey/NodePropertyPanel.tsx`)
+## 3. Form & list updates
+For each entity, add DOB + Gender to Create/Edit dialog, View dialog, and the main list table column (after existing identity columns).
 
-- No functional change to the editing logic — it already covers Message (template + free-form), Decision (channel-aware condition), Delay (duration + unit), Entry (audience hint).
-- Add a small **"Editing — changes saved on Save"** helper line at the top of the panel and a friendlier title (e.g., "Edit Message", "Edit Decision", "Edit Delay") to make the edit affordance explicit.
-- For `active`/`paused` journeys, surface an inline note: "Edits will affect future executions only."
+- **Leads** — `src/components/transactions/LeadFormDialog.tsx`, `src/pages/transactions/LeadsList.tsx`, `src/lib/leadImport.ts` (accept optional `dob`, `gender` columns; skip if absent)
+- **Customers** — `src/pages/transactions/CustomersList.tsx` + its form dialog, `src/lib/customerImport.ts`
+- **Contacts** — `src/pages/communication/ContactsManager.tsx` (add Gender to add dialog, DOB already exists — reformat display to dd-mm-yyyy)
+- **Candidates** — `src/components/recruitment/CandidateFormDialog.tsx`, `src/components/recruitment/CandidateDetailsSheet.tsx`
+- **Employees** — `src/pages/staff/Employees.tsx`, `src/pages/staff/EmployeeDetails.tsx` — verify both fields surface in create/edit/view; reformat DOB display to dd-mm-yyyy
 
-### 4. Execution / scheduling
+Validation via `zod` (`src/lib/schemas.ts`):
+- `date_of_birth: z.string().optional().nullable()` (ISO)
+- `gender: z.enum(['Male','Female','Other']).optional().nullable()`
 
-- No changes. `process-journeys`, `journey-actions`, `journey_enrollments`, and `journey_schedules` are not touched. Existing enrollments continue with the canvas state they were enrolled against (current behavior).
+## 4. Out of scope (preserves backward compatibility)
+- No changes to journeys engine, list-view executor, analytics, edge functions, exports, or RLS.
+- No rename of existing `date_of_birth` columns.
+- No changes to filters/segment logic beyond the columns being available to existing dynamic list-view builder (which already auto-discovers columns).
+- No visitors module changes (none exists).
 
-## Technical details
-
-- New state in `JourneyBuilder`: `editDetailsOpen: boolean`. Reuses the existing `journey` query and a new `updateDetailsMutation` that does `supabase.from("journeys").update({ name, description, list_view_id, audience_config }).eq("id", id)` then invalidates `["journey", id]` and `["journeys"]`.
-- New dialog component (inline) shared between `JourneyList` and `JourneyBuilder`, or simply duplicated — small enough to inline in both. Reuses `AudienceBuilder` for the audience block.
-- Routing: list's "Edit Journey" icon simply navigates to the existing builder route. No new route needed.
-- No DB migration. No edge-function changes. No `canvas_data` shape change.
-
-## Out of scope
-
-- Versioning/branching of canvases.
-- Re-enrolling already-processed contacts after an edit.
-- Edits to schedule timings (already handled by the existing Schedule dialog).
+## Open question
+You mentioned "Visitors" — there is no Visitors table in the project today. Should I (a) skip it, or (b) create a new `visitors` table? Default: skip.
