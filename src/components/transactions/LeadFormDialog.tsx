@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { GenderSelect, formatDOB } from "@/components/shared/GenderSelect";
 
 export interface LeadRow {
   id: string;
@@ -23,6 +24,8 @@ export interface LeadRow {
   converted_at: string | null;
   converted_customer_id: string | null;
   created_at: string;
+  date_of_birth?: string | null;
+  gender?: string | null;
 }
 
 interface Props {
@@ -32,7 +35,7 @@ interface Props {
   mode?: "create" | "edit" | "view";
 }
 
-const empty = { name: "", email: "", phone: "", city: "", state: "", country: "", address: "" };
+const empty = { name: "", email: "", phone: "", city: "", state: "", country: "", address: "", date_of_birth: "", gender: "" };
 
 export function LeadFormDialog({ open, onOpenChange, lead = null, mode = "create" }: Props) {
   const qc = useQueryClient();
@@ -51,6 +54,8 @@ export function LeadFormDialog({ open, onOpenChange, lead = null, mode = "create
         state: lead.state || "",
         country: lead.country || "",
         address: lead.address || "",
+        date_of_birth: (lead as any).date_of_birth || "",
+        gender: (lead as any).gender || "",
       });
     } else {
       setForm(empty);
@@ -67,6 +72,8 @@ export function LeadFormDialog({ open, onOpenChange, lead = null, mode = "create
         state: form.state || null,
         country: form.country || null,
         address: form.address || null,
+        date_of_birth: form.date_of_birth || null,
+        gender: form.gender || null,
       };
       const q = isEdit
         ? supabase.from("leads").update(payload).eq("id", lead!.id)
@@ -120,6 +127,19 @@ export function LeadFormDialog({ open, onOpenChange, lead = null, mode = "create
           <div>
             <Label>State</Label>
             <Input value={form.state} disabled={isView} onChange={(e) => setForm({ ...form, state: e.target.value })} />
+          </div>
+          <div>
+            <Label>Date of Birth</Label>
+            {isView ? (
+              <Input value={formatDOB(form.date_of_birth)} disabled />
+            ) : (
+              <Input type="date" value={form.date_of_birth} onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })} />
+            )}
+            {!isView && <p className="text-[11px] text-muted-foreground mt-1">Displayed as dd-mm-yyyy</p>}
+          </div>
+          <div>
+            <Label>Gender</Label>
+            <GenderSelect value={form.gender} onChange={(v) => setForm({ ...form, gender: v || "" })} disabled={isView} />
           </div>
           <div className="col-span-2">
             <Label>Country</Label>
