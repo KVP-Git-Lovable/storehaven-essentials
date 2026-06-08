@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { AudiencePreviewDialog } from "./AudiencePreviewDialog";
+import { MultiSegmentPreviewDialog } from "./MultiSegmentPreviewDialog";
 
 const COMBINATOR_LABELS: Record<string, string> = {
   union: "A ∪ B",
@@ -26,6 +27,7 @@ export function EntryNode({ data, selected }: NodeProps) {
   const entityType: string | undefined = d.list_view_entity_type;
   const [count, setCount] = useState<number | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [multiPreviewOpen, setMultiPreviewOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,8 +90,27 @@ export function EntryNode({ data, selected }: NodeProps) {
             ))}
           </div>
           {count !== null && (
-            <Badge variant="secondary" className="text-[10px]">{count} contacts</Badge>
+            <Badge
+              variant="secondary"
+              className="text-[10px] cursor-pointer hover:bg-secondary/80"
+              onClick={(e) => { e.stopPropagation(); setMultiPreviewOpen(true); }}
+            >
+              {count} contacts
+            </Badge>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs w-full"
+            onClick={(e) => { e.stopPropagation(); setMultiPreviewOpen(true); }}
+          >
+            <Eye className="h-3 w-3 mr-1" /> Preview Audience
+          </Button>
+          <MultiSegmentPreviewDialog
+            open={multiPreviewOpen}
+            onOpenChange={setMultiPreviewOpen}
+            audienceConfig={audienceConfig}
+          />
         </div>
       ) : isBound ? (
         <div className="space-y-2">
@@ -100,7 +121,15 @@ export function EntryNode({ data, selected }: NodeProps) {
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {entityType && <Badge variant="outline" className="text-[10px] capitalize">{entityType}</Badge>}
-            {count !== null && <Badge variant="secondary" className="text-[10px]">{count} contacts</Badge>}
+            {count !== null && (
+              <Badge
+                variant="secondary"
+                className="text-[10px] cursor-pointer hover:bg-secondary/80"
+                onClick={(e) => { e.stopPropagation(); setPreviewOpen(true); }}
+              >
+                {count} contacts
+              </Badge>
+            )}
           </div>
           <Button
             variant="ghost"
