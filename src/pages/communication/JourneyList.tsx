@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Plus, Play, Pause, Trash2, BarChart3, GitBranch, Users, MessageSquare, ExternalLink, Send, Inbox, Check, X, Calendar as CalendarIcon } from "lucide-react";
+import { Plus, Play, Pause, Trash2, BarChart3, GitBranch, Users, MessageSquare, ExternalLink, Send, Inbox, Check, X, Calendar as CalendarIcon, Pencil } from "lucide-react";
 import { BackButton } from "@/components/shared/BackButton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
@@ -23,6 +23,7 @@ import { JourneyScheduleDialog } from "@/components/journey/JourneyScheduleDialo
 import { summarizeSchedule, type JourneySchedule } from "@/lib/journeySchedule";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { AudienceBuilder, type AudienceConfig } from "@/components/journey/AudienceBuilder";
+import { EditJourneyDetailsDialog } from "@/components/journey/EditJourneyDetailsDialog";
 import { cn } from "@/lib/utils";
 
 const statusColors: Record<string, string> = {
@@ -90,6 +91,9 @@ export default function JourneyList() {
 
   // Schedule dialog state
   const [scheduleJourney, setScheduleJourney] = useState<any | null>(null);
+
+  // Edit journey details dialog
+  const [editJourney, setEditJourney] = useState<any | null>(null);
 
   // List filter state
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
@@ -707,6 +711,11 @@ export default function JourneyList() {
                         {canSubmit(j) && (
                           <Button size="sm" variant="ghost" title="Submit for Approval" onClick={() => openSubmitDialog(j)}>
                             <Send className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {(j.status === "draft" || j.status === "active" || j.status === "paused") && (
+                          <Button size="sm" variant="ghost" title="Edit Journey" onClick={() => setEditJourney(j)}>
+                            <Pencil className="h-4 w-4" />
                           </Button>
                         )}
                         {j.status === "draft" && (
