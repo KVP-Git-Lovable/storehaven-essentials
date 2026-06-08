@@ -766,9 +766,11 @@ export type Database = {
           created_at: string
           current_company: string | null
           current_designation: string | null
+          date_of_birth: string | null
           email: string | null
           expected_salary: number | null
           experience_years: number | null
+          gender: string | null
           id: string
           name: string
           notes: string | null
@@ -784,9 +786,11 @@ export type Database = {
           created_at?: string
           current_company?: string | null
           current_designation?: string | null
+          date_of_birth?: string | null
           email?: string | null
           expected_salary?: number | null
           experience_years?: number | null
+          gender?: string | null
           id?: string
           name: string
           notes?: string | null
@@ -802,9 +806,11 @@ export type Database = {
           created_at?: string
           current_company?: string | null
           current_designation?: string | null
+          date_of_birth?: string | null
           email?: string | null
           expected_salary?: number | null
           experience_years?: number | null
+          gender?: string | null
           id?: string
           name?: string
           notes?: string | null
@@ -1218,6 +1224,7 @@ export type Database = {
           customer_segment: string | null
           date_of_birth: string | null
           email: string | null
+          gender: string | null
           id: string
           loyalty_points: number | null
           name: string | null
@@ -1239,6 +1246,7 @@ export type Database = {
           customer_segment?: string | null
           date_of_birth?: string | null
           email?: string | null
+          gender?: string | null
           id?: string
           loyalty_points?: number | null
           name?: string | null
@@ -1260,6 +1268,7 @@ export type Database = {
           customer_segment?: string | null
           date_of_birth?: string | null
           email?: string | null
+          gender?: string | null
           id?: string
           loyalty_points?: number | null
           name?: string | null
@@ -3042,6 +3051,7 @@ export type Database = {
           created_by: string | null
           date_of_birth: string | null
           email: string
+          gender: string | null
           id: string
           last_purchase_date: string | null
           name: string
@@ -3056,6 +3066,7 @@ export type Database = {
           created_by?: string | null
           date_of_birth?: string | null
           email: string
+          gender?: string | null
           id?: string
           last_purchase_date?: string | null
           name: string
@@ -3070,6 +3081,7 @@ export type Database = {
           created_by?: string | null
           date_of_birth?: string | null
           email?: string
+          gender?: string | null
           id?: string
           last_purchase_date?: string | null
           name?: string
@@ -3864,7 +3876,9 @@ export type Database = {
           converted_customer_id: string | null
           country: string | null
           created_at: string
+          date_of_birth: string | null
           email: string | null
+          gender: string | null
           id: string
           is_converted: boolean
           name: string | null
@@ -3879,7 +3893,9 @@ export type Database = {
           converted_customer_id?: string | null
           country?: string | null
           created_at?: string
+          date_of_birth?: string | null
           email?: string | null
+          gender?: string | null
           id?: string
           is_converted?: boolean
           name?: string | null
@@ -3894,7 +3910,9 @@ export type Database = {
           converted_customer_id?: string | null
           country?: string | null
           created_at?: string
+          date_of_birth?: string | null
           email?: string | null
+          gender?: string | null
           id?: string
           is_converted?: boolean
           name?: string | null
