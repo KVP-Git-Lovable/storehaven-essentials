@@ -54,7 +54,7 @@ const SAMPLE_ROW = {
   state: "Maharashtra",
   country: "India",
   address: "12 MG Road",
-  date_of_birth: "1990-05-12",
+  date_of_birth: "12-05-1990",
   gender: "Female",
 };
 
