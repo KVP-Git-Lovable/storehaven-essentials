@@ -268,8 +268,8 @@ export function LeadImportDialog({ open, onOpenChange }: Props) {
                         <TableCell className="text-xs">{r.raw.email || "—"}</TableCell>
                         <TableCell className="text-xs">{r.raw.city || "—"}</TableCell>
                         <TableCell className="text-xs">{r.raw.state || "—"}</TableCell>
-                        <TableCell className="text-xs">{r.resolved.date_of_birth ? r.resolved.date_of_birth.split("-").reverse().join("-") : "—"}</TableCell>
-                        <TableCell className="text-xs">{r.resolved.gender || "—"}</TableCell>
+                        <TableCell className="text-xs">{r.resolved?.date_of_birth ? r.resolved.date_of_birth.split("-").reverse().join("-") : (r.raw.date_of_birth || "—")}</TableCell>
+                        <TableCell className="text-xs">{r.resolved?.gender || r.raw.gender || "—"}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1 max-w-md">
                             {r.issues.map((iss, idx) => (
