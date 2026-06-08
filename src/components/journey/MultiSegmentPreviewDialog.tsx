@@ -1,3 +1,11 @@
+function normalizePhone(p: any): string | null {
+  if (!p) return null;
+  const digits = String(p).replace(/\D/g, "");
+  if (!digits) return null;
+  // Match backend normalizeE164 loosely: keep last 10-15 digits
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -61,8 +69,16 @@ export function MultiSegmentPreviewDialog({ open, onOpenChange, audienceConfig }
           if (error) throw error;
           if (data?.error) throw new Error(data.error);
           const segRows: any[] = data?.rows || [];
-          perSegmentIds[seg.key] = segRows.map((r) => r.id).filter(Boolean);
-          for (const r of segRows) if (r?.id) rowsById[r.id] = r;
+          const keys: string[] = [];
+          for (const r of segRows) {
+            // Prefer phone as the combine key (matches backend audience-preview counts).
+            // Fallback to id if phone is missing (e.g., orders list views).
+            const key = normalizePhone(r?.phone) || (r?.id ? `id:${r.id}` : null);
+            if (!key) continue;
+            keys.push(key);
+            if (!rowsById[key]) rowsById[key] = r;
+          }
+          perSegmentIds[seg.key] = keys;
         }
         const finalIds = combine(perSegmentIds, audienceConfig);
         const finalRows = finalIds.map((id) => rowsById[id]).filter(Boolean);
