@@ -13,10 +13,12 @@ export const CUSTOMER_HEADERS = [
   "country",
   "date_of_birth",
   "anniversary_date",
+  "gender",
 ] as const;
 
 export const REQUIRED_CUSTOMER_FIELDS = ["phone"] as const;
 export const VALID_TIERS = ["bronze", "silver", "gold", "platinum"] as const;
+export const VALID_GENDERS = ["Male", "Female", "Other"] as const;
 
 export type CustomerImportRow = {
   customer_code?: string;
@@ -29,6 +31,7 @@ export type CustomerImportRow = {
   country?: string;
   date_of_birth?: string | number;
   anniversary_date?: string | number;
+  gender?: string;
 };
 
 export type CustomerIssue = { severity: "error" | "warning"; message: string };
@@ -48,6 +51,7 @@ export type ValidatedCustomerRow = {
     country: string | null;
     date_of_birth: string | null;
     anniversary_date: string | null;
+    gender: string | null;
     existingId?: string; // when matched on phone -> update
   };
 };
@@ -63,6 +67,7 @@ const SAMPLE_ROW: CustomerImportRow = {
   country: "India",
   date_of_birth: "1990-05-12",
   anniversary_date: "2015-11-20",
+  gender: "Female",
 };
 
 /* -------- Template generation -------- */
@@ -122,9 +127,19 @@ function parseDate(v: any): string | null {
     return d.toISOString().slice(0, 10);
   }
   const s = String(v).trim();
+  const m = s.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
   const d = new Date(s.includes("T") ? s : s + "T00:00:00");
   if (isNaN(d.getTime())) return null;
   return d.toISOString().slice(0, 10);
+}
+
+function normaliseGender(v: any): { value: string | null; invalid: boolean } {
+  const s = String(v ?? "").trim();
+  if (!s) return { value: null, invalid: false };
+  const lower = s.toLowerCase();
+  const match = VALID_GENDERS.find((g) => g.toLowerCase() === lower);
+  return match ? { value: match, invalid: false } : { value: null, invalid: true };
 }
 
 const STATE_LOOKUP = new Set(INDIAN_STATES.map((s) => s.toLowerCase()));
@@ -151,6 +166,7 @@ export function validateCustomerRows(
     const country = String(raw.country ?? "").trim();
     const dob = parseDate(raw.date_of_birth);
     const anniv = parseDate(raw.anniversary_date);
+    const genderParsed = normaliseGender(raw.gender);
     let code = String(raw.customer_code ?? "").trim();
 
     if (!phone || !/^\d{10,15}$/.test(phone)) {
@@ -212,6 +228,9 @@ export function validateCustomerRows(
     if (raw.anniversary_date && !anniv) {
       issues.push({ severity: "warning", message: "Could not parse anniversary_date (use yyyy-mm-dd)" });
     }
+    if (genderParsed.invalid) {
+      issues.push({ severity: "warning", message: `Invalid gender "${raw.gender}" — allowed: Male, Female, Other` });
+    }
 
     if (existingByThisPhone) {
       issues.push({ severity: "warning", message: "Phone already exists — will UPDATE the existing customer" });
@@ -231,6 +250,7 @@ export function validateCustomerRows(
         country: country || null,
         date_of_birth: dob,
         anniversary_date: anniv,
+        gender: genderParsed.value,
         existingId: existingByThisPhone?.id,
       };
     }
@@ -277,6 +297,7 @@ export const CUSTOMER_EXPORT_HEADERS = [
   "total_spent",
   "date_of_birth",
   "anniversary_date",
+  "gender",
   "created_at",
 ] as const;
 

@@ -8,9 +8,12 @@ export const REQUIRED_HEADERS = [
   "state",
   "country",
   "address",
+  "date_of_birth",
+  "gender",
 ] as const;
 
 export const REQUIRED_FIELDS = ["phone"] as const;
+const VALID_GENDERS = ["Male", "Female", "Other"] as const;
 
 export type ImportRow = {
   name?: string;
@@ -20,6 +23,8 @@ export type ImportRow = {
   state?: string;
   country?: string;
   address?: string;
+  date_of_birth?: string | number;
+  gender?: string;
 };
 
 export type Issue = { severity: "error" | "warning"; message: string };
@@ -36,6 +41,8 @@ export type ValidatedRow = {
     state: string | null;
     country: string | null;
     address: string | null;
+    date_of_birth: string | null;
+    gender: string | null;
   };
 };
 
@@ -47,6 +54,8 @@ const SAMPLE_ROW = {
   state: "Maharashtra",
   country: "India",
   address: "12 MG Road",
+  date_of_birth: "1990-05-12",
+  gender: "Female",
 };
 
 export function downloadTemplateCSV() {
@@ -61,6 +70,31 @@ export function downloadTemplateXLSX() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Leads");
   XLSX.writeFile(wb, "lead_import_template.xlsx");
+}
+
+function parseDate(v: any): string | null {
+  if (v == null || v === "") return null;
+  if (typeof v === "number") {
+    const ms = Math.round((v - 25569) * 86400 * 1000);
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString().slice(0, 10);
+  }
+  const s = String(v).trim();
+  // Accept dd-mm-yyyy or dd/mm/yyyy
+  const m = s.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  const d = new Date(s.includes("T") ? s : s + "T00:00:00");
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function normaliseGender(v: any): { value: string | null; invalid: boolean } {
+  const s = String(v ?? "").trim();
+  if (!s) return { value: null, invalid: false };
+  const lower = s.toLowerCase();
+  const match = VALID_GENDERS.find((g) => g.toLowerCase() === lower);
+  return match ? { value: match, invalid: false } : { value: null, invalid: true };
 }
 
 function triggerDownload(blob: Blob, filename: string) {
@@ -110,6 +144,8 @@ export function validateRows(
     const state = String(raw.state ?? "").trim();
     const country = String(raw.country ?? "").trim();
     const address = String(raw.address ?? "").trim();
+    const dob = parseDate(raw.date_of_birth);
+    const genderParsed = normaliseGender(raw.gender);
 
     if (!phone) {
       issues.push({ severity: "error", message: "Phone is required" });
@@ -133,6 +169,13 @@ export function validateRows(
       issues.push({ severity: "warning", message: "Name is empty" });
     }
 
+    if (raw.date_of_birth && !dob) {
+      issues.push({ severity: "warning", message: "Could not parse date_of_birth (use dd-mm-yyyy or yyyy-mm-dd)" });
+    }
+    if (genderParsed.invalid) {
+      issues.push({ severity: "warning", message: `Invalid gender "${raw.gender}" — allowed: Male, Female, Other` });
+    }
+
     const hasError = issues.some((i) => i.severity === "error");
     const validated: ValidatedRow = { rowNumber, raw, issues };
     if (!hasError) {
@@ -144,6 +187,8 @@ export function validateRows(
         state: state || null,
         country: country || null,
         address: address || null,
+        date_of_birth: dob,
+        gender: genderParsed.value,
       };
     }
     return validated;
