@@ -65,7 +65,7 @@ const SAMPLE_ROW: CustomerImportRow = {
   city: "Mumbai",
   state: "Maharashtra",
   country: "India",
-  date_of_birth: "1990-05-12",
+  date_of_birth: "12-05-1990",
   anniversary_date: "2015-11-20",
   gender: "Female",
 };
@@ -223,7 +223,7 @@ export function validateCustomerRows(
     }
 
     if (raw.date_of_birth && !dob) {
-      issues.push({ severity: "warning", message: "Could not parse date_of_birth (use yyyy-mm-dd)" });
+      issues.push({ severity: "warning", message: "Could not parse date_of_birth (use dd-mm-yyyy)" });
     }
     if (raw.anniversary_date && !anniv) {
       issues.push({ severity: "warning", message: "Could not parse anniversary_date (use yyyy-mm-dd)" });
