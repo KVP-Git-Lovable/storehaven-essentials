@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { OrderFormDialog } from "@/components/transactions/OrderFormDialog";
 import { INDIAN_STATES } from "@/lib/indianStates";
 import { CUSTOMER_CODE_REGEX, generateCustomerCode } from "@/lib/customerCode";
+import { GenderSelect, formatDOB } from "@/components/shared/GenderSelect";
 
 interface Props {
   open: boolean;
@@ -29,6 +30,7 @@ interface Props {
     city?: string | null;
     state?: string | null;
     country?: string | null;
+    gender?: string | null;
   } | null;
   mode?: "create" | "edit" | "view";
 }
@@ -44,6 +46,7 @@ const emptyForm = {
   city: "",
   state: "",
   country: "India",
+  gender: "",
 };
 
 const inr = (n: number) =>
@@ -72,6 +75,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
         city: (customer as any).city || "",
         state: (customer as any).state || "",
         country: (customer as any).country || "India",
+        gender: (customer as any).gender || "",
       });
       return;
     }
@@ -112,6 +116,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
         city: form.city || null,
         state: form.state || null,
         country: form.country || null,
+        gender: form.gender || null,
       };
       const query = isEdit
         ? supabase.from("customers").update(payload).eq("id", customer!.id)
@@ -175,11 +180,20 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
           </div>
           <div>
             <Label>Date of Birth</Label>
-            <Input type="date" disabled={isView} value={form.date_of_birth} onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })} />
+            {isView ? (
+              <Input value={formatDOB(form.date_of_birth)} disabled />
+            ) : (
+              <Input type="date" value={form.date_of_birth} onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })} />
+            )}
+            {!isView && <p className="text-[11px] text-muted-foreground mt-1">Displayed as dd-mm-yyyy</p>}
           </div>
-          <div className="col-span-2">
+          <div>
             <Label>Anniversary</Label>
             <Input type="date" disabled={isView} value={form.anniversary_date} onChange={(e) => setForm({ ...form, anniversary_date: e.target.value })} />
+          </div>
+          <div className="col-span-2">
+            <Label>Gender</Label>
+            <GenderSelect value={form.gender} onChange={(v) => setForm({ ...form, gender: v || "" })} disabled={isView} />
           </div>
           <div>
             <Label>City</Label>
