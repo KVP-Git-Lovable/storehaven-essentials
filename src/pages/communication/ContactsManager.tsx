@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Plus, Search } from "lucide-react";
 import { BackButton } from "@/components/shared/BackButton";
 import { toast } from "sonner";
+import { GenderSelect, formatDOB } from "@/components/shared/GenderSelect";
 
 const segmentColors: Record<string, string> = {
   customer: "bg-green-100 text-green-800",
@@ -29,7 +30,7 @@ export default function ContactsManager() {
   const [segFilter, setSegFilter] = useState("all");
   const [form, setForm] = useState({
     name: "", email: "", phone: "", city: "", date_of_birth: "",
-    last_purchase_date: "", segment_type: "customer",
+    last_purchase_date: "", segment_type: "customer", gender: "",
   });
 
   const { data: contacts = [], isLoading } = useQuery({
@@ -55,6 +56,7 @@ export default function ContactsManager() {
         ...form,
         date_of_birth: form.date_of_birth || null,
         last_purchase_date: form.last_purchase_date || null,
+        gender: form.gender || null,
         created_by: user?.id,
       });
       if (error) throw error;
@@ -62,7 +64,7 @@ export default function ContactsManager() {
     onSuccess: () => {
       toast.success("Contact added");
       setShowAdd(false);
-      setForm({ name: "", email: "", phone: "", city: "", date_of_birth: "", last_purchase_date: "", segment_type: "customer" });
+      setForm({ name: "", email: "", phone: "", city: "", date_of_birth: "", last_purchase_date: "", segment_type: "customer", gender: "" });
       queryClient.invalidateQueries({ queryKey: ["journey-contacts"] });
     },
     onError: () => toast.error("Failed to add contact"),
@@ -111,21 +113,25 @@ export default function ContactsManager() {
               <TableHead>Email</TableHead>
               <TableHead>Phone</TableHead>
               <TableHead>City</TableHead>
+              <TableHead>DOB</TableHead>
+              <TableHead>Gender</TableHead>
               <TableHead>Segment</TableHead>
               <TableHead>Opted Out</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
             ) : filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No contacts found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No contacts found</TableCell></TableRow>
             ) : filtered.map((c: any) => (
               <TableRow key={c.id}>
                 <TableCell className="font-medium">{c.name}</TableCell>
                 <TableCell>{c.email}</TableCell>
                 <TableCell>{c.phone}</TableCell>
                 <TableCell>{c.city || "—"}</TableCell>
+                <TableCell>{formatDOB(c.date_of_birth)}</TableCell>
+                <TableCell>{c.gender || "—"}</TableCell>
                 <TableCell><Badge className={segmentColors[c.segment_type] || ""}>{c.segment_type}</Badge></TableCell>
                 <TableCell>
                   <Switch checked={c.opted_out} onCheckedChange={(v) => toggleOptOut.mutate({ id: c.id, opted_out: v })} />
@@ -161,6 +167,10 @@ export default function ContactsManager() {
             <div className="grid grid-cols-2 gap-4">
               <div><Label>Date of Birth</Label><Input type="date" value={form.date_of_birth} onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })} /></div>
               <div><Label>Last Purchase Date</Label><Input type="date" value={form.last_purchase_date} onChange={(e) => setForm({ ...form, last_purchase_date: e.target.value })} /></div>
+            </div>
+            <div>
+              <Label>Gender</Label>
+              <GenderSelect value={form.gender} onChange={(v) => setForm({ ...form, gender: v || "" })} />
             </div>
           </div>
           <DialogFooter>

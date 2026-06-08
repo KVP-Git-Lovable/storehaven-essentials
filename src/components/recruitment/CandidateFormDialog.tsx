@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { GENDER_OPTIONS } from "@/components/shared/GenderSelect";
 
 interface CandidateFormDialogProps {
   open: boolean;
@@ -33,6 +34,8 @@ type FormData = {
   notice_period_days: string;
   source: string;
   notes: string;
+  date_of_birth: string;
+  gender: string;
 };
 
 export function CandidateFormDialog({ open, onOpenChange, requisitions, onSuccess }: CandidateFormDialogProps) {
@@ -51,6 +54,8 @@ export function CandidateFormDialog({ open, onOpenChange, requisitions, onSucces
       notice_period_days: "",
       source: "direct",
       notes: "",
+      date_of_birth: "",
+      gender: "",
     },
   });
 
@@ -67,6 +72,8 @@ export function CandidateFormDialog({ open, onOpenChange, requisitions, onSucces
       notice_period_days: data.notice_period_days ? Number(data.notice_period_days) : null,
       source: data.source,
       notes: data.notes || null,
+      date_of_birth: data.date_of_birth || null,
+      gender: data.gender || null,
       status: "applied",
     });
 
@@ -175,6 +182,44 @@ export function CandidateFormDialog({ open, onOpenChange, requisitions, onSucces
                     <FormControl>
                       <Input placeholder="Designation" {...field} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="date_of_birth"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date of Birth</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <p className="text-[11px] text-muted-foreground">Displayed as dd-mm-yyyy</p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="gender"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Gender</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select gender" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {GENDER_OPTIONS.map((g) => (
+                          <SelectItem key={g} value={g}>{g}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

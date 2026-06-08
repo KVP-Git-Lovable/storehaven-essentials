@@ -13,6 +13,7 @@ import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar
 import { CustomerFormDialog } from "@/components/transactions/CustomerFormDialog";
 import { CustomerImportDialog } from "@/components/transactions/CustomerImportDialog";
 import { exportCustomersCSV, exportCustomersXLSX } from "@/lib/customerImport";
+import { formatDOB } from "@/components/shared/GenderSelect";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -43,6 +44,7 @@ const SEARCH_COLUMNS: SearchColumn[] = [
   { key: "created_at", label: "Created Date", type: "date" },
   { key: "date_of_birth", label: "DOB", type: "date" },
   { key: "anniversary_date", label: "Anniversary", type: "date" },
+  { key: "gender", label: "Gender", type: "enum", options: ["Male", "Female", "Other"] },
 ];
 import {
   AlertDialog,
@@ -88,7 +90,7 @@ export default function CustomersList() {
   const DEFAULT_COLUMNS = [
     "customer_code", "name", "phone", "email", "tier", "city", "state", "total_orders",
     "total_spent", "loyalty_points", "store_credit",
-    "created_at", "date_of_birth", "anniversary_date",
+    "created_at", "date_of_birth", "anniversary_date", "gender",
   ];
   const viewColumns = (activeColumnOrder.length ? activeColumnOrder : activeSelectedFields)
     .filter((k) => k !== "id");
@@ -111,9 +113,12 @@ export default function CustomersList() {
       case "loyalty_points":
         return Number(v || 0);
       case "created_at":
-      case "date_of_birth":
       case "anniversary_date":
         return v ? format(new Date(v), "dd MMM yyyy") : "—";
+      case "date_of_birth":
+        return formatDOB(v);
+      case "gender":
+        return v || "—";
       case "email":
         return <span className="text-xs">{v || "—"}</span>;
       default:
