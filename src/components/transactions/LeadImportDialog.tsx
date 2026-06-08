@@ -246,6 +246,8 @@ export function LeadImportDialog({ open, onOpenChange }: Props) {
                     <TableHead>Email</TableHead>
                     <TableHead>City</TableHead>
                     <TableHead>State</TableHead>
+                    <TableHead>DOB</TableHead>
+                    <TableHead>Gender</TableHead>
                     <TableHead>Issues</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -266,6 +268,8 @@ export function LeadImportDialog({ open, onOpenChange }: Props) {
                         <TableCell className="text-xs">{r.raw.email || "—"}</TableCell>
                         <TableCell className="text-xs">{r.raw.city || "—"}</TableCell>
                         <TableCell className="text-xs">{r.raw.state || "—"}</TableCell>
+                        <TableCell className="text-xs">{r.resolved.date_of_birth ? r.resolved.date_of_birth.split("-").reverse().join("-") : "—"}</TableCell>
+                        <TableCell className="text-xs">{r.resolved.gender || "—"}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1 max-w-md">
                             {r.issues.map((iss, idx) => (
@@ -281,7 +285,7 @@ export function LeadImportDialog({ open, onOpenChange }: Props) {
                   })}
                   {filteredRows.length > 500 && (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-xs text-muted-foreground">
+                      <TableCell colSpan={10} className="text-center text-xs text-muted-foreground">
                         Showing first 500 of {filteredRows.length} rows. All rows will be processed on import.
                       </TableCell>
                     </TableRow>
