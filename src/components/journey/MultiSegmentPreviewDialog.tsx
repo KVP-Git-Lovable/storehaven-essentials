@@ -63,20 +63,10 @@ export function MultiSegmentPreviewDialog({ open, onOpenChange, audienceConfig }
         const perSegmentIds: Record<string, string[]> = {};
         const rowsById: Record<string, any> = {};
         for (const seg of audienceConfig.segments!) {
-          // Fetch the list view definition so we can request ALL columns (selected_fields
-          // on the saved list view may exclude phone/id needed for combining).
-          const { data: lv, error: lvErr } = await supabase
-            .from("list_views")
-            .select("entity_type, filters")
-            .eq("id", seg.list_view_id)
-            .maybeSingle();
-          if (lvErr) throw lvErr;
-          if (!lv) throw new Error(`List view ${seg.key} not found`);
+          // Resolve via edge function (service-role) so RLS on list_views doesn't
+          // block users who didn't create the saved view. Pass list_view_id directly.
           const { data, error } = await supabase.functions.invoke("list-view-resolve", {
-            body: {
-              definition: { entity_type: lv.entity_type, filters: lv.filters || [], selected_fields: [] },
-              mode: "rows",
-            },
+            body: { list_view_id: seg.list_view_id, mode: "rows" },
           });
           if (error) throw error;
           if (data?.error) throw new Error(data.error);
