@@ -591,7 +591,26 @@ function resolveVariables(
     // self-referential (e.g. "{{1}}") or empty cannot resolve. Look for a
     // friendly sibling key whose value resolves and use that.
     const isNumericKey = /^\d+$/.test(key);
-    if (isNumericKey && (!resolved || !resolved.trim())) {
+    // When the template marker tells us this numeric slot belongs to a
+    // specific friendly key (e.g. "2" -> "customer_dob"), the friendly key
+    // is the source of truth. Older nodes may have a STALE numeric mirror
+    // (e.g. "2": "{{contact.name}}" left over from a previous binding),
+    // so we re-resolve from the friendly source whenever it exists — not
+    // only when the numeric resolution is empty.
+    if (isNumericKey && numericToFriendly?.[key]) {
+      const friendlyKey = numericToFriendly[key];
+      if (mapping[friendlyKey] != null) {
+        const fromFriendly = tryResolve(mapping[friendlyKey]);
+        if (fromFriendly && fromFriendly.trim()) {
+          resolved = fromFriendly;
+        } else if (!resolved || !resolved.trim()) {
+          // Friendly source exists but didn't resolve — also try the
+          // friendly key as a direct contact path (e.g. customer_dob).
+          const direct = resolveContactPath(contact, friendlyKey);
+          if (direct && direct.trim()) resolved = direct;
+        }
+      }
+    } else if (isNumericKey && (!resolved || !resolved.trim())) {
       // Prefer the friendly key mapped to this slot via the template marker
       // (e.g. {"1": "customer_name", "2": "customer_dob"}). This preserves
       // positional intent — without it, slot "2" could grab slot "1"'s value.
