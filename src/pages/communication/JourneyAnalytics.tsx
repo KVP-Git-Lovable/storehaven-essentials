@@ -619,7 +619,7 @@ export default function JourneyAnalytics() {
             <TableBody>
               {messages.length === 0 ? (
                 <TableRow><TableCell colSpan={hasTrackedTemplate ? 7 : 6} className="text-center py-8 text-muted-foreground">No messages sent yet</TableCell></TableRow>
-              ) : messages.map((m: any) => {
+              ) : (showAllMessages ? messages : messages.slice(0, 5)).map((m: any) => {
                 const reason = m.error_message || (m.status === "scheduled_no_audience" ? "No audience matched" : "");
                 const isTracked = m.whatsapp_templates?.twilio_content_sid === TRACKED_TEMPLATE_SID
                   || (journeyUsesTrackedTemplate && (m.channel === "whatsapp_template" || m.channel === "whatsapp"));
@@ -696,6 +696,13 @@ export default function JourneyAnalytics() {
               })}
             </TableBody>
           </Table>
+          {messages.length > 5 && (
+            <div className="p-3 border-t text-center">
+              <Button variant="ghost" size="sm" onClick={() => setShowAllMessages((v) => !v)}>
+                {showAllMessages ? "Show less" : `Show more (${messages.length - 5} more)`}
+              </Button>
+            </div>
+          )}
         </Card>
 
         {id && (
@@ -711,5 +718,80 @@ export default function JourneyAnalytics() {
         )}
       </div>
     </TooltipProvider>
+  );
+}
+
+function KpiTile({ label, value, accent, icon }: { label: string; value: string; accent?: string; icon?: JSX.Element }) {
+  return (
+    <Card>
+      <CardContent className="p-3">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</p>
+          {icon && <span className="text-muted-foreground">{icon}</span>}
+        </div>
+        <p className={`text-xl font-bold whitespace-nowrap ${accent || ""}`}>{value}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function FunnelView({ funnel }: { funnel: { label: string; count: number }[] }) {
+  const max = Math.max(...funnel.map((f) => f.count), 1);
+  const colors = ["#3b82f6", "#06b6d4", "#10b981", "#f59e0b", "#f97316", "#ef4444"];
+  const first = funnel[0]?.count || 0;
+  return (
+    <div className="space-y-1.5">
+      {funnel.map((f, i) => {
+        const pct = (f.count / max) * 100;
+        const conv = first ? (f.count / first) * 100 : 0;
+        return (
+          <div key={f.label} className="flex items-center gap-2 text-xs">
+            <span className="w-24 text-muted-foreground">{f.label}</span>
+            <div className="flex-1 h-7 bg-muted rounded relative overflow-hidden">
+              <div className="absolute inset-y-0 left-0 rounded" style={{ width: `${pct}%`, background: colors[i % colors.length], opacity: 0.85 }} />
+              <span className="absolute inset-0 flex items-center justify-end pr-2 text-[11px] font-medium text-foreground">{f.count.toLocaleString("en-IN")}</span>
+            </div>
+            <span className="w-12 text-right text-muted-foreground">{conv.toFixed(1)}%</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Heatmap({ data }: { data: number[][] }) {
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const max = Math.max(...data.flat(), 1);
+  return (
+    <div className="overflow-x-auto">
+      <table className="text-[10px]">
+        <thead>
+          <tr>
+            <th></th>
+            {Array.from({ length: 24 }, (_, h) => <th key={h} className="px-0.5 text-muted-foreground font-normal">{h % 4 === 0 ? `${h}h` : ""}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {days.map((d, di) => (
+            <tr key={d}>
+              <td className="pr-1 text-muted-foreground">{d}</td>
+              {data[di].map((v, hi) => {
+                const op = v / max;
+                return <td key={hi} className="p-0"><div className="w-3 h-3 rounded-sm" style={{ background: `hsl(217 91% 60% / ${0.08 + op * 0.92})` }} title={`${d} ${hi}:00 — ${v} reads`} /></td>;
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SegRow({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div className={`rounded-lg p-3 ${color}`}>
+      <p className="text-[11px] uppercase tracking-wide">{label}</p>
+      <p className="text-lg font-bold">{value.toLocaleString("en-IN")}</p>
+    </div>
   );
 }
