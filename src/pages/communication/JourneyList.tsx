@@ -1142,6 +1142,38 @@ export default function JourneyList() {
         onOpenChange={(o) => { if (!o) setEditJourney(null); }}
         journey={editJourney}
       />
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteTarget && deleteTarget.ids.length > 1
+                ? `Delete ${deleteTarget.ids.length} journeys?`
+                : "Delete this journey?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget?.name ? (
+                <>This will permanently delete <span className="font-medium text-foreground">{deleteTarget.name}</span>. </>
+              ) : null}
+              This action cannot be undone. All related enrollments and message logs will remain for audit but the journey configuration will be removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteTarget) deleteMutation.mutate(deleteTarget.ids);
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
