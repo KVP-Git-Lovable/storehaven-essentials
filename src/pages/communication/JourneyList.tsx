@@ -8,6 +8,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -102,6 +113,10 @@ export default function JourneyList() {
   const [createdByFilter, setCreatedByFilter] = useState<string>("");
   const [listDateFrom, setListDateFrom] = useState<string>("");
   const [listDateTo, setListDateTo] = useState<string>("");
+
+  // Selection + delete confirmation state
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<{ ids: string[]; name?: string } | null>(null);
 
   const { data: journeys = [], isLoading } = useQuery({
     queryKey: ["journeys"],
@@ -278,14 +293,18 @@ export default function JourneyList() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("journeys").delete().eq("id", id);
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase.from("journeys").delete().in("id", ids);
       if (error) throw error;
+      return ids.length;
     },
-    onSuccess: () => {
+    onSuccess: (count) => {
       queryClient.invalidateQueries({ queryKey: ["journeys"] });
-      toast.success("Journey deleted");
+      setSelectedIds([]);
+      setDeleteTarget(null);
+      toast.success(count === 1 ? "Journey deleted" : `${count} journeys deleted`);
     },
+    onError: (e: any) => toast.error(e.message || "Failed to delete"),
   });
 
   const submitForApprovalMutation = useMutation({
@@ -653,9 +672,40 @@ export default function JourneyList() {
             </p>
           )}
         </div>
+        {selectedIds.length > 0 && (
+          <div className="px-4 py-2 border-b bg-muted/40 flex items-center justify-between">
+            <p className="text-sm">{selectedIds.length} selected</p>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setSelectedIds([])}>Clear</Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setDeleteTarget({ ids: selectedIds })}
+              >
+                <Trash2 className="h-4 w-4 mr-1" /> Delete selected
+              </Button>
+            </div>
+          </div>
+        )}
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={
+                    filteredJourneys.length > 0 &&
+                    filteredJourneys.every((j: any) => selectedIds.includes(j.id))
+                  }
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setSelectedIds(filteredJourneys.map((j: any) => j.id));
+                    } else {
+                      setSelectedIds([]);
+                    }
+                  }}
+                  aria-label="Select all"
+                />
+              </TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Segment</TableHead>
@@ -665,11 +715,11 @@ export default function JourneyList() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
             ) : journeys.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No journeys yet. Create one to get started.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No journeys yet. Create one to get started.</TableCell></TableRow>
             ) : filteredJourneys.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No journeys match the selected filters.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No journeys match the selected filters.</TableCell></TableRow>
             ) : (
               filteredJourneys.map((j: any) => {
                 const a = j.approval_status;
@@ -680,6 +730,17 @@ export default function JourneyList() {
                     className={cn("cursor-pointer", j.status === "active" && "bg-green-50 hover:bg-green-100")}
                     onClick={() => navigate(`/communication/journeys/${j.id}`)}
                   >
+                    <TableCell className="py-2 md:py-4" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.includes(j.id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedIds((prev) =>
+                            checked ? [...prev, j.id] : prev.filter((id) => id !== j.id)
+                          );
+                        }}
+                        aria-label={`Select ${j.name}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium py-2 md:py-4 text-xs md:text-sm leading-tight">{j.name}</TableCell>
                     <TableCell className="py-2 md:py-4 align-middle">
                       <div className="flex items-center gap-1 flex-nowrap md:flex-wrap whitespace-nowrap">
@@ -745,7 +806,13 @@ export default function JourneyList() {
                         <Button size="sm" variant="ghost" onClick={() => navigate(`/communication/journeys/${j.id}/analytics`)}>
                           <BarChart3 className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(j.id)}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive"
+                          title="Delete"
+                          onClick={() => setDeleteTarget({ ids: [j.id], name: j.name })}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -1075,6 +1142,38 @@ export default function JourneyList() {
         onOpenChange={(o) => { if (!o) setEditJourney(null); }}
         journey={editJourney}
       />
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteTarget && deleteTarget.ids.length > 1
+                ? `Delete ${deleteTarget.ids.length} journeys?`
+                : "Delete this journey?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget?.name ? (
+                <>This will permanently delete <span className="font-medium text-foreground">{deleteTarget.name}</span>. </>
+              ) : null}
+              This action cannot be undone. All related enrollments and message logs will remain for audit but the journey configuration will be removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteTarget) deleteMutation.mutate(deleteTarget.ids);
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
