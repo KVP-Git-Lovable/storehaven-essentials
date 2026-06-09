@@ -150,7 +150,20 @@ export function useDashboardMetrics() {
         byUser.set(k, (byUser.get(k) || 0) + 1);
       }
       const topEntry = [...byUser.entries()].sort((a, b) => b[1] - a[1])[0];
-      const topUser = topEntry ? { name: topEntry[0], orders: topEntry[1] } : null;
+      let topUser: { name: string; orders: number } | null = null;
+      if (topEntry) {
+        const [topUserId, topOrders] = topEntry;
+        let name = "Unknown";
+        if (topUserId && topUserId !== "Unknown") {
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("username, email")
+            .eq("id", topUserId)
+            .maybeSingle();
+          name = (prof as any)?.username || (prof as any)?.email || "Unknown";
+        }
+        topUser = { name, orders: topOrders };
+      }
 
       // Recent activity
       const [recentJourneys, recentOrders, recentLeads, recentCustomers] = await Promise.all([
