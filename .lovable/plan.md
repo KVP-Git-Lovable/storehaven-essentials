@@ -1,72 +1,62 @@
-# Home Dashboard Redesign — Executive Marketing + Business Overview
+## Goal
+Upgrade `/communication/journeys/:id/analytics` into a CRM-grade dashboard inspired by Salesforce / HubSpot, matching the attached reference. Strictly additive — no changes to Journey Builder logic, scheduling, Twilio, send pipeline, templates, or DB schema. Recent Messages becomes top-5 with Show More.
 
-Replace the current operations-style dashboard at `/dashboard` with a crisp, executive marketing + business snapshot. Reuses existing tokens (`stat-card`, navy/teal palette, Inter/Plus Jakarta Sans), shadcn components, and existing tables — **no schema, API, permission, or workflow changes**.
-
-## Layout (max 8 widgets)
+## Page Layout (top → bottom)
 
 ```text
-┌──────────────┬──────────────┬──────────────┬──────────────┐
-│ Customers /  │   Orders     │   Revenue    │  Marketing   │   Section 1: KPI row
-│   Leads      │              │              │   Activity   │   (4 cards)
-└──────────────┴──────────────┴──────────────┴──────────────┘
-┌─────────────────────────────────────┬──────────────────────┐
-│  Revenue & Orders Trend (30 days)   │  Communication       │   Section 2 + 3
-│  (single line/area chart)           │  Health (WA/Voice/   │
-│                                     │  Email compact)      │
-└─────────────────────────────────────┴──────────────────────┘
-┌──────────────────┬──────────────────┬─────────────────────┐
-│  Quick Actions   │  Recent Activity │  Top Channel +      │   Sections 4, 5, 6+7+8
-│  (5 buttons)     │  (5–8 items)     │  Team + AI Insights │
-│                  │                  │  (stacked compact)  │
-└──────────────────┴──────────────────┴─────────────────────┘
+[Header: title, status, created on, audience, type, channel | date range | Share | Export | Create Journey from Segment]
+
+[Row 1: Executive KPI strip — 10 cards w/ trend arrows vs prev period]
+
+[Row 2: Journey Funnel | Engagement Over Time (line) | Journey Health Score (gauge + strengths/areas)]
+
+[Row 3: Node/Message Performance table | Best Time to Engage (heatmap) | Top Performing Segments]
+                                                                       [AI Insights card]
+
+[Row 4: Revenue Attribution (donut + windows) | Cost Breakdown (donut) | Cohort Analysis (retention table)]
+
+[Row 5: Recent Journey Activity strip (top 5 + Show more)]
+
+[Existing JourneyCostAnalytics + JourneyEngagementSummary kept below, lazy-loaded]
 ```
 
-Total widgets: 4 KPI cards + Trend chart + Communication Health + Quick Actions + Recent Activity + Top Channel + Team Snapshot + AI Insights = within the 8-component executive scope (the KPI row counts as one band).
+## Sections to build
 
-## Widget specs
+1. **Executive KPI strip** (`ExecutiveKpiStrip.tsx`): Entered, Active, Completed, Delivery Rate, Read Rate, Click Rate, Reply Rate, Conversion Rate, Revenue, Total Spend, ROI. Each with delta vs previous equivalent window, color-coded arrow.
+2. **Journey Funnel** (`JourneyFunnel.tsx`): Entered → Delivered → Read → Clicked → Replied → Order Placed, with count + conversion %. Click a stage → opens dialog listing contacts in that stage (reuses existing `journey_contacts` join).
+3. **Engagement Over Time** (`EngagementTrendChart.tsx`): Daily/Hourly toggle line chart for delivered/read/clicked/replied from `journey_message_log` + `whatsapp_link_clicks`.
+4. **Journey Health Score** (`JourneyHealthScore.tsx`): rule-based 0–100 score, strengths and areas to improve.
+5. **Node / Message Performance** (`NodePerformanceTable.tsx`): aggregate per `node_id` from `journey_message_log`; flag best/worst/highest conversion.
+6. **Best Time to Engage heatmap** (`EngagementHeatmap.tsx`): day-of-week × hour grid colored by read/click rate.
+7. **Top Performing Segments** (`TopSegmentsTable.tsx`): groups recipients by score buckets / repeat-customer / new-lead and shows read/click/conversion rates.
+8. **AI Insights** (`JourneyInsightsCard.tsx`): rule-based bullets ("Message 2 converts 3.2× better…", "Read rate dropped after Day 5", "Opt-out risk rising").
+9. **Revenue Attribution** (`RevenueAttribution.tsx`): orders for journey contacts within 1/7/15/30 day windows after first delivered message; donut + AOV + RPC.
+10. **Cost Breakdown** (`CostBreakdownDonut.tsx`): pulls from existing `useJourneyCostAnalytics` — no new pricing logic.
+11. **Cohort Analysis** (`CohortRetentionTable.tsx`): groups contacts by enrollment week; columns Day 1/7/14/30 read % & converted %.
+12. **Recent Journey Activity** (`RecentJourneyActivity.tsx`): top 5 events (delivery/click/reply/order/opt-out) with Show more expanding to 50.
+13. **Recent Messages**: existing table — change default limit to 5 with "Show more…" toggle expanding to 50.
+14. **Export menu** (`AnalyticsExportMenu.tsx`): CSV (client-side), Excel (xlsx via existing dep if present, else CSV fallback), PDF (window.print of analytics container), Copy shareable URL.
+15. **Date range selector** (`AnalyticsDateRange.tsx`): Today / 7d / 30d / custom — drives all hooks via shared context.
 
-1. **KPI Card — Customers / Leads**: `customers` count, `leads` count, MoM growth % (compare current vs previous calendar month on `created_at`).
-2. **KPI Card — Orders**: this-month orders, completed (`status='completed'`), pending (`status='pending'`).
-3. **KPI Card — Revenue**: SUM(`orders.total_amount`) this month, growth % vs last month, `en-IN` formatting (₹1,00,000 / ₹1.2L).
-4. **KPI Card — Marketing Activity**: counts of active journeys (`journeys.status='active'`), active WhatsApp/Voice/Email campaigns derived from `journeys` channel types already present in canvas_data (best-effort, fallback 0 if not derivable without new logic).
-5. **Revenue & Orders Trend**: single Recharts composed chart (area for revenue, line for orders) over last 30 days from `orders` grouped by `created_at::date`. Reuse existing Recharts theme.
-6. **Communication Health**: compact card with three rows (WhatsApp delivery/read %, Voice connected % & voice orders, Email open/click %) computed from `journey_message_events` event_type aggregation + `whatsapp_message_log`. Today's total messages/calls shown as header chip.
-7. **Quick Actions**: replace current ops actions with: Create Journey (`/communication/journeys/new`), Send Campaign (`/communication/whatsapp`), Add Customer (`/transactions/customers?action=add`), Create Order (`/pos`), Add Product (`/transactions/products?action=add`). Reuse existing `Button` styles from current `QuickActions.tsx`.
-8. **Recent Activity**: unified feed (journeys created, campaigns sent, orders placed, leads added, customers added) — query latest 5–8 rows across `journeys`, `orders`, `leads`, `customers`, `journey_message_events`, sort by created_at desc.
-9. **Top Performing Channel** (compact): compare WhatsApp vs Voice vs Email engagement % over last 30d from `journey_message_events`; show winner with "X% better than Y" delta.
-10. **Team Snapshot** (compact): active users from `profiles` (status='active'), online-now placeholder using last login if available else hidden, top user by orders created in last 30d (`orders.created_by`).
-11. **AI Insights** (compact, max 3 bullets): purely derived deltas from existing metrics (engagement +/- vs previous period, conversion trend, delivery dip). No new AI calls — simple computed deltas styled as insight chips. Sparkles icon header.
+## Data layer
 
-Widgets 9, 10, 11 stack inside the right column of the bottom row to keep the visible widget count low and the layout executive.
+Single new hook `useJourneyAnalytics(journeyId, range)` (in `src/hooks/useJourneyAnalytics.ts`) — runs parallel queries and returns memoized aggregates:
+- enrollments, message log, link clicks, contact events, orders for contact ids, prev-period log for deltas.
+- Returns: kpis{}, funnel[], trend[], heatmap[][], nodes[], segments[], cohorts[], attribution{}, insights[], health{}.
 
-## Technical details
+Sentiment/engagement scoring computed client-side from existing event data using the spec's weights (delivered+1, read+3, click+5, positive reply+7, order+20, repeat+40, failed -2, opt-out -50, negative reply -10). Negative reply detection: regex match on body for `stop|not interested|don't send|unsubscribe|no thanks` (case-insensitive). Score and segment views computed per render — no schema change.
 
-**Files**
-- `src/pages/Dashboard.tsx` — rewrite to compose the new layout.
-- `src/components/dashboard/KpiCard.tsx` (new) — multi-line KPI variant (primary + 2 sub-metrics + delta).
-- `src/components/dashboard/RevenueOrdersTrend.tsx` (new) — Recharts ComposedChart, 30-day window.
-- `src/components/dashboard/CommunicationHealth.tsx` (new).
-- `src/components/dashboard/MarketingQuickActions.tsx` (new) — replaces existing `QuickActions` usage on dashboard only (leave the old file untouched in case used elsewhere).
-- `src/components/dashboard/MarketingRecentActivity.tsx` (new) — separate from existing ops `RecentActivity.tsx`.
-- `src/components/dashboard/TopChannelCard.tsx` (new).
-- `src/components/dashboard/TeamSnapshotCard.tsx` (new).
-- `src/components/dashboard/AIInsightsCard.tsx` (new).
-- `src/hooks/useDashboardMetrics.ts` (new) — single hook batching the supabase queries with `useQuery`, scoped by existing `useStoreAccess` for store-restricted users (preserve current access pattern).
+All queries scoped to `journey_id = :id` with `react-query` caching (`staleTime: 60s`). Lazy-load heavy cards via `React.lazy`.
 
-**Data sources (read-only, existing tables)**
-- `customers`, `leads`, `orders`, `journeys`, `journey_message_events`, `whatsapp_message_log`, `profiles`.
-- All filtering respects `useStoreAccess` exactly as the current Dashboard does for store-scoped tables (`orders.store_id`).
+## Files
+- New: 15 components above + `useJourneyAnalytics.ts` + small `src/lib/journeyInsights.ts` (rules) + `src/lib/journeyScoring.ts`.
+- Edited: `src/pages/communication/JourneyAnalytics.tsx` — restructured layout, Recent Messages collapsed to 5 + Show more. Existing `JourneyCostAnalytics` and `JourneyEngagementSummary` retained and kept mounted at bottom.
 
-**Design tokens**
-- Reuse `stat-card`, semantic colors (`primary`, `success`, `warning`, `destructive`, `muted-foreground`), `text-xs/sm/2xl` scale, en-IN currency, `whitespace-nowrap` per project standards. No new colors.
-- Responsive: KPI grid `grid-cols-2 md:grid-cols-4`; mid row `lg:grid-cols-3` (chart spans 2); bottom row `lg:grid-cols-3` stacking on mobile.
+## Constraints respected
+- No schema changes, no edge function changes, no Twilio changes, no changes to Journey Builder pages/components.
+- Reuses existing tables: `journeys`, `journey_enrollments`, `journey_message_log`, `journey_contacts`, `journey_contact_events`, `whatsapp_link_clicks`, `orders`, `journey_cost_settings`, `whatsapp_pricing_config`.
+- Cost section uses existing `useJourneyCostAnalytics` — pricing logic untouched.
+- Recent Messages and all current cards keep working; new cards are additive.
 
-**Out of scope (explicitly NOT added)**
-- Journey funnel, segments, cohorts, heatmaps, attribution, conversion tables — those stay in Journey Analytics.
-- No schema/migration changes, no edge function changes, no permission edits.
-- Existing `QuickActions.tsx` and `RecentActivity.tsx` files remain untouched (only the dashboard page stops importing them).
-
-## Acceptance
-- `/dashboard` renders the new layout with all 8 widget areas populated from live data.
-- Layout works at 1052px (current viewport) and on mobile (`grid-cols-2` for KPIs).
-- No console errors; existing store-access filtering preserved on order/revenue widgets.
+## Open question
+Ok to proceed with this scope in one pass, or would you like me to ship in phases (Phase 1: KPI strip + Funnel + Health + Recent Messages top-5; Phase 2: Node/Heatmap/Segments/Insights; Phase 3: Cohorts/Attribution/Export)?
