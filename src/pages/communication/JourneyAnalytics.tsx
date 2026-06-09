@@ -55,6 +55,17 @@ function last10(raw: string | null | undefined): string {
 export default function JourneyAnalytics() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [rangeKey, setRangeKey] = useState<"7d" | "30d" | "all">("30d");
+  const [showAllMessages, setShowAllMessages] = useState(false);
+  const range = useMemo(() => {
+    const now = new Date();
+    if (rangeKey === "all") return undefined;
+    const days = rangeKey === "7d" ? 7 : 30;
+    const from = new Date(now);
+    from.setDate(from.getDate() - days);
+    return { from, to: now };
+  }, [rangeKey]);
+  const ja = useJourneyAnalytics(useParams<{ id: string }>().id || "", range);
 
   const { data: journey } = useQuery({
     queryKey: ["journey", id],
@@ -185,14 +196,246 @@ export default function JourneyAnalytics() {
   return (
     <TooltipProvider>
       <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(`/communication/journeys/${id}`)}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">{journey?.name || "Journey"} — Analytics</h1>
-            <p className="text-muted-foreground">Performance metrics and message activity</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate(`/communication/journeys/${id}`)}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold flex items-center gap-2">
+                {journey?.name || "Journey"} — Analytics
+                {journey?.status === "active" && <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Active</Badge>}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {journey?.created_at && <>Created {format(new Date(journey.created_at), "dd MMM yyyy")} · </>}
+                Audience {ja.kpis.entered.toLocaleString("en-IN")} · Channel WhatsApp
+              </p>
+            </div>
           </div>
+          <div className="flex items-center gap-2">
+            <Select value={rangeKey} onValueChange={(v) => setRangeKey(v as any)}>
+              <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7d">Last 7 days</SelectItem>
+                <SelectItem value="30d">Last 30 days</SelectItem>
+                <SelectItem value="all">All time</SelectItem>
+              </SelectContent>
+            </Select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm"><Download className="h-4 w-4 mr-1" /> Export</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => window.print()}>Print / Save as PDF</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  const rows = [["Metric", "Value"],
+                    ["Entered", ja.kpis.entered], ["Delivered", ja.kpis.delivered], ["Read", ja.kpis.read],
+                    ["Clicked", ja.kpis.clicked], ["Replied", ja.kpis.replies], ["Orders", ja.kpis.ordersCount],
+                    ["Revenue", ja.kpis.revenue]];
+                  const csv = rows.map((r) => r.join(",")).join("\n");
+                  const blob = new Blob([csv], { type: "text/csv" });
+                  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+                  a.download = `journey-${id}-analytics.csv`; a.click();
+                }}>Download CSV</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigator.clipboard.writeText(window.location.href)}>Copy shareable link</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {/* SECTION 1 — Executive KPI strip */}
+        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
+          <KpiTile label="Entered Journey" value={ja.kpis.entered.toLocaleString("en-IN")} icon={<Users className="h-4 w-4" />} />
+          <KpiTile label="Active" value={ja.kpis.active.toLocaleString("en-IN")} />
+          <KpiTile label="Completed" value={ja.kpis.completed.toLocaleString("en-IN")} />
+          <KpiTile label="Delivery Rate" value={`${ja.kpis.deliveryRate.toFixed(1)}%`} accent="text-green-600" icon={<Send className="h-4 w-4" />} />
+          <KpiTile label="Read Rate" value={`${ja.kpis.readRate.toFixed(1)}%`} accent="text-blue-600" icon={<BookOpen className="h-4 w-4" />} />
+          <KpiTile label="Click Rate" value={`${ja.kpis.clickRate.toFixed(1)}%`} accent="text-purple-600" icon={<MousePointer className="h-4 w-4" />} />
+          <KpiTile label="Reply Rate" value={`${ja.kpis.replyRate.toFixed(1)}%`} icon={<MessageSquare className="h-4 w-4" />} />
+          <KpiTile label="Conversion Rate" value={`${ja.kpis.conversionRate.toFixed(2)}%`} icon={<Target className="h-4 w-4" />} />
+          <KpiTile label="Revenue Generated" value={`₹${ja.kpis.revenue.toLocaleString("en-IN")}`} accent="text-green-600" icon={<DollarSign className="h-4 w-4" />} />
+          <KpiTile label="Orders Attributed" value={ja.kpis.ordersCount.toLocaleString("en-IN")} />
+          <KpiTile label="Avg Order Value" value={`₹${Math.round(ja.kpis.avgOrderValue).toLocaleString("en-IN")}`} />
+          <KpiTile label="Opted Out" value={ja.kpis.optedOut.toLocaleString("en-IN")} accent={ja.kpis.optedOut > 0 ? "text-destructive" : ""} />
+        </div>
+
+        {/* SECTION 2/3/4 — Funnel + Trend + Health */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card className="lg:col-span-1">
+            <CardHeader><CardTitle className="text-base">Journey Funnel</CardTitle></CardHeader>
+            <CardContent>
+              <FunnelView funnel={ja.funnel} />
+            </CardContent>
+          </Card>
+          <Card className="lg:col-span-1">
+            <CardHeader><CardTitle className="text-base">Engagement Over Time</CardTitle></CardHeader>
+            <CardContent className="h-[260px]">
+              {ja.trend.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-sm text-muted-foreground">No activity yet</div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={ja.trend}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                    <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <RTooltip />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Line type="monotone" dataKey="delivered" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="read" stroke="#10b981" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="clicked" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="replied" stroke="#8b5cf6" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Journey Health Score</CardTitle></CardHeader>
+            <CardContent>
+              <div className="text-center mb-4">
+                <div className={`text-5xl font-bold ${ja.health.score >= 70 ? "text-green-600" : ja.health.score >= 40 ? "text-amber-600" : "text-destructive"}`}>{ja.health.score}<span className="text-base text-muted-foreground">/100</span></div>
+                <p className="text-xs text-muted-foreground mt-1">{ja.health.score >= 80 ? "Excellent" : ja.health.score >= 60 ? "Good" : ja.health.score >= 40 ? "Needs attention" : "At risk"}</p>
+              </div>
+              {ja.health.strengths.length > 0 && (
+                <div className="mb-2">
+                  <p className="text-xs font-medium text-green-700 mb-1">Strengths</p>
+                  {ja.health.strengths.map((s, i) => <p key={i} className="text-xs text-muted-foreground flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-green-600" />{s}</p>)}
+                </div>
+              )}
+              {ja.health.areas.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-amber-700 mb-1">Areas to Improve</p>
+                  {ja.health.areas.map((s, i) => <p key={i} className="text-xs text-muted-foreground flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-amber-600" />{s}</p>)}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* SECTION 3 — Node performance + Heatmap + Segments + Insights */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card className="lg:col-span-2">
+            <CardHeader><CardTitle className="text-base">Node / Message Performance</CardTitle></CardHeader>
+            <CardContent className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Node</TableHead>
+                    <TableHead className="text-right">Sent</TableHead>
+                    <TableHead className="text-right">Delivered</TableHead>
+                    <TableHead className="text-right">Read</TableHead>
+                    <TableHead className="text-right">Clicked</TableHead>
+                    <TableHead className="text-right">Replied</TableHead>
+                    <TableHead className="text-right">Failed</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ja.nodePerformance.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="text-center py-4 text-muted-foreground text-sm">No node activity</TableCell></TableRow>
+                  ) : ja.nodePerformance.map((n) => (
+                    <TableRow key={n.nodeId}>
+                      <TableCell className="font-medium">{n.label}</TableCell>
+                      <TableCell className="text-right">{n.sent.toLocaleString("en-IN")}</TableCell>
+                      <TableCell className="text-right">{n.delivered.toLocaleString("en-IN")}</TableCell>
+                      <TableCell className="text-right">{n.read.toLocaleString("en-IN")}</TableCell>
+                      <TableCell className="text-right">{n.clicked.toLocaleString("en-IN")}</TableCell>
+                      <TableCell className="text-right">{n.replied.toLocaleString("en-IN")}</TableCell>
+                      <TableCell className="text-right text-destructive">{n.failed.toLocaleString("en-IN")}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle className="text-base flex items-center gap-2"><Sparkles className="h-4 w-4 text-amber-500" /> AI Insights</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {ja.insights.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Insights will appear as the journey accumulates data.</p>
+              ) : ja.insights.map((i, idx) => (
+                <div key={idx} className="flex items-start gap-2 text-xs">
+                  {i.kind === "warn" ? <AlertTriangle className="h-3.5 w-3.5 text-amber-600 mt-0.5" /> :
+                   i.kind === "success" ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600 mt-0.5" /> :
+                   <Lightbulb className="h-3.5 w-3.5 text-blue-600 mt-0.5" />}
+                  <span className="text-foreground">{i.text}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Best Time to Engage</CardTitle></CardHeader>
+            <CardContent>
+              <Heatmap data={ja.heat} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Audience Segments</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <SegRow label="Highly Engaged" value={ja.segments.highlyEngaged} color="bg-green-50 text-green-700" />
+                <SegRow label="Warm" value={ja.segments.warm} color="bg-amber-50 text-amber-700" />
+                <SegRow label="Cold" value={ja.segments.cold} color="bg-blue-50 text-blue-700" />
+                <SegRow label="Lost" value={ja.segments.lost} color="bg-red-50 text-red-700" />
+                <SegRow label="High Intent" value={ja.segments.highIntent} color="bg-purple-50 text-purple-700" />
+                <SegRow label="High Value" value={ja.segments.highValue} color="bg-emerald-50 text-emerald-700" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* SECTION 7/8 — Cohort & Attribution */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Revenue Attribution</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-4 gap-2 text-center">
+                {(["d1","d7","d15","d30"] as const).map((k, i) => (
+                  <div key={k} className="rounded-lg border p-2">
+                    <p className="text-[10px] text-muted-foreground uppercase">{["1 day","7 days","15 days","30 days"][i]}</p>
+                    <p className="text-sm font-semibold">₹{(ja.attribution[k] as number).toLocaleString("en-IN")}</p>
+                    <p className="text-[10px] text-muted-foreground">{ja.attribution[`${k}Count` as const] as number} orders</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                <div>AOV: <span className="text-foreground font-medium">₹{Math.round(ja.kpis.avgOrderValue).toLocaleString("en-IN")}</span></div>
+                <div>Revenue / Customer: <span className="text-foreground font-medium">₹{Math.round(ja.kpis.revenuePerCustomer).toLocaleString("en-IN")}</span></div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Cohort Analysis (Retention)</CardTitle></CardHeader>
+            <CardContent className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cohort (Week of)</TableHead>
+                    <TableHead className="text-right">Entered</TableHead>
+                    <TableHead className="text-right">Day 1 Read %</TableHead>
+                    <TableHead className="text-right">Day 7 Read %</TableHead>
+                    <TableHead className="text-right">Day 30 Conv %</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ja.cohorts.length === 0 ? (
+                    <TableRow><TableCell colSpan={5} className="text-center py-4 text-muted-foreground text-sm">No cohort data yet</TableCell></TableRow>
+                  ) : ja.cohorts.map((c) => (
+                    <TableRow key={c.week}>
+                      <TableCell>{format(new Date(c.week), "dd MMM yyyy")}</TableCell>
+                      <TableCell className="text-right">{c.entered}</TableCell>
+                      <TableCell className="text-right">{c.d1ReadPct.toFixed(1)}%</TableCell>
+                      <TableCell className="text-right">{c.d7ReadPct.toFixed(1)}%</TableCell>
+                      <TableCell className="text-right">{c.d30ConvPct.toFixed(1)}%</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </div>
 
         {totalEnrolled > 0 && (
