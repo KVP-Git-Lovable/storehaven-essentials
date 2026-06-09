@@ -8,6 +8,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -102,6 +113,10 @@ export default function JourneyList() {
   const [createdByFilter, setCreatedByFilter] = useState<string>("");
   const [listDateFrom, setListDateFrom] = useState<string>("");
   const [listDateTo, setListDateTo] = useState<string>("");
+
+  // Selection + delete confirmation state
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<{ ids: string[]; name?: string } | null>(null);
 
   const { data: journeys = [], isLoading } = useQuery({
     queryKey: ["journeys"],
@@ -278,14 +293,18 @@ export default function JourneyList() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("journeys").delete().eq("id", id);
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase.from("journeys").delete().in("id", ids);
       if (error) throw error;
+      return ids.length;
     },
-    onSuccess: () => {
+    onSuccess: (count) => {
       queryClient.invalidateQueries({ queryKey: ["journeys"] });
-      toast.success("Journey deleted");
+      setSelectedIds([]);
+      setDeleteTarget(null);
+      toast.success(count === 1 ? "Journey deleted" : `${count} journeys deleted`);
     },
+    onError: (e: any) => toast.error(e.message || "Failed to delete"),
   });
 
   const submitForApprovalMutation = useMutation({
