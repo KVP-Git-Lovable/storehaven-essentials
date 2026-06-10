@@ -109,12 +109,19 @@ export default function Users() {
     }
   }, [hierarchyLoading]);
 
+  // Users with admin/super-admin roles should always be visible
+  // (organisational leadership is visible across the hierarchy)
+  const isAdminRole = (roleName?: string | null) => {
+    const r = roleName?.toLowerCase();
+    return r === "admin" || r === "super admin";
+  };
+
   // Calculate role counts based on hierarchy-filtered users
   const roleCounts = useMemo(() => {
-    // Apply hierarchy filter first
+    // Apply hierarchy filter first (admins are always included)
     const hierarchyFiltered = isAdmin 
       ? users 
-      : users.filter(user => accessibleUserIds.has(user.id));
+      : users.filter(user => accessibleUserIds.has(user.id) || isAdminRole(user.role_name));
     
     const counts: Record<string, number> = {};
     hierarchyFiltered.forEach((user) => {
@@ -131,10 +138,10 @@ export default function Users() {
 
   // Filter users based on hierarchy access, search, and role
   const filteredUsers = useMemo(() => {
-    // First apply hierarchy filter (non-admins only see accessible users)
+    // First apply hierarchy filter (non-admins see accessible users + admins)
     const hierarchyFiltered = isAdmin 
       ? users 
-      : users.filter(user => accessibleUserIds.has(user.id));
+      : users.filter(user => accessibleUserIds.has(user.id) || isAdminRole(user.role_name));
 
     return hierarchyFiltered.filter((user) => {
       const matchesSearch =
@@ -272,7 +279,7 @@ export default function Users() {
 
       <RoleCountBadges
         roleCounts={roleCounts}
-        totalCount={isAdmin ? users.length : Array.from(accessibleUserIds).filter(id => users.some(u => u.id === id)).length}
+        totalCount={isAdmin ? users.length : users.filter(u => accessibleUserIds.has(u.id) || isAdminRole(u.role_name)).length}
         selectedRole={selectedRoleFilter}
         onRoleClick={setSelectedRoleFilter}
       />
