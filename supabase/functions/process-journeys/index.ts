@@ -570,7 +570,10 @@ async function enrichContact(supabase: any, contact: any, tokens: Set<string>): 
     try {
       const { data: orders } = await supabase
         .from("orders")
-        .select("id, order_number, status, total_amount, tax_amount, discount_amount, created_at, delivery_date")
+        // Keep this select aligned to the actual orders table. Selecting a
+        // missing column makes the whole latest-order lookup fail, which then
+        // leaves customer_last_order_date empty.
+        .select("id, order_number, status, total_amount, tax_amount, discount_amount, created_at")
         .eq("customer_id", customer.id)
         .order("created_at", { ascending: false })
         .limit(1);
@@ -594,6 +597,13 @@ function resolveContactPath(contact: any, rawPath: string): string {
   if (!contact) return "";
   // Strip leading "contact." if present
   let path = rawPath.startsWith("contact.") ? rawPath.slice("contact.".length) : rawPath;
+
+  const registeredSource = TOKEN_SOURCES[path];
+  if (registeredSource) {
+    if (registeredSource.kind === "contact") return readSourceField(contact, registeredSource);
+    const fromMetadata = getNested(contact.metadata, path);
+    if (fromMetadata != null && fromMetadata !== "") return String(fromMetadata);
+  }
 
   // Aliases for common fields
   if (path === "name") {
