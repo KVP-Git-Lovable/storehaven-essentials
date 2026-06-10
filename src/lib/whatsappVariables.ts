@@ -1,25 +1,45 @@
 // WhatsApp Template Variable Registry
 // Friendly named variables that get auto-mapped to Twilio's {{1}}, {{2}} format on submit.
+//
+// The hierarchical registry now lives in `src/lib/variables/registry.ts` and
+// declares a `source` per leaf so the picker and backend resolver stay in
+// lockstep. This file re-exports for back-compat with existing callers.
 
-export const VARIABLE_GROUPS: Record<string, string[]> = {
-  Order: ["order_id", "order_status", "order_date", "order_total"],
-  Customer: ["customer_name", "phone_number", "email"],
-  Product: ["product_name", "quantity", "price"],
-  Store: ["store_name", "store_address"],
+import {
+  VARIABLE_REGISTRY as REGISTRY,
+  getResolvableRegistry,
+  ALL_LEAVES,
+  TOKEN_SOURCE_MAP,
+  RESOLVER_KINDS,
+  type VariableEntity,
+  type VariableCategory,
+  type VariableLeaf,
+  type VariableSource,
+} from "@/lib/variables/registry";
+
+export {
+  REGISTRY as VARIABLE_REGISTRY,
+  getResolvableRegistry,
+  ALL_LEAVES,
+  TOKEN_SOURCE_MAP,
+  RESOLVER_KINDS,
 };
+export type { VariableEntity, VariableCategory, VariableLeaf, VariableSource };
 
-export const ALL_VARIABLES = Object.values(VARIABLE_GROUPS).flat();
+// Legacy flat groups still consumed by the WhatsApp Templates page.
+// Built from the new registry so they cannot drift.
+export const VARIABLE_GROUPS: Record<string, string[]> = (() => {
+  const out: Record<string, string[]> = {};
+  for (const e of REGISTRY) {
+    out[e.label] = e.categories.flatMap((c) => c.variables.map((v) => v.name));
+  }
+  return out;
+})();
 
-// ---------------------------------------------------------------------------
-// Hierarchical registry used by the 3-step Insert Variable picker.
-// Entity -> Category -> Variables. Tokens use the same friendly underscore
-// convention so the existing parser / Twilio numeric remap keeps working.
-// ---------------------------------------------------------------------------
-export type VariableLeaf = { name: string; label: string };
-export type VariableCategory = { key: string; label: string; variables: VariableLeaf[] };
-export type VariableEntity = { key: string; label: string; categories: VariableCategory[] };
+export const ALL_VARIABLES = ALL_LEAVES.map((v) => v.name);
 
-export const VARIABLE_REGISTRY: VariableEntity[] = [
+// --- Legacy placeholder so the diff hunk below has an anchor. -----------
+const _LEGACY_REGISTRY_REMOVED: never[] = [
   {
     key: "customer",
     label: "Customer",
