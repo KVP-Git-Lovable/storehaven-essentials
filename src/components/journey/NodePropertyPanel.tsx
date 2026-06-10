@@ -12,6 +12,7 @@ import { X, Trash2, AlertTriangle } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import type { Edge, Node } from "@xyflow/react";
 import { parseStoredBody, transformTwilioToFriendly } from "@/lib/whatsappVariables";
+import { InsertVariablePicker } from "@/components/communication/InsertVariablePicker";
 
 type FreeformChannel = "whatsapp" | "sms" | "email";
 const FREEFORM_CHANNELS: { value: FreeformChannel; label: string }[] = [
