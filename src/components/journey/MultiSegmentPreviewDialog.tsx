@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Loader2 } from "lucide-react";
 
-type Segment = { key: string; label?: string; list_view_id: string };
+type Segment = { key: string; label?: string; list_view_id: string; entity_type?: string };
 type AudienceConfig = {
   segments?: Segment[];
   combinator?: string;
@@ -71,11 +71,22 @@ export function MultiSegmentPreviewDialog({ open, onOpenChange, audienceConfig }
           if (error) throw error;
           if (data?.error) throw new Error(data.error);
           const segRows: any[] = data?.rows || [];
+          const contactKey: string | undefined = data?.contact_key;
           const keys: string[] = [];
           for (const r of segRows) {
-            // Prefer phone as the combine key (matches backend audience-preview counts).
-            // Fallback to id if phone is missing (e.g., orders list views).
-            const key = normalizePhone(r?.phone) || (r?.id ? `id:${r.id}` : null);
+            // Prefer a phone-based key so cross-entity segments (e.g. customers + orders)
+            // can intersect/union on the same person. Fall back to the entity's
+            // configured contact key, then to id.
+            const phoneKey =
+              normalizePhone(r?.phone) ||
+              normalizePhone(r?.customer_phone) ||
+              normalizePhone(r?.mobile);
+            const contactVal = contactKey ? r?.[contactKey] : null;
+            const key =
+              phoneKey ||
+              (contactVal ? `c:${contactVal}` : null) ||
+              (r?.customer_id ? `c:${r.customer_id}` : null) ||
+              (r?.id ? `id:${r.id}` : null);
             if (!key) continue;
             keys.push(key);
             if (!rowsById[key]) rowsById[key] = r;
