@@ -8,7 +8,6 @@ import {
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { getResolvableRegistry, type VariableEntity, type VariableCategory } from "@/lib/whatsappVariables";
-import { useMemo as useMemoReg } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -32,7 +31,7 @@ export function InsertVariablePicker({ onInsert }: Props) {
   const [search, setSearch] = useState("");
 
   // Only show entities/categories/leaves the backend can actually resolve.
-  const registry = useMemoReg(() => getResolvableRegistry(), []);
+  const registry = useMemo(() => getResolvableRegistry(), []);
 
   // On open: restore last entity if available, jump straight to category step.
   useEffect(() => {
