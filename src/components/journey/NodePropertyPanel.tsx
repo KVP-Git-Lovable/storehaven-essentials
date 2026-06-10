@@ -367,17 +367,10 @@ export function NodePropertyPanel({ node, nodes = [], edges = [], onUpdate, onDe
                           onChange={(e) => updateWhatsAppVariable(variable, e.target.value)}
                           placeholder="e.g. {{contact.name}} or a fixed value"
                         />
-                        <div className="flex flex-wrap gap-1">
-                          {CONTACT_FIELD_SUGGESTIONS.map((s) => (
-                            <button
-                              key={s.token}
-                              type="button"
-                              onClick={() => updateWhatsAppVariable(variable, s.token)}
-                              className="text-[10px] px-1.5 py-0.5 rounded border bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                              {s.label}
-                            </button>
-                          ))}
+                        <div className="flex flex-wrap gap-1 items-center">
+                          <InsertVariablePicker
+                            onInsert={(name) => updateWhatsAppVariable(variable, `{{${name}}}`)}
+                          />
                         </div>
                       </div>
                     ))}
