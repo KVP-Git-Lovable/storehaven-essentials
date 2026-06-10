@@ -174,7 +174,7 @@ serve(async (req) => {
       const filled: Record<string, string> = {};
       for (const n of placeholderNums) {
         const v = incoming[n];
-        filled[n] = (v != null && String(v).trim() !== '') ? String(v) : 'Customer';
+        filled[n] = (v != null && String(v).trim() !== '') ? String(v) : '';
       }
       // Also pass through any extra named variables the caller supplied
       for (const [k, v] of Object.entries(incoming)) {
