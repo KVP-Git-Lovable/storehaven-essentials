@@ -84,6 +84,8 @@ export const ENTITY_SCHEMAS: Record<EntityKey, EntityDef> = {
       { key: "id", label: "ID", type: "string" },
       { key: "order_number", label: "Order Number", type: "string" },
       { key: "customer_id", label: "Customer ID", type: "string" },
+      { key: "customer_name", label: "Customer Name", type: "string" },
+      { key: "customer_phone", label: "Customer Phone", type: "string" },
       { key: "status", label: "Status", type: "string" },
       { key: "payment_status", label: "Payment Status", type: "string" },
       { key: "total_amount", label: "Total Amount", type: "number" },
