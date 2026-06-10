@@ -885,6 +885,18 @@ async function processEnrollment(
           }
         } catch (_) { /* ignore — fall back to plain resolution */ }
 
+        // Enrich the contact with joined customer/order data so tokens like
+        // {{customer_last_order_date}} resolve to actual values instead of
+        // falling back to the literal "Customer" downstream.
+        try {
+          const sources: any[] = Object.values(variablesMap as Record<string, string>);
+          for (const friendly of Object.values(numericToFriendly)) sources.push(friendly);
+          const tokens = collectTokensFromSources(sources);
+          await enrichContact(supabase, contact, tokens);
+        } catch (e) {
+          console.error("[process-journeys] enrichContact failed", e);
+        }
+
         const variables = resolveVariables(
           variablesMap as Record<string, string>,
           contact,
