@@ -61,7 +61,11 @@ function deriveChannels(canvas_data: any): string[] {
   const channels = Array.from(
     new Set(
       messageNodes
-        .map((n) => (n.data?.channel || n.data?.messageChannel || "").toLowerCase())
+        .map((n) => {
+          const raw = (n.data?.channel || n.data?.messageChannel || "").toLowerCase();
+          if (raw === "whatsapp_template" || raw === "whatsapp-template" || raw.startsWith("whatsapp")) return "whatsapp";
+          return raw;
+        })
         .filter(Boolean),
     ),
   );
