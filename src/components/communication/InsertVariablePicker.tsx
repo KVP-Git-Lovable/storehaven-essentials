@@ -7,7 +7,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { VARIABLE_REGISTRY, type VariableEntity, type VariableCategory } from "@/lib/whatsappVariables";
+import { getResolvableRegistry, type VariableEntity, type VariableCategory } from "@/lib/whatsappVariables";
+import { useMemo as useMemoReg } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -30,13 +31,16 @@ export function InsertVariablePicker({ onInsert }: Props) {
   const [category, setCategory] = useState<VariableCategory | null>(null);
   const [search, setSearch] = useState("");
 
+  // Only show entities/categories/leaves the backend can actually resolve.
+  const registry = useMemoReg(() => getResolvableRegistry(), []);
+
   // On open: restore last entity if available, jump straight to category step.
   useEffect(() => {
     if (!open) return;
     setSearch("");
     try {
       const lastKey = window.localStorage.getItem(LAST_ENTITY_KEY);
-      const found = lastKey ? VARIABLE_REGISTRY.find((e) => e.key === lastKey) : null;
+      const found = lastKey ? registry.find((e) => e.key === lastKey) : null;
       if (found) {
         setEntity(found);
         setCategory(null);
@@ -53,9 +57,9 @@ export function InsertVariablePicker({ onInsert }: Props) {
 
   const filteredEntities = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return VARIABLE_REGISTRY;
-    return VARIABLE_REGISTRY.filter((e) => e.label.toLowerCase().includes(q));
-  }, [search]);
+    if (!q) return registry;
+    return registry.filter((e) => e.label.toLowerCase().includes(q));
+  }, [search, registry]);
 
   const filteredCategories = useMemo(() => {
     if (!entity) return [];
