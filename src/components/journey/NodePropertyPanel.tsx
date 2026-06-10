@@ -12,6 +12,7 @@ import { X, Trash2, AlertTriangle } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import type { Edge, Node } from "@xyflow/react";
 import { parseStoredBody, transformTwilioToFriendly } from "@/lib/whatsappVariables";
+import { InsertVariablePicker } from "@/components/communication/InsertVariablePicker";
 
 type FreeformChannel = "whatsapp" | "sms" | "email";
 const FREEFORM_CHANNELS: { value: FreeformChannel; label: string }[] = [
@@ -43,13 +44,7 @@ interface WhatsAppTemplateOption {
   twilio_required_variables: string[] | null;
 }
 
-const CONTACT_FIELD_SUGGESTIONS: { label: string; token: string }[] = [
-  { label: "Contact name", token: "{{contact.name}}" },
-  { label: "First name", token: "{{contact.first_name}}" },
-  { label: "Phone", token: "{{contact.phone}}" },
-  { label: "Email", token: "{{contact.email}}" },
-  { label: "City", token: "{{contact.city}}" },
-];
+// Variable picker now sourced from VARIABLE_REGISTRY via InsertVariablePicker.
 
 export function NodePropertyPanel({ node, nodes = [], edges = [], onUpdate, onDelete, onClose, journeyStatus }: Props) {
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -373,17 +368,10 @@ export function NodePropertyPanel({ node, nodes = [], edges = [], onUpdate, onDe
                           onChange={(e) => updateWhatsAppVariable(variable, e.target.value)}
                           placeholder="e.g. {{contact.name}} or a fixed value"
                         />
-                        <div className="flex flex-wrap gap-1">
-                          {CONTACT_FIELD_SUGGESTIONS.map((s) => (
-                            <button
-                              key={s.token}
-                              type="button"
-                              onClick={() => updateWhatsAppVariable(variable, s.token)}
-                              className="text-[10px] px-1.5 py-0.5 rounded border bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                              {s.label}
-                            </button>
-                          ))}
+                        <div className="flex flex-wrap gap-1 items-center">
+                          <InsertVariablePicker
+                            onInsert={(name) => updateWhatsAppVariable(variable, `{{${name}}}`)}
+                          />
                         </div>
                       </div>
                     ))}
