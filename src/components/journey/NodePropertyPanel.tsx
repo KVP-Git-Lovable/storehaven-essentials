@@ -43,13 +43,7 @@ interface WhatsAppTemplateOption {
   twilio_required_variables: string[] | null;
 }
 
-const CONTACT_FIELD_SUGGESTIONS: { label: string; token: string }[] = [
-  { label: "Contact name", token: "{{contact.name}}" },
-  { label: "First name", token: "{{contact.first_name}}" },
-  { label: "Phone", token: "{{contact.phone}}" },
-  { label: "Email", token: "{{contact.email}}" },
-  { label: "City", token: "{{contact.city}}" },
-];
+// Variable picker now sourced from VARIABLE_REGISTRY via InsertVariablePicker.
 
 export function NodePropertyPanel({ node, nodes = [], edges = [], onUpdate, onDelete, onClose, journeyStatus }: Props) {
   const [confirmOpen, setConfirmOpen] = useState(false);
