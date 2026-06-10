@@ -15,6 +15,16 @@ const ALLOWED_ENTITIES: Record<string, { table: string; isAudienceSource: boolea
   schemes: { table: "pos_schemes", isAudienceSource: false },
 };
 
+const VIRTUAL_FIELDS: Record<string, { keys: string[]; fk: string; joinTable: string; joinField: string; map: Record<string, string> }> = {
+  orders: {
+    keys: ["customer_name", "customer_phone"],
+    fk: "customer_id",
+    joinTable: "customers",
+    joinField: "id",
+    map: { customer_name: "name", customer_phone: "phone" },
+  },
+};
+
 function applyFilter(q: any, cond: any) {
   const { field, operator, value } = cond;
   switch (operator) {
@@ -89,16 +99,51 @@ Deno.serve(async (req) => {
 
     const allFilters = def.filters || [];
     const recurringFilters = allFilters.filter((c: any) => c.operator === "upcoming_anniversary_n_days");
-    const serverFilters = allFilters.filter((c: any) => c.operator !== "upcoming_anniversary_n_days");
+    const virtual = VIRTUAL_FIELDS[def.entity_type];
+    const virtualFilters = allFilters.filter(
+      (c: any) => virtual && virtual.keys.includes(c.field) && c.operator !== "upcoming_anniversary_n_days"
+    );
+    const serverFilters = allFilters.filter(
+      (c: any) => c.operator !== "upcoming_anniversary_n_days" && !virtualFilters.includes(c)
+    );
     const hasRecurring = recurringFilters.length > 0;
 
-    const fields = def.selected_fields?.length ? def.selected_fields.join(", ") : "*";
+    const selectedVirtuals = virtual
+      ? (def.selected_fields || []).filter((k) => virtual.keys.includes(k))
+      : [];
+    let serverFieldList: string[] | null = null;
+    if (def.selected_fields?.length) {
+      serverFieldList = def.selected_fields.filter((k: string) => !selectedVirtuals.includes(k));
+      if (virtual && selectedVirtuals.length && !serverFieldList.includes(virtual.fk)) {
+        serverFieldList = [...serverFieldList, virtual.fk];
+      }
+    }
+    const fields = serverFieldList?.length ? serverFieldList.join(", ") : "*";
+
+    let fkRestrictIds: string[] | null = null;
+    if (virtualFilters.length && virtual) {
+      let cq: any = supabase.from(virtual.joinTable).select(virtual.joinField);
+      for (const cond of virtualFilters) {
+        cq = applyFilter(cq, { ...cond, field: virtual.map[cond.field] });
+      }
+      const { data: matched, error: mErr } = await cq.limit(50000);
+      if (mErr) throw mErr;
+      fkRestrictIds = (matched || []).map((r: any) => r[virtual.joinField]);
+      if (fkRestrictIds.length === 0) {
+        return new Response(
+          JSON.stringify({ count: 0, rows: mode === "rows" ? [] : undefined, entity_type: def.entity_type, is_audience_source: entity.isAudienceSource, contact_key: entity.contactKey }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     let q = supabase.from(entity.table).select(fields, {
       count: hasRecurring ? undefined : "exact",
       head: !hasRecurring && mode === "count",
     });
     for (const cond of serverFilters) q = applyFilter(q, cond);
     for (const cond of recurringFilters) q = q.not(cond.field, "is", null);
+    if (fkRestrictIds && virtual) q = q.in(virtual.fk, fkRestrictIds);
 
     if (hasRecurring) q = q.limit(2000);
     else if (mode === "rows") q = q.limit(1000);
@@ -115,6 +160,22 @@ Deno.serve(async (req) => {
       }
       finalCount = finalRows.length;
       if (mode === "rows") finalRows = finalRows.slice(0, 1000);
+    }
+
+    if (mode === "rows" && virtual && selectedVirtuals.length && finalRows.length) {
+      const ids = Array.from(new Set(finalRows.map((r: any) => r[virtual.fk]).filter(Boolean)));
+      if (ids.length) {
+        const cols = Array.from(new Set([virtual.joinField, ...selectedVirtuals.map((k) => virtual.map[k])]));
+        const { data: refs } = await supabase.from(virtual.joinTable).select(cols.join(", ")).in(virtual.joinField, ids);
+        const lookup = new Map<string, any>();
+        (refs || []).forEach((r: any) => lookup.set(r[virtual.joinField], r));
+        finalRows = finalRows.map((r: any) => {
+          const ref = lookup.get(r[virtual.fk]);
+          const out = { ...r };
+          for (const k of selectedVirtuals) out[k] = ref ? ref[virtual.map[k]] : null;
+          return out;
+        });
+      }
     }
 
     return new Response(
