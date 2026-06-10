@@ -22,6 +22,7 @@ import { UsersTable, UserData } from "@/components/admin/UsersTable";
 import { RoleCountBadges } from "@/components/admin/RoleCountBadges";
 import { ColumnVisibilityDropdown } from "@/components/admin/ColumnVisibilityDropdown";
 import { useHierarchyAccess } from "@/hooks/useHierarchyAccess";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Users() {
   const [users, setUsers] = useState<UserData[]>([]);
@@ -44,6 +45,7 @@ export default function Users() {
   const { toast } = useToast();
   const { hasPermission, isAdmin } = usePermissions();
   const { accessibleUserIds, loading: hierarchyLoading } = useHierarchyAccess();
+  const { user: authUser } = useAuth();
 
   const canCreate = hasPermission("usermanagement.users", "create");
   const canEdit = hasPermission("usermanagement.users", "edit");
@@ -51,18 +53,14 @@ export default function Users() {
 
   const fetchUsers = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from("profiles")
-      .select(`
-        id,
-        username,
-        email,
-        role_id,
-        reports_to,
-        status,
-        user_roles_master (name)
-      `)
-      .order("username");
+    if (!authUser?.id) {
+      setIsLoading(false);
+      return;
+    }
+
+    const { data, error } = await supabase.rpc("get_users_for_management", {
+      _viewer_id: authUser.id,
+    });
 
     if (error) {
       toast({
@@ -74,46 +72,32 @@ export default function Users() {
       return;
     }
 
-    // Fetch manager names
-    const usersWithManagers = await Promise.all(
-      (data || []).map(async (user) => {
-        let managerName = null;
-        if (user.reports_to) {
-          const { data: manager } = await supabase
-            .from("profiles")
-            .select("username")
-            .eq("id", user.reports_to)
-            .single();
-          managerName = manager?.username;
-        }
-        return {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          role_id: user.role_id,
-          reports_to: user.reports_to,
-          status: user.status,
-          role_name: (user.user_roles_master as { name: string } | null)?.name,
-          manager_name: managerName,
-        };
-      })
+    setUsers(
+      (data || []).map((u: any) => ({
+        id: u.id,
+        username: u.username,
+        email: u.email,
+        role_id: u.role_id,
+        reports_to: u.reports_to,
+        status: u.status,
+        role_name: u.role_name ?? undefined,
+        manager_name: u.manager_name ?? undefined,
+      }))
     );
-
-    setUsers(usersWithManagers);
     setIsLoading(false);
   };
 
   useEffect(() => {
-    if (!hierarchyLoading) {
+    if (!hierarchyLoading && authUser?.id) {
       fetchUsers();
     }
-  }, [hierarchyLoading]);
+  }, [hierarchyLoading, authUser?.id]);
 
   // Users with admin/super-admin roles should always be visible
   // (organisational leadership is visible across the hierarchy)
   const isAdminRole = (roleName?: string | null) => {
-    const r = roleName?.toLowerCase();
-    return r === "admin" || r === "super admin";
+    const r = roleName?.toLowerCase().replace(/[-_]/g, " ").trim();
+    return r === "admin" || r === "super admin" || r === "superadmin";
   };
 
   // Calculate role counts based on hierarchy-filtered users

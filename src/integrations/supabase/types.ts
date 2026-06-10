@@ -11456,6 +11456,19 @@ export type Database = {
           module_key: string
         }[]
       }
+      get_users_for_management: {
+        Args: { _viewer_id: string }
+        Returns: {
+          email: string
+          id: string
+          manager_name: string
+          reports_to: string
+          role_id: string
+          role_name: string
+          status: string
+          username: string
+        }[]
+      }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_in_service_window: {
         Args: { _at: string; _phone: string }
