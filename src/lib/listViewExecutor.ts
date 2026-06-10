@@ -1,6 +1,17 @@
 import { supabase } from "@/integrations/supabase/client";
 import { ENTITY_SCHEMAS, type EntityKey, type FilterCondition, type FieldDef } from "./listViewSchema";
 
+// Virtual fields that don't exist on the underlying table and must be hydrated via a join.
+const VIRTUAL_FIELDS: Record<string, { keys: string[]; fk: string; joinTable: string; joinField: string; map: Record<string, string> }> = {
+  orders: {
+    keys: ["customer_name", "customer_phone"],
+    fk: "customer_id",
+    joinTable: "customers",
+    joinField: "id",
+    map: { customer_name: "name", customer_phone: "phone" },
+  },
+};
+
 export interface ListViewDefinition {
   entity_type: EntityKey;
   selected_fields?: string[];
@@ -17,13 +28,47 @@ export async function executeListView(
   const schema = ENTITY_SCHEMAS[def.entity_type];
   if (!schema) throw new Error(`Unknown entity: ${def.entity_type}`);
 
-  const fields = def.selected_fields?.length ? def.selected_fields.join(", ") : "*";
+  const virtual = VIRTUAL_FIELDS[def.entity_type];
+  const selectedVirtuals = virtual
+    ? (def.selected_fields || []).filter((k) => virtual.keys.includes(k))
+    : [];
+  // Rewrite select list: drop virtual keys, but ensure FK is present so we can hydrate later.
+  let serverFieldList: string[] | null = null;
+  if (def.selected_fields?.length) {
+    serverFieldList = def.selected_fields.filter((k) => !selectedVirtuals.includes(k));
+    if (virtual && selectedVirtuals.length && !serverFieldList.includes(virtual.fk)) {
+      serverFieldList = [...serverFieldList, virtual.fk];
+    }
+  }
+  const fields = serverFieldList?.length ? serverFieldList.join(", ") : "*";
   const fieldMap = new Map<string, FieldDef>(schema.fields.map((f) => [f.key, f]));
 
   // Separate recurring filters (need client-side post-filter) from server-side filters
   const recurringFilters = (def.filters || []).filter((c) => c.operator === "upcoming_anniversary_n_days");
-  const serverFilters = (def.filters || []).filter((c) => c.operator !== "upcoming_anniversary_n_days");
+  const virtualFilters = (def.filters || []).filter(
+    (c) => virtual && virtual.keys.includes(c.field) && c.operator !== "upcoming_anniversary_n_days"
+  );
+  const serverFilters = (def.filters || []).filter(
+    (c) => c.operator !== "upcoming_anniversary_n_days" && !virtualFilters.includes(c)
+  );
   const hasRecurring = recurringFilters.length > 0;
+
+  // Pre-resolve virtual-field filters by looking up matching FK IDs.
+  let fkRestrictIds: string[] | null = null;
+  if (virtualFilters.length && virtual) {
+    let cq: any = supabase.from(virtual.joinTable as any).select(virtual.joinField);
+    for (const cond of virtualFilters) {
+      const realCol = virtual.map[cond.field];
+      const meta: FieldDef = { key: realCol, label: realCol, type: "string" };
+      cq = applyFilter(cq, { ...cond, field: realCol }, meta);
+    }
+    const { data: matched, error: mErr } = await cq.limit(50000);
+    if (mErr) throw mErr;
+    fkRestrictIds = (matched || []).map((r: any) => r[virtual.joinField]);
+    if (fkRestrictIds.length === 0) {
+      return { rows: [], count: 0 };
+    }
+  }
 
   // Build a query factory so we can paginate beyond PostgREST's 1000-row cap.
   const buildQuery = (rangeFrom: number, rangeTo: number, withCount: boolean) => {
@@ -39,6 +84,9 @@ export async function executeListView(
     for (const cond of recurringFilters) {
       q = q.not(cond.field, "is", null);
     }
+    if (fkRestrictIds && virtual) {
+      q = q.in(virtual.fk, fkRestrictIds);
+    }
     return q.range(rangeFrom, rangeTo);
   };
 
@@ -49,6 +97,9 @@ export async function executeListView(
       const meta = fieldMap.get(cond.field);
       if (!meta) continue;
       q = applyFilter(q, cond, meta);
+    }
+    if (fkRestrictIds && virtual) {
+      q = q.in(virtual.fk, fkRestrictIds);
     }
     const { error, count } = await q;
     if (error) throw error;
@@ -87,7 +138,31 @@ export async function executeListView(
   }
 
   if (rows.length > (opts.limit ?? 25)) rows = rows.slice(0, opts.limit ?? 25);
+  rows = await hydrateVirtuals(rows, def.entity_type, selectedVirtuals);
   return { rows, count: serverCount || rows.length };
+}
+
+async function hydrateVirtuals(rows: any[], entityType: string, selectedVirtuals: string[]) {
+  const virtual = VIRTUAL_FIELDS[entityType];
+  if (!virtual || !selectedVirtuals.length || rows.length === 0) return rows;
+  const ids = Array.from(new Set(rows.map((r) => r[virtual.fk]).filter(Boolean)));
+  if (!ids.length) return rows;
+  const cols = Array.from(new Set([virtual.joinField, ...selectedVirtuals.map((k) => virtual.map[k])]));
+  const { data, error } = await supabase
+    .from(virtual.joinTable as any)
+    .select(cols.join(", "))
+    .in(virtual.joinField, ids);
+  if (error) return rows;
+  const lookup = new Map<string, any>();
+  (data || []).forEach((r: any) => lookup.set(r[virtual.joinField], r));
+  return rows.map((r) => {
+    const ref = lookup.get(r[virtual.fk]);
+    const out = { ...r };
+    for (const k of selectedVirtuals) {
+      out[k] = ref ? ref[virtual.map[k]] : null;
+    }
+    return out;
+  });
 }
 
 /**
