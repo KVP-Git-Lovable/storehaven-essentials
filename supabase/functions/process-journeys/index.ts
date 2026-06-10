@@ -501,6 +501,123 @@ function getNested(obj: any, path: string): any {
   return cur;
 }
 
+function formatDate(raw: any): string {
+  if (raw == null || raw === "") return "";
+  const d = new Date(String(raw));
+  if (isNaN(d.getTime())) return String(raw);
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${dd} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+// Tokens (from VARIABLE_REGISTRY) that need data joined from related tables.
+// We enrich the journey_contacts row's `metadata` so the existing
+// resolveContactPath metadata-fallback finds them transparently.
+const ENRICHABLE_TOKENS = new Set<string>([
+  "customer_first_name", "customer_last_name", "customer_company_name",
+  "customer_whatsapp", "customer_alt_contact",
+  "customer_created_date", "customer_updated_date",
+  "customer_last_order_date", "customer_last_order_amount",
+  "customer_total_orders", "customer_total_purchase",
+  "customer_outstanding", "customer_credit_limit",
+  "customer_city", "customer_state", "customer_pincode", "customer_country",
+  "customer_anniversary",
+  "order_id", "order_status", "order_date", "order_delivery_date",
+  "order_total", "order_tax", "order_discount",
+]);
+
+function collectTokensFromSources(sources: Iterable<any>): Set<string> {
+  const out = new Set<string>();
+  const tokenRe = /\{\{?\s*([a-zA-Z_][a-zA-Z0-9_.]*)\s*\}?\}/g;
+  for (const src of sources) {
+    if (src == null) continue;
+    const s = String(src);
+    let m: RegExpExecArray | null;
+    tokenRe.lastIndex = 0;
+    while ((m = tokenRe.exec(s)) !== null) out.add(m[1]);
+    // Bare token (no braces) — e.g. mapping value "customer_last_order_date"
+    const bare = s.trim();
+    if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(bare)) out.add(bare);
+  }
+  return out;
+}
+
+async function enrichContact(supabase: any, contact: any, tokens: Set<string>): Promise<void> {
+  if (!contact) return;
+  const needsAny = Array.from(tokens).some((t) => ENRICHABLE_TOKENS.has(t));
+  if (!needsAny) return;
+
+  const metadata = (contact.metadata && typeof contact.metadata === "object") ? contact.metadata : {};
+  contact.metadata = metadata;
+
+  // Locate the customer row.
+  let customer: any = null;
+  const phone = contact.phone ? String(contact.phone).replace(/\D/g, "") : "";
+  const last10 = phone ? phone.slice(-10) : "";
+  try {
+    if (contact.contact_id) {
+      const { data } = await supabase.from("customers").select("*").eq("id", contact.contact_id).maybeSingle();
+      if (data) customer = data;
+    }
+    if (!customer && last10) {
+      const { data } = await supabase
+        .from("customers")
+        .select("*")
+        .or(`phone.ilike.%${last10},phone.eq.${last10}`)
+        .limit(1);
+      if (data && data.length) customer = data[0];
+    }
+  } catch (e) { console.error("[enrichContact] customer lookup failed", e); }
+
+  if (customer) {
+    const name = String(customer.name || "").trim();
+    const [first, ...rest] = name.split(/\s+/);
+    metadata.customer_first_name ??= first || "";
+    metadata.customer_last_name ??= rest.join(" ") || "";
+    metadata.customer_company_name ??= customer.company_name || "";
+    metadata.customer_whatsapp ??= customer.whatsapp_number || customer.phone || "";
+    metadata.customer_alt_contact ??= customer.alternate_phone || "";
+    metadata.customer_city ??= customer.city || "";
+    metadata.customer_state ??= customer.state || "";
+    metadata.customer_pincode ??= customer.pincode || customer.postal_code || "";
+    metadata.customer_country ??= customer.country || "";
+    metadata.customer_created_date ??= formatDate(customer.created_at);
+    metadata.customer_updated_date ??= formatDate(customer.updated_at);
+    metadata.customer_total_orders ??= customer.total_orders != null ? String(customer.total_orders) : "";
+    metadata.customer_total_purchase ??= customer.total_spent != null ? String(customer.total_spent) : "";
+    metadata.customer_outstanding ??= customer.outstanding_amount != null ? String(customer.outstanding_amount) : "";
+    metadata.customer_credit_limit ??= customer.credit_limit != null ? String(customer.credit_limit) : "";
+    metadata.customer_anniversary ??= formatDate(customer.anniversary_date);
+  }
+
+  // Last order — only fetch if any order/last_order token is requested.
+  const needsOrder = Array.from(tokens).some((t) =>
+    t.startsWith("order_") || t === "customer_last_order_date" || t === "customer_last_order_amount"
+  );
+  if (needsOrder && customer?.id) {
+    try {
+      const { data: orders } = await supabase
+        .from("orders")
+        .select("id, order_number, status, total_amount, tax_amount, discount_amount, created_at, delivery_date")
+        .eq("customer_id", customer.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const o = orders && orders[0];
+      if (o) {
+        metadata.customer_last_order_date ??= formatDate(o.created_at);
+        metadata.customer_last_order_amount ??= o.total_amount != null ? String(o.total_amount) : "";
+        metadata.order_id ??= o.order_number || o.id;
+        metadata.order_status ??= o.status || "";
+        metadata.order_date ??= formatDate(o.created_at);
+        metadata.order_delivery_date ??= formatDate(o.delivery_date);
+        metadata.order_total ??= o.total_amount != null ? String(o.total_amount) : "";
+        metadata.order_tax ??= o.tax_amount != null ? String(o.tax_amount) : "";
+        metadata.order_discount ??= o.discount_amount != null ? String(o.discount_amount) : "";
+      }
+    } catch (e) { console.error("[enrichContact] order lookup failed", e); }
+  }
+}
+
 function resolveContactPath(contact: any, rawPath: string): string {
   if (!contact) return "";
   // Strip leading "contact." if present
