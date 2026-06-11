@@ -7,6 +7,7 @@ import { MarketingRecentActivity } from "@/components/dashboard/MarketingRecentA
 import { TopChannelCard } from "@/components/dashboard/TopChannelCard";
 import { TeamSnapshotCard } from "@/components/dashboard/TeamSnapshotCard";
 import { AIInsightsCard } from "@/components/dashboard/AIInsightsCard";
+import { JourneyOverviewSection } from "@/components/dashboard/JourneyOverviewSection";
 import { useDashboardMetrics, formatINR } from "@/hooks/useDashboardMetrics";
 
 export default function Dashboard() {
@@ -80,6 +81,9 @@ export default function Dashboard() {
           <CommunicationHealth comm={data.comm} />
         </div>
       </div>
+
+      {/* Journey overview + health + WhatsApp wallet */}
+      <JourneyOverviewSection />
 
       {/* Section 4 + 5 + (6,7,8 stacked) */}
       <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-3">
