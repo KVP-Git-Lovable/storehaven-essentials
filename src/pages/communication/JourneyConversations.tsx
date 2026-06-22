@@ -410,8 +410,8 @@ export default function JourneyConversations() {
                         setSelectedPhone(p.phoneL10);
                         setShowListMobile(false);
                       }}
-                      className={`w-full text-left p-3 hover:bg-accent transition-colors flex gap-3 items-start ${
-                        isActive ? "bg-accent" : ""
+                      className={`w-full text-left p-3 hover:bg-muted/60 transition-colors flex gap-3 items-start ${
+                        isActive ? "bg-muted" : ""
                       }`}
                     >
                       <Avatar className="h-10 w-10 shrink-0">
