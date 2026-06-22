@@ -25,6 +25,7 @@ export const TOKEN_SOURCES: Record<string, VariableSource> = {
   email: { kind: "contact", field: "email" },
   customer_alt_contact: { kind: "customer", field: "alternate_phone" },
   // Customer / Date
+  customer_date_of_birth: { kind: "customer", field: "date_of_birth", format: "date" },
   customer_created_date: { kind: "customer", field: "created_at", format: "date" },
   customer_updated_date: { kind: "customer", field: "updated_at", format: "date" },
   customer_last_order_date: { kind: "last_order", field: "created_at", format: "date" },
