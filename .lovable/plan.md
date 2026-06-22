@@ -1,73 +1,51 @@
-# Plan: Guarantee Every Journey Variable Resolves to Real Data
+# Journey WhatsApp Conversations View
 
-## Goal
-Eliminate the class of bug where a variable is selectable in the Journey Builder picker but resolves to empty/fallback text at send time (e.g. `customer_last_order_date` → `"Customer"`).
+Add a per-journey conversation inspector reachable from Journey Analytics, reusing the look and feel of `/communication/whatsapp/conversations` but scoped strictly to participants of the current journey.
 
-## Root cause
-Today we maintain two disconnected lists:
-- **Frontend:** `src/lib/whatsappVariables.ts` → `VARIABLE_REGISTRY` (what users can pick)
-- **Backend:** `supabase/functions/process-journeys/index.ts` → `ENRICHABLE_TOKENS` + ad-hoc field mapping in `enrichContact` (what actually gets joined from the DB)
+## 1. Entry point on Journey Analytics
 
-When someone adds a variable to the picker without also wiring it into `enrichContact`, sending silently falls back to the contact name. Nothing fails loudly.
+In `src/pages/communication/JourneyAnalytics.tsx`, add a new button **"View WhatsApp Conversations"** next to the existing **Export** dropdown in the header toolbar (line ~226). Icon: `MessageSquare` / `WhatsAppIcon`. Clicking navigates to `/communication/journeys/:id/conversations`. No other analytics code or layout is touched.
 
-## Solution: one declarative registry, two consumers
+## 2. New route & page
 
-### 1. Convert `VARIABLE_REGISTRY` into a self-describing schema
-Each leaf variable declares **how to resolve it**, not just its label:
+- Register a new route in `src/App.tsx` under the protected block: `/communication/journeys/:id/conversations` → `JourneyConversations`.
+- Create `src/pages/communication/JourneyConversations.tsx` — a new page modeled on `WhatsAppConversations.tsx`, but every query is filtered to the current journey:
+  - **Participant list (left panel)** sourced from `journey_contacts` joined with `journey_enrollments` for this `journey_id`. For each contact show: name, phone, last message preview, last activity time, and unread indicator (derived from latest inbound `whatsapp_messages` after latest outbound).
+  - **Thread (center panel)** loads from `whatsapp_messages` matched by last-10-digit phone of the selected participant (same matching scheme already used in `useJourneyAnalytics`). Renders the same bubble UI, day separators, and time formatting as `WhatsAppConversations`.
+  - **Journey context (right panel / participant header)**: journey name, journey status, enrollment `created_at` (Date Entered), current `node_id` from latest `journey_message_log` row, enrollment status (Active / Completed / Exited).
 
-```ts
-type VariableLeaf = {
-  name: string;              // "customer_last_order_date"
-  label: string;             // "Last Order Date"
-  source:                    // tells the backend where to read from
-    | { kind: "contact"; field: string }                 // journey_contacts.<field>
-    | { kind: "customer"; field: string; format?: "date" | "currency" | "number" }
-    | { kind: "last_order"; field: string; format?: ... }
-    | { kind: "store"; field: string }
-    | { kind: "journey"; field: string }
-    | { kind: "static"; value: string };
-};
+## 3. Filters & search
+
+Above the participant list:
+- Search by name or phone (debounced).
+- Filter chips: Replied, Not Replied, Active, Completed, Opted Out, Read, Unread. Each chip applies an in-memory predicate over the loaded participants using fields already available (`opted_out`, enrollment.status, inbound-message presence, unread flag).
+
+## 4. Data scope & performance
+
+- All queries `.eq("journey_id", id)`; no global conversations leak in.
+- Participant list paginated 50 at a time (range query on `journey_contacts`).
+- Thread loaded only on selection, cached per participant via React Query.
+- Realtime: subscribe to `whatsapp_messages` INSERT and invalidate only the selected participant's thread + the participant list's "last activity" query.
+
+## 5. Reuse, not duplication
+
+- Reuse `WhatsAppIcon`, message bubble markup, `initials`, `formatBubbleTime`, `formatDayLabel` by extracting them from `WhatsAppConversations.tsx` into a small shared module `src/components/communication/conversationHelpers.tsx` (pure helpers + tiny presentational `MessageBubble`). `WhatsAppConversations.tsx` continues to import and render them — no behavior change.
+- No edits to `useJourneyAnalytics`, the journey schema, or the existing conversations page beyond this extract-and-reimport refactor.
+
+## Technical notes
+
+- Files created: `src/pages/communication/JourneyConversations.tsx`, `src/components/communication/conversationHelpers.tsx`.
+- Files edited: `src/pages/communication/JourneyAnalytics.tsx` (button only), `src/App.tsx` (route only), `src/pages/communication/WhatsAppConversations.tsx` (imports moved to shared helper).
+- No DB migrations. No edge function changes. No changes to existing routes.
+
+```text
+[Journey Analytics page]
+   header toolbar: [Range] [Export ▾] [View WhatsApp Conversations] ← new
+                                                    │
+                                                    ▼
+        /communication/journeys/:id/conversations
+   ┌──────────────┬──────────────────────┬──────────────────┐
+   │ Participants │ Conversation thread  │ Journey context  │
+   │ + filters    │ (reused bubble UI)   │ + enrollment     │
+   └──────────────┴──────────────────────┴──────────────────┘
 ```
-
-The picker keeps rendering `label`; the backend reads `source`.
-
-### 2. Single shared resolver module
-Create `supabase/functions/_shared/variable-resolver.ts` (and re-export the registry from a shared file usable by both Vite and Deno):
-- `src/lib/variables/registry.ts` — pure data, no React imports.
-- `supabase/functions/_shared/variable-resolver.ts` — imports the same registry via a relative path (`../../../src/lib/variables/registry.ts`) or a duplicated `.ts` kept in sync by a test (see §4).
-- One function `resolveTokens(tokens, ctx)` walks the registry, fetches the minimum set of joins needed (customer, last order, store, journey), formats values, and returns `Record<string,string>`.
-
-`process-journeys` then calls `resolveTokens` instead of the bespoke `enrichContact` + metadata-fallback dance.
-
-### 3. Picker only shows resolvable variables
-`InsertVariablePicker` filters out any leaf whose `source.kind` isn't implemented yet (a `RESOLVER_KINDS` set exported from the resolver). Adding a variable to the registry without a resolver means it simply won't appear in the UI — no silent failures.
-
-### 4. Parity test (the safety net)
-Add `src/lib/variables/__tests__/registry.test.ts` that, for every leaf in the registry:
-- asserts `source` is present and uses a kind the resolver supports,
-- asserts `source.field` exists in the corresponding Supabase type (`Database["public"]["Tables"][...]["Row"]`) — this catches typos and removed columns at build time,
-- asserts the friendly token name is unique.
-
-Runs in CI via `bunx vitest run`. A future PR that adds `customer_favourite_colour` to the picker but forgets to wire a resolver fails the test instead of shipping.
-
-### 5. Backfill the existing gaps
-While converting the registry, audit every current leaf:
-- `customer_dob` → add resolver (customer.date_of_birth) or remove from registry.
-- `lead_*`, `visitor_*`, `retailer_*`, `employee_*`, `order_item_*`, `product_*`, `journey_event_*` — currently in the picker, none resolved. For each: either implement the resolver or hide the group behind a feature flag until the entity is wired up.
-
-### 6. Send-time guard
-In `whatsapp-send` (and anywhere variables are substituted), if a token resolves to empty string **and** the registry says it should have a value, log a structured warning (`level=warn`, `token`, `journey_id`, `contact_id`) and substitute `""` (not the contact name). Update the existing `"Customer"` fallback path so unresolved variables never silently borrow a different field's value.
-
-## Files touched
-- **New:** `src/lib/variables/registry.ts`, `supabase/functions/_shared/variable-resolver.ts`, `src/lib/variables/__tests__/registry.test.ts`
-- **Edit:** `src/lib/whatsappVariables.ts` (re-export from new registry for back-compat), `src/components/communication/InsertVariablePicker.tsx` (filter by resolver support), `supabase/functions/process-journeys/index.ts` (replace `enrichContact` + `ENRICHABLE_TOKENS` with `resolveTokens`), `supabase/functions/whatsapp-send/index.ts` (remove "Customer" fallback for known tokens; warn on empty)
-- **Delete:** the duplicated `ENRICHABLE_TOKENS` list
-
-## Rollout
-1. Land registry + resolver + tests (no behaviour change — backend still uses old path).
-2. Switch `process-journeys` to `resolveTokens`; verify on journey `7e83ec6f…` that `{{customer_last_order_date}}` renders the real date.
-3. Switch picker to filter by `RESOLVER_KINDS`; entities without resolvers disappear from the UI.
-4. Remove the legacy `enrichContact` code and `"Customer"` fallback.
-
-## Outcome
-After this lands, the only way to expose a variable to users is to declare its data source — making the bug you hit structurally impossible.
