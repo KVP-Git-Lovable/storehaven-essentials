@@ -126,30 +126,44 @@ export function MultiSegmentPreviewDialog({ open, onOpenChange, audienceConfig }
           <p className="text-sm text-destructive py-4">{error}</p>
         ) : rows.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4">No matching records.</p>
-        ) : (
-          <div className="max-h-[400px] overflow-auto border rounded-md">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>City</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((r, i) => (
-                  <TableRow key={r.id || i}>
-                    <TableCell className="text-xs">{r.name || r.full_name || "—"}</TableCell>
-                    <TableCell className="text-xs">{r.phone || "—"}</TableCell>
-                    <TableCell className="text-xs">{r.email || "—"}</TableCell>
-                    <TableCell className="text-xs">{r.city || "—"}</TableCell>
+        ) : (() => {
+          const HIDE = new Set(["id", "created_at", "updated_at", "store_id", "created_by"]);
+          const cols = Array.from(
+            rows.reduce<Set<string>>((acc, r) => {
+              Object.keys(r || {}).forEach((k) => {
+                if (!HIDE.has(k) && r[k] !== null && r[k] !== undefined && r[k] !== "") acc.add(k);
+              });
+              return acc;
+            }, new Set())
+          ).slice(0, 6);
+          const fmt = (v: any) => {
+            if (v === null || v === undefined || v === "") return "—";
+            if (typeof v === "object") return JSON.stringify(v);
+            return String(v);
+          };
+          return (
+            <div className="max-h-[400px] overflow-auto border rounded-md">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {cols.map((c) => (
+                      <TableHead key={c} className="capitalize">{c.replace(/_/g, " ")}</TableHead>
+                    ))}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+                </TableHeader>
+                <TableBody>
+                  {rows.map((r, i) => (
+                    <TableRow key={r.id || i}>
+                      {cols.map((c) => (
+                        <TableCell key={c} className="text-xs">{fmt(r?.[c])}</TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          );
+        })()}
         <p className="text-xs text-muted-foreground">Showing first {Math.min(50, total)} of {total} combined records.</p>
       </DialogContent>
     </Dialog>
