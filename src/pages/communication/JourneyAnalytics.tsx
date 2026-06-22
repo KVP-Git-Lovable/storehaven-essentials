@@ -240,6 +240,13 @@ export default function JourneyAnalytics() {
                 <DropdownMenuItem onClick={() => navigator.clipboard.writeText(window.location.href)}>Copy shareable link</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/communication/journeys/${id}/conversations`)}
+            >
+              <WhatsAppIcon className="h-4 w-4 mr-1 text-green-600" /> View WhatsApp Conversations
+            </Button>
           </div>
         </div>
 
