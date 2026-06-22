@@ -131,6 +131,7 @@ const JourneyList = lazyWithRetry(() => import("./pages/communication/JourneyLis
 const CommunicationCalendar = lazyWithRetry(() => import("./pages/communication/CommunicationCalendar"), "CommunicationCalendar");
 const JourneyBuilder = lazyWithRetry(() => import("./pages/communication/JourneyBuilder"), "JourneyBuilder");
 const JourneyAnalytics = lazyWithRetry(() => import("./pages/communication/JourneyAnalytics"), "JourneyAnalytics");
+const JourneyConversations = lazyWithRetry(() => import("./pages/communication/JourneyConversations"), "JourneyConversations");
 const ContactsManager = lazyWithRetry(() => import("./pages/communication/ContactsManager"), "ContactsManager");
 const WhatsAppCenter = lazyWithRetry(() => import("./pages/communication/WhatsAppCenter"), "WhatsAppCenter");
 const WhatsAppConversations = lazyWithRetry(() => import("./pages/communication/WhatsAppConversations"), "WhatsAppConversations");
