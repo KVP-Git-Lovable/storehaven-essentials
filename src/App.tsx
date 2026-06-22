@@ -246,6 +246,7 @@ const App = () => (
                 <Route path="/communication/journeys" element={<JourneyList />} />
                 <Route path="/communication/journeys/:id" element={<JourneyBuilder />} />
                 <Route path="/communication/journeys/:id/analytics" element={<JourneyAnalytics />} />
+                <Route path="/communication/journeys/:id/conversations" element={<JourneyConversations />} />
                 <Route path="/communication/calendar" element={<CommunicationCalendar />} />
                 <Route path="/communication/contacts" element={<ContactsManager />} />
                 <Route path="/communication/whatsapp" element={<WhatsAppCenter />} />
