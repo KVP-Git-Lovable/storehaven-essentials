@@ -61,6 +61,7 @@ export const VARIABLE_REGISTRY: VariableEntity[] = [
         { name: "customer_alt_contact", label: "Alternate Contact", source: { kind: "customer", field: "alternate_phone" } },
       ]},
       { key: "date", label: "Date Fields", variables: [
+        { name: "customer_date_of_birth", label: "Date of Birth", source: { kind: "customer", field: "date_of_birth", format: "date" } },
         { name: "customer_created_date", label: "Created Date", source: { kind: "customer", field: "created_at", format: "date" } },
         { name: "customer_updated_date", label: "Updated Date", source: { kind: "customer", field: "updated_at", format: "date" } },
         { name: "customer_last_order_date", label: "Last Order Date", source: { kind: "last_order", field: "created_at", format: "date" } },
