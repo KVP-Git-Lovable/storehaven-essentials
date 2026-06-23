@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
+import { toWhatsAppE164IN } from "../_shared/phone-india.ts";
 
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/twilio';
 
@@ -56,7 +57,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    const {
+    let {
       template_id, to_number, from_number, variables, order_id,
       allow_user_initiated, internal_caller, journey_enrollment_id,
     } = body;
@@ -91,6 +92,10 @@ serve(async (req) => {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    // Auto-normalize Indian phone formats (10-digit -> +91XXXXXXXXXX, etc.)
+    to_number = toWhatsAppE164IN(to_number) ?? to_number;
+    from_number = toWhatsAppE164IN(from_number) ?? from_number;
 
     if (!/^\+[1-9]\d{1,14}$/.test(to_number) || !/^\+[1-9]\d{1,14}$/.test(from_number)) {
       return new Response(JSON.stringify({ error: 'Phone numbers must be in E.164 format' }), {
