@@ -446,12 +446,17 @@ async function runRelativeBranch(
   }
 
   function normalize(raw: any): string | null {
+    // Use the shared India normalizer so 10-digit, +91…, and 91… all map identically.
     if (!raw) return null;
     const s = String(raw).trim();
-    const digits = s.startsWith("+") ? s.slice(1).replace(/\D/g, "") : s.replace(/\D/g, "");
-    if (!digits) return null;
-    if (s.startsWith("+") || digits.length > 10) return `+${digits}`;
-    return `+91${digits}`;
+    if (!s) return null;
+    // Inline equivalent of toWhatsAppE164IN to avoid an extra import in this large file.
+    const digits = s.replace(/\D/g, "");
+    if (s.startsWith("+") && /^\+[1-9]\d{7,14}$/.test(s)) return s;
+    if (digits.length === 10) return `+91${digits}`;
+    if (digits.length === 12 && digits.startsWith("91")) return `+${digits}`;
+    if (digits.length === 11 && digits.startsWith("0")) return `+91${digits.slice(1)}`;
+    return null;
   }
 
   const nowIso = new Date().toISOString();
