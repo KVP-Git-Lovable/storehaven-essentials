@@ -1,6 +1,8 @@
 // Shared helpers for free-form journey message dispatch.
 // Channels: whatsapp (Twilio), sms (Twilio), email (Lovable Email).
 
+import { toWhatsAppE164IN } from "./phone-india.ts";
+
 export type FreeformChannel = "whatsapp" | "sms" | "email";
 
 export interface ChannelSendResult {
