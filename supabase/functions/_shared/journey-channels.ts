@@ -69,6 +69,8 @@ export async function sendWhatsAppFreeform(
     const twilioKey = Deno.env.get("TWILIO_API_KEY");
     if (!lovableKey) throw new Error("LOVABLE_API_KEY not configured");
     if (!twilioKey) throw new Error("TWILIO_API_KEY not configured");
+    fromNumber = toWhatsAppE164IN(fromNumber) ?? fromNumber;
+    toNumber = toWhatsAppE164IN(toNumber) ?? toNumber;
     if (!fromNumber || !/^\+[1-9]\d{1,14}$/.test(fromNumber)) throw new Error("Invalid WhatsApp sender number");
     if (!toNumber || !/^\+[1-9]\d{1,14}$/.test(toNumber)) throw new Error("Invalid recipient phone");
     if (!body || !body.trim()) throw new Error("Empty message body");
@@ -127,6 +129,8 @@ export async function sendSms(
     const twilioKey = Deno.env.get("TWILIO_API_KEY");
     if (!lovableKey) throw new Error("LOVABLE_API_KEY not configured");
     if (!twilioKey) throw new Error("TWILIO_API_KEY not configured");
+    fromNumber = toWhatsAppE164IN(fromNumber) ?? fromNumber;
+    toNumber = toWhatsAppE164IN(toNumber) ?? toNumber;
     if (!fromNumber || !/^\+[1-9]\d{1,14}$/.test(fromNumber)) throw new Error("Invalid SMS sender number — set whatsapp_config.sms_sender_number");
     if (!toNumber || !/^\+[1-9]\d{1,14}$/.test(toNumber)) throw new Error("Invalid recipient phone");
     if (!body || !body.trim()) throw new Error("Empty message body");
