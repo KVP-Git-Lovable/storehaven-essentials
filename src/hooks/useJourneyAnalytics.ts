@@ -371,16 +371,24 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       nodeAgg.set(n.id, mkAgg(n.id, n.data?.label || n.data?.name || "Message"));
     });
     messages.forEach((m: any) => {
-      if (!m.node_id || !m.contact_id) return;
+      const key = personKey(m);
+      if (!m.node_id || !key) return;
       if (!nodeAgg.has(m.node_id)) nodeAgg.set(m.node_id, mkAgg(m.node_id, "Message"));
       const n = nodeAgg.get(m.node_id)!;
-      n.sentSet.add(m.contact_id);
-      if (m.status === "delivered" || m.delivery_status === "delivered" || m.status === "read") n.deliveredSet.add(m.contact_id);
-      if (m.status === "read") n.readSet.add(m.contact_id);
-      if (FAIL.has(m.status) || m.delivery_status === "failed") n.failedSet.add(m.contact_id);
+      n.sentSet.add(key);
+      if (m.status === "delivered" || m.delivery_status === "delivered" || m.status === "read") n.deliveredSet.add(key);
+      if (m.status === "read") n.readSet.add(key);
       const p = last10(m.journey_contacts?.phone);
-      if (p && clickedPhones.has(p)) n.clickedSet.add(m.contact_id);
-      if (p && replyPhones.has(p)) n.repliedSet.add(m.contact_id);
+      if (p && clickedPhones.has(p)) n.clickedSet.add(key);
+      if (p && replyPhones.has(p)) n.repliedSet.add(key);
+    });
+    // Failed = sent − delivered (per node), so the row is internally
+    // consistent and the failed count can never exceed sent. This avoids
+    // counting retry attempts as separate failures for the same contact.
+    nodeAgg.forEach((n) => {
+      const failedKeys = new Set<string>();
+      n.sentSet.forEach((k) => { if (!n.deliveredSet.has(k)) failedKeys.add(k); });
+      n.failedSet = failedKeys;
     });
     const nodePerformance = Array.from(nodeAgg.values()).map((n) => ({
       nodeId: n.nodeId,
