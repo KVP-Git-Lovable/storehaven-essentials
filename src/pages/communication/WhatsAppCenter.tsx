@@ -3,6 +3,7 @@ import { MessageSquare, MessagesSquare, Settings } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BackButton } from "@/components/shared/BackButton";
 import { WalletBalanceCard } from "@/components/communication/WalletBalanceCard";
+import { WhatsAppVideosSection } from "@/components/communication/WhatsAppVideosSection";
 import whatsappLogo from "@/assets/whatsapp-logo.png";
 
 const cards = [
@@ -65,6 +66,8 @@ const WhatsAppCenter = () => {
           </Card>
         ))}
       </div>
+
+      <WhatsAppVideosSection />
     </div>
   );
 };
