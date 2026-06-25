@@ -588,13 +588,6 @@ serve(async (req) => {
           }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
 
-        const twilio = getTwilioAuth();
-        if (!twilio) {
-          return new Response(JSON.stringify({ error: 'Twilio credentials are not configured' }), {
-            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-
         // Rebuild a sample-variables map from the stored required vars.
         const meta = deriveTwilioMetadata(repairedTypes);
         const variableSamples: Record<string, string> = {};
