@@ -513,13 +513,6 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
     if (ordersAttributed.length > 0) {
       insights.push({ kind: "success", text: `${ordersAttributed.length} orders attributed (₹${revenue.toLocaleString("en-IN")})` });
     }
-    // Best hour
-    let bestHour = -1, bestVal = 0;
-    for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) if (heat[d][h] > bestVal) { bestVal = heat[d][h]; bestHour = h; }
-    if (bestHour >= 0 && bestVal > 3) {
-      insights.push({ kind: "info", text: `Best engagement around ${bestHour}:00–${bestHour + 1}:00` });
-    }
-
     // Health score (0-100)
     // All rates use unique-contact funnel counts over Entered so the score,
     // KPI cards, Journey Funnel and AI Insights stay aligned.
