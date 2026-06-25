@@ -152,6 +152,22 @@ function applyFilter(q: any, cond: any) {
     case "lte": return q.lte(field, value);
     case "ilike": return q.ilike(field, `%${value}%`);
     case "starts_with": return q.ilike(field, `${value}%`);
+    case "starts_with_between": {
+      const raw = String(value ?? "");
+      const [a, b] = raw.split("|");
+      const from = (a || "").trim().charAt(0).toUpperCase();
+      const to = (b || "").trim().charAt(0).toUpperCase();
+      if (!from || !to) return q;
+      const start = from <= to ? from : to;
+      const end = from <= to ? to : from;
+      const letters: string[] = [];
+      for (let c = start.charCodeAt(0); c <= end.charCodeAt(0); c++) {
+        letters.push(String.fromCharCode(c));
+      }
+      if (!letters.length) return q;
+      const orExpr = letters.map((ch) => `${field}.ilike.${ch}%`).join(",");
+      return q.or(orExpr);
+    }
     case "is_null": return q.is(field, null);
     case "is_not_null": return q.not(field, "is", null);
     case "is_true": return q.eq(field, true);
@@ -159,6 +175,10 @@ function applyFilter(q: any, cond: any) {
     case "last_n_days": {
       const days = Number(value) || 0;
       return q.gte(field, new Date(Date.now() - days * 86400000).toISOString());
+    }
+    case "next_n_days": {
+      const days = Number(value) || 0;
+      return q.gte(field, new Date().toISOString()).lte(field, new Date(Date.now() + days * 86400000).toISOString());
     }
     default: return q;
   }
