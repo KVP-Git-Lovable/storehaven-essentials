@@ -451,24 +451,25 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       if (key && m.journey_contacts?.opted_out) optedOutContacts.add(key);
     });
     messages.forEach((m: any) => {
-      if (!m.contact_id || contactsSeen.has(m.contact_id)) return;
-      contactsSeen.add(m.contact_id);
+      const key = personKey(m);
+      if (!key || contactsSeen.has(key)) return;
+      contactsSeen.add(key);
       const score = scoreByContact.get(m.contact_id) || 0;
       if (score > 50) segments.highIntent++;
       else if (score > 20) segments.medium++;
       else if (score > 0) segments.low++;
       else segments.dormant++;
-      const wasRead = readContacts.has(m.contact_id);
-      const wasClicked = clickedContacts.has(m.contact_id);
-      const wasReplied = repliedContacts.has(m.contact_id);
-      const wasFailed = failedContacts.has(m.contact_id);
-      const wasDelivered = deliveredContacts.has(m.contact_id);
-      const purchased = orderContacts.has(m.contact_id);
+      const wasRead = readContacts.has(key);
+      const wasClicked = clickedContacts.has(key);
+      const wasReplied = repliedContacts.has(key);
+      const wasFailed = failedContacts.has(key);
+      const wasDelivered = deliveredContacts.has(key);
+      const purchased = orderContacts.has(key);
       if (purchased) segments.highValue++;
       if (wasRead && wasClicked && wasReplied) segments.highlyEngaged++;
       else if (wasRead) segments.warm++;
       else if (wasDelivered) segments.cold++;
-      else if (wasFailed || optedOutContacts.has(m.contact_id)) segments.lost++;
+      else if (wasFailed || optedOutContacts.has(key)) segments.lost++;
     });
 
     // Cohorts by week of enrollment — use full journey messages so weekly
