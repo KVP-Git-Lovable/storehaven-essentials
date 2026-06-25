@@ -122,14 +122,23 @@ export default function JourneyConversations() {
     queryKey: ["journey-conv-enrollments", id],
     enabled: !!id,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("journey_enrollments")
-        .select("id, contact_id, current_node_id, status, enrolled_at")
-        .eq("journey_id", id!)
-        .order("enrolled_at", { ascending: false })
-        .limit(500);
-      if (error) throw error;
-      return (data || []) as Enrollment[];
+      const PAGE = 1000;
+      const out: Enrollment[] = [];
+      for (let i = 0; i < 200; i++) {
+        const from = i * PAGE;
+        const to = from + PAGE - 1;
+        const { data, error } = await supabase
+          .from("journey_enrollments")
+          .select("id, contact_id, current_node_id, status, enrolled_at")
+          .eq("journey_id", id!)
+          .order("enrolled_at", { ascending: false })
+          .range(from, to);
+        if (error) throw error;
+        const rows = (data || []) as Enrollment[];
+        out.push(...rows);
+        if (rows.length < PAGE) break;
+      }
+      return out;
     },
   });
 
@@ -142,12 +151,19 @@ export default function JourneyConversations() {
     queryKey: ["journey-conv-contacts", contactIds.sort().join(",")],
     enabled: contactIds.length > 0,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("journey_contacts")
-        .select("id, name, phone, opted_out")
-        .in("id", contactIds);
-      if (error) throw error;
-      return (data || []) as Contact[];
+      // Batch the .in() to avoid URL-length issues and PostgREST row caps
+      const CHUNK = 200;
+      const out: Contact[] = [];
+      for (let i = 0; i < contactIds.length; i += CHUNK) {
+        const slice = contactIds.slice(i, i + CHUNK);
+        const { data, error } = await supabase
+          .from("journey_contacts")
+          .select("id, name, phone, opted_out")
+          .in("id", slice);
+        if (error) throw error;
+        out.push(...((data || []) as Contact[]));
+      }
+      return out;
     },
   });
 
