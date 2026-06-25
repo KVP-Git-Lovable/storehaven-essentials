@@ -227,14 +227,61 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
     const active = uniqueEnrollments.filter((e: any) => e.status === "active" || e.status === "in_progress").length;
     const dropped = uniqueEnrollments.filter((e: any) => e.status === "exited" || e.status === "dropped").length;
 
-    // Funnel
+    // Funnel — cumulative unique-contact counts over the ENTIRE journey,
+    // independent of the date-range filter. A contact who has ever reached
+    // a stage remains counted even if later messages fail.
+    const deliveredContacts = new Set<string>();
+    const readContacts = new Set<string>();
+    const firstSentByPhoneAll = new Map<string, number>();
+    messages.forEach((m: any) => {
+      if (m.contact_id) {
+        if (m.status === "delivered" || m.delivery_status === "delivered" || m.status === "read") {
+          deliveredContacts.add(m.contact_id);
+        }
+        if (m.status === "read") readContacts.add(m.contact_id);
+      }
+      const p = last10(m.journey_contacts?.phone);
+      if (p && m.sent_at) {
+        const t = new Date(m.sent_at).getTime();
+        const prev = firstSentByPhoneAll.get(p);
+        if (prev === undefined || t < prev) firstSentByPhoneAll.set(p, t);
+      }
+    });
+    const phoneToContactId = new Map<string, string>();
+    messages.forEach((m: any) => {
+      const p = last10(m.journey_contacts?.phone);
+      if (p && m.contact_id && !phoneToContactId.has(p)) phoneToContactId.set(p, m.contact_id);
+    });
+    const clickedContacts = new Set<string>();
+    clicks.forEach((c: any) => {
+      const id = phoneToContactId.get(last10(c.phone_number));
+      if (id) clickedContacts.add(id);
+    });
+    const repliedContacts = new Set<string>();
+    inbound.forEach((i: any) => {
+      const p = last10(i.phone);
+      const first = firstSentByPhoneAll.get(p);
+      if (!first) return;
+      if (new Date(i.created_at).getTime() < first) return;
+      const id = phoneToContactId.get(p);
+      if (id) repliedContacts.add(id);
+    });
+    const orderContacts = new Set<string>();
+    orders.forEach((o: any) => {
+      const first = firstSentByPhoneAll.get(o.phone);
+      if (first && new Date(o.created_at).getTime() >= first) {
+        const id = phoneToContactId.get(o.phone);
+        if (id) orderContacts.add(id);
+      }
+    });
+
     const funnel = [
       { label: "Entered Journey", count: entered },
-      { label: "Delivered", count: delivered },
-      { label: "Read", count: read },
-      { label: "Clicked", count: clicked },
-      { label: "Replied", count: replies },
-      { label: "Order Placed", count: ordersAttributed.length },
+      { label: "Delivered", count: deliveredContacts.size },
+      { label: "Read", count: readContacts.size },
+      { label: "Clicked", count: clickedContacts.size },
+      { label: "Replied", count: repliedContacts.size },
+      { label: "Order Placed", count: orderContacts.size },
     ];
 
     // Trend by day
