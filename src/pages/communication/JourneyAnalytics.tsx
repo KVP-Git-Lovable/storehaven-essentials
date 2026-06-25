@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowLeft, Send, Eye, MousePointer, Target, Mail, MessageSquare, Link2, CheckCircle2, XCircle, BookOpen, TrendingUp, TrendingDown, Users, DollarSign, AlertTriangle, Lightbulb, Sparkles, Download } from "lucide-react";
+import { ArrowLeft, Send, Eye, MousePointer, Target, Mail, MessageSquare, Link2, CheckCircle2, XCircle, BookOpen, TrendingUp, TrendingDown, Users, DollarSign, AlertTriangle, Lightbulb, Sparkles, Download, FileText } from "lucide-react";
 import { WhatsAppIcon } from "@/components/communication/WhatsAppIcon";
 import { format } from "date-fns";
 import { useJourneyAnalytics } from "@/hooks/useJourneyAnalytics";
@@ -18,6 +18,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 const JourneyCostAnalytics = lazy(() => import("@/components/journey/JourneyCostAnalytics"));
 const JourneyEngagementSummary = lazy(() => import("@/components/journey/JourneyEngagementSummary"));
 const RateLimitedRetrySection = lazy(() => import("@/components/journey/RateLimitedRetrySection"));
+const JourneyLogsDialog = lazy(() => import("@/components/journey/JourneyLogsDialog"));
 
 const SUCCESS_STATUSES = new Set(["sent", "delivered", "queued", "accepted", "scheduled", "sending"]);
 const FAIL_STATUSES = new Set(["failed", "undelivered"]);
@@ -58,6 +59,7 @@ export default function JourneyAnalytics() {
   const navigate = useNavigate();
   const [rangeKey, setRangeKey] = useState<"7d" | "30d" | "all">("30d");
   const [showAllMessages, setShowAllMessages] = useState(false);
+  const [logsOpen, setLogsOpen] = useState(false);
   const range = useMemo(() => {
     const now = new Date();
     if (rangeKey === "all") return undefined;
@@ -219,6 +221,9 @@ export default function JourneyAnalytics() {
                 <SelectItem value="all">All time</SelectItem>
               </SelectContent>
             </Select>
+            <Button variant="outline" size="sm" onClick={() => setLogsOpen(true)}>
+              <FileText className="h-4 w-4 mr-1" /> View Logs
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm"><Download className="h-4 w-4 mr-1" /> Export</Button>
