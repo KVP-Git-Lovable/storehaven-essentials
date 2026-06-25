@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
@@ -37,6 +38,55 @@ export default function WhatsAppTemplateDetails() {
   const [showTwilioDef, setShowTwilioDef] = useState(false);
   const [showMediaTest, setShowMediaTest] = useState(false);
   const [repairing, setRepairing] = useState(false);
+  const [videoOnlyTo, setVideoOnlyTo] = useState("");
+  const [videoOnlyCaption, setVideoOnlyCaption] = useState("");
+  const [videoOnlyFrom, setVideoOnlyFrom] = useState("");
+  const [videoOnlyForce, setVideoOnlyForce] = useState(false);
+  const [videoOnlySending, setVideoOnlySending] = useState(false);
+
+  const sendVideoOnly = async (videoUrl: string) => {
+    if (!videoOnlyTo.trim()) {
+      toast.error("Enter a recipient number");
+      return;
+    }
+    setVideoOnlySending(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-send-media`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            to_number: videoOnlyTo.trim(),
+            media_url: videoUrl,
+            caption: videoOnlyCaption.trim() || undefined,
+            from_number: videoOnlyFrom.trim() || undefined,
+            force: videoOnlyForce,
+          }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        if (data?.code === "outside_service_window") {
+          toast.error(data.error, { duration: 8000 });
+        } else {
+          toast.error(data?.error || "Send failed");
+        }
+        return;
+      }
+      toast.success(`Video sent · ${data.status} (${data.message_sid})`);
+      setVideoOnlyCaption("");
+    } catch (e: any) {
+      toast.error(e?.message || "Send failed");
+    } finally {
+      setVideoOnlySending(false);
+    }
+  };
+
 
   const verifyMediaUrl = async (url: string) => {
     if (!url.trim()) {
