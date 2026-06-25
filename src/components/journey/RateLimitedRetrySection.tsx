@@ -34,21 +34,70 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
   const { data: rows = [], isLoading, refetch } = useQuery<FailedRow[]>({
     queryKey: ["journey-rate-limited-failures", journeyId],
     queryFn: async () => {
-      const { data: logs, error } = await supabase
-        .from("journey_message_log")
-        .select("id, node_id, contact_id, error_message, sent_at")
-        .eq("journey_id", journeyId)
-        .eq("status", "failed")
-        .ilike("error_message", "%Rate limit%")
-        .order("sent_at", { ascending: false });
-      if (error) throw error;
-      const list = logs || [];
-      const contactIds = Array.from(new Set(list.map((l: any) => l.contact_id).filter(Boolean)));
+      // 1. Paginate ALL rate-limited failure rows (bypasses PostgREST 1000-row cap).
+      const list: any[] = [];
+      const PAGE = 1000;
+      for (let from = 0; from < 200_000; from += PAGE) {
+        const { data, error } = await supabase
+          .from("journey_message_log")
+          .select("id, node_id, contact_id, error_message, sent_at")
+          .eq("journey_id", journeyId)
+          .eq("status", "failed")
+          .ilike("error_message", "%Rate limit%")
+          .order("sent_at", { ascending: false })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        const batch = data || [];
+        list.push(...batch);
+        if (batch.length < PAGE) break;
+      }
+
+      // 2. Dedupe to ONE row per contact (most recent failure). A contact who
+      //    failed several times only needs one retry entry.
+      const latestByContact = new Map<string, any>();
+      for (const l of list) {
+        if (!l.contact_id) continue;
+        const prev = latestByContact.get(l.contact_id);
+        if (!prev || new Date(l.sent_at).getTime() > new Date(prev.sent_at).getTime()) {
+          latestByContact.set(l.contact_id, l);
+        }
+      }
+      const contactIds = Array.from(latestByContact.keys());
+      if (contactIds.length === 0) return [];
+
+      // 3. For those contacts, find the most-recent successful (delivered/
+      //    sent/read) log in this journey. If a contact has a success that
+      //    happened AFTER the failure, exclude them — they've already been
+      //    retried successfully.
+      const successByContact = new Map<string, number>();
+      const CHUNK_S = 200;
+      for (let i = 0; i < contactIds.length; i += CHUNK_S) {
+        const slice = contactIds.slice(i, i + CHUNK_S);
+        const { data: succ, error: sErr } = await supabase
+          .from("journey_message_log")
+          .select("contact_id, sent_at, status, delivery_status")
+          .eq("journey_id", journeyId)
+          .in("contact_id", slice)
+          .in("status", ["sent", "delivered", "read", "queued", "accepted"]);
+        if (sErr) { console.error("[RateLimitedRetry] success fetch error", sErr); continue; }
+        for (const s of succ || []) {
+          const t = new Date(s.sent_at).getTime();
+          const prev = successByContact.get(s.contact_id) || 0;
+          if (t > prev) successByContact.set(s.contact_id, t);
+        }
+      }
+      const stillFailing = Array.from(latestByContact.values()).filter((l) => {
+        const succT = successByContact.get(l.contact_id) || 0;
+        const failT = new Date(l.sent_at).getTime();
+        return succT < failT; // no success after the failure
+      });
+
+      // 4. Hydrate names/phones in batches.
+      const finalIds = stillFailing.map((l) => l.contact_id);
       let contactMap: Record<string, { name: string | null; phone: string | null }> = {};
-      // Batch to avoid URL-length limits and PostgREST max-rows cap
       const CHUNK = 200;
-      for (let i = 0; i < contactIds.length; i += CHUNK) {
-        const slice = contactIds.slice(i, i + CHUNK);
+      for (let i = 0; i < finalIds.length; i += CHUNK) {
+        const slice = finalIds.slice(i, i + CHUNK);
         const { data: contacts, error: cErr } = await supabase
           .from("journey_contacts")
           .select("id, name, phone")
@@ -59,7 +108,7 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
         }
         for (const c of contacts || []) contactMap[c.id] = { name: c.name, phone: c.phone };
       }
-      return list.map((l: any) => ({
+      return stillFailing.map((l: any) => ({
         id: l.id,
         node_id: l.node_id,
         contact_id: l.contact_id,
