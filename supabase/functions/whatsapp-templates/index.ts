@@ -585,6 +585,8 @@ serve(async (req) => {
           return new Response(JSON.stringify({
             repaired: false,
             reason: 'No malformed URLs found in this template.',
+            source: liveTypes ? 'twilio_live' : 'db',
+            inspected_types: sourceTypes,
           }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
 
