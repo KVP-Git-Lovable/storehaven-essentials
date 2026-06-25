@@ -441,13 +441,14 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       highlyEngaged: 0, warm: 0, cold: 0, lost: 0, highValue: 0,
     };
     const contactsSeen = new Set<string>();
+    // Failed = unique people we attempted but never delivered to. Capped at
+    // sentContacts so retries cannot push the rate above 100%.
     const failedContacts = new Set<string>();
-    messages.forEach((m: any) => {
-      if (m.contact_id && (FAIL.has(m.status) || m.delivery_status === "failed")) failedContacts.add(m.contact_id);
-    });
+    sentContacts.forEach((k) => { if (!deliveredContacts.has(k)) failedContacts.add(k); });
     const optedOutContacts = new Set<string>();
     messages.forEach((m: any) => {
-      if (m.contact_id && m.journey_contacts?.opted_out) optedOutContacts.add(m.contact_id);
+      const key = personKey(m);
+      if (key && m.journey_contacts?.opted_out) optedOutContacts.add(key);
     });
     messages.forEach((m: any) => {
       if (!m.contact_id || contactsSeen.has(m.contact_id)) return;
