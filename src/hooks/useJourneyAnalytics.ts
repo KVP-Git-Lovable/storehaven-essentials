@@ -474,11 +474,13 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
     }
 
     // Health score (0-100)
-    const deliveryRate = sent ? (delivered / sent) * 100 : 0;
-    const readRate = sent ? (read / sent) * 100 : 0;
+    // Delivery/Read/Click rates use unique-contact funnel counts over Entered,
+    // matching the Journey Funnel percentages.
+    const deliveryRate = entered ? (deliveredContacts.size / entered) * 100 : 0;
+    const readRate = entered ? (readContacts.size / entered) * 100 : 0;
     const failRate = sent ? (failed / sent) * 100 : 0;
     const optOutRate = entered ? (optedOut / entered) * 100 : 0;
-    const replyRate = sent ? (replies / sent) * 100 : 0;
+    const replyRate = entered ? (repliedContacts.size / entered) * 100 : 0;
     let health = 0;
     health += Math.min(30, deliveryRate * 0.3);
     health += Math.min(30, readRate * 0.4);
@@ -501,7 +503,7 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
         entered, active, completed, dropped, optedOut,
         sent, delivered, read, failed, clicked, replies,
         ordersCount: ordersAttributed.length, revenue,
-        deliveryRate, readRate, clickRate: sent ? (clicked / sent) * 100 : 0,
+        deliveryRate, readRate, clickRate: entered ? (clickedContacts.size / entered) * 100 : 0,
         replyRate, conversionRate: entered ? (ordersAttributed.length / entered) * 100 : 0,
         avgOrderValue: ordersAttributed.length ? revenue / ordersAttributed.length : 0,
         revenuePerCustomer: entered ? revenue / entered : 0,
