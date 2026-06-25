@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
@@ -37,6 +38,55 @@ export default function WhatsAppTemplateDetails() {
   const [showTwilioDef, setShowTwilioDef] = useState(false);
   const [showMediaTest, setShowMediaTest] = useState(false);
   const [repairing, setRepairing] = useState(false);
+  const [videoOnlyTo, setVideoOnlyTo] = useState("");
+  const [videoOnlyCaption, setVideoOnlyCaption] = useState("");
+  const [videoOnlyFrom, setVideoOnlyFrom] = useState("");
+  const [videoOnlyForce, setVideoOnlyForce] = useState(false);
+  const [videoOnlySending, setVideoOnlySending] = useState(false);
+
+  const sendVideoOnly = async (videoUrl: string) => {
+    if (!videoOnlyTo.trim()) {
+      toast.error("Enter a recipient number");
+      return;
+    }
+    setVideoOnlySending(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-send-media`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            to_number: videoOnlyTo.trim(),
+            media_url: videoUrl,
+            caption: videoOnlyCaption.trim() || undefined,
+            from_number: videoOnlyFrom.trim() || undefined,
+            force: videoOnlyForce,
+          }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        if (data?.code === "outside_service_window") {
+          toast.error(data.error, { duration: 8000 });
+        } else {
+          toast.error(data?.error || "Send failed");
+        }
+        return;
+      }
+      toast.success(`Video sent · ${data.status} (${data.message_sid})`);
+      setVideoOnlyCaption("");
+    } catch (e: any) {
+      toast.error(e?.message || "Send failed");
+    } finally {
+      setVideoOnlySending(false);
+    }
+  };
+
 
   const verifyMediaUrl = async (url: string) => {
     if (!url.trim()) {
@@ -436,6 +486,74 @@ export default function WhatsAppTemplateDetails() {
           </CardContent>
         )}
       </Card>
+
+      {(twilioType === "twilio/media" || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(twilioMediaUrl || "")) && twilioMediaUrl && !twilioMediaIsVar && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Send Video Only (no template)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Sends just the video as a freeform WhatsApp media message — no template body, no variables.
+              WhatsApp only allows this when the recipient has messaged your business in the last 24 hours
+              (the "service window"). Outside that window you must use an approved template instead.
+            </p>
+            <div>
+              <Label className="text-xs">Video URL</Label>
+              <code className="block w-full break-all rounded bg-muted px-2 py-1 text-xs">{twilioMediaUrl}</code>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label>To Number</Label>
+                <Input
+                  placeholder="+919876543210 or 9876543210"
+                  value={videoOnlyTo}
+                  onChange={(e) => setVideoOnlyTo(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>From Number <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                <Input
+                  placeholder="Defaults to configured sender"
+                  value={videoOnlyFrom}
+                  onChange={(e) => setVideoOnlyFrom(e.target.value)}
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Caption <span className="text-muted-foreground text-xs">(optional, ≤1024 chars)</span></Label>
+              <Textarea
+                rows={2}
+                maxLength={1024}
+                placeholder="Optional caption shown below the video"
+                value={videoOnlyCaption}
+                onChange={(e) => setVideoOnlyCaption(e.target.value)}
+              />
+            </div>
+            <label className="flex items-start gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={videoOnlyForce}
+                onChange={(e) => setVideoOnlyForce(e.target.checked)}
+              />
+              <span>
+                Skip the 24-hour service-window check (Twilio will still reject with error 63016 if the
+                recipient is outside the window — use only for debugging).
+              </span>
+            </label>
+            <div className="flex justify-end">
+              <Button
+                onClick={() => sendVideoOnly(twilioMediaUrl)}
+                disabled={videoOnlySending || !videoOnlyTo.trim()}
+              >
+                <Send className="h-4 w-4 mr-2" />
+                {videoOnlySending ? "Sending..." : "Send Video"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Send Test Dialog */}
       <Dialog open={showSendDialog} onOpenChange={setShowSendDialog}>
