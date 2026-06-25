@@ -11,6 +11,16 @@ function last10(p: any) {
   return String(p || "").replace(/\D/g, "").slice(-10);
 }
 
+// Stable per-person key so re-enrollments (which create new
+// journey_contacts rows with new contact_ids for the same phone) collapse
+// into a single unique contact across all funnel/node/AI metrics.
+function personKey(m: any): string | null {
+  const p = last10(m?.journey_contacts?.phone);
+  if (p) return `p:${p}`;
+  if (m?.contact_id) return `c:${m.contact_id}`;
+  return null;
+}
+
 export interface RangeFilter {
   from?: Date;
   to?: Date;
@@ -260,13 +270,16 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
     // a stage remains counted even if later messages fail.
     const deliveredContacts = new Set<string>();
     const readContacts = new Set<string>();
+    const sentContacts = new Set<string>();
     const firstSentByPhoneAll = new Map<string, number>();
     messages.forEach((m: any) => {
-      if (m.contact_id) {
+      const key = personKey(m);
+      if (key) {
+        sentContacts.add(key);
         if (m.status === "delivered" || m.delivery_status === "delivered" || m.status === "read") {
-          deliveredContacts.add(m.contact_id);
+          deliveredContacts.add(key);
         }
-        if (m.status === "read") readContacts.add(m.contact_id);
+        if (m.status === "read") readContacts.add(key);
       }
       const p = last10(m.journey_contacts?.phone);
       if (p && m.sent_at) {
@@ -275,15 +288,10 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
         if (prev === undefined || t < prev) firstSentByPhoneAll.set(p, t);
       }
     });
-    const phoneToContactId = new Map<string, string>();
-    messages.forEach((m: any) => {
-      const p = last10(m.journey_contacts?.phone);
-      if (p && m.contact_id && !phoneToContactId.has(p)) phoneToContactId.set(p, m.contact_id);
-    });
     const clickedContacts = new Set<string>();
     clicks.forEach((c: any) => {
-      const id = phoneToContactId.get(last10(c.phone_number));
-      if (id) clickedContacts.add(id);
+      const p = last10(c.phone_number);
+      if (p) clickedContacts.add(`p:${p}`);
     });
     const repliedContacts = new Set<string>();
     inbound.forEach((i: any) => {
@@ -291,15 +299,13 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       const first = firstSentByPhoneAll.get(p);
       if (!first) return;
       if (new Date(i.created_at).getTime() < first) return;
-      const id = phoneToContactId.get(p);
-      if (id) repliedContacts.add(id);
+      repliedContacts.add(`p:${p}`);
     });
     const orderContacts = new Set<string>();
     orders.forEach((o: any) => {
       const first = firstSentByPhoneAll.get(o.phone);
       if (first && new Date(o.created_at).getTime() >= first) {
-        const id = phoneToContactId.get(o.phone);
-        if (id) orderContacts.add(id);
+        if (o.phone) orderContacts.add(`p:${o.phone}`);
       }
     });
 
@@ -361,16 +367,24 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       nodeAgg.set(n.id, mkAgg(n.id, n.data?.label || n.data?.name || "Message"));
     });
     messages.forEach((m: any) => {
-      if (!m.node_id || !m.contact_id) return;
+      const key = personKey(m);
+      if (!m.node_id || !key) return;
       if (!nodeAgg.has(m.node_id)) nodeAgg.set(m.node_id, mkAgg(m.node_id, "Message"));
       const n = nodeAgg.get(m.node_id)!;
-      n.sentSet.add(m.contact_id);
-      if (m.status === "delivered" || m.delivery_status === "delivered" || m.status === "read") n.deliveredSet.add(m.contact_id);
-      if (m.status === "read") n.readSet.add(m.contact_id);
-      if (FAIL.has(m.status) || m.delivery_status === "failed") n.failedSet.add(m.contact_id);
+      n.sentSet.add(key);
+      if (m.status === "delivered" || m.delivery_status === "delivered" || m.status === "read") n.deliveredSet.add(key);
+      if (m.status === "read") n.readSet.add(key);
       const p = last10(m.journey_contacts?.phone);
-      if (p && clickedPhones.has(p)) n.clickedSet.add(m.contact_id);
-      if (p && replyPhones.has(p)) n.repliedSet.add(m.contact_id);
+      if (p && clickedPhones.has(p)) n.clickedSet.add(key);
+      if (p && replyPhones.has(p)) n.repliedSet.add(key);
+    });
+    // Failed = sent − delivered (per node), so the row is internally
+    // consistent and the failed count can never exceed sent. This avoids
+    // counting retry attempts as separate failures for the same contact.
+    nodeAgg.forEach((n) => {
+      const failedKeys = new Set<string>();
+      n.sentSet.forEach((k) => { if (!n.deliveredSet.has(k)) failedKeys.add(k); });
+      n.failedSet = failedKeys;
     });
     const nodePerformance = Array.from(nodeAgg.values()).map((n) => ({
       nodeId: n.nodeId,
@@ -427,33 +441,35 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       highlyEngaged: 0, warm: 0, cold: 0, lost: 0, highValue: 0,
     };
     const contactsSeen = new Set<string>();
+    // Failed = unique people we attempted but never delivered to. Capped at
+    // sentContacts so retries cannot push the rate above 100%.
     const failedContacts = new Set<string>();
-    messages.forEach((m: any) => {
-      if (m.contact_id && (FAIL.has(m.status) || m.delivery_status === "failed")) failedContacts.add(m.contact_id);
-    });
+    sentContacts.forEach((k) => { if (!deliveredContacts.has(k)) failedContacts.add(k); });
     const optedOutContacts = new Set<string>();
     messages.forEach((m: any) => {
-      if (m.contact_id && m.journey_contacts?.opted_out) optedOutContacts.add(m.contact_id);
+      const key = personKey(m);
+      if (key && m.journey_contacts?.opted_out) optedOutContacts.add(key);
     });
     messages.forEach((m: any) => {
-      if (!m.contact_id || contactsSeen.has(m.contact_id)) return;
-      contactsSeen.add(m.contact_id);
+      const key = personKey(m);
+      if (!key || contactsSeen.has(key)) return;
+      contactsSeen.add(key);
       const score = scoreByContact.get(m.contact_id) || 0;
       if (score > 50) segments.highIntent++;
       else if (score > 20) segments.medium++;
       else if (score > 0) segments.low++;
       else segments.dormant++;
-      const wasRead = readContacts.has(m.contact_id);
-      const wasClicked = clickedContacts.has(m.contact_id);
-      const wasReplied = repliedContacts.has(m.contact_id);
-      const wasFailed = failedContacts.has(m.contact_id);
-      const wasDelivered = deliveredContacts.has(m.contact_id);
-      const purchased = orderContacts.has(m.contact_id);
+      const wasRead = readContacts.has(key);
+      const wasClicked = clickedContacts.has(key);
+      const wasReplied = repliedContacts.has(key);
+      const wasFailed = failedContacts.has(key);
+      const wasDelivered = deliveredContacts.has(key);
+      const purchased = orderContacts.has(key);
       if (purchased) segments.highValue++;
       if (wasRead && wasClicked && wasReplied) segments.highlyEngaged++;
       else if (wasRead) segments.warm++;
       else if (wasDelivered) segments.cold++;
-      else if (wasFailed || optedOutContacts.has(m.contact_id)) segments.lost++;
+      else if (wasFailed || optedOutContacts.has(key)) segments.lost++;
     });
 
     // Cohorts by week of enrollment — use full journey messages so weekly
@@ -470,8 +486,9 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       const msg = messages.find((m: any) => m.contact_id === e.contact_id);
       const p = last10(msg?.journey_contacts?.phone);
       if (p) c.phones.add(p);
+      const ckey = p ? `p:${p}` : `c:${e.contact_id}`;
       const enrolledAt = new Date(e.enrolled_at).getTime();
-      const wasRead = readContacts.has(e.contact_id);
+      const wasRead = readContacts.has(ckey);
       if (wasRead) {
         const readMsg = messages.find((m: any) => m.contact_id === e.contact_id && m.status === "read");
         const days = readMsg ? (new Date(readMsg.sent_at).getTime() - enrolledAt) / 86400000 : 999;
