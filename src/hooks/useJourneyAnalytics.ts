@@ -344,28 +344,45 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       heat[d.getDay()][d.getHours()]++;
     });
 
-    // Node performance
-    const nodeMap = new Map<string, any>();
+    // Node performance — unique-contact counts per node, full journey
+    // (no date filter), so values stay consistent with the Journey Funnel.
+    type NodeAgg = {
+      nodeId: string; label: string;
+      sentSet: Set<string>; deliveredSet: Set<string>; readSet: Set<string>;
+      clickedSet: Set<string>; repliedSet: Set<string>; failedSet: Set<string>; orderSet: Set<string>;
+    };
+    const nodeAgg = new Map<string, NodeAgg>();
+    const mkAgg = (id: string, label: string): NodeAgg => ({
+      nodeId: id, label,
+      sentSet: new Set(), deliveredSet: new Set(), readSet: new Set(),
+      clickedSet: new Set(), repliedSet: new Set(), failedSet: new Set(), orderSet: new Set(),
+    });
     nodes.forEach((n: any) => {
-      nodeMap.set(n.id, {
-        nodeId: n.id,
-        label: n.data?.label || n.data?.name || "Message",
-        sent: 0, delivered: 0, read: 0, clicked: 0, replied: 0, failed: 0, orders: 0,
-      });
+      nodeAgg.set(n.id, mkAgg(n.id, n.data?.label || n.data?.name || "Message"));
     });
-    filteredMsgs.forEach((m: any) => {
-      if (!m.node_id) return;
-      if (!nodeMap.has(m.node_id)) nodeMap.set(m.node_id, { nodeId: m.node_id, label: "Message", sent: 0, delivered: 0, read: 0, clicked: 0, replied: 0, failed: 0, orders: 0 });
-      const n = nodeMap.get(m.node_id);
-      n.sent++;
-      if (m.status === "delivered" || m.delivery_status === "delivered" || m.status === "read") n.delivered++;
-      if (m.status === "read") n.read++;
-      if (FAIL.has(m.status) || m.delivery_status === "failed") n.failed++;
+    messages.forEach((m: any) => {
+      if (!m.node_id || !m.contact_id) return;
+      if (!nodeAgg.has(m.node_id)) nodeAgg.set(m.node_id, mkAgg(m.node_id, "Message"));
+      const n = nodeAgg.get(m.node_id)!;
+      n.sentSet.add(m.contact_id);
+      if (m.status === "delivered" || m.delivery_status === "delivered" || m.status === "read") n.deliveredSet.add(m.contact_id);
+      if (m.status === "read") n.readSet.add(m.contact_id);
+      if (FAIL.has(m.status) || m.delivery_status === "failed") n.failedSet.add(m.contact_id);
       const p = last10(m.journey_contacts?.phone);
-      if (clickedPhones.has(p)) n.clicked++;
-      if (replyPhones.has(p)) n.replied++;
+      if (p && clickedPhones.has(p)) n.clickedSet.add(m.contact_id);
+      if (p && replyPhones.has(p)) n.repliedSet.add(m.contact_id);
     });
-    const nodePerformance = Array.from(nodeMap.values());
+    const nodePerformance = Array.from(nodeAgg.values()).map((n) => ({
+      nodeId: n.nodeId,
+      label: n.label,
+      sent: n.sentSet.size,
+      delivered: n.deliveredSet.size,
+      read: n.readSet.size,
+      clicked: n.clickedSet.size,
+      replied: n.repliedSet.size,
+      failed: n.failedSet.size,
+      orders: n.orderSet.size,
+    }));
 
     // Engagement scoring per contact
     const scoreByContact = new Map<string, number>();
@@ -403,12 +420,22 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       if (n > 0) scoreByContact.set(m.contact_id, (scoreByContact.get(m.contact_id) || 0) + 20 + Math.max(0, n - 1) * 40);
     });
 
+    // Audience Segments — use full journey messages and unique-contact funnel
+    // sets so segment buckets reconcile with the Journey Funnel.
     const segments = {
       highIntent: 0, medium: 0, low: 0, dormant: 0,
       highlyEngaged: 0, warm: 0, cold: 0, lost: 0, highValue: 0,
     };
     const contactsSeen = new Set<string>();
-    filteredMsgs.forEach((m: any) => {
+    const failedContacts = new Set<string>();
+    messages.forEach((m: any) => {
+      if (m.contact_id && (FAIL.has(m.status) || m.delivery_status === "failed")) failedContacts.add(m.contact_id);
+    });
+    const optedOutContacts = new Set<string>();
+    messages.forEach((m: any) => {
+      if (m.contact_id && m.journey_contacts?.opted_out) optedOutContacts.add(m.contact_id);
+    });
+    messages.forEach((m: any) => {
       if (!m.contact_id || contactsSeen.has(m.contact_id)) return;
       contactsSeen.add(m.contact_id);
       const score = scoreByContact.get(m.contact_id) || 0;
@@ -416,23 +443,23 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       else if (score > 20) segments.medium++;
       else if (score > 0) segments.low++;
       else segments.dormant++;
-      const p = last10(m.journey_contacts?.phone);
-      const wasRead = filteredMsgs.some((x: any) => x.contact_id === m.contact_id && x.status === "read");
-      const wasClicked = clickedPhones.has(p);
-      const wasReplied = replyPhones.has(p);
-      const wasFailed = filteredMsgs.some((x: any) => x.contact_id === m.contact_id && (FAIL.has(x.status) || x.delivery_status === "failed"));
-      const wasDelivered = filteredMsgs.some((x: any) => x.contact_id === m.contact_id && (x.status === "delivered" || x.delivery_status === "delivered" || x.status === "read"));
-      const purchased = (orderCountByPhone.get(p) || 0) > 0;
+      const wasRead = readContacts.has(m.contact_id);
+      const wasClicked = clickedContacts.has(m.contact_id);
+      const wasReplied = repliedContacts.has(m.contact_id);
+      const wasFailed = failedContacts.has(m.contact_id);
+      const wasDelivered = deliveredContacts.has(m.contact_id);
+      const purchased = orderContacts.has(m.contact_id);
       if (purchased) segments.highValue++;
       if (wasRead && wasClicked && wasReplied) segments.highlyEngaged++;
       else if (wasRead) segments.warm++;
       else if (wasDelivered) segments.cold++;
-      else if (wasFailed || m.journey_contacts?.opted_out) segments.lost++;
+      else if (wasFailed || optedOutContacts.has(m.contact_id)) segments.lost++;
     });
 
-    // Cohorts by week of enrollment
+    // Cohorts by week of enrollment — use full journey messages so weekly
+    // rates remain stable and consistent with the funnel.
     const cohortMap = new Map<string, { entered: number; phones: Set<string>; d1Read: number; d7Read: number; d30Conv: number }>();
-    enrollments.forEach((e: any) => {
+    uniqueEnrollments.forEach((e: any) => {
       const week = new Date(e.enrolled_at);
       const monday = new Date(week);
       monday.setDate(monday.getDate() - monday.getDay() + 1);
@@ -440,13 +467,13 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       if (!cohortMap.has(key)) cohortMap.set(key, { entered: 0, phones: new Set(), d1Read: 0, d7Read: 0, d30Conv: 0 });
       const c = cohortMap.get(key)!;
       c.entered++;
-      const msg = filteredMsgs.find((m: any) => m.contact_id === e.contact_id);
+      const msg = messages.find((m: any) => m.contact_id === e.contact_id);
       const p = last10(msg?.journey_contacts?.phone);
       if (p) c.phones.add(p);
       const enrolledAt = new Date(e.enrolled_at).getTime();
-      const wasRead = filteredMsgs.some((m: any) => m.contact_id === e.contact_id && m.status === "read");
+      const wasRead = readContacts.has(e.contact_id);
       if (wasRead) {
-        const readMsg = filteredMsgs.find((m: any) => m.contact_id === e.contact_id && m.status === "read");
+        const readMsg = messages.find((m: any) => m.contact_id === e.contact_id && m.status === "read");
         const days = readMsg ? (new Date(readMsg.sent_at).getTime() - enrolledAt) / 86400000 : 999;
         if (days <= 1) c.d1Read++;
         if (days <= 7) c.d7Read++;
@@ -474,22 +501,14 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       if (days <= 30) { attribution.d30 += amt; attribution.d30Count++; }
     });
 
-    // Rule-based insights
+    // Rule-based insights — use the unique-contact funnel rates so
+    // headlines reconcile with the funnel and KPI cards.
     const insights: { kind: "info" | "warn" | "success"; text: string }[] = [];
     const sortedNodes = [...nodePerformance].sort((a, b) => (b.read / Math.max(b.sent, 1)) - (a.read / Math.max(a.sent, 1)));
     if (sortedNodes.length >= 2) {
       const a = sortedNodes[0]; const b = sortedNodes[sortedNodes.length - 1];
       const ratio = (a.read / Math.max(a.sent, 1)) / Math.max(b.read / Math.max(b.sent, 1), 0.001);
       if (ratio > 1.5) insights.push({ kind: "info", text: `${a.label} reads ${ratio.toFixed(1)}× better than ${b.label}` });
-    }
-    if (sent > 0) {
-      const readRate = (read / sent) * 100;
-      if (readRate > 60) insights.push({ kind: "success", text: `Strong read rate at ${readRate.toFixed(1)}%` });
-      else if (readRate < 30 && sent > 20) insights.push({ kind: "warn", text: `Read rate is low at ${readRate.toFixed(1)}%` });
-      const failRate = (failed / sent) * 100;
-      if (failRate > 10) insights.push({ kind: "warn", text: `Failed delivery rate is high (${failRate.toFixed(1)}%)` });
-      const optOutRate = (optedOut / Math.max(entered, 1)) * 100;
-      if (optOutRate > 5) insights.push({ kind: "warn", text: `Opt-out rate increasing (${optOutRate.toFixed(1)}%)` });
     }
     if (ordersAttributed.length > 0) {
       insights.push({ kind: "success", text: `${ordersAttributed.length} orders attributed (₹${revenue.toLocaleString("en-IN")})` });
@@ -502,13 +521,27 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
     }
 
     // Health score (0-100)
-    // Delivery/Read/Click rates use unique-contact funnel counts over Entered,
-    // matching the Journey Funnel percentages.
+    // All rates use unique-contact funnel counts over Entered so the score,
+    // KPI cards, Journey Funnel and AI Insights stay aligned.
     const deliveryRate = entered ? (deliveredContacts.size / entered) * 100 : 0;
     const readRate = entered ? (readContacts.size / entered) * 100 : 0;
-    const failRate = sent ? (failed / sent) * 100 : 0;
-    const optOutRate = entered ? (optedOut / entered) * 100 : 0;
+    const failRate = entered ? (failedContacts.size / entered) * 100 : 0;
+    const optOutRate = entered ? (optedOutContacts.size / entered) * 100 : 0;
     const replyRate = entered ? (repliedContacts.size / entered) * 100 : 0;
+
+    // AI Insights using unified rates
+    if (entered > 0) {
+      if (readRate > 60) insights.push({ kind: "success", text: `Strong read rate at ${readRate.toFixed(1)}%` });
+      else if (readRate < 30 && entered > 20) insights.push({ kind: "warn", text: `Read rate is low at ${readRate.toFixed(1)}%` });
+      if (failRate > 10) insights.push({ kind: "warn", text: `Failed delivery rate is high (${failRate.toFixed(1)}%)` });
+      if (optOutRate > 5) insights.push({ kind: "warn", text: `Opt-out rate increasing (${optOutRate.toFixed(1)}%)` });
+    }
+    if (ordersAttributed.length > 0) {
+      insights.push({ kind: "success", text: `${ordersAttributed.length} orders attributed (₹${revenue.toLocaleString("en-IN")})` });
+    }
+    let bestHour2 = -1, bestVal2 = 0;
+    for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) if (heat[d][h] > bestVal2) { bestVal2 = heat[d][h]; bestHour2 = h; }
+    if (bestHour2 >= 0 && bestVal2 > 3) insights.push({ kind: "info", text: `Best engagement around ${bestHour2}:00–${bestHour2 + 1}:00` });
     let health = 0;
     health += Math.min(30, deliveryRate * 0.3);
     health += Math.min(30, readRate * 0.4);
@@ -535,6 +568,13 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
         replyRate, conversionRate: entered ? (ordersAttributed.length / entered) * 100 : 0,
         avgOrderValue: ordersAttributed.length ? revenue / ordersAttributed.length : 0,
         revenuePerCustomer: entered ? revenue / entered : 0,
+        // Unique-contact funnel counts (shared with Live Send Progress).
+        uniqueDelivered: deliveredContacts.size,
+        uniqueRead: readContacts.size,
+        uniqueClicked: clickedContacts.size,
+        uniqueReplied: repliedContacts.size,
+        uniqueFailed: failedContacts.size,
+        uniqueOrders: orderContacts.size,
       },
       funnel, trend, heat, nodePerformance, segments, cohorts, attribution, insights,
       health: { score: health, strengths, areas },
