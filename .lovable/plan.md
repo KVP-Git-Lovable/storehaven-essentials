@@ -1,46 +1,44 @@
-## Problem
+# Journey Analytics – View Logs
 
-In `src/hooks/useJourneyAnalytics.ts`, the Journey Funnel currently counts **message rows** (events), and those rows are further restricted by the date-range filter (`Last 30 days`, etc.).
+Add a **View Logs** button next to **Export** on the Journey Analytics page. Clicking it opens a full-screen dialog that lists every message sent for this journey with Twilio-aligned columns.
 
-That's why "Delivered" goes down over time — older delivered messages fall out of the window, and the same contact is counted once per message instead of once per journey.
+## UI
 
-## Fix (scoped to the funnel + Entered Journey only)
+- New outlined button **View Logs** (file-text icon) placed left of **Export** in the page header of `src/pages/communication/JourneyAnalytics.tsx`.
+- Opens a large `Dialog` (max-w-7xl, 90vh) containing:
+  - Header: title, total count, search box (name / phone / SID), status filter dropdown, CSV export of the filtered rows.
+  - Scrollable table with columns:
+    1. **Username** – contact name from `journey_contacts` / `customers` / `leads`
+    2. **Phone** – E.164 formatted
+    3. **Message** – truncated body with hover/expand
+    4. **Status** – badge (Sent, Delivered, Read, Clicked, Failed, Undelivered, Queued)
+    5. **Reason** – Twilio error code + description (only for failed / undelivered)
+    6. **Sent At** – `MMM d, yyyy HH:mm`
+    7. **SID** – Twilio Message SID (monospace, copy on click)
+  - Empty / loading states; pagination past Supabase's 1000-row cap using the existing `fetchAllPaged` pattern.
 
-Rework the funnel block in `useJourneyAnalytics.ts` so every funnel stage is a **distinct count of `contact_id`s in this journey** who ever reached that stage, ignoring the date-range filter. Other widgets (Engagement Over Time trend, heatmap, node performance, cohorts, attribution, KPI strip rates) stay as-is.
+## Data
 
-### New funnel logic
+Build a new hook `useJourneyMessageLogs(journeyId)`:
 
-Iterate over the full `messagesQ.data` (not `filteredMsgs`) and build per-contact Sets:
+- Pull all `journey_message_log` rows for the journey (paginated).
+- For each row, derive:
+  - `contact_id` → join `journey_contacts` for `name` / `phone` (batched `.in()` chunks of 200, same as `RateLimitedRetrySection`).
+  - `body` from `rendered_body` (fallback to template name).
+  - `status` from latest `journey_message_events` row per `message_sid` (delivered/read/clicked beat sent). Use a single paged query filtered by `message_sid in (...)`.
+  - `error_code` + `error_message` from the log row; map common Twilio codes (63049 = "Message blocked by Meta - user opted out / number unreachable", 63016 = "Outside 24h window", 21610 = "Recipient unsubscribed", 21620 = "Invalid media URL", etc.) via a small lookup table in `src/lib/twilioErrors.ts`.
+- Status badge colors reuse the existing palette from `MessageLog.tsx`; add `read` (blue), `clicked` (violet), `undelivered` (amber).
 
-- `deliveredContacts` — contact ids with at least one row where `status ∈ {delivered, read}` or `delivery_status = 'delivered'`.
-- `readContacts` — contact ids with at least one row where `status = 'read'`.
-- `clickedContacts` — contact ids whose phone appears in `whatsapp_link_clicks` for this journey (already journey-scoped).
-- `repliedContacts` — contact ids whose phone has an inbound message after their first-ever `sent_at` in this journey (compute `firstSentByPhone` from all messages, not filtered).
-- `orderContacts` — distinct contacts among `ordersAttributed` (already attributed to first send).
+## Files
 
-Funnel becomes:
+- **New** `src/components/journey/JourneyLogsDialog.tsx` – dialog UI, search, filter, CSV export.
+- **New** `src/hooks/useJourneyMessageLogs.ts` – fetch + merge + dedupe.
+- **New** `src/lib/twilioErrors.ts` – `{ [code]: humanMessage }` lookup.
+- **Edit** `src/pages/communication/JourneyAnalytics.tsx` – add button + dialog state.
 
-```text
-Entered Journey  = uniqueEnrollments.length          (unchanged; already deduped by contact)
-Delivered        = deliveredContacts.size
-Read             = readContacts.size
-Clicked          = clickedContacts.size
-Replied          = repliedContacts.size
-Order Placed     = orderContacts.size
-```
+No backend / edge function / schema changes – everything is read from existing tables.
 
-Percentages on the funnel bars continue to be `count / entered * 100`.
+## Out of scope
 
-### Entered Journey
-
-Already deduped by `contact_id` (latest enrollment per contact). Confirmed correct — for the example journey it equals the audience size (1,000). No change needed beyond keeping the existing dedupe.
-
-### What does NOT change
-
-- KPI strip values (`sent`, `delivered`, `read`, `failed`, `delivery rate`, `read rate`, etc. used by the top cards) keep their current event-count semantics and continue to respect the date range. Only the **Journey Funnel** array uses the new unique-contact counts.
-- `Engagement Over Time` trend, heatmap, node performance, cohorts, attribution windows, health score, insights — unchanged.
-- No UI / layout / component changes. No DB or edge-function changes.
-
-### Files touched
-
-- `src/hooks/useJourneyAnalytics.ts` — add the unique-contact Sets computed over the unfiltered `messages` array and swap the `funnel = [...]` values to use those Set sizes. ~25 lines.
+- No changes to send pipeline, retry logic, or other analytics sections.
+- Reason column is best-effort from stored Twilio error codes; we do not re-fetch live Twilio data.
