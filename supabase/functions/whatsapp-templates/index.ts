@@ -529,9 +529,32 @@ serve(async (req) => {
           });
         }
 
-        // Sanitize every URL inside the stored types map.
-        const originalTypes = (tmpl.twilio_content_types ?? {}) as Record<string, any>;
-        const repairedTypes: Record<string, any> = JSON.parse(JSON.stringify(originalTypes));
+        const twilio = getTwilioAuth();
+        if (!twilio) {
+          return new Response(JSON.stringify({ error: 'Twilio credentials are not configured' }), {
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Always fetch the LIVE Twilio Content — the DB may already be clean
+        // while Twilio still holds the malformed URL inside the ContentSid.
+        let liveTypes: Record<string, any> | null = null;
+        if (tmpl.twilio_content_sid) {
+          try {
+            const liveResp = await fetch(`${CONTENT_API_BASE}/v1/Content/${tmpl.twilio_content_sid}`, {
+              headers: { 'Authorization': twilio.authHeader },
+            });
+            const liveData = await liveResp.json();
+            if (liveResp.ok && liveData?.types && typeof liveData.types === 'object') {
+              liveTypes = liveData.types;
+            }
+          } catch (err) {
+            console.error('[repair-media-url] live fetch error:', err);
+          }
+        }
+
+        const sourceTypes = (liveTypes ?? tmpl.twilio_content_types ?? {}) as Record<string, any>;
+        const repairedTypes: Record<string, any> = JSON.parse(JSON.stringify(sourceTypes));
         let changed = false;
         for (const v of Object.values(repairedTypes)) {
           if (!v || typeof v !== 'object') continue;
@@ -562,14 +585,8 @@ serve(async (req) => {
           return new Response(JSON.stringify({
             repaired: false,
             reason: 'No malformed URLs found in this template.',
+            source: liveTypes ? 'twilio_live' : 'db',
           }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-
-        const twilio = getTwilioAuth();
-        if (!twilio) {
-          return new Response(JSON.stringify({ error: 'Twilio credentials are not configured' }), {
-            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
         }
 
         // Rebuild a sample-variables map from the stored required vars.
