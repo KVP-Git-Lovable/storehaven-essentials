@@ -16,6 +16,7 @@ interface FailedRow {
   id: string;
   node_id: string | null;
   contact_id: string | null;
+  person_key: string;
   error_message: string | null;
   sent_at: string | null;
   contact_name: string | null;
@@ -23,6 +24,24 @@ interface FailedRow {
 }
 
 const SPACING_MS = 12_000;
+const SUCCESS_STATUSES = new Set(["accepted", "queued", "sending", "scheduled", "sent", "delivered", "read"]);
+
+function last10(phone: unknown) {
+  return String(phone || "").replace(/\D/g, "").slice(-10);
+}
+
+function personKey(row: any) {
+  const p = last10(row?.journey_contacts?.phone);
+  if (p) return `p:${p}`;
+  if (row?.contact_id) return `c:${row.contact_id}`;
+  return `l:${row?.id}`;
+}
+
+function isSuccessfulLog(row: any) {
+  const status = String(row?.status || "").toLowerCase();
+  const delivery = String(row?.delivery_status || "").toLowerCase();
+  return SUCCESS_STATUSES.has(status) || SUCCESS_STATUSES.has(delivery);
+}
 
 export default function RateLimitedRetrySection({ journeyId }: { journeyId: string }) {
   const queryClient = useQueryClient();
@@ -35,12 +54,14 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
     queryKey: ["journey-rate-limited-failures", journeyId],
     queryFn: async () => {
       // 1. Paginate ALL rate-limited failure rows (bypasses PostgREST 1000-row cap).
+      //    Join contact phone up-front so duplicate journey_contact rows for the
+      //    same mobile number collapse into one actual user.
       const list: any[] = [];
       const PAGE = 1000;
       for (let from = 0; from < 200_000; from += PAGE) {
         const { data, error } = await supabase
           .from("journey_message_log")
-          .select("id, node_id, contact_id, error_message, sent_at")
+          .select("id, node_id, contact_id, error_message, sent_at, journey_contacts(id, name, phone)")
           .eq("journey_id", journeyId)
           .eq("status", "failed")
           .ilike("error_message", "%Rate limit%")
@@ -52,48 +73,47 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
         if (batch.length < PAGE) break;
       }
 
-      // 2. Dedupe to ONE row per contact (most recent failure). A contact who
-      //    failed several times only needs one retry entry.
-      const latestByContact = new Map<string, any>();
+      // 2. Dedupe to ONE row per actual person/mobile number. A contact who
+      //    failed several times or was re-enrolled under a new contact_id only
+      //    needs one retry entry.
+      const latestByPerson = new Map<string, any>();
       for (const l of list) {
-        if (!l.contact_id) continue;
-        const prev = latestByContact.get(l.contact_id);
+        const key = personKey(l);
+        const prev = latestByPerson.get(key);
         if (!prev || new Date(l.sent_at).getTime() > new Date(prev.sent_at).getTime()) {
-          latestByContact.set(l.contact_id, l);
+          latestByPerson.set(key, l);
         }
       }
-      const contactIds = Array.from(latestByContact.keys());
-      if (contactIds.length === 0) return [];
+      if (latestByPerson.size === 0) return [];
 
-      // 3. For those contacts, find the most-recent successful (delivered/
-      //    sent/read) log in this journey. If a contact has a success that
-      //    happened AFTER the failure, exclude them — they've already been
-      //    retried successfully.
-      const successByContact = new Map<string, number>();
-      const CHUNK_S = 200;
-      for (let i = 0; i < contactIds.length; i += CHUNK_S) {
-        const slice = contactIds.slice(i, i + CHUNK_S);
-        const { data: succ, error: sErr } = await supabase
+      // 3. Fetch all successful journey sends and exclude any person who has
+      //    already received/accepted at least one message in this journey.
+      //    This section is specifically for users for whom no WhatsApp message
+      //    was sent because of a rate-limit failure.
+      const successByPerson = new Set<string>();
+      for (let from = 0; from < 200_000; from += PAGE) {
+        const { data, error } = await supabase
           .from("journey_message_log")
-          .select("contact_id, sent_at, status, delivery_status")
+          .select("id, contact_id, status, delivery_status, journey_contacts(id, phone)")
           .eq("journey_id", journeyId)
-          .in("contact_id", slice)
-          .in("status", ["sent", "delivered", "read", "queued", "accepted"]);
-        if (sErr) { console.error("[RateLimitedRetry] success fetch error", sErr); continue; }
-        for (const s of succ || []) {
-          const t = new Date(s.sent_at).getTime();
-          const prev = successByContact.get(s.contact_id) || 0;
-          if (t > prev) successByContact.set(s.contact_id, t);
+          .or("status.in.(accepted,queued,sending,scheduled,sent,delivered,read),delivery_status.in.(accepted,queued,sending,scheduled,sent,delivered,read)")
+          .order("id", { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) {
+          console.error("[RateLimitedRetry] success fetch error", error);
+          break;
         }
+        const batch = data || [];
+        for (const s of batch) if (isSuccessfulLog(s)) successByPerson.add(personKey(s));
+        if (batch.length < PAGE) break;
       }
-      const stillFailing = Array.from(latestByContact.values()).filter((l) => {
-        const succT = successByContact.get(l.contact_id) || 0;
-        const failT = new Date(l.sent_at).getTime();
-        return succT < failT; // no success after the failure
-      });
+      const stillFailing = Array.from(latestByPerson.entries())
+        .filter(([key]) => !successByPerson.has(key))
+        .map(([key, row]) => ({ ...row, person_key: key }));
 
-      // 4. Hydrate names/phones in batches.
-      const finalIds = stillFailing.map((l) => l.contact_id);
+      // 4. Hydrate names/phones in batches only for rows where the join did
+      //    not return contact details.
+      const finalIds = stillFailing.filter((l) => !l.journey_contacts).map((l) => l.contact_id).filter(Boolean);
       let contactMap: Record<string, { name: string | null; phone: string | null }> = {};
       const CHUNK = 200;
       for (let i = 0; i < finalIds.length; i += CHUNK) {
@@ -112,10 +132,11 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
         id: l.id,
         node_id: l.node_id,
         contact_id: l.contact_id,
+        person_key: l.person_key,
         error_message: l.error_message,
         sent_at: l.sent_at,
-        contact_name: contactMap[l.contact_id]?.name ?? null,
-        contact_phone: contactMap[l.contact_id]?.phone ?? null,
+        contact_name: l.journey_contacts?.name ?? contactMap[l.contact_id]?.name ?? null,
+        contact_phone: l.journey_contacts?.phone ?? contactMap[l.contact_id]?.phone ?? null,
       }));
     },
     enabled: !!journeyId,
