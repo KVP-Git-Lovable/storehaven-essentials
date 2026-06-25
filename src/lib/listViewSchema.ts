@@ -163,6 +163,7 @@ export const OPERATORS_BY_TYPE: Record<FieldType, { value: string; label: string
     { value: "neq", label: "not equals", needsValue: true },
     { value: "ilike", label: "contains", needsValue: true },
     { value: "starts_with", label: "starts with", needsValue: true },
+    { value: "starts_with_between", label: "Starts with – Between", needsValue: true },
     { value: "is_null", label: "is empty", needsValue: false },
     { value: "is_not_null", label: "is not empty", needsValue: false },
   ],

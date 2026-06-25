@@ -15,16 +15,26 @@ export function FilterRow({ fields, value, onChange, onRemove }: Props) {
   if (!fields.length) return null;
   const fieldMeta = fields.find((f) => f.key === value.field) || fields[0];
   const allOperators = OPERATORS_BY_TYPE[fieldMeta.type];
-  // Hide recurring operator unless field is flagged as recurring
-  const operators = allOperators.filter(
-    (o) => o.value !== "upcoming_anniversary_n_days" || fieldMeta.recurring
-  );
+  // Hide recurring operator unless field is flagged as recurring.
+  // Hide "starts with – between" unless field is the Name field.
+  const operators = allOperators.filter((o) => {
+    if (o.value === "upcoming_anniversary_n_days") return !!fieldMeta.recurring;
+    if (o.value === "starts_with_between") return fieldMeta.key === "name";
+    return true;
+  });
   const opMeta = operators.find((o) => o.value === value.operator) || operators[0];
 
   const isNDaysOp =
     value.operator === "last_n_days" ||
     value.operator === "next_n_days" ||
     value.operator === "upcoming_anniversary_n_days";
+
+  const isStartsBetween = value.operator === "starts_with_between";
+  const [betweenFrom, betweenTo] = (() => {
+    const raw = String(value.value ?? "");
+    const parts = raw.split("|");
+    return [parts[0] ?? "", parts[1] ?? ""];
+  })();
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -54,7 +64,31 @@ export function FilterRow({ fields, value, onChange, onRemove }: Props) {
       </Select>
 
       {opMeta.needsValue && (
-        fieldMeta.type === "enum" && fieldMeta.options ? (
+        isStartsBetween ? (
+          <div className="flex flex-1 min-w-[160px] items-center gap-2">
+            <Input
+              className="w-20"
+              type="text"
+              maxLength={1}
+              value={betweenFrom}
+              onChange={(e) =>
+                onChange({ ...value, value: `${e.target.value}|${betweenTo}` })
+              }
+              placeholder="A"
+            />
+            <span className="text-sm text-muted-foreground">to</span>
+            <Input
+              className="w-20"
+              type="text"
+              maxLength={1}
+              value={betweenTo}
+              onChange={(e) =>
+                onChange({ ...value, value: `${betweenFrom}|${e.target.value}` })
+              }
+              placeholder="K"
+            />
+          </div>
+        ) : fieldMeta.type === "enum" && fieldMeta.options ? (
           <Select value={String(value.value ?? "")} onValueChange={(v) => onChange({ ...value, value: v })}>
             <SelectTrigger className="flex-1 min-w-[160px]"><SelectValue placeholder="Select..." /></SelectTrigger>
             <SelectContent>
