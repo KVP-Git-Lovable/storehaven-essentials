@@ -486,8 +486,9 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       const msg = messages.find((m: any) => m.contact_id === e.contact_id);
       const p = last10(msg?.journey_contacts?.phone);
       if (p) c.phones.add(p);
+      const ckey = p ? `p:${p}` : `c:${e.contact_id}`;
       const enrolledAt = new Date(e.enrolled_at).getTime();
-      const wasRead = readContacts.has(e.contact_id);
+      const wasRead = readContacts.has(ckey);
       if (wasRead) {
         const readMsg = messages.find((m: any) => m.contact_id === e.contact_id && m.status === "read");
         const days = readMsg ? (new Date(readMsg.sent_at).getTime() - enrolledAt) / 86400000 : 999;
