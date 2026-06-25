@@ -17,16 +17,36 @@ export interface RangeFilter {
 }
 
 export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
+  async function fetchAllPaged<T = any>(
+    build: (from: number, to: number) => any,
+    pageSize = 1000,
+  ): Promise<T[]> {
+    const out: T[] = [];
+    let from = 0;
+    // Hard safety cap to avoid runaway loops
+    for (let i = 0; i < 200; i++) {
+      const to = from + pageSize - 1;
+      const { data, error } = await build(from, to);
+      if (error) throw error;
+      const rows = (data || []) as T[];
+      out.push(...rows);
+      if (rows.length < pageSize) break;
+      from += pageSize;
+    }
+    return out;
+  }
+
   const messagesQ = useQuery({
     queryKey: ["ja-messages", journeyId],
     enabled: !!journeyId,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("journey_message_log")
-        .select("id, status, delivery_status, channel, node_id, sent_at, error_message, error_code, contact_id, journey_contacts(id, name, phone, email, opted_out)")
-        .eq("journey_id", journeyId);
-      if (error) throw error;
-      return data || [];
+      return await fetchAllPaged((from, to) =>
+        supabase
+          .from("journey_message_log")
+          .select("id, status, delivery_status, channel, node_id, sent_at, error_message, error_code, contact_id, journey_contacts(id, name, phone, email, opted_out)")
+          .eq("journey_id", journeyId)
+          .range(from, to),
+      );
     },
     staleTime: 60_000,
   });
@@ -35,12 +55,13 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
     queryKey: ["ja-enroll", journeyId],
     enabled: !!journeyId,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("journey_enrollments")
-        .select("id, status, contact_id, enrolled_at")
-        .eq("journey_id", journeyId);
-      if (error) throw error;
-      return data || [];
+      return await fetchAllPaged((from, to) =>
+        supabase
+          .from("journey_enrollments")
+          .select("id, status, contact_id, enrolled_at")
+          .eq("journey_id", journeyId)
+          .range(from, to),
+      );
     },
     staleTime: 60_000,
   });
