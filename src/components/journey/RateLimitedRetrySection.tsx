@@ -45,11 +45,18 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
       const list = logs || [];
       const contactIds = Array.from(new Set(list.map((l: any) => l.contact_id).filter(Boolean)));
       let contactMap: Record<string, { name: string | null; phone: string | null }> = {};
-      if (contactIds.length) {
-        const { data: contacts } = await supabase
+      // Batch to avoid URL-length limits and PostgREST max-rows cap
+      const CHUNK = 200;
+      for (let i = 0; i < contactIds.length; i += CHUNK) {
+        const slice = contactIds.slice(i, i + CHUNK);
+        const { data: contacts, error: cErr } = await supabase
           .from("journey_contacts")
           .select("id, name, phone")
-          .in("id", contactIds);
+          .in("id", slice);
+        if (cErr) {
+          console.error("[RateLimitedRetry] contacts fetch error", cErr);
+          continue;
+        }
         for (const c of contacts || []) contactMap[c.id] = { name: c.name, phone: c.phone };
       }
       return list.map((l: any) => ({
