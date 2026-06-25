@@ -22,7 +22,7 @@ interface FailedRow {
   contact_phone: string | null;
 }
 
-const SPACING_MS = 45_000;
+const SPACING_MS = 12_000;
 
 export default function RateLimitedRetrySection({ journeyId }: { journeyId: string }) {
   const queryClient = useQueryClient();
@@ -170,7 +170,7 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
             <Badge variant="secondary">{rows.length}</Badge>
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Contacts whose message failed with "Rate limit exceeded". Retry sends one message every 45 seconds.
+            Contacts whose message failed with "Rate limit exceeded". Retry sends one message every 12 seconds.
           </p>
         </div>
         <div className="flex items-center gap-2">
