@@ -148,14 +148,11 @@ export default function JourneyAnalytics() {
   const completed = enrollments?.filter((e: any) => e.status === "completed").length || 0;
   const channelSummary = summarizeByChannel(messages);
 
-  // Live progress (refreshes every 5s while journey is active)
-  const totalEnrolled = enrollments?.length || 0;
-  const sentCount = messages.filter((m: any) =>
-    SUCCESS_STATUSES.has(m.status) || m.delivery_status === "delivered" || m.status === "delivered",
-  ).length;
-  const failedCount = messages.filter((m: any) =>
-    FAIL_STATUSES.has(m.status) || m.delivery_status === "failed",
-  ).length;
+  // Live progress — sourced from the same unified analytics hook used by the
+  // Journey Funnel and KPI cards, so counts always reconcile across sections.
+  const totalEnrolled = ja.kpis.entered || 0;
+  const sentCount = (ja.kpis as any).uniqueDelivered || 0;
+  const failedCount = (ja.kpis as any).uniqueFailed || 0;
   const pendingCount = Math.max(0, totalEnrolled - sentCount - failedCount);
   const progressPct = totalEnrolled > 0 ? Math.round(((sentCount + failedCount) / totalEnrolled) * 100) : 0;
 
