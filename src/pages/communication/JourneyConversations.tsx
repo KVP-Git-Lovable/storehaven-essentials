@@ -147,6 +147,18 @@ export default function JourneyConversations() {
     [enrollments]
   );
 
+  // Dedupe enrollments by contact_id (keep most recent — list is already ordered desc by enrolled_at)
+  const uniqueEnrollments = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Enrollment[] = [];
+    for (const e of enrollments) {
+      if (!e.contact_id || seen.has(e.contact_id)) continue;
+      seen.add(e.contact_id);
+      out.push(e);
+    }
+    return out;
+  }, [enrollments]);
+
   const { data: contacts = [] } = useQuery({
     queryKey: ["journey-conv-contacts", contactIds.sort().join(",")],
     enabled: contactIds.length > 0,
@@ -176,29 +188,54 @@ export default function JourneyConversations() {
   // Phones for this journey, last-10
   const phoneL10List = useMemo(() => {
     const set = new Set<string>();
-    enrollments.forEach((e) => {
+    uniqueEnrollments.forEach((e) => {
       const c = contactMap.get(e.contact_id);
       const p = last10(c?.phone);
       if (p) set.add(p);
     });
     return Array.from(set);
-  }, [enrollments, contactMap]);
+  }, [uniqueEnrollments, contactMap]);
 
-  // Pull all whatsapp messages whose phone matches any participant (last-10 suffix).
-  // We fetch recent messages and filter client-side by suffix to keep query simple
-  // since whatsapp_messages.phone may carry "+" or country code variants.
+  // Build all known phone format variants for these participants so we can match
+  // whatsapp_messages.phone regardless of how it was stored (+91xxxx, 91xxxx, xxxx).
+  const phoneVariants = useMemo(() => {
+    const set = new Set<string>();
+    phoneL10List.forEach((p) => {
+      set.add(p);
+      set.add(`91${p}`);
+      set.add(`+91${p}`);
+    });
+    return Array.from(set);
+  }, [phoneL10List]);
+
+  // Pull all whatsapp messages whose phone matches any participant.
+  // Batch the `.in()` over phone variants and paginate per batch to bypass the
+  // 1000-row cap so older inbound replies are still detected.
   const { data: recentMessages = [] } = useQuery({
-    queryKey: ["journey-conv-recent-msgs", id, phoneL10List.sort().join(",")],
-    enabled: phoneL10List.length > 0,
+    queryKey: ["journey-conv-recent-msgs", id, phoneVariants.sort().join(",")],
+    enabled: phoneVariants.length > 0,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("whatsapp_messages")
-        .select("id, phone, direction, message, message_type, status, is_read, profile_name, created_at")
-        .order("created_at", { ascending: false })
-        .limit(1000);
-      if (error) throw error;
-      const set = new Set(phoneL10List);
-      return (data as WAMessage[]).filter((m) => set.has(last10(m.phone)));
+      const out: WAMessage[] = [];
+      const PHONE_CHUNK = 150;
+      const PAGE = 1000;
+      for (let i = 0; i < phoneVariants.length; i += PHONE_CHUNK) {
+        const slice = phoneVariants.slice(i, i + PHONE_CHUNK);
+        for (let p = 0; p < 200; p++) {
+          const from = p * PAGE;
+          const to = from + PAGE - 1;
+          const { data, error } = await supabase
+            .from("whatsapp_messages")
+            .select("id, phone, direction, message, message_type, status, is_read, profile_name, created_at")
+            .in("phone", slice)
+            .order("created_at", { ascending: false })
+            .range(from, to);
+          if (error) throw error;
+          const rows = (data || []) as WAMessage[];
+          out.push(...rows);
+          if (rows.length < PAGE) break;
+        }
+      }
+      return out;
     },
   });
 
@@ -232,7 +269,7 @@ export default function JourneyConversations() {
   }, [recentMessages]);
 
   const participants: Participant[] = useMemo(() => {
-    const list: Participant[] = enrollments
+    const list: Participant[] = uniqueEnrollments
       .map((e) => {
         const contact = contactMap.get(e.contact_id);
         if (!contact) return null;
@@ -258,7 +295,7 @@ export default function JourneyConversations() {
       return new Date(b.enrollment.enrolled_at).getTime() - new Date(a.enrollment.enrolled_at).getTime();
     });
     return list;
-  }, [enrollments, contactMap, phoneStats]);
+  }, [uniqueEnrollments, contactMap, phoneStats]);
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
@@ -297,14 +334,25 @@ export default function JourneyConversations() {
     queryKey: ["journey-conv-thread", selectedPhone],
     enabled: !!selectedPhone,
     queryFn: async () => {
-      // Pull broadly then filter — phone formats may vary in storage.
-      const { data, error } = await supabase
-        .from("whatsapp_messages")
-        .select("id, phone, direction, message, message_type, status, is_read, profile_name, created_at")
-        .order("created_at", { ascending: true })
-        .limit(1000);
-      if (error) throw error;
-      return (data as WAMessage[]).filter((m) => last10(m.phone) === selectedPhone);
+      if (!selectedPhone) return [] as WAMessage[];
+      const variants = [selectedPhone, `91${selectedPhone}`, `+91${selectedPhone}`];
+      const out: WAMessage[] = [];
+      const PAGE = 1000;
+      for (let p = 0; p < 50; p++) {
+        const from = p * PAGE;
+        const to = from + PAGE - 1;
+        const { data, error } = await supabase
+          .from("whatsapp_messages")
+          .select("id, phone, direction, message, message_type, status, is_read, profile_name, created_at")
+          .in("phone", variants)
+          .order("created_at", { ascending: true })
+          .range(from, to);
+        if (error) throw error;
+        const rows = (data || []) as WAMessage[];
+        out.push(...rows);
+        if (rows.length < PAGE) break;
+      }
+      return out;
     },
   });
 
