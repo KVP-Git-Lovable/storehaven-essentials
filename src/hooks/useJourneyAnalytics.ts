@@ -145,10 +145,32 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
     queryKey: ["ja-journey", journeyId],
     enabled: !!journeyId,
     queryFn: async () => {
-      const { data } = await supabase.from("journeys").select("canvas_data").eq("id", journeyId).maybeSingle();
+      const { data } = await supabase.from("journeys").select("canvas_data, audience_config").eq("id", journeyId).maybeSingle();
       return data;
     },
     staleTime: 5 * 60_000,
+  });
+
+  // Live audience preview — same source used by the Journey Builder's
+  // "Live preview" so "Entered Journey" matches the configured list view.
+  const audiencePreviewQ = useQuery({
+    queryKey: ["ja-audience-preview", journeyId, JSON.stringify((journeyQ.data as any)?.audience_config || null)],
+    enabled: !!journeyId && !!(journeyQ.data as any)?.audience_config?.segments?.length,
+    queryFn: async () => {
+      const cfg = (journeyQ.data as any)?.audience_config;
+      const validSegments = (cfg?.segments || []).filter((s: any) => s?.list_view_id);
+      if (!validSegments.length) return null;
+      const { data, error } = await supabase.functions.invoke("journey-actions", {
+        body: {
+          action: "audience-preview",
+          audience_config: { segments: validSegments, combinator: cfg?.combinator || "union", primary: cfg?.primary },
+        },
+      });
+      if (error) return null;
+      if (data?.error) return null;
+      return { final: Number(data?.final || 0) };
+    },
+    staleTime: 60_000,
   });
 
   return useMemo(() => {
@@ -222,7 +244,13 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       }
     });
     const uniqueEnrollments = Array.from(latestByContact.values());
-    const entered = uniqueEnrollments.length;
+    // "Entered Journey" reflects the journey's current configured audience
+    // (matching the Live preview in the Journey Builder). Falls back to the
+    // historical unique-enrollment count if the preview isn't available.
+    const previewFinal = (audiencePreviewQ.data as any)?.final;
+    const entered = (typeof previewFinal === "number" && previewFinal > 0)
+      ? previewFinal
+      : uniqueEnrollments.length;
     const completed = uniqueEnrollments.filter((e: any) => e.status === "completed").length;
     const active = uniqueEnrollments.filter((e: any) => e.status === "active" || e.status === "in_progress").length;
     const dropped = uniqueEnrollments.filter((e: any) => e.status === "exited" || e.status === "dropped").length;
@@ -512,5 +540,5 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       health: { score: health, strengths, areas },
       sentimentBreakdown: { positive, negative, neutral: replies - positive - negative },
     };
-  }, [messagesQ.data, enrollmentsQ.data, eventsQ.data, clicksQ.data, inboundQ.data, ordersQ.data, journeyQ.data, range?.from, range?.to]);
+  }, [messagesQ.data, enrollmentsQ.data, eventsQ.data, clicksQ.data, inboundQ.data, ordersQ.data, journeyQ.data, audiencePreviewQ.data, range?.from, range?.to]);
 }

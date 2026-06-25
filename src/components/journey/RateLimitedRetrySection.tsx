@@ -144,6 +144,10 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
       description: `${sent} sent, ${failed} failed.`,
     });
     queryClient.invalidateQueries({ queryKey: ["journey-rate-limited-failures", journeyId] });
+    // Refresh analytics so the Journey Funnel / KPIs pick up newly delivered messages.
+    queryClient.invalidateQueries({ queryKey: ["ja-messages", journeyId] });
+    queryClient.invalidateQueries({ queryKey: ["ja-enroll", journeyId] });
+    queryClient.invalidateQueries({ queryKey: ["ja-events", journeyId] });
     setSelected(new Set());
   }
 
