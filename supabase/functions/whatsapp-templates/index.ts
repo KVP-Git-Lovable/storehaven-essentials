@@ -8,6 +8,25 @@ const corsHeaders = {
 
 const CONTENT_API_BASE = 'https://content.twilio.com';
 
+// Collapse stray double slashes in the path portion of a URL.
+// Twilio's Content API rejects send-time media URLs that contain `//`
+// (error 21620: "Media urls ... are invalid"), even though Supabase
+// Storage tolerates them. We strip them defensively everywhere we
+// accept a media or CTA URL.
+function sanitizeUrl(input: string | null | undefined): string {
+  if (typeof input !== 'string') return '';
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+  try {
+    const u = new URL(trimmed);
+    u.pathname = u.pathname.replace(/\/{2,}/g, '/');
+    return u.toString();
+  } catch {
+    // Not a parseable absolute URL — leave it for downstream validation.
+    return trimmed;
+  }
+}
+
 // Inspect a Twilio Content `types` map and derive normalized template metadata
 // (template type, media URL, whether the media URL is variable-driven, and the
 // full set of required {{N}} or {{name}} variables across body + media).
