@@ -19,7 +19,13 @@ Deno.serve(async (req) => {
     );
 
     const url = new URL(req.url);
-    const force = url.searchParams.get("force") === "1";
+    let force = url.searchParams.get("force") === "1";
+    if (!force && req.method === "POST") {
+      try {
+        const body = await req.json();
+        if (body?.force === true || body?.force === 1 || body?.force === "1") force = true;
+      } catch (_) { /* no body */ }
+    }
 
     if (!force) {
       const { data: cached } = await supabase
