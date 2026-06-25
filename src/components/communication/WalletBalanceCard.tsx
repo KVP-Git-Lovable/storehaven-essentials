@@ -8,8 +8,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function WalletBalanceCard() {
   const { data, isLoading, refetch, isFetching } = useQuery<{ balance: string; currency: string; fetched_at: string; cached: boolean }>({
     queryKey: ["twilio-balance"],
-    queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("twilio-balance");
+    queryFn: async ({ meta }) => {
+      const force = (meta as any)?.force === true;
+      const { data, error } = await supabase.functions.invoke("twilio-balance", {
+        body: force ? { force: true } : {},
+      });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       return data as { balance: string; currency: string; fetched_at: string; cached: boolean };
@@ -75,7 +78,7 @@ export function WalletBalanceCard() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => refetch()}
+          onClick={() => refetch({ meta: { force: true } } as any)}
           disabled={isFetching}
           title="Refresh balance"
         >
