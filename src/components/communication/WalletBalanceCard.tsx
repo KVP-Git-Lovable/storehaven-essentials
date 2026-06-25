@@ -4,12 +4,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Wallet, RefreshCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useRef } from "react";
 
 export function WalletBalanceCard() {
+  const forceRef = useRef(false);
   const { data, isLoading, refetch, isFetching } = useQuery<{ balance: string; currency: string; fetched_at: string; cached: boolean }>({
     queryKey: ["twilio-balance"],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("twilio-balance");
+      const force = forceRef.current;
+      forceRef.current = false;
+      const { data, error } = await supabase.functions.invoke("twilio-balance", {
+        body: force ? { force: true } : {},
+      });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       return data as { balance: string; currency: string; fetched_at: string; cached: boolean };
@@ -75,7 +81,7 @@ export function WalletBalanceCard() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => refetch()}
+          onClick={() => { forceRef.current = true; refetch(); }}
           disabled={isFetching}
           title="Refresh balance"
         >
