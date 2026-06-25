@@ -598,14 +598,14 @@ serve(async (req) => {
       if (contentType === 'media') {
         twilioTypes['twilio/media'] = {
           body: twilioCleanBody,
-          media: [mediaUrl.trim()],
+          media: [sanitizeUrl(mediaUrl)],
         };
       } else if (contentType === 'call_to_action') {
         twilioTypes['twilio/call-to-action'] = {
           body: twilioCleanBody,
           actions: ctaActions.map((a) =>
             a.type === 'URL'
-              ? { type: 'URL', title: a.title, url: a.url }
+              ? { type: 'URL', title: a.title, url: sanitizeUrl(a.url) }
               : { type: 'PHONE_NUMBER', title: a.title, phone: a.phone },
           ),
         };
