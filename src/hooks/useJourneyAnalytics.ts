@@ -11,6 +11,16 @@ function last10(p: any) {
   return String(p || "").replace(/\D/g, "").slice(-10);
 }
 
+// Stable per-person key so re-enrollments (which create new
+// journey_contacts rows with new contact_ids for the same phone) collapse
+// into a single unique contact across all funnel/node/AI metrics.
+function personKey(m: any): string | null {
+  const p = last10(m?.journey_contacts?.phone);
+  if (p) return `p:${p}`;
+  if (m?.contact_id) return `c:${m.contact_id}`;
+  return null;
+}
+
 export interface RangeFilter {
   from?: Date;
   to?: Date;
