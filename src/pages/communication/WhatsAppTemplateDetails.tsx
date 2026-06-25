@@ -350,6 +350,19 @@ export default function WhatsAppTemplateDetails() {
                         No media URL is bound on this template in API. WhatsApp will reject sends with error 63019.
                       </p>
                     )}
+                    {twilioMediaUrl && /\/\/[^/]*\/.*\/\//.test(twilioMediaUrl) && (
+                      <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 space-y-2">
+                        <p className="text-xs text-destructive">
+                          This URL contains a stray <code>//</code> in its path. Twilio rejects sends with error 21620.
+                          Click <strong>Repair URL</strong> to create a fresh Twilio Content with the cleaned URL and
+                          resubmit it for WhatsApp approval (re-approval is typically instant since the template name
+                          is already approved).
+                        </p>
+                        <Button size="sm" variant="destructive" onClick={repairMediaUrl} disabled={repairing}>
+                          {repairing ? "Repairing…" : "Repair URL"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="flex justify-between gap-2">
