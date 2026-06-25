@@ -36,6 +36,7 @@ export default function WhatsAppTemplateDetails() {
   const [mediaChecking, setMediaChecking] = useState(false);
   const [showTwilioDef, setShowTwilioDef] = useState(false);
   const [showMediaTest, setShowMediaTest] = useState(false);
+  const [repairing, setRepairing] = useState(false);
 
   const verifyMediaUrl = async (url: string) => {
     if (!url.trim()) {
@@ -66,6 +67,37 @@ export default function WhatsAppTemplateDetails() {
       toast.error(e?.message || "Request failed");
     } finally {
       setMediaChecking(false);
+    }
+  };
+
+  const repairMediaUrl = async () => {
+    if (!id) return;
+    setRepairing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-templates`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ action: "repair-media-url", template_id: id }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "Repair failed");
+      if (data.repaired === false) {
+        toast.info(data.reason || "Nothing to repair on this template.");
+      } else {
+        toast.success("Template URL repaired. New version submitted for WhatsApp approval.");
+        queryClient.invalidateQueries({ queryKey: ["whatsapp-template", id] });
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Repair failed");
+    } finally {
+      setRepairing(false);
     }
   };
 
