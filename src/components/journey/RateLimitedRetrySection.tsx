@@ -97,6 +97,7 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
           .select("id, contact_id, status, delivery_status, journey_contacts(id, phone)")
           .eq("journey_id", journeyId)
           .or("status.in.(accepted,queued,sending,scheduled,sent,delivered,read),delivery_status.in.(accepted,queued,sending,scheduled,sent,delivered,read)")
+          .order("id", { ascending: true })
           .range(from, from + PAGE - 1);
         if (error) {
           console.error("[RateLimitedRetry] success fetch error", error);
