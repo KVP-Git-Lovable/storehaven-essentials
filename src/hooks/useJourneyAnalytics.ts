@@ -270,13 +270,16 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
     // a stage remains counted even if later messages fail.
     const deliveredContacts = new Set<string>();
     const readContacts = new Set<string>();
+    const sentContacts = new Set<string>();
     const firstSentByPhoneAll = new Map<string, number>();
     messages.forEach((m: any) => {
-      if (m.contact_id) {
+      const key = personKey(m);
+      if (key) {
+        sentContacts.add(key);
         if (m.status === "delivered" || m.delivery_status === "delivered" || m.status === "read") {
-          deliveredContacts.add(m.contact_id);
+          deliveredContacts.add(key);
         }
-        if (m.status === "read") readContacts.add(m.contact_id);
+        if (m.status === "read") readContacts.add(key);
       }
       const p = last10(m.journey_contacts?.phone);
       if (p && m.sent_at) {
@@ -285,15 +288,10 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
         if (prev === undefined || t < prev) firstSentByPhoneAll.set(p, t);
       }
     });
-    const phoneToContactId = new Map<string, string>();
-    messages.forEach((m: any) => {
-      const p = last10(m.journey_contacts?.phone);
-      if (p && m.contact_id && !phoneToContactId.has(p)) phoneToContactId.set(p, m.contact_id);
-    });
     const clickedContacts = new Set<string>();
     clicks.forEach((c: any) => {
-      const id = phoneToContactId.get(last10(c.phone_number));
-      if (id) clickedContacts.add(id);
+      const p = last10(c.phone_number);
+      if (p) clickedContacts.add(`p:${p}`);
     });
     const repliedContacts = new Set<string>();
     inbound.forEach((i: any) => {
@@ -301,15 +299,13 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
       const first = firstSentByPhoneAll.get(p);
       if (!first) return;
       if (new Date(i.created_at).getTime() < first) return;
-      const id = phoneToContactId.get(p);
-      if (id) repliedContacts.add(id);
+      repliedContacts.add(`p:${p}`);
     });
     const orderContacts = new Set<string>();
     orders.forEach((o: any) => {
       const first = firstSentByPhoneAll.get(o.phone);
       if (first && new Date(o.created_at).getTime() >= first) {
-        const id = phoneToContactId.get(o.phone);
-        if (id) orderContacts.add(id);
+        if (o.phone) orderContacts.add(`p:${o.phone}`);
       }
     });
 
