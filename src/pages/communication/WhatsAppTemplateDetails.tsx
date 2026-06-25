@@ -36,6 +36,7 @@ export default function WhatsAppTemplateDetails() {
   const [mediaChecking, setMediaChecking] = useState(false);
   const [showTwilioDef, setShowTwilioDef] = useState(false);
   const [showMediaTest, setShowMediaTest] = useState(false);
+  const [repairing, setRepairing] = useState(false);
 
   const verifyMediaUrl = async (url: string) => {
     if (!url.trim()) {
@@ -66,6 +67,37 @@ export default function WhatsAppTemplateDetails() {
       toast.error(e?.message || "Request failed");
     } finally {
       setMediaChecking(false);
+    }
+  };
+
+  const repairMediaUrl = async () => {
+    if (!id) return;
+    setRepairing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-templates`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ action: "repair-media-url", template_id: id }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "Repair failed");
+      if (data.repaired === false) {
+        toast.info(data.reason || "Nothing to repair on this template.");
+      } else {
+        toast.success("Template URL repaired. New version submitted for WhatsApp approval.");
+        queryClient.invalidateQueries({ queryKey: ["whatsapp-template", id] });
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Repair failed");
+    } finally {
+      setRepairing(false);
     }
   };
 
@@ -317,6 +349,19 @@ export default function WhatsAppTemplateDetails() {
                       <p className="text-xs text-destructive">
                         No media URL is bound on this template in API. WhatsApp will reject sends with error 63019.
                       </p>
+                    )}
+                    {twilioMediaUrl && /\/\/[^/]*\/.*\/\//.test(twilioMediaUrl) && (
+                      <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 space-y-2">
+                        <p className="text-xs text-destructive">
+                          This URL contains a stray <code>//</code> in its path. Twilio rejects sends with error 21620.
+                          Click <strong>Repair URL</strong> to create a fresh Twilio Content with the cleaned URL and
+                          resubmit it for WhatsApp approval (re-approval is typically instant since the template name
+                          is already approved).
+                        </p>
+                        <Button size="sm" variant="destructive" onClick={repairMediaUrl} disabled={repairing}>
+                          {repairing ? "Repairing…" : "Repair URL"}
+                        </Button>
+                      </div>
                     )}
                   </div>
                 )}

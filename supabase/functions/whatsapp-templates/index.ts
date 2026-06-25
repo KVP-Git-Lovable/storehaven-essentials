@@ -8,6 +8,25 @@ const corsHeaders = {
 
 const CONTENT_API_BASE = 'https://content.twilio.com';
 
+// Collapse stray double slashes in the path portion of a URL.
+// Twilio's Content API rejects send-time media URLs that contain `//`
+// (error 21620: "Media urls ... are invalid"), even though Supabase
+// Storage tolerates them. We strip them defensively everywhere we
+// accept a media or CTA URL.
+function sanitizeUrl(input: string | null | undefined): string {
+  if (typeof input !== 'string') return '';
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+  try {
+    const u = new URL(trimmed);
+    u.pathname = u.pathname.replace(/\/{2,}/g, '/');
+    return u.toString();
+  } catch {
+    // Not a parseable absolute URL — leave it for downstream validation.
+    return trimmed;
+  }
+}
+
 // Inspect a Twilio Content `types` map and derive normalized template metadata
 // (template type, media URL, whether the media URL is variable-driven, and the
 // full set of required {{N}} or {{name}} variables across body + media).
@@ -484,6 +503,135 @@ serve(async (req) => {
         });
       }
 
+      // --- Repair a template whose stored media/CTA URLs contain stray
+      //     double slashes (Twilio error 21620 at send time).
+      //     We create a fresh Twilio Content with sanitized URLs, resubmit
+      //     it for WhatsApp approval and repoint the template row to the
+      //     new ContentSid. Existing approval on the WhatsApp side is
+      //     keyed by template name+language, so re-approval is normally
+      //     instant or near-instant.
+      if (action === 'repair-media-url') {
+        const { template_id } = body;
+        if (!template_id) {
+          return new Response(JSON.stringify({ error: 'template_id is required' }), {
+            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const { data: tmpl, error: tmplErr } = await supabase
+          .from('whatsapp_templates')
+          .select('*')
+          .eq('id', template_id)
+          .single();
+        if (tmplErr || !tmpl) {
+          return new Response(JSON.stringify({ error: tmplErr?.message || 'Template not found' }), {
+            status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Sanitize every URL inside the stored types map.
+        const originalTypes = (tmpl.twilio_content_types ?? {}) as Record<string, any>;
+        const repairedTypes: Record<string, any> = JSON.parse(JSON.stringify(originalTypes));
+        let changed = false;
+        for (const v of Object.values(repairedTypes)) {
+          if (!v || typeof v !== 'object') continue;
+          const obj = v as Record<string, unknown>;
+          if (Array.isArray(obj.media)) {
+            const cleaned = (obj.media as unknown[]).map((m) =>
+              typeof m === 'string' ? sanitizeUrl(m) : m,
+            );
+            if (JSON.stringify(cleaned) !== JSON.stringify(obj.media)) changed = true;
+            obj.media = cleaned;
+          } else if (typeof obj.media === 'string') {
+            const cleaned = sanitizeUrl(obj.media);
+            if (cleaned !== obj.media) changed = true;
+            obj.media = cleaned;
+          }
+          if (Array.isArray((obj as any).actions)) {
+            for (const a of (obj as any).actions) {
+              if (a && typeof a === 'object' && typeof (a as any).url === 'string') {
+                const cleaned = sanitizeUrl((a as any).url);
+                if (cleaned !== (a as any).url) changed = true;
+                (a as any).url = cleaned;
+              }
+            }
+          }
+        }
+
+        if (!changed) {
+          return new Response(JSON.stringify({
+            repaired: false,
+            reason: 'No malformed URLs found in this template.',
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const twilio = getTwilioAuth();
+        if (!twilio) {
+          return new Response(JSON.stringify({ error: 'Twilio credentials are not configured' }), {
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Rebuild a sample-variables map from the stored required vars.
+        const meta = deriveTwilioMetadata(repairedTypes);
+        const variableSamples: Record<string, string> = {};
+        for (const k of meta.requiredVariables) variableSamples[k] = 'sample';
+
+        const createResp = await fetch(`${CONTENT_API_BASE}/v1/Content`, {
+          method: 'POST',
+          headers: { 'Authorization': twilio.authHeader, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            friendly_name: tmpl.name,
+            language: tmpl.language || 'en',
+            variables: variableSamples,
+            types: repairedTypes,
+          }),
+        });
+        const createData = await createResp.json();
+        if (!createResp.ok || !createData?.sid) {
+          return new Response(JSON.stringify({ error: 'Twilio Content create failed', twilio: createData }), {
+            status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Resubmit for WhatsApp approval (same name+language → typically auto-approves).
+        try {
+          await fetch(`${CONTENT_API_BASE}/v1/Content/${createData.sid}/ApprovalRequests/whatsapp`, {
+            method: 'POST',
+            headers: { 'Authorization': twilio.authHeader, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: tmpl.name, category: (tmpl.category || 'MARKETING').toLowerCase() }),
+          });
+        } catch (err) {
+          console.error('[repair-media-url] approval submission error:', err);
+        }
+
+        const newMeta = deriveTwilioMetadata(repairedTypes);
+        const { data: updated, error: updateErr } = await supabase
+          .from('whatsapp_templates')
+          .update({
+            twilio_content_sid: createData.sid,
+            twilio_content_types: repairedTypes,
+            twilio_template_type: newMeta.templateType,
+            twilio_media_url: newMeta.mediaUrl,
+            twilio_media_is_variable: newMeta.mediaIsVariable,
+            twilio_required_variables: newMeta.requiredVariables,
+            twilio_synced_at: new Date().toISOString(),
+          })
+          .eq('id', template_id)
+          .select()
+          .single();
+
+        if (updateErr) {
+          return new Response(JSON.stringify({ error: updateErr.message }), {
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        return new Response(JSON.stringify({ repaired: true, template: updated }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // --- Create template (default action) ---
       // Supports three Twilio Content types:
       //   - twilio/text             (default, body only)
@@ -579,14 +727,14 @@ serve(async (req) => {
       if (contentType === 'media') {
         twilioTypes['twilio/media'] = {
           body: twilioCleanBody,
-          media: [mediaUrl.trim()],
+          media: [sanitizeUrl(mediaUrl)],
         };
       } else if (contentType === 'call_to_action') {
         twilioTypes['twilio/call-to-action'] = {
           body: twilioCleanBody,
           actions: ctaActions.map((a) =>
             a.type === 'URL'
-              ? { type: 'URL', title: a.title, url: a.url }
+              ? { type: 'URL', title: a.title, url: sanitizeUrl(a.url) }
               : { type: 'PHONE_NUMBER', title: a.title, phone: a.phone },
           ),
         };
