@@ -733,6 +733,11 @@ export default function JourneyAnalytics() {
           </Suspense>
         )}
       </div>
+      {id && (
+        <Suspense fallback={null}>
+          <JourneyLogsDialog open={logsOpen} onOpenChange={setLogsOpen} journeyId={id} journeyName={journey?.name} />
+        </Suspense>
+      )}
     </TooltipProvider>
   );
 }
