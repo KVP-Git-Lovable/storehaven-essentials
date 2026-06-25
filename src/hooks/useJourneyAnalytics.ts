@@ -211,11 +211,21 @@ export function useJourneyAnalytics(journeyId: string, range?: RangeFilter) {
     });
     const revenue = ordersAttributed.reduce((s, o) => s + Number(o.total_amount || 0), 0);
 
-    // Audience metrics
-    const entered = enrollments.length;
-    const completed = enrollments.filter((e: any) => e.status === "completed").length;
-    const active = enrollments.filter((e: any) => e.status === "active" || e.status === "in_progress").length;
-    const dropped = enrollments.filter((e: any) => e.status === "exited" || e.status === "dropped").length;
+    // Audience metrics — dedupe by contact_id since re-activations create
+    // multiple enrollment rows per contact. Use the most recent row's status.
+    const latestByContact = new Map<string, any>();
+    enrollments.forEach((e: any) => {
+      if (!e?.contact_id) return;
+      const prev = latestByContact.get(e.contact_id);
+      if (!prev || new Date(e.enrolled_at).getTime() > new Date(prev.enrolled_at).getTime()) {
+        latestByContact.set(e.contact_id, e);
+      }
+    });
+    const uniqueEnrollments = Array.from(latestByContact.values());
+    const entered = uniqueEnrollments.length;
+    const completed = uniqueEnrollments.filter((e: any) => e.status === "completed").length;
+    const active = uniqueEnrollments.filter((e: any) => e.status === "active" || e.status === "in_progress").length;
+    const dropped = uniqueEnrollments.filter((e: any) => e.status === "exited" || e.status === "dropped").length;
 
     // Funnel
     const funnel = [
