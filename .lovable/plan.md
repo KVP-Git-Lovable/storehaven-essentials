@@ -1,66 +1,33 @@
-## Goal
+## Problem
 
-Move "Rate-limited Failures" from inline section to a dedicated page (opened via button), add a new "Status code failures" page (opened via button) with tabs for error codes `63049` and `63024`, and ensure the processor does not auto-retry messages that failed with those two codes.
+The **Status code failures** page shows "0 unresolved contacts" for both 63049 and 63024, even though Recent Messages clearly lists rows with those error codes.
 
-## 1. Journey Analytics header — replace section with buttons
+Root cause: `StatusCodeFailuresTable` queries `journey_message_log` with `.eq("status", "failed")` AND `.eq("error_code", code)`. In the database, Twilio's 63049/63024 responses are stored as `status = 'undelivered'` with `delivery_status = 'failed'`, **never** as `status = 'failed'`. So the query always returns 0 rows.
 
-File: `src/pages/communication/JourneyAnalytics.tsx`
+(Some 63049/63024 rows also exist with `status=sent, delivery_status=delivered` — i.e. Twilio reported the code on an interim event but the message eventually delivered. Those must remain excluded.)
 
-- Remove the inline `<RateLimitedRetrySection />` render and its `lazy` import.
-- In the header (next to "View Logs"), add two new buttons:
-  - **Rate-limited Failures** → navigates to `/communication/journeys/:id/rate-limited-failures`
-  - **Status code failures** → navigates to `/communication/journeys/:id/status-code-failures`
+## Fix
 
-## 2. New page: Rate-limited Failures
+In `src/components/journey/StatusCodeFailuresTable.tsx`, change the primary fetch to filter purely by `error_code` (drop the `status='failed'` filter) and instead treat a row as a candidate failure when:
 
-File: `src/pages/communication/JourneyRateLimitedFailures.tsx` (new)
+- `error_code = <code>`, AND
+- it is not a successful send (i.e. `delivery_status` is not in the success set AND `status` is not in the success set).
 
-- Standalone page with back button → Journey Analytics.
-- Renders the existing `RateLimitedRetrySection` component unchanged (already supports list + select + Retry selected at 1 msg / 12s).
+The existing person-level success exclusion (looking for any later successful send to the same phone in this journey) stays as-is — it correctly removes contacts who eventually received any message in the journey.
 
-## 3. New page: Status code failures (with tabs)
+Pseudocode change:
 
-File: `src/pages/communication/JourneyStatusCodeFailures.tsx` (new)
-
-- Two tabs: **63049 — Blocked by Meta** and **63024 — Template paused**.
-- New shared component `src/components/journey/StatusCodeFailuresTable.tsx` parameterised by `errorCode` that:
-  - Paginates `journey_message_log` filtered by `journey_id`, `status = 'failed'`, `error_code = <code>`.
-  - Dedupes by phone (last-10), like the rate-limit table.
-  - Excludes contacts who later had any successful send in this journey (same logic as `RateLimitedRetrySection`).
-  - Shows Contact, Phone, Failed at, Twilio error message, Retry status.
-  - Header: Refresh + Retry selected (uses the existing `retry-journey-message` edge function, 12s spacing — same loop pattern reused).
-
-## 4. Suppress automatic retries for 63049 / 63024
-
-File: `supabase/functions/process-journeys/index.ts` (around lines 1118–1146 — the per-enrollment retry/backoff branch)
-
-- After computing `anyAccepted`, before the existing retry/backoff branch:
-  - If any `sendResults` entry has `errorCode === "63049"` or `"63024"`, update the enrollment to `status = 'failed'` immediately and skip the retry/backoff increment. Do not delete the failed `journey_message_log` row (so it shows up in the new page).
-- Result: these messages will only be re-sent when the user explicitly clicks **Retry selected** on the Status code failures page.
-
-The existing `retry-journey-message` edge function already handles manual one-off retries, so no backend changes are needed there.
-
-## 5. Routing
-
-File: `src/App.tsx`
-
-Add two protected routes inside the communication area:
-
-```text
-/communication/journeys/:id/rate-limited-failures  → JourneyRateLimitedFailures
-/communication/journeys/:id/status-code-failures   → JourneyStatusCodeFailures
+```ts
+const candidates = pagedRows.filter(r => !isSuccessfulLog(r));   // drop sent/delivered
+// then dedupe by person_key (latest), then exclude personKeys present in successByPerson
 ```
 
-## Files touched
+No other component needs changes. The `process-journeys` write path that stamps `error_code` is already correct.
 
-- `src/pages/communication/JourneyAnalytics.tsx` — remove inline section, add two header buttons.
-- `src/pages/communication/JourneyRateLimitedFailures.tsx` — new page wrapper.
-- `src/pages/communication/JourneyStatusCodeFailures.tsx` — new page with tabs.
-- `src/components/journey/StatusCodeFailuresTable.tsx` — new reusable table + retry.
-- `src/App.tsx` — two new routes.
-- `supabase/functions/process-journeys/index.ts` — skip auto-retry on 63049/63024.
+## Verification
 
-## Notes
-
-- No DB schema change required — `error_code` column already exists on `journey_message_log`.
-- The existing `RateLimitedRetrySection` component is reused as-is on its new page; the manual retry pipeline (`retry-journey-message`, 12s spacing, analytics invalidation) is shared by the new Status code failures page.
+After the change, on a journey with known 63049 rows:
+1. Open Status code failures → 63049 tab → list populates with the undelivered contacts (matching the Recent Messages screenshot).
+2. Switch to 63024 tab → list populates similarly.
+3. Contacts who later received a successful send in the same journey are not shown.
+4. "Retry selected" still works (no change to the retry path).
