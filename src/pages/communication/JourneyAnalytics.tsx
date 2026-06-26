@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowLeft, Send, Eye, MousePointer, Target, Mail, MessageSquare, Link2, CheckCircle2, XCircle, BookOpen, TrendingUp, TrendingDown, Users, DollarSign, AlertTriangle, Lightbulb, Sparkles, Download, FileText, Pause, Play } from "lucide-react";
+import { ArrowLeft, Send, Eye, MousePointer, Target, Mail, MessageSquare, Link2, CheckCircle2, XCircle, BookOpen, TrendingUp, TrendingDown, Users, DollarSign, AlertTriangle, Lightbulb, Sparkles, Download, FileText, Pause, Play, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { WhatsAppIcon } from "@/components/communication/WhatsAppIcon";
 import { format } from "date-fns";
@@ -18,7 +18,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 const JourneyCostAnalytics = lazy(() => import("@/components/journey/JourneyCostAnalytics"));
 const JourneyEngagementSummary = lazy(() => import("@/components/journey/JourneyEngagementSummary"));
-const RateLimitedRetrySection = lazy(() => import("@/components/journey/RateLimitedRetrySection"));
 const JourneyLogsDialog = lazy(() => import("@/components/journey/JourneyLogsDialog"));
 
 const SUCCESS_STATUSES = new Set(["sent", "delivered", "queued", "accepted", "scheduled", "sending"]);
@@ -253,6 +252,12 @@ export default function JourneyAnalytics() {
             </Select>
             <Button variant="outline" size="sm" onClick={() => setLogsOpen(true)}>
               <FileText className="h-4 w-4 mr-1" /> View Logs
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate(`/communication/journeys/${id}/rate-limited-failures`)}>
+              <AlertTriangle className="h-4 w-4 mr-1" /> Rate-limited Failures
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate(`/communication/journeys/${id}/status-code-failures`)}>
+              <ShieldAlert className="h-4 w-4 mr-1" /> Status code failures
             </Button>
             <Button
               size="sm"
@@ -756,12 +761,6 @@ export default function JourneyAnalytics() {
         {id && (
           <Suspense fallback={<Card><CardContent className="py-8 text-center text-muted-foreground text-sm">Loading cost analytics…</CardContent></Card>}>
             <JourneyCostAnalytics journeyId={id} />
-          </Suspense>
-        )}
-
-        {id && (
-          <Suspense fallback={<Card><CardContent className="py-8 text-center text-muted-foreground text-sm">Loading rate-limited failures…</CardContent></Card>}>
-            <RateLimitedRetrySection journeyId={id} />
           </Suspense>
         )}
 

@@ -132,6 +132,8 @@ const CommunicationCalendar = lazyWithRetry(() => import("./pages/communication/
 const JourneyBuilder = lazyWithRetry(() => import("./pages/communication/JourneyBuilder"), "JourneyBuilder");
 const JourneyAnalytics = lazyWithRetry(() => import("./pages/communication/JourneyAnalytics"), "JourneyAnalytics");
 const JourneyConversations = lazyWithRetry(() => import("./pages/communication/JourneyConversations"), "JourneyConversations");
+const JourneyRateLimitedFailures = lazyWithRetry(() => import("./pages/communication/JourneyRateLimitedFailures"), "JourneyRateLimitedFailures");
+const JourneyStatusCodeFailures = lazyWithRetry(() => import("./pages/communication/JourneyStatusCodeFailures"), "JourneyStatusCodeFailures");
 const ContactsManager = lazyWithRetry(() => import("./pages/communication/ContactsManager"), "ContactsManager");
 const WhatsAppCenter = lazyWithRetry(() => import("./pages/communication/WhatsAppCenter"), "WhatsAppCenter");
 const WhatsAppConversations = lazyWithRetry(() => import("./pages/communication/WhatsAppConversations"), "WhatsAppConversations");
@@ -247,6 +249,8 @@ const App = () => (
                 <Route path="/communication/journeys/:id" element={<JourneyBuilder />} />
                 <Route path="/communication/journeys/:id/analytics" element={<JourneyAnalytics />} />
                 <Route path="/communication/journeys/:id/conversations" element={<JourneyConversations />} />
+                <Route path="/communication/journeys/:id/rate-limited-failures" element={<JourneyRateLimitedFailures />} />
+                <Route path="/communication/journeys/:id/status-code-failures" element={<JourneyStatusCodeFailures />} />
                 <Route path="/communication/calendar" element={<CommunicationCalendar />} />
                 <Route path="/communication/contacts" element={<ContactsManager />} />
                 <Route path="/communication/whatsapp" element={<WhatsAppCenter />} />
