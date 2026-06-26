@@ -3180,6 +3180,39 @@ export type Database = {
           },
         ]
       }
+      journey_excluded_contacts: {
+        Row: {
+          contact_id: string | null
+          created_at: string
+          error_code: string | null
+          excluded_by: string | null
+          id: string
+          journey_id: string
+          phone_last10: string
+          reason: string | null
+        }
+        Insert: {
+          contact_id?: string | null
+          created_at?: string
+          error_code?: string | null
+          excluded_by?: string | null
+          id?: string
+          journey_id: string
+          phone_last10: string
+          reason?: string | null
+        }
+        Update: {
+          contact_id?: string | null
+          created_at?: string
+          error_code?: string | null
+          excluded_by?: string | null
+          id?: string
+          journey_id?: string
+          phone_last10?: string
+          reason?: string | null
+        }
+        Relationships: []
+      }
       journey_message_events: {
         Row: {
           created_at: string

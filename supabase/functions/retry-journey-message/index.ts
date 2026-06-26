@@ -227,6 +227,25 @@ serve(async (req) => {
       });
     }
 
+    // Load contact phone early to honor the per-journey exclusion list.
+    const { data: contactPre } = await supabase
+      .from("journey_contacts").select("phone").eq("id", log.contact_id).maybeSingle();
+    const last10 = String(contactPre?.phone || "").replace(/\D/g, "").slice(-10);
+    if (last10) {
+      const { data: excl } = await supabase
+        .from("journey_excluded_contacts")
+        .select("error_code, reason")
+        .eq("journey_id", log.journey_id)
+        .eq("phone_last10", last10)
+        .maybeSingle();
+      if (excl) {
+        const msg = `Will not be sent due to previous Status error${excl.error_code ? ` (${excl.error_code})` : ""}`;
+        return new Response(JSON.stringify({ success: false, excluded: true, error: msg }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Load journey (for canvas) and contact
     const [{ data: journey }, { data: contact }, { data: cfg }] = await Promise.all([
       supabase.from("journeys").select("id, canvas_data").eq("id", log.journey_id).maybeSingle(),
