@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertTriangle, RotateCw, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Ban } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -62,6 +63,20 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
   const isRetrying = job.isRunning;
   const countdown = job.countdown;
   const statuses = job.statuses;
+
+  const { data: excluded = new Map<string, string>() } = useQuery<Map<string, string>>({
+    queryKey: ["journey-excluded-contacts-map", journeyId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("journey_excluded_contacts")
+        .select("phone_last10, error_code")
+        .eq("journey_id", journeyId);
+      const m = new Map<string, string>();
+      for (const r of data || []) m.set((r as any).phone_last10, (r as any).error_code || "");
+      return m;
+    },
+    enabled: !!journeyId,
+  });
 
   const { data: rows = [], isLoading, refetch } = useQuery<FailedRow[]>({
     queryKey: ["journey-rate-limited-failures", journeyId],
@@ -205,6 +220,11 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
       rows: snapshot,
       spacingMs: SPACING_MS,
       send: async (row) => {
+        const p = last10(row.contact_phone);
+        const exCode = p ? excluded.get(p) : undefined;
+        if (exCode !== undefined) {
+          return { success: false, error: `Will not be sent due to previous Status error${exCode ? ` (${exCode})` : ""}` };
+        }
         const { data, error } = await supabase.functions.invoke("retry-journey-message", {
           body: { message_log_id: row.id },
         });
@@ -304,6 +324,8 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
             <TableBody>
               {displayRows.map((r) => {
                 const st = statuses[r.id]?.state || "idle";
+                const exCode = excluded.get(last10(r.contact_phone));
+                const isExcluded = exCode !== undefined;
                 return (
                   <TableRow key={r.id}>
                     <TableCell>
@@ -323,6 +345,13 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
                       {r.error_message}
                     </TableCell>
                     <TableCell>
+                      {isExcluded && st !== "sending" && st !== "success" && st !== "failed" ? (
+                        <Badge variant="outline" className="gap-1 border-amber-300 text-amber-700"
+                          title={`Will not be sent due to previous Status error${exCode ? ` (${exCode})` : ""}`}>
+                          <Ban className="h-3 w-3" />
+                          Will not be sent due to previous Status error{exCode ? ` (${exCode})` : ""}
+                        </Badge>
+                      ) : <>
                       {st === "idle" && <span className="text-xs text-muted-foreground">—</span>}
                       {st === "queued" && <Badge variant="outline">Queued</Badge>}
                       {st === "sending" && (
@@ -340,6 +369,7 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
                           <XCircle className="h-3 w-3" /> Failed
                         </Badge>
                       )}
+                      </>}
                     </TableCell>
                   </TableRow>
                 );
