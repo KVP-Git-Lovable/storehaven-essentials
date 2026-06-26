@@ -28,7 +28,8 @@ interface FailedRow {
   contact_phone: string | null;
 }
 
-const SPACING_MS = 12_000;
+const SPACING_MS = 60_000;
+const BATCH_SIZE = 30;
 const SUCCESS_STATUSES = new Set(["accepted", "queued", "sending", "scheduled", "sent", "delivered", "read"]);
 
 function last10(phone: unknown) {
@@ -240,6 +241,7 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
     void startRetryJob(jobKey, {
       rows: snapshot,
       spacingMs: SPACING_MS,
+      batchSize: BATCH_SIZE,
       send: async (row) => {
         const p = last10(row.contact_phone);
         const exCode = p ? excluded.get(p) : undefined;
