@@ -62,15 +62,17 @@ export default function StatusCodeFailuresTable({
       for (let from = 0; from < 200_000; from += PAGE) {
         const { data, error } = await supabase
           .from("journey_message_log")
-          .select("id, contact_id, error_message, error_code, sent_at, journey_contacts(id, name, phone)")
+          .select("id, contact_id, status, delivery_status, error_message, error_code, sent_at, journey_contacts(id, name, phone)")
           .eq("journey_id", journeyId)
-          .eq("status", "failed")
           .eq("error_code", errorCode)
           .order("sent_at", { ascending: false })
           .range(from, from + PAGE - 1);
         if (error) throw error;
         const batch = data || [];
-        list.push(...batch);
+        // Twilio stores 63049/63024 as status='undelivered' (delivery_status='failed').
+        // Some rows with this error_code later resolve to status='sent'/'delivered' —
+        // exclude those here; the per-person success exclusion below also catches them.
+        for (const r of batch) if (!isSuccessfulLog(r)) list.push(r);
         if (batch.length < PAGE) break;
       }
 
