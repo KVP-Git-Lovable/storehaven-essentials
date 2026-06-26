@@ -142,7 +142,9 @@ Deno.serve(async (req) => {
           status: "active",
           next_action_at: new Date().toISOString(),
         }));
-        const { error: enrErr } = await supabase.from("journey_enrollments").insert(enrollments);
+        const { error: enrErr } = await supabase
+          .from("journey_enrollments")
+          .upsert(enrollments, { onConflict: "journey_id,contact_id", ignoreDuplicates: true });
         if (enrErr) {
           console.error("[journey-actions] insert journey_enrollments failed:", enrErr);
           throw new Error(`Failed to enroll contacts: ${enrErr.message}`);
@@ -178,6 +180,18 @@ Deno.serve(async (req) => {
 
     if (action === "pause") {
       await supabase.from("journeys").update({ status: "paused" }).eq("id", journey_id);
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "resume") {
+      // Flip status back to active WITHOUT touching enrollments — picks up exactly where it left off.
+      await supabase.from("journeys").update({ status: "active" }).eq("id", journey_id);
+      // Kick processor immediately so queued enrollments resume in seconds, not minutes.
+      supabase.functions
+        .invoke("process-journeys", { body: { journey_id, trigger: "resume" } })
+        .catch((e: any) => console.error("[resume] kickoff failed:", e?.message || e));
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
