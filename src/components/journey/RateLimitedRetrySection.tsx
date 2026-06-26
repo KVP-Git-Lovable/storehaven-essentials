@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useSyncExternalStore, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,8 +9,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertTriangle, RotateCw, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
-
-type RetryStatus = "idle" | "queued" | "sending" | "success" | "failed";
+import {
+  getRetryJob,
+  subscribeRetryJob,
+  startRetryJob,
+  resetRetryJob,
+} from "@/lib/retryRunner";
 
 interface FailedRow {
   id: string;
@@ -46,9 +50,18 @@ function isSuccessfulLog(row: any) {
 export default function RateLimitedRetrySection({ journeyId }: { journeyId: string }) {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [statuses, setStatuses] = useState<Record<string, { state: RetryStatus; error?: string }>>({});
-  const [isRetrying, setIsRetrying] = useState(false);
-  const [countdown, setCountdown] = useState<number | null>(null);
+
+  // Subscribe to the module-level retry runner so an in-flight batch keeps
+  // running (and its progress remains visible) across navigation/unmounts.
+  const jobKey = `rate-limited:${journeyId}`;
+  const job = useSyncExternalStore(
+    useCallback((cb) => subscribeRetryJob(jobKey, cb), [jobKey]),
+    useCallback(() => getRetryJob(jobKey), [jobKey]),
+    useCallback(() => getRetryJob(jobKey), [jobKey]),
+  );
+  const isRetrying = job.isRunning;
+  const countdown = job.countdown;
+  const statuses = job.statuses;
 
   const { data: rows = [], isLoading, refetch } = useQuery<FailedRow[]>({
     queryKey: ["journey-rate-limited-failures", journeyId],
@@ -142,12 +155,31 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
     enabled: !!journeyId,
   });
 
-  const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
-  const someSelected = rows.some((r) => selected.has(r.id));
+  // Merge: while a batch is running (or just finished), include snapshot rows
+  // so they remain visible even if the underlying query has been refetched /
+  // the user navigated away and back before completion.
+  const displayRows = useMemo<FailedRow[]>(() => {
+    const byId = new Map<string, FailedRow>();
+    for (const r of rows) byId.set(r.id, r);
+    for (const id of job.queueIds) {
+      if (!byId.has(id) && job.rowSnapshots[id]) {
+        byId.set(id, job.rowSnapshots[id] as FailedRow);
+      }
+    }
+    // Keep queued rows first (in original order) so the running batch stays
+    // pinned to the top during navigation returns.
+    const queuedOrdered = job.queueIds.map((id) => byId.get(id)).filter(Boolean) as FailedRow[];
+    const queuedSet = new Set(job.queueIds);
+    const rest = rows.filter((r) => !queuedSet.has(r.id));
+    return [...queuedOrdered, ...rest];
+  }, [rows, job.queueIds, job.rowSnapshots]);
+
+  const allSelected = displayRows.length > 0 && displayRows.every((r) => selected.has(r.id));
+  const someSelected = displayRows.some((r) => selected.has(r.id));
 
   const toggleAll = () => {
     if (allSelected) setSelected(new Set());
-    else setSelected(new Set(rows.map((r) => r.id)));
+    else setSelected(new Set(displayRows.map((r) => r.id)));
   };
 
   const toggleOne = (id: string) => {
@@ -157,68 +189,39 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
     setSelected(next);
   };
 
-  const queue = useMemo(() => rows.filter((r) => selected.has(r.id)), [rows, selected]);
+  const queue = useMemo(() => displayRows.filter((r) => selected.has(r.id)), [displayRows, selected]);
 
   async function runRetries() {
     if (queue.length === 0) return;
-    setIsRetrying(true);
-    const initial: Record<string, { state: RetryStatus }> = {};
-    queue.forEach((q) => (initial[q.id] = { state: "queued" }));
-    setStatuses((s) => ({ ...s, ...initial }));
-
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
     if (!token) {
       toast({ title: "Not signed in", variant: "destructive" });
-      setIsRetrying(false);
       return;
     }
-
-    let sent = 0, failed = 0;
-    for (let i = 0; i < queue.length; i++) {
-      const row = queue[i];
-      setStatuses((s) => ({ ...s, [row.id]: { state: "sending" } }));
-      try {
+    const snapshot = queue.map((q) => ({ ...q }));
+    setSelected(new Set());
+    void startRetryJob(jobKey, {
+      rows: snapshot,
+      spacingMs: SPACING_MS,
+      send: async (row) => {
         const { data, error } = await supabase.functions.invoke("retry-journey-message", {
           body: { message_log_id: row.id },
         });
         if (error) throw new Error(error.message);
-        if (data?.success) {
-          setStatuses((s) => ({ ...s, [row.id]: { state: "success" } }));
-          sent++;
-        } else {
-          setStatuses((s) => ({ ...s, [row.id]: { state: "failed", error: data?.error || "Send not accepted" } }));
-          failed++;
-        }
-      } catch (e: any) {
-        setStatuses((s) => ({ ...s, [row.id]: { state: "failed", error: e.message } }));
-        failed++;
-      }
-
-      // Space sends by SPACING_MS, except after the last one
-      if (i < queue.length - 1) {
-        const startedAt = Date.now();
-        const target = startedAt + SPACING_MS;
-        while (Date.now() < target) {
-          const remaining = Math.max(0, Math.ceil((target - Date.now()) / 1000));
-          setCountdown(remaining);
-          await new Promise((r) => setTimeout(r, 1000));
-        }
-        setCountdown(null);
-      }
-    }
-    setIsRetrying(false);
-    setCountdown(null);
-    toast({
-      title: "Retry batch complete",
-      description: `${sent} sent, ${failed} failed.`,
+        return { success: !!data?.success, error: data?.error };
+      },
+      onComplete: (totals) => {
+        toast({
+          title: "Retry batch complete",
+          description: `${totals.sent} sent, ${totals.failed} failed.`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["journey-rate-limited-failures", journeyId] });
+        queryClient.invalidateQueries({ queryKey: ["ja-messages", journeyId] });
+        queryClient.invalidateQueries({ queryKey: ["ja-enroll", journeyId] });
+        queryClient.invalidateQueries({ queryKey: ["ja-events", journeyId] });
+      },
     });
-    queryClient.invalidateQueries({ queryKey: ["journey-rate-limited-failures", journeyId] });
-    // Refresh analytics so the Journey Funnel / KPIs pick up newly delivered messages.
-    queryClient.invalidateQueries({ queryKey: ["ja-messages", journeyId] });
-    queryClient.invalidateQueries({ queryKey: ["ja-enroll", journeyId] });
-    queryClient.invalidateQueries({ queryKey: ["ja-events", journeyId] });
-    setSelected(new Set());
   }
 
   if (isLoading) {
@@ -237,15 +240,27 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
           <CardTitle className="text-base flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-500" />
             Rate-limited Failures
-            <Badge variant="secondary">{rows.length}</Badge>
+            <Badge variant="secondary">{displayRows.length}</Badge>
+            {isRetrying && (
+              <Badge variant="outline" className="gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Retrying {Object.values(statuses).filter((s) => s.state === "success" || s.state === "failed").length}/{job.queueIds.length}
+              </Badge>
+            )}
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
             Contacts whose message failed with "Rate limit exceeded". Retry sends one message every 12 seconds.
+            {" "}You can leave this page — the batch keeps running and progress is restored when you return.
           </p>
         </div>
         <div className="flex items-center gap-2">
           {isRetrying && countdown !== null && (
             <span className="text-xs text-muted-foreground">Next in {countdown}s…</span>
+          )}
+          {!isRetrying && job.queueIds.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => resetRetryJob(jobKey)}>
+              Clear results
+            </Button>
           )}
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRetrying}>
             Refresh
@@ -262,7 +277,7 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        {rows.length === 0 ? (
+        {displayRows.length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
             No rate-limited failures for this journey. 🎉
           </div>
@@ -287,7 +302,7 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((r) => {
+              {displayRows.map((r) => {
                 const st = statuses[r.id]?.state || "idle";
                 return (
                   <TableRow key={r.id}>
