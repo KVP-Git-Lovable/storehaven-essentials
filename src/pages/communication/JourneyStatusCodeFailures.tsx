@@ -39,6 +39,7 @@ export default function JourneyStatusCodeFailures() {
           <TabsList>
             <TabsTrigger value="63049">63049 — Blocked by Meta</TabsTrigger>
             <TabsTrigger value="63024">63024 — Template paused</TabsTrigger>
+            <TabsTrigger value="63032">63032 — Account banned by Meta</TabsTrigger>
           </TabsList>
           <TabsContent value="63049">
             <Suspense fallback={<div className="text-center text-sm text-muted-foreground py-8">Loading…</div>}>
@@ -48,6 +49,11 @@ export default function JourneyStatusCodeFailures() {
           <TabsContent value="63024">
             <Suspense fallback={<div className="text-center text-sm text-muted-foreground py-8">Loading…</div>}>
               <StatusCodeFailuresTable journeyId={id} errorCode="63024" />
+            </Suspense>
+          </TabsContent>
+          <TabsContent value="63032">
+            <Suspense fallback={<div className="text-center text-sm text-muted-foreground py-8">Loading…</div>}>
+              <StatusCodeFailuresTable journeyId={id} errorCode="63032" />
             </Suspense>
           </TabsContent>
         </Tabs>
