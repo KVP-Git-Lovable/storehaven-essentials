@@ -1125,7 +1125,17 @@ async function processEnrollment(
         .eq("id", enrollment.id);
     } else {
       const currentRetries = enrollment.retry_count || 0;
-      if (currentRetries < MAX_RETRIES) {
+      // If any send failed with a permanent template/recipient error, do NOT auto-retry.
+      // These can only be re-sent manually from the Status code failures page.
+      const NO_AUTO_RETRY_CODES = new Set(["63049", "63024"]);
+      const hasPermanentFailure = sendResults.some(
+        (r) => r && !r.accepted && r.errorCode && NO_AUTO_RETRY_CODES.has(String(r.errorCode)),
+      );
+      if (hasPermanentFailure) {
+        await supabase.from("journey_enrollments")
+          .update({ status: "failed" })
+          .eq("id", enrollment.id);
+      } else if (currentRetries < MAX_RETRIES) {
         await supabase.from("journey_enrollments")
           .update({
             status: "active",
