@@ -85,6 +85,12 @@ export interface RunRetryOptions {
   spacingMs: number;
   send: (row: any) => Promise<{ success: boolean; error?: string }>;
   onComplete?: (totals: { sent: number; failed: number }) => void;
+  /**
+   * Number of rows to process in parallel per cycle. Defaults to 1 (serial).
+   * When >1, each cycle dispatches up to `batchSize` rows concurrently and
+   * then waits `spacingMs` before starting the next batch.
+   */
+  batchSize?: number;
 }
 
 export async function startRetryJob(key: string, opts: RunRetryOptions) {
@@ -105,9 +111,9 @@ export async function startRetryJob(key: string, opts: RunRetryOptions) {
   job.countdown = null;
   emit(job);
 
-  for (let i = 0; i < opts.rows.length; i++) {
-    if (job.abort) break;
-    const row = opts.rows[i];
+  const batchSize = Math.max(1, opts.batchSize ?? 1);
+
+  const processOne = async (row: any) => {
     job.statuses[row.id] = { state: "sending" };
     emit(job);
     try {
@@ -124,8 +130,14 @@ export async function startRetryJob(key: string, opts: RunRetryOptions) {
       job.totals.failed++;
     }
     emit(job);
+  };
 
-    if (i < opts.rows.length - 1 && !job.abort) {
+  for (let i = 0; i < opts.rows.length; i += batchSize) {
+    if (job.abort) break;
+    const batch = opts.rows.slice(i, i + batchSize);
+    await Promise.all(batch.map((row) => processOne(row)));
+
+    if (i + batchSize < opts.rows.length && !job.abort) {
       const target = Date.now() + opts.spacingMs;
       while (Date.now() < target && !job.abort) {
         job.countdown = Math.max(0, Math.ceil((target - Date.now()) / 1000));
