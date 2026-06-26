@@ -765,12 +765,6 @@ export default function JourneyAnalytics() {
         )}
 
         {id && (
-          <Suspense fallback={<Card><CardContent className="py-8 text-center text-muted-foreground text-sm">Loading rate-limited failures…</CardContent></Card>}>
-            <RateLimitedRetrySection journeyId={id} />
-          </Suspense>
-        )}
-
-        {id && (
           <Suspense fallback={<Card><CardContent className="py-8 text-center text-muted-foreground text-sm">Loading engagement…</CardContent></Card>}>
             <JourneyEngagementSummary journeyId={id} isActive={isActive} />
           </Suspense>
