@@ -135,8 +135,29 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
         for (const s of batch) if (isSuccessfulLog(s)) successByPerson.add(personKey(s));
         if (batch.length < PAGE) break;
       }
+      // 3b. Fetch all contacts that have any 63049/63024 status-code failure
+      //     in this journey. Those are owned by the "Status code failures"
+      //     screens and must NOT appear in the rate-limited list.
+      const statusCodeFailurePersons = new Set<string>();
+      for (let from = 0; from < 200_000; from += PAGE) {
+        const { data, error } = await supabase
+          .from("journey_message_log")
+          .select("id, contact_id, error_code, journey_contacts(id, phone)")
+          .eq("journey_id", journeyId)
+          .in("error_code", ["63049", "63024"])
+          .order("id", { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) {
+          console.error("[RateLimitedRetry] status-code fetch error", error);
+          break;
+        }
+        const batch = data || [];
+        for (const s of batch) statusCodeFailurePersons.add(personKey(s));
+        if (batch.length < PAGE) break;
+      }
+
       const stillFailing = Array.from(latestByPerson.entries())
-        .filter(([key]) => !successByPerson.has(key))
+        .filter(([key]) => !successByPerson.has(key) && !statusCodeFailurePersons.has(key))
         .map(([key, row]) => ({ ...row, person_key: key }));
 
       // 4. Hydrate names/phones in batches only for rows where the join did
