@@ -1,13 +1,14 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { lazy, Suspense, useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowLeft, Send, Eye, MousePointer, Target, Mail, MessageSquare, Link2, CheckCircle2, XCircle, BookOpen, TrendingUp, TrendingDown, Users, DollarSign, AlertTriangle, Lightbulb, Sparkles, Download, FileText } from "lucide-react";
+import { ArrowLeft, Send, Eye, MousePointer, Target, Mail, MessageSquare, Link2, CheckCircle2, XCircle, BookOpen, TrendingUp, TrendingDown, Users, DollarSign, AlertTriangle, Lightbulb, Sparkles, Download, FileText, Pause, Play } from "lucide-react";
+import { toast } from "sonner";
 import { WhatsAppIcon } from "@/components/communication/WhatsAppIcon";
 import { format } from "date-fns";
 import { useJourneyAnalytics } from "@/hooks/useJourneyAnalytics";
@@ -57,6 +58,8 @@ function last10(raw: string | null | undefined): string {
 export default function JourneyAnalytics() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [toggling, setToggling] = useState(false);
   const [rangeKey, setRangeKey] = useState<"7d" | "30d" | "all">("30d");
   const [showAllMessages, setShowAllMessages] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
@@ -81,6 +84,33 @@ export default function JourneyAnalytics() {
   });
 
   const isActive = journey?.status === "active";
+
+  const handleToggleSending = async () => {
+    if (!id) return;
+    const action = isActive ? "pause" : "resume";
+    setToggling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("journey-actions", {
+        body: { action, journey_id: id },
+      });
+      if (error || (data as any)?.error) throw new Error(error?.message || (data as any)?.error);
+      if (isActive) {
+        toast.success("Sending stopped", {
+          description: "No new messages will be sent. In-flight Twilio requests may still land.",
+        });
+      } else {
+        toast.success("Sending resumed", {
+          description: "Picking up from where it left off — queued contacts will continue.",
+        });
+      }
+      await queryClient.invalidateQueries({ queryKey: ["journey", id] });
+      await queryClient.invalidateQueries({ queryKey: ["journey-enrollments", id] });
+    } catch (e: any) {
+      toast.error("Failed to update journey", { description: e?.message || String(e) });
+    } finally {
+      setToggling(false);
+    }
+  };
 
   const { data: messages = [] } = useQuery({
     queryKey: ["journey-messages", id],
