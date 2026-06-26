@@ -254,6 +254,14 @@ export default function JourneyAnalytics() {
             <Button variant="outline" size="sm" onClick={() => setLogsOpen(true)}>
               <FileText className="h-4 w-4 mr-1" /> View Logs
             </Button>
+            <Button
+              size="sm"
+              disabled={toggling || !journey}
+              onClick={handleToggleSending}
+              className={isActive ? "bg-red-600 hover:bg-red-700 text-white" : "bg-green-600 hover:bg-green-700 text-white"}
+            >
+              {isActive ? (<><Pause className="h-4 w-4 mr-1" /> Stop Sending</>) : (<><Play className="h-4 w-4 mr-1" /> Start Sending</>)}
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm"><Download className="h-4 w-4 mr-1" /> Export</Button>
