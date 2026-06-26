@@ -165,7 +165,9 @@ async function runScheduleSweep(supabase: any): Promise<{ triggered: number; err
           status: "active",
           next_action_at: new Date().toISOString(),
         }));
-        const { error: enrErr } = await supabase.from("journey_enrollments").insert(enrollments);
+        const { error: enrErr } = await supabase
+          .from("journey_enrollments")
+          .upsert(enrollments, { onConflict: "journey_id,contact_id", ignoreDuplicates: true });
         if (enrErr) throw new Error(`enroll: ${enrErr.message}`);
       }
 
