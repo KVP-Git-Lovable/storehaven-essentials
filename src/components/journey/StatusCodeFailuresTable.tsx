@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { RotateCw, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
+import { Ban } from "lucide-react";
 
 type RetryStatus = "idle" | "queued" | "sending" | "success" | "failed";
 
@@ -53,6 +54,19 @@ export default function StatusCodeFailuresTable({
   const [statuses, setStatuses] = useState<Record<string, { state: RetryStatus; error?: string }>>({});
   const [isRetrying, setIsRetrying] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [isExcluding, setIsExcluding] = useState(false);
+
+  const { data: excluded = new Set<string>() } = useQuery<Set<string>>({
+    queryKey: ["journey-excluded-contacts", journeyId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("journey_excluded_contacts")
+        .select("phone_last10")
+        .eq("journey_id", journeyId);
+      return new Set((data || []).map((r: any) => r.phone_last10));
+    },
+    enabled: !!journeyId,
+  });
 
   const { data: rows = [], isLoading, refetch } = useQuery<FailedRow[]>({
     queryKey: ["journey-status-code-failures", journeyId, errorCode],
@@ -141,6 +155,42 @@ export default function StatusCodeFailuresTable({
   };
   const queue = useMemo(() => rows.filter((r) => selected.has(r.id)), [rows, selected]);
 
+  async function excludeSelected() {
+    if (queue.length === 0) return;
+    setIsExcluding(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const inserts = queue
+      .map((r) => {
+        const p = last10(r.contact_phone);
+        if (!p) return null;
+        return {
+          journey_id: journeyId,
+          phone_last10: p,
+          contact_id: r.contact_id,
+          error_code: errorCode,
+          reason: `Excluded from Status code ${errorCode} failures`,
+          excluded_by: user?.id ?? null,
+        };
+      })
+      .filter(Boolean) as any[];
+    if (inserts.length === 0) {
+      setIsExcluding(false);
+      toast({ title: "Nothing to exclude", description: "Selected rows have no phone numbers.", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase
+      .from("journey_excluded_contacts")
+      .upsert(inserts, { onConflict: "journey_id,phone_last10", ignoreDuplicates: true });
+    setIsExcluding(false);
+    if (error) {
+      toast({ title: "Failed to exclude", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Excluded from sending", description: `${inserts.length} contact${inserts.length === 1 ? "" : "s"} will no longer receive messages in this journey.` });
+    setSelected(new Set());
+    queryClient.invalidateQueries({ queryKey: ["journey-excluded-contacts", journeyId] });
+  }
+
   async function runRetries() {
     if (queue.length === 0) return;
     setIsRetrying(true);
@@ -194,6 +244,10 @@ export default function StatusCodeFailuresTable({
         <div className="flex items-center gap-2">
           {isRetrying && countdown !== null && <span className="text-xs text-muted-foreground">Next in {countdown}s…</span>}
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRetrying}>Refresh</Button>
+          <Button variant="outline" size="sm" onClick={excludeSelected} disabled={isRetrying || isExcluding || queue.length === 0} className="gap-1.5">
+            {isExcluding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
+            Exclude from sending ({queue.length})
+          </Button>
           <Button size="sm" onClick={runRetries} disabled={isRetrying || queue.length === 0} className="gap-1.5">
             {isRetrying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
             Retry selected ({queue.length})
@@ -223,6 +277,7 @@ export default function StatusCodeFailuresTable({
             <TableBody>
               {rows.map((r) => {
                 const st = statuses[r.id]?.state || "idle";
+                const isExcluded = excluded.has(last10(r.contact_phone));
                 return (
                   <TableRow key={r.id}>
                     <TableCell>
@@ -237,11 +292,17 @@ export default function StatusCodeFailuresTable({
                       {r.error_message}
                     </TableCell>
                     <TableCell>
+                      {isExcluded ? (
+                        <Badge variant="outline" className="gap-1 border-amber-300 text-amber-700">
+                          <Ban className="h-3 w-3" /> Excluded
+                        </Badge>
+                      ) : <>
                       {st === "idle" && <span className="text-xs text-muted-foreground">—</span>}
                       {st === "queued" && <Badge variant="outline">Queued</Badge>}
                       {st === "sending" && (<Badge variant="outline" className="gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Sending</Badge>)}
                       {st === "success" && (<Badge className="gap-1 bg-green-100 text-green-700 hover:bg-green-100"><CheckCircle2 className="h-3 w-3" /> Sent</Badge>)}
                       {st === "failed" && (<Badge variant="destructive" className="gap-1" title={statuses[r.id]?.error}><XCircle className="h-3 w-3" /> Failed</Badge>)}
+                      </>}
                     </TableCell>
                   </TableRow>
                 );
