@@ -1127,7 +1127,7 @@ async function processEnrollment(
       const currentRetries = enrollment.retry_count || 0;
       // If any send failed with a permanent template/recipient error, do NOT auto-retry.
       // These can only be re-sent manually from the Status code failures page.
-      const NO_AUTO_RETRY_CODES = new Set(["63049", "63024"]);
+      const NO_AUTO_RETRY_CODES = new Set(["63049", "63024", "63032"]);
       const hasPermanentFailure = sendResults.some(
         (r) => r && !r.accepted && r.errorCode && NO_AUTO_RETRY_CODES.has(String(r.errorCode)),
       );

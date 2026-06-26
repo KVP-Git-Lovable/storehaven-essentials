@@ -144,7 +144,7 @@ export default function RateLimitedRetrySection({ journeyId }: { journeyId: stri
           .from("journey_message_log")
           .select("id, contact_id, error_code, journey_contacts(id, phone)")
           .eq("journey_id", journeyId)
-          .in("error_code", ["63049", "63024"])
+          .in("error_code", ["63049", "63024", "63032"])
           .order("id", { ascending: true })
           .range(from, from + PAGE - 1);
         if (error) {
