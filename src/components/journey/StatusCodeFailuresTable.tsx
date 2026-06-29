@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { RotateCw, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { RotateCw, Loader2, CheckCircle2, XCircle, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { Ban } from "lucide-react";
@@ -55,6 +55,7 @@ export default function StatusCodeFailuresTable({
   const [isRetrying, setIsRetrying] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isExcluding, setIsExcluding] = useState(false);
+  const [isIncluding, setIsIncluding] = useState(false);
 
   const { data: excluded = new Set<string>() } = useQuery<Set<string>>({
     queryKey: ["journey-excluded-contacts", journeyId],
@@ -155,6 +156,35 @@ export default function StatusCodeFailuresTable({
   };
   const queue = useMemo(() => rows.filter((r) => selected.has(r.id)), [rows, selected]);
 
+  const selectedExcludedCount = useMemo(
+    () => queue.filter((r) => excluded.has(last10(r.contact_phone))).length,
+    [queue, excluded]
+  );
+
+  async function includeSelected() {
+    if (queue.length === 0) return;
+    const phones = queue
+      .map((r) => last10(r.contact_phone))
+      .filter((p) => p && excluded.has(p));
+    if (phones.length === 0) {
+      toast({ title: "Nothing to include", description: "No selected rows are currently excluded.", variant: "destructive" });
+      return;
+    }
+    setIsIncluding(true);
+    const { error } = await supabase
+      .from("journey_excluded_contacts")
+      .delete()
+      .eq("journey_id", journeyId)
+      .in("phone_last10", phones);
+    setIsIncluding(false);
+    if (error) {
+      toast({ title: "Failed to include", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Included for sending", description: `${phones.length} contact${phones.length === 1 ? "" : "s"} can receive messages again in this journey.` });
+    queryClient.invalidateQueries({ queryKey: ["journey-excluded-contacts", journeyId] });
+  }
+
   async function excludeSelected() {
     if (queue.length === 0) return;
     setIsExcluding(true);
@@ -193,14 +223,29 @@ export default function StatusCodeFailuresTable({
 
   async function runRetries() {
     if (queue.length === 0) return;
+    const blocked = queue.filter((r) => excluded.has(last10(r.contact_phone)));
+    const sendable = queue.filter((r) => !excluded.has(last10(r.contact_phone)));
+    if (blocked.length > 0) {
+      const initialBlocked: Record<string, { state: RetryStatus; error?: string }> = {};
+      blocked.forEach((q) => (initialBlocked[q.id] = { state: "failed", error: "Will not be sent due to previous Status error" }));
+      setStatuses((s) => ({ ...s, ...initialBlocked }));
+    }
+    if (sendable.length === 0) {
+      toast({
+        title: "All selected are excluded",
+        description: "Toggle “Include recipients” first to re-enable sending.",
+        variant: "destructive",
+      });
+      return;
+    }
     setIsRetrying(true);
     const initial: Record<string, { state: RetryStatus }> = {};
-    queue.forEach((q) => (initial[q.id] = { state: "queued" }));
+    sendable.forEach((q) => (initial[q.id] = { state: "queued" }));
     setStatuses((s) => ({ ...s, ...initial }));
 
     let sent = 0, failed = 0;
-    for (let i = 0; i < queue.length; i++) {
-      const row = queue[i];
+    for (let i = 0; i < sendable.length; i++) {
+      const row = sendable[i];
       setStatuses((s) => ({ ...s, [row.id]: { state: "sending" } }));
       try {
         const { data, error } = await supabase.functions.invoke("retry-journey-message", {
@@ -218,7 +263,7 @@ export default function StatusCodeFailuresTable({
         setStatuses((s) => ({ ...s, [row.id]: { state: "failed", error: e.message } }));
         failed++;
       }
-      if (i < queue.length - 1) {
+      if (i < sendable.length - 1) {
         const target = Date.now() + SPACING_MS;
         while (Date.now() < target) {
           setCountdown(Math.max(0, Math.ceil((target - Date.now()) / 1000)));
@@ -244,6 +289,10 @@ export default function StatusCodeFailuresTable({
         <div className="flex items-center gap-2">
           {isRetrying && countdown !== null && <span className="text-xs text-muted-foreground">Next in {countdown}s…</span>}
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRetrying}>Refresh</Button>
+          <Button variant="outline" size="sm" onClick={includeSelected} disabled={isRetrying || isIncluding || selectedExcludedCount === 0} className="gap-1.5">
+            {isIncluding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />}
+            Include recipients ({selectedExcludedCount})
+          </Button>
           <Button variant="outline" size="sm" onClick={excludeSelected} disabled={isRetrying || isExcluding || queue.length === 0} className="gap-1.5">
             {isExcluding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
             Exclude from sending ({queue.length})
