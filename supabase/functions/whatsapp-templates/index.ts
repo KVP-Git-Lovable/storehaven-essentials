@@ -649,6 +649,146 @@ serve(async (req) => {
         });
       }
 
+      // --- Refresh media cache for templates whose underlying file changed.
+      //     Twilio (and Meta) cache the bytes behind a media URL when the
+      //     Content was approved. After re-encoding an existing file
+      //     in-place, the URL is unchanged so Meta keeps serving the stale
+      //     copy. We append/replace a `?v=<ts>` cache-buster on every media
+      //     URL inside the Content, create a new Twilio Content, and
+      //     resubmit it for WhatsApp approval. The visible URL on the
+      //     recipient's device stays the same; only the cached bytes
+      //     refresh.
+      if (action === 'refresh-media-cache') {
+        const { template_id, template_ids, by_storage_path } = body;
+        const ids: string[] = Array.isArray(template_ids)
+          ? template_ids
+          : template_id ? [template_id] : [];
+        if (ids.length === 0 && !by_storage_path) {
+          return new Response(JSON.stringify({ error: 'template_id, template_ids, or by_storage_path is required' }), {
+            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        const twilio = getTwilioAuth();
+        if (!twilio) {
+          return new Response(JSON.stringify({ error: 'Twilio credentials are not configured' }), {
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Resolve target templates.
+        let targets: any[] = [];
+        if (ids.length > 0) {
+          const { data, error } = await supabase
+            .from('whatsapp_templates').select('*').in('id', ids);
+          if (error) {
+            return new Response(JSON.stringify({ error: error.message }), {
+              status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          targets = data || [];
+        } else if (by_storage_path) {
+          // Match any template whose stored media URL ends with this storage path
+          const { data, error } = await supabase
+            .from('whatsapp_templates').select('*')
+            .ilike('twilio_media_url', `%${by_storage_path}%`);
+          if (error) {
+            return new Response(JSON.stringify({ error: error.message }), {
+              status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          targets = data || [];
+        }
+
+        const stamp = Date.now().toString();
+        const bust = (url: string): string => {
+          try {
+            const u = new URL(url);
+            u.pathname = u.pathname.replace(/\/{2,}/g, '/');
+            u.searchParams.set('v', stamp);
+            return u.toString();
+          } catch { return url; }
+        };
+
+        const results: any[] = [];
+        for (const tmpl of targets) {
+          // Pull live Twilio types when possible so we don't lose any fields.
+          let liveTypes: Record<string, any> | null = null;
+          if (tmpl.twilio_content_sid) {
+            try {
+              const r = await fetch(`${CONTENT_API_BASE}/v1/Content/${tmpl.twilio_content_sid}`, {
+                headers: { 'Authorization': twilio.authHeader },
+              });
+              const j = await r.json();
+              if (r.ok && j?.types) liveTypes = j.types;
+            } catch (err) { console.error('[refresh-media-cache] live fetch', err); }
+          }
+          const sourceTypes = (liveTypes ?? tmpl.twilio_content_types ?? {}) as Record<string, any>;
+          const newTypes: Record<string, any> = JSON.parse(JSON.stringify(sourceTypes));
+          let changed = false;
+          for (const v of Object.values(newTypes)) {
+            if (!v || typeof v !== 'object') continue;
+            const obj = v as Record<string, unknown>;
+            if (Array.isArray(obj.media)) {
+              const cleaned = (obj.media as unknown[]).map((m) => (typeof m === 'string' ? bust(m) : m));
+              if (JSON.stringify(cleaned) !== JSON.stringify(obj.media)) changed = true;
+              obj.media = cleaned;
+            } else if (typeof obj.media === 'string') {
+              const cleaned = bust(obj.media);
+              if (cleaned !== obj.media) changed = true;
+              obj.media = cleaned;
+            }
+          }
+          if (!changed) {
+            results.push({ template_id: tmpl.id, refreshed: false, reason: 'No media field on this template' });
+            continue;
+          }
+
+          const meta = deriveTwilioMetadata(newTypes);
+          const variableSamples: Record<string, string> = {};
+          for (const k of meta.requiredVariables) variableSamples[k] = 'sample';
+
+          const createResp = await fetch(`${CONTENT_API_BASE}/v1/Content`, {
+            method: 'POST',
+            headers: { 'Authorization': twilio.authHeader, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              friendly_name: tmpl.name,
+              language: tmpl.language || 'en',
+              variables: variableSamples,
+              types: newTypes,
+            }),
+          });
+          const createData = await createResp.json();
+          if (!createResp.ok || !createData?.sid) {
+            results.push({ template_id: tmpl.id, refreshed: false, error: createData });
+            continue;
+          }
+          try {
+            await fetch(`${CONTENT_API_BASE}/v1/Content/${createData.sid}/ApprovalRequests/whatsapp`, {
+              method: 'POST',
+              headers: { 'Authorization': twilio.authHeader, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: tmpl.name, category: (tmpl.category || 'MARKETING').toLowerCase() }),
+            });
+          } catch (err) { console.error('[refresh-media-cache] approval', err); }
+
+          const newMeta = deriveTwilioMetadata(newTypes);
+          await supabase.from('whatsapp_templates').update({
+            twilio_content_sid: createData.sid,
+            twilio_content_types: newTypes,
+            twilio_template_type: newMeta.templateType,
+            twilio_media_url: newMeta.mediaUrl,
+            twilio_media_is_variable: newMeta.mediaIsVariable,
+            twilio_required_variables: newMeta.requiredVariables,
+            twilio_synced_at: new Date().toISOString(),
+          }).eq('id', tmpl.id);
+
+          results.push({ template_id: tmpl.id, name: tmpl.name, refreshed: true, new_sid: createData.sid });
+        }
+
+        return new Response(JSON.stringify({ count: results.length, results }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // --- Create template (default action) ---
       // Supports three Twilio Content types:
       //   - twilio/text             (default, body only)
