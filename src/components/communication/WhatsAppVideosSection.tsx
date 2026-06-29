@@ -93,14 +93,16 @@ async function normalizeForAndroidWhatsApp(file: File, onProgress?: (msg: string
     "-y",
   ];
   await ff.exec([...baseArgs, "-b:v", "1100k", "-maxrate", "1400k", "-bufsize", "2800k", outputName]);
-  let data = await ff.readFile(outputName) as Uint8Array;
+  let data = (await ff.readFile(outputName)) as Uint8Array;
   if (data.byteLength > 16 * 1024 * 1024) {
     onProgress?.("Output > 16 MB, re-encoding at lower bitrate…");
     await ff.exec([...baseArgs, "-b:v", "650k", "-maxrate", "800k", "-bufsize", "1600k", outputName]);
-    data = await ff.readFile(outputName) as Uint8Array;
+    data = (await ff.readFile(outputName)) as Uint8Array;
   }
   try { await ff.deleteFile(inputName); await ff.deleteFile(outputName); } catch { /* ignore */ }
-  return new Blob([data], { type: "video/mp4" });
+  // Copy into a fresh ArrayBuffer to satisfy strict BlobPart typing.
+  const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+  return new Blob([ab], { type: "video/mp4" });
 }
 
 export function WhatsAppVideosSection() {
