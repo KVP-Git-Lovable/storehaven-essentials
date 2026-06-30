@@ -8,11 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { X, Trash2, AlertTriangle } from "lucide-react";
+import { X, Trash2, AlertTriangle, Eye } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import type { Edge, Node } from "@xyflow/react";
 import { parseStoredBody, transformTwilioToFriendly } from "@/lib/whatsappVariables";
 import { InsertVariablePicker } from "@/components/communication/InsertVariablePicker";
+import { MessageResponseAudiencePreviewDialog } from "@/components/journey/MessageResponseAudiencePreviewDialog";
 
 type FreeformChannel = "whatsapp" | "sms" | "email";
 const FREEFORM_CHANNELS: { value: FreeformChannel; label: string }[] = [
@@ -29,6 +30,7 @@ interface Props {
   onDelete: (id: string) => void;
   onClose: () => void;
   journeyStatus?: string;
+  journeyId?: string;
 }
 
 interface WhatsAppTemplateOption {
@@ -46,8 +48,9 @@ interface WhatsAppTemplateOption {
 
 // Variable picker now sourced from VARIABLE_REGISTRY via InsertVariablePicker.
 
-export function NodePropertyPanel({ node, nodes = [], edges = [], onUpdate, onDelete, onClose, journeyStatus }: Props) {
+export function NodePropertyPanel({ node, nodes = [], edges = [], onUpdate, onDelete, onClose, journeyStatus, journeyId }: Props) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const { data: approvedWhatsAppTemplates = [], isLoading: loadingWhatsAppTemplates } = useQuery({
     queryKey: ["journey-whatsapp-templates"],
