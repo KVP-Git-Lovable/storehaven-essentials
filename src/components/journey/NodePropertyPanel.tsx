@@ -556,12 +556,6 @@ export function NodePropertyPanel({ node, nodes = [], edges = [], onUpdate, onDe
         );
       })()}
 
-      <div className="pt-4 border-t">
-        <Button variant="destructive" size="sm" className="w-full" onClick={() => setConfirmOpen(true)}>
-          <Trash2 className="h-4 w-4 mr-1" /> Delete Node
-        </Button>
-      </div>
-
       {node.type === "message_response" && (() => {
         // Find all upstream WhatsApp Template message nodes (those reachable backwards from this node)
         const upstreamIds = new Set<string>();
@@ -700,6 +694,12 @@ export function NodePropertyPanel({ node, nodes = [], edges = [], onUpdate, onDe
           </div>
         );
       })()}
+
+      <div className="pt-4 border-t">
+        <Button variant="destructive" size="sm" className="w-full" onClick={() => setConfirmOpen(true)}>
+          <Trash2 className="h-4 w-4 mr-1" /> Delete Node
+        </Button>
+      </div>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
