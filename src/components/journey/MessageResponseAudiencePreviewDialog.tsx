@@ -51,7 +51,10 @@ type LogRow = {
 
 const POSITIVE = new Set(["delivered", "read", "replied", "failed", "undelivered"]);
 
-function reachedStatus(row: LogRow, target: string): boolean {
+type EventMap = Record<string, Partial<Record<string, string>>>; // sid -> { event_type -> earliest ts }
+
+function statusReached(row: LogRow, target: string): boolean {
+  // Fallback when no event row exists (older logs). Honors window only via timestamp-based path; here just confirms current state.
   const s = String(row.status || "").toLowerCase();
   const d = String(row.delivery_status || "").toLowerCase();
   if (target === "delivered") return ["delivered", "read"].includes(s) || ["delivered", "read"].includes(d);
@@ -61,12 +64,28 @@ function reachedStatus(row: LogRow, target: string): boolean {
   return false;
 }
 
+/**
+ * Returns the timestamp at which the target status was reached for this SID, or null.
+ * For 'delivered', accepts either the delivered or the read event (read implies delivered).
+ */
+function eventTsFor(events: EventMap, sid: string | null, target: string): string | null {
+  if (!sid) return null;
+  const e = events[sid];
+  if (!e) return null;
+  if (target === "delivered") return e.delivered || e.read || null;
+  if (target === "read") return e.read || null;
+  if (target === "failed") return e.failed || null;
+  if (target === "undelivered") return e.undelivered || null;
+  return null;
+}
+
 export function MessageResponseAudiencePreviewDialog({
   open, onOpenChange, journeyId, targetNodeId, targetLabel, condition, waitValue, waitUnit,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<LogRow[]>([]);
   const [replyPhones, setReplyPhones] = useState<Array<{ phone: string; created_at: string }>>([]);
+  const [events, setEvents] = useState<EventMap>({});
   const [error, setError] = useState<string | null>(null);
 
   const windowMs = useMemo(() => waitMs(waitValue, waitUnit), [waitValue, waitUnit]);
@@ -102,7 +121,34 @@ export function MessageResponseAudiencePreviewDialog({
         if (cancel) return;
         setRows(all);
 
-        // 2) Inbound replies if needed
+        // 2) Per-SID engagement event timestamps (delivered/read/failed/undelivered)
+        const sids = Array.from(new Set(all.map((r) => r.twilio_message_sid).filter(Boolean))) as string[];
+        const evMap: EventMap = {};
+        if (sids.length) {
+          const CHUNK = 200;
+          for (let i = 0; i < sids.length; i += CHUNK) {
+            const slice = sids.slice(i, i + CHUNK);
+            const { data, error } = await supabase
+              .from("journey_message_events")
+              .select("whatsapp_message_sid, event_type, event_timestamp")
+              .eq("journey_id", journeyId)
+              .in("whatsapp_message_sid", slice);
+            if (error) throw error;
+            for (const e of (data || []) as any[]) {
+              const sid = e.whatsapp_message_sid as string;
+              const etype = String(e.event_type || "").toLowerCase();
+              const ts = e.event_timestamp as string;
+              if (!sid || !etype || !ts) continue;
+              const bucket = evMap[sid] || (evMap[sid] = {});
+              const cur = bucket[etype];
+              if (!cur || new Date(ts) < new Date(cur)) bucket[etype] = ts;
+            }
+          }
+        }
+        if (cancel) return;
+        setEvents(evMap);
+
+        // 3) Inbound replies if needed
         if (isReplyCond && all.length) {
           const earliest = all.reduce((m, r) => (r.sent_at < m ? r.sent_at : m), all[0].sent_at);
           const replies: Array<{ phone: string; created_at: string }> = [];
@@ -150,29 +196,40 @@ export function MessageResponseAudiencePreviewDialog({
     }
     // Evaluate every row first, then dedupe by contact_id keeping the best (matched) result.
     // This avoids dropping contacts whose latest send is queued/sending while an earlier send was Read.
-    const perRow: Array<{ row: LogRow; windowEnd: Date; matched: boolean; windowClosed: boolean }> = [];
+    const perRow: Array<{ row: LogRow; windowEnd: Date; matched: boolean; windowClosed: boolean; matchedAt?: Date }> = [];
     for (const row of rows) {
       const sent = new Date(row.sent_at).getTime();
       const winEnd = sent + windowMs;
       const windowClosed = now >= winEnd;
       let conditionMet = false;
+      let matchedAt: Date | undefined;
       if (isReplyCond) {
         const k = last10(row.journey_contacts?.phone || "");
         const arr = repliesByPhone.get(k) || [];
-        conditionMet = arr.some((ts) => {
+        for (const ts of arr) {
           const t = new Date(ts).getTime();
-          return t > sent && t <= winEnd;
-        });
+          if (t > sent && t <= winEnd) { conditionMet = true; matchedAt = new Date(t); break; }
+        }
       } else if (POSITIVE.has(baseCond)) {
-        conditionMet = reachedStatus(row, baseCond);
+        // Prefer per-event timestamp so the window is honored.
+        const evTs = eventTsFor(events, row.twilio_message_sid, baseCond);
+        if (evTs) {
+          const t = new Date(evTs).getTime();
+          if (t >= sent && t <= winEnd) { conditionMet = true; matchedAt = new Date(t); }
+        } else if (baseCond !== "read") {
+          // Legacy fallback for non-read targets when event row is missing.
+          // We cannot know the actual delivered/failed time, so we conservatively
+          // accept only if window is already closed (current status is durable).
+          conditionMet = windowClosed && statusReached(row, baseCond);
+        }
       }
       const matched = isNegative
         ? windowClosed && !conditionMet
         : conditionMet;
-      perRow.push({ row, windowEnd: new Date(winEnd), matched, windowClosed });
+      perRow.push({ row, windowEnd: new Date(winEnd), matched, windowClosed, matchedAt });
     }
     // Dedupe by contact_id: prefer a matched row; otherwise keep the most recent (rows already desc sorted).
-    const byContact = new Map<string, { row: LogRow; windowEnd: Date; matched: boolean; windowClosed: boolean }>();
+    const byContact = new Map<string, { row: LogRow; windowEnd: Date; matched: boolean; windowClosed: boolean; matchedAt?: Date }>();
     for (const entry of perRow) {
       const cid = entry.row.contact_id;
       if (!cid) continue;
@@ -181,7 +238,7 @@ export function MessageResponseAudiencePreviewDialog({
       if (!existing.matched && entry.matched) byContact.set(cid, entry);
     }
     return Array.from(byContact.values());
-  }, [rows, replyPhones, isReplyCond, isNegative, baseCond, windowMs]);
+  }, [rows, replyPhones, events, isReplyCond, isNegative, baseCond, windowMs]);
 
   const matched = evaluation.filter((e) => e.matched);
 
@@ -217,7 +274,7 @@ export function MessageResponseAudiencePreviewDialog({
                       <TableHead>Name</TableHead>
                       <TableHead>Phone</TableHead>
                       <TableHead>Sent At</TableHead>
-                      <TableHead>Current Status</TableHead>
+                      <TableHead>Matched At</TableHead>
                       <TableHead>Window Ends</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -227,12 +284,12 @@ export function MessageResponseAudiencePreviewDialog({
                         No contacts match yet. The upstream template may not have been sent, or no recipient satisfies the condition within the window.
                       </TableCell></TableRow>
                     ) : (
-                      matched.map(({ row, windowEnd }) => (
+                      matched.map(({ row, windowEnd, matchedAt }) => (
                         <TableRow key={row.id}>
                           <TableCell>{row.journey_contacts?.name || "—"}</TableCell>
                           <TableCell className="font-mono text-xs">{row.journey_contacts?.phone || "—"}</TableCell>
                           <TableCell className="text-xs">{format(new Date(row.sent_at), "dd MMM yyyy HH:mm")}</TableCell>
-                          <TableCell className="text-xs capitalize">{row.delivery_status || row.status || "—"}</TableCell>
+                          <TableCell className="text-xs">{matchedAt ? format(matchedAt, "dd MMM yyyy HH:mm") : "—"}</TableCell>
                           <TableCell className="text-xs">{format(windowEnd, "dd MMM yyyy HH:mm")}</TableCell>
                         </TableRow>
                       ))
