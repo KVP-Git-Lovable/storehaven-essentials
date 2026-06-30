@@ -208,7 +208,7 @@ export function MessageResponseAudiencePreviewDialog({
             <>
               <div className="mb-3">
                 <span className="text-lg font-semibold text-green-600">{matched.length}</span>{" "}
-                <span className="text-muted-foreground">of {dedupedRows.length} sent recipients would route to <b>Yes</b> right now.</span>
+                <span className="text-muted-foreground">of {evaluation.length} sent recipients would route to <b>Yes</b> right now.</span>
               </div>
               <div className="overflow-auto border rounded-md max-h-[55vh]">
                 <Table>
