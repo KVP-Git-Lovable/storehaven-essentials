@@ -1,63 +1,86 @@
+## Goal
+Add a new Journey node type — **Message Response** — that branches based on how a participant engaged with a previously sent WhatsApp Template message. Reuses existing webhook/event tracking, no schema migration, fully backward compatible with existing draft/active/paused journeys.
 
-## Diagnosis of existing videos
+## Scope
+Frontend (Journey Builder canvas + property panel + analytics) and the `process-journeys` edge function. No DB schema changes. No changes to existing node types, message sending, or webhook code.
 
-I probed both files in the `whatsapp-videos` bucket against the Twilio/Android checklist. **Both fail** the Android WhatsApp requirements:
+---
 
-| File | Profile / Level | Faststart (moov first) | Frame rate | Resolution | Audio | Size |
-|---|---|---|---|---|---|---|
-| `1782371501124_Trayi_Final__1_.mp4` | H.264 **High / 4.0** ❌ | **No** ❌ (mdat before moov) | CFR ~29.97 ✓ | 1080×1920 ✓ | AAC LC ✓ | 15.4 MB ✓ |
-| `1782369278840_Trayi_Final.mp4` | H.264 **High / 4.0** ❌ | **No** ❌ | **VFR** ❌ (r=29.97, avg=29.55) | 1080×1920 ✓ | AAC LC ✓ | 16.0 MB ⚠ at limit |
+## 1. New Node Component
+**File:** `src/components/journey/MessageResponseNode.tsx` (new)
+- Visual style mirrors `DecisionNode`: rounded card, target handle on top, two source handles (`yes` green / `no` red) on bottom.
+- Icon: `MessageCircle` (lucide-react), accent color teal/cyan to distinguish from purple Decision node.
+- Body shows: target template node label (e.g. "Welcome Template"), condition (e.g. "Read"), and wait period (e.g. "Wait 1h").
 
-Required by Android client: **H.264 Baseline ≤ L3.1**, `+faststart` (moov atom at file start), constant frame rate, AAC audio, ≤16 MB. Neither file meets profile/level or faststart — this matches exactly the Twilio assessment and explains the "video cannot be played" error on Android while iOS/Web (which are lenient) play fine.
+## 2. Register Node Type
+**File:** `src/pages/communication/JourneyBuilder.tsx`
+- Import `MessageResponseNode`, add `message_response: MessageResponseNode` to `nodeTypes`.
+- Add a new toolbar button (between Decision and Exit) labeled "Message Response" with `MessageCircle` icon.
+- Default node data: `{ target_node_id: null, condition: "read", wait_value: 1, wait_unit: "hours" }`.
 
-## Plan
+## 3. Property Panel Editor
+**File:** `src/components/journey/NodePropertyPanel.tsx`
+Add a new editor block for `node.type === "message_response"` with:
+- **Evaluate Message** dropdown — built from `nodes` prop, listing only message nodes that:
+  - appear **before** the current node in the graph (BFS from entry, stop at current node), AND
+  - have `channel === "whatsapp_template"` (or `message_type === "template"`).
+  - Each option label = template name or node label; value = node id.
+  - If no eligible upstream template node exists → show warning: *"Add a WhatsApp Template message node before this node to enable engagement tracking."*
+- **Condition** dropdown — Delivered, Not Delivered, Read, Not Read, Replied, Not Replied, Failed, Undelivered.
+- **Wait Period** — preset chips (Immediately, 30 min, 1 hr, 6 hr, 24 hr) + Custom (number + unit minutes/hours/days).
+- Validation: if `target_node_id` references a deleted node, show red banner *"Referenced message node no longer exists — please reselect."*
 
-### 1. Re-encode the two existing files in place (one-off)
-Run ffmpeg with the canonical Android-safe settings, upsert back into the same storage path so the public URLs already wired into templates `HX173fc431…` keep working with no template re-approval needed:
+## 4. Execution Logic
+**File:** `supabase/functions/process-journeys/index.ts` — add a new `if (nodeType === "message_response")` branch (parallel to the existing `decision` block at line 1161).
 
+Algorithm per enrollment:
+1. Read `target_node_id`, `condition`, `wait_value`, `wait_unit` from node data.
+2. **Wait gate** — compute `waitMs`; if `Date.now() < arrived_at + waitMs`, return without advancing (the existing `next_action_at` mechanism handles re-checking). On first visit, set `next_action_at = arrived_at + waitMs` so the cron picks it up at the right time.
+3. **Find the sent message** — query `journey_message_log` for `(enrollment_id = X, node_id = target_node_id)` to get the `twilio_message_sid` (or fall back to `(contact_id, journey_id, node_id)` for older rows).
+4. **Evaluate condition** against existing data:
+   - `delivered` / `read` / `failed` / `undelivered` → check `journey_message_log.delivery_status` / `status`.
+   - `replied` → check `whatsapp_messages` for inbound rows from the contact's phone with `created_at > sent_at`.
+   - Negative conditions (`not_delivered`, `not_read`, `not_replied`) → invert the result.
+5. Pick branch (`yes` / `no`) using the same `sourceHandle` matching pattern as the decision node, advance `current_node_id`.
+6. Evaluate **once** per visit — no retry loop.
+
+If the referenced template node was deleted or the message was never sent, route through `no` branch and log a warning event (so the journey doesn't deadlock).
+
+## 5. Analytics
+**File:** `src/hooks/useJourneyAnalytics.ts` and `src/pages/communication/JourneyAnalytics.tsx`
+- For each `message_response` node in the canvas, compute and surface:
+  - **Evaluated** — enrollments that passed through the node.
+  - **Matched (Yes)** — routed down `yes` handle.
+  - **Unmatched (No)** — routed down `no` handle.
+  - **Match Rate %** — Matched / Evaluated.
+- Reuse existing per-node aggregation pattern already used for message nodes; new metric rows appear in the Node Performance table with a distinct "Response" badge.
+
+## 6. Backward Compatibility
+- No DB schema changes.
+- Existing journeys load unchanged (no `message_response` nodes present).
+- New node type only activates when explicitly added.
+- Existing `decision`, `message`, `delay`, `entry`, `exit` paths and webhook handlers untouched.
+
+---
+
+## Technical Notes (for developer reference)
+
+**Canvas data shape (stored in `journeys.canvas_data` JSONB):**
+```json
+{
+  "id": "node_xxx",
+  "type": "message_response",
+  "data": {
+    "target_node_id": "node_yyy",
+    "condition": "read",
+    "wait_value": 1,
+    "wait_unit": "hours"
+  }
+}
 ```
-ffmpeg -i in.mp4 \
-  -c:v libx264 -profile:v baseline -level 3.1 -pix_fmt yuv420p \
-  -vf "scale='min(1280,iw)':'-2',fps=30" \
-  -b:v 1200k -maxrate 1500k -bufsize 3000k \
-  -c:a aac -b:a 96k -ac 1 -ar 44100 \
-  -movflags +faststart -y out.mp4
-```
 
-I'll do this from the sandbox (download via service role, transcode, re-upload with `upsert: true`, then `repair-media-url` on each affected template so Twilio refetches).
+**Wait-gate persistence:** reuse `enrollment.next_action_at`. On first arrival at the node, if `next_action_at` was set at edge-traversal time (current behavior), compute `delayUntil = next_action_at + waitMs` and if `now < delayUntil`, push `next_action_at = delayUntil` and return; otherwise evaluate.
 
-### 2. Make the uploader Android-safe by default (so this never recurs)
-Update `src/components/communication/WhatsAppVideosSection.tsx` to:
-- After file selection, probe metadata (size, type) client-side.
-- Show a clear "Will be re-encoded for Android compatibility" notice and a blocking error if > 30 MB pre-encode.
-- Send the file to a new **edge function** `whatsapp-video-normalize` instead of uploading directly to storage.
+**Reply detection query:** `whatsapp_messages` where `direction='inbound'` and normalized phone matches `journey_contacts.phone` and `created_at >` the matching `journey_message_log.sent_at`.
 
-### 3. New edge function `whatsapp-video-normalize`
-Server-side normalization pipeline:
-1. Receive the raw upload (multipart).
-2. Stream through **ffmpeg.wasm** (`@ffmpeg/ffmpeg` npm via Deno `npm:` specifier) using the exact command above.
-3. Validate output: ≤16 MB, has audio stream, H.264 baseline, faststart. If still >16 MB, retry with `-crf 28` / lower bitrate; surface a clear error if it still won't fit.
-4. Upload the normalized MP4 to `whatsapp-videos` with `contentType: 'video/mp4'`, `cacheControl: '31536000'`.
-5. Return the public URL.
-
-Fallback if ffmpeg.wasm proves too heavy for edge runtime memory: pivot to a **Cloudflare Stream / Mux-style** approach — but the request is to fix uploads to our own bucket, so ffmpeg.wasm is the first attempt and is known to work for short ≤30 MB clips inside Supabase Edge Functions (Deno + WASM, ~512 MB RAM budget).
-
-### 4. UI surfaces in the videos list
-- Add a small **"Android-compatible ✓ / ⚠ Re-encode"** badge per row, computed by a lightweight HEAD probe + range-read of the first 64 KB to check for `moov` (matches the check I ran above).
-- A **Re-encode** button per legacy row that pipes the existing object through `whatsapp-video-normalize` and replaces it in place.
-
-### 5. Template repair after re-encode
-After any in-place replace, automatically call the existing `whatsapp-templates/repair-media-url` for every template currently referencing the file URL so Twilio's Content API refreshes its cached media (otherwise Twilio may keep serving the stale rendition).
-
-## Technical notes
-- Public URLs stay stable because we upsert to the same storage key — no template edits required.
-- ffmpeg.wasm package: `npm:@ffmpeg/ffmpeg@0.12` + `npm:@ffmpeg/util@0.12`. Load `core-mt` for faster encode if available, else `core`.
-- All transcodes use **Baseline / L3.1 / yuv420p / +faststart / CFR 30 fps / AAC mono 96k** — strictly within WhatsApp Android limits.
-- Edge function deploys with `verify_jwt = true` (admin-only upload surface). CORS headers included.
-- No DB schema changes required.
-
-## Out of scope
-- No changes to `process-journeys`, `whatsapp-send`, or template-creation flow — they continue to consume the public URL.
-- No changes to non-video templates.
-
-Approve and I'll execute steps 1–5 in build mode.
+**No new tables, no new columns, no migrations.**

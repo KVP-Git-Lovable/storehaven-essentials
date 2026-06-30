@@ -1179,6 +1179,102 @@ async function processEnrollment(
     return { processed: true, sent: 0 };
   }
 
+  if (nodeType === "message_response") {
+    const data = currentNode.data || {};
+    const targetNodeId: string | null = data.target_node_id || null;
+    const condition: string = data.condition || "read";
+    const waitValue = Number(data.wait_value || 0);
+    const waitUnit: string = data.wait_unit || "hours";
+    const waitMs =
+      waitUnit === "minutes" ? waitValue * 60_000 :
+      waitUnit === "days" ? waitValue * 86_400_000 :
+      waitValue * 3_600_000;
+
+    const arrived = enrollment.next_action_at ? new Date(enrollment.next_action_at).getTime() : Date.now();
+    const dueAt = arrived + waitMs;
+    if (Date.now() < dueAt) {
+      // Push next_action_at forward so cron re-evaluates after wait elapses.
+      if (waitMs > 0 && arrived + waitMs > arrived) {
+        await supabase.from("journey_enrollments")
+          .update({ next_action_at: new Date(dueAt).toISOString() })
+          .eq("id", enrollment.id);
+      }
+      return { processed: true, sent: 0 };
+    }
+
+    // Look up the sent template message for this enrollment + target node
+    let matched = false;
+    if (targetNodeId) {
+      const { data: logs } = await supabase
+        .from("journey_message_log")
+        .select("twilio_message_sid, status, delivery_status, sent_at, journey_contacts(phone)")
+        .eq("enrollment_id", enrollment.id)
+        .eq("node_id", targetNodeId)
+        .limit(1);
+      const log: any = (logs && logs[0]) || null;
+
+      if (log) {
+        const s = String(log.status || "").toLowerCase();
+        const d = String(log.delivery_status || "").toLowerCase();
+        const isDelivered = s === "delivered" || d === "delivered" || s === "read" || d === "read";
+        const isRead = s === "read" || d === "read";
+        const isFailed = s === "failed" || d === "failed";
+        const isUndelivered = s === "undelivered" || d === "undelivered";
+
+        let isReplied = false;
+        if (condition === "replied" || condition === "not_replied") {
+          const phone: string = (log.journey_contacts?.phone || enrollment.journey_contacts?.phone || "").replace(/\D/g, "");
+          if (phone && log.sent_at) {
+            const { data: phoneReplies } = await supabase
+              .from("whatsapp_messages")
+              .select("id, phone")
+              .eq("direction", "inbound")
+              .gt("created_at", log.sent_at)
+              .limit(200);
+            isReplied = (phoneReplies || []).some(
+              (r: any) => String(r.phone || "").replace(/\D/g, "").endsWith(phone.slice(-10)),
+            );
+          }
+        }
+
+        switch (condition) {
+          case "delivered": matched = isDelivered; break;
+          case "not_delivered": matched = !isDelivered; break;
+          case "read": matched = isRead; break;
+          case "not_read": matched = !isRead; break;
+          case "replied": matched = isReplied; break;
+          case "not_replied": matched = !isReplied; break;
+          case "failed": matched = isFailed; break;
+          case "undelivered": matched = isUndelivered; break;
+          default: matched = false;
+        }
+      }
+      // If no log row found, route through "no" branch (cannot evaluate).
+    }
+
+    // Log the evaluation result for analytics (idempotent on enrollment+node+channel)
+    await supabase.from("journey_message_log").insert({
+      journey_id: journey.id,
+      enrollment_id: enrollment.id,
+      node_id: currentNode.id,
+      contact_id: enrollment.contact_id,
+      channel: "message_response",
+      status: matched ? "yes" : "no",
+      template_body: `condition=${condition}; target=${targetNodeId || "—"}`,
+    });
+
+    const handleId = matched ? "yes" : "no";
+    const nextEdge = canvas.edges.find(
+      (e: any) => e.source === currentNode.id && e.sourceHandle === handleId,
+    ) || canvas.edges.find((e: any) => e.source === currentNode.id && !e.sourceHandle);
+    if (nextEdge) {
+      await supabase.from("journey_enrollments")
+        .update({ current_node_id: nextEdge.target, next_action_at: new Date().toISOString() })
+        .eq("id", enrollment.id);
+    }
+    return { processed: true, sent: 0 };
+  }
+
   // Entry -> advance and immediately process the next node in the same run.
   const nextEdge = canvas.edges.find((e: any) => e.source === currentNode.id);
   if (nextEdge) {
