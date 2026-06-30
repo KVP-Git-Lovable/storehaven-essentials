@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Save, Play, Pause, Users, Mail, Clock, GitBranch, LogOut, BarChart3, MessageCircleMore, Pencil, MousePointerClick, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { EditJourneyDetailsDialog } from "@/components/journey/EditJourneyDetailsDialog";
+import { ResumeJourneyDialog } from "@/components/journey/ResumeJourneyDialog";
 
 const nodeTypes = {
   entry: EntryNode,
@@ -49,6 +50,7 @@ export default function JourneyBuilder() {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [editDetailsOpen, setEditDetailsOpen] = useState(false);
+  const [resumeDialogOpen, setResumeDialogOpen] = useState(false);
   const initialized = useRef(false);
 
   const { data: journey, isLoading } = useQuery({
@@ -134,6 +136,14 @@ export default function JourneyBuilder() {
     mutationFn: async (status: string) => {
       // Persist canvas first so the edge function reads the latest entry node
       await supabase.from("journeys").update({ canvas_data: { nodes, edges } }).eq("id", id!);
+      if (status === "resume") {
+        const { data, error } = await supabase.functions.invoke("journey-actions", {
+          body: { action: "resume", journey_id: id },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        return { ...data, _action: "resume" };
+      }
       if (status === "active") {
         // Use edge function to (re)resolve audience from list view + clear stale enrollments
         const { data, error } = await supabase.functions.invoke("journey-actions", {
@@ -150,7 +160,13 @@ export default function JourneyBuilder() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["journey", id] });
-      if (data?.enrolled !== undefined) {
+      if (data?._action === "resume") {
+        if (data.resumed > 0) {
+          toast.success(`Journey resumed — ${data.resumed} previously completed participant${data.resumed === 1 ? "" : "s"} continuing from the newly added node`);
+        } else {
+          toast.success("Journey resumed");
+        }
+      } else if (data?.enrolled !== undefined) {
         const matched = data.matched ?? data.enrolled;
         const skipped = data.skipped ?? 0;
         if (data.enrolled === 0 && matched > 0) {
@@ -210,9 +226,13 @@ export default function JourneyBuilder() {
           <Button variant="outline" size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
             <Save className="mr-1 h-4 w-4" /> Save
           </Button>
-          {journey?.status === "draft" || journey?.status === "paused" ? (
+          {journey?.status === "draft" ? (
             <Button size="sm" onClick={() => statusMutation.mutate("active")}>
               <Play className="mr-1 h-4 w-4" /> Activate
+            </Button>
+          ) : journey?.status === "paused" ? (
+            <Button size="sm" onClick={() => setResumeDialogOpen(true)}>
+              <Play className="mr-1 h-4 w-4" /> Resume
             </Button>
           ) : (
             <Button size="sm" variant="secondary" onClick={() => statusMutation.mutate("paused")}>
@@ -294,6 +314,14 @@ export default function JourneyBuilder() {
         onOpenChange={setEditDetailsOpen}
         journey={journey}
       />
+      {id && (
+        <ResumeJourneyDialog
+          open={resumeDialogOpen}
+          onOpenChange={setResumeDialogOpen}
+          journeyId={id}
+          onConfirmed={() => statusMutation.mutate("resume")}
+        />
+      )}
     </div>
   );
 }
