@@ -1225,17 +1225,6 @@ async function processEnrollment(
         if (condition === "replied" || condition === "not_replied") {
           const phone: string = (log.journey_contacts?.phone || enrollment.journey_contacts?.phone || "").replace(/\D/g, "");
           if (phone && log.sent_at) {
-            const { data: replies } = await supabase
-              .from("whatsapp_messages")
-              .select("id")
-              .eq("direction", "inbound")
-              .gt("created_at", log.sent_at)
-              .limit(50);
-            isReplied = (replies || []).some((r: any) => {
-              // We can't filter on derived phone in SQL easily; loop instead.
-              return true; // Phone already filtered below
-            });
-            // Re-query with phone normalization on server side
             const { data: phoneReplies } = await supabase
               .from("whatsapp_messages")
               .select("id, phone")
