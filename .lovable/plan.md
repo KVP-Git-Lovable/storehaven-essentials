@@ -1,56 +1,41 @@
-# Preview Audience for Message Response Node
+# Why the count is the same for "within 1 hour" and "within 3 days"
 
-Add a **Preview Audience** button inside the Message Response node's property panel (right side editor). It evaluates, against the live `journey_message_log` for the selected upstream WhatsApp Template node, which contacts would currently satisfy the configured condition within the configured wait window.
+The current Audience Preview logic in `src/components/journey/MessageResponseAudiencePreviewDialog.tsx` only checks the **current status** of each sent message (e.g. is `status` or `delivery_status` equal to `read`?). It does **not** look at *when* the read event actually arrived.
 
-## Where it appears
+So the window value (1 hour vs 3 days) has no effect for `read` / `delivered` / `failed` / `undelivered` — every contact whose message is currently marked Read counts as a match, regardless of how long after the send the read actually happened. That is why 1 hour and 3 days both return 329.
 
-In `src/components/journey/NodePropertyPanel.tsx`, inside the existing `node.type === "message_response"` block (around line 693), directly below the **Wait Period** section. The button is enabled only when:
-- An upstream template node is selected (`target_node_id` exists), AND
-- Wait Period is set (any value, including 0 = "Immediately").
+Only the `replied` condition currently respects the time window, because that path joins on `whatsapp_messages.created_at` and compares it to the send time.
 
-Disabled state shows a tooltip: *"Select an upstream template and wait period first."*
+# Fix
 
-## What it does (no backend changes)
+Use the per-event timestamps already stored in `journey_message_events` (populated by `whatsapp-inbound` whenever Twilio reports `sent`, `delivered`, `read`, `failed`, `undelivered`). Each row has `whatsapp_message_sid`, `event_type`, and `event_timestamp`.
 
-On click, opens a dialog that runs a Supabase query against the existing `journey_message_log` table — same source already powering Journey Analytics → View Logs.
+### Changes in `MessageResponseAudiencePreviewDialog.tsx`
 
-Logic (client-side):
-1. Compute `waitMs` from `wait_value` + `wait_unit` (minutes/hours/days).
-2. Query rows for this journey scoped to the selected upstream message node:
-   ```ts
-   supabase.from("journey_message_log")
-     .select("id, contact_id, status, delivery_status, sent_at, twilio_message_sid, journey_contacts(name, phone)")
-     .eq("journey_id", journeyId)
-     .eq("node_id", target_node_id)
-     .not("sent_at", "is", null)
-     .order("sent_at", { ascending: false });
-   ```
-   Paginated in 1000-row batches like `useJourneyMessageLogs` already does.
-3. For the **Replied** / **Not Replied** conditions, also fetch inbound `whatsapp_messages` (paginated) and match by last-10-digits of phone with `created_at > sent_at` and `created_at <= sent_at + waitMs` — mirroring the existing `process-journeys` reply-detection rule, so preview matches the live evaluation.
-4. For each contact, evaluate condition within the wait window:
-   - **Delivered / Read / Failed / Undelivered / Replied**: status (or reply) achieved at any timestamp ≤ `sent_at + waitMs`.
-   - **Not Delivered / Not Read / Not Replied**: contact has a `sent_at` row but did NOT reach the target status by `sent_at + waitMs` AND `now() >= sent_at + waitMs` (so we don't count contacts still inside the wait window as "Not …" yet).
-5. Deduplicate by `contact_id` (keep most recent send).
+1. After fetching the `journey_message_log` rows for the node, collect every non-null `twilio_message_sid`.
+2. Fetch all matching `journey_message_events` rows (paginated) for that journey and those SIDs, selecting `whatsapp_message_sid, event_type, event_timestamp`. Build a map: `sid -> { delivered?: ts, read?: ts, failed?: ts, undelivered?: ts }` (keep the earliest timestamp per event_type).
+3. Replace `reachedStatus(row, baseCond)` with a timestamp-aware check:
+   - For `baseCond === 'read'`: matched if `events[sid].read` exists AND `read_ts - sent_at <= windowMs`.
+   - For `baseCond === 'delivered'`: matched if (`events[sid].delivered` OR `events[sid].read`) within the window. (Read implies delivered.)
+   - For `baseCond === 'failed'` / `'undelivered'`: same pattern using the corresponding event timestamp; fall back to row status only if no event row exists (legacy data without events).
+4. Negative conditions (`not_read`, `not_delivered`, …) keep the existing rule: window must be closed AND the positive condition was NOT met within the window.
+5. `replied` / `not_replied` logic stays unchanged — it already uses timestamps.
+6. The dedupe-by-`contact_id` step stays: prefer a matched row, otherwise keep most recent. With the new evaluation a contact is counted matched only if at least one of their sends had a Read (or chosen) event inside that send's own window.
+7. Optional UI nicety: in the matched rows table, show "Read at" (event timestamp) instead of/in addition to "Current Status" so the user can audit the within-window decision.
 
-## UI
+### Edge cases handled
 
-- Button label: **Preview Audience** with refresh icon. Sits below Wait Period section.
-- On click → `Dialog` titled "Audience Preview — {condition} within {wait_value} {wait_unit}".
-  - Header: total matching count (e.g. "12 contacts will route to **Yes**").
-  - Body: scrollable table with columns *Name, Phone, Sent At, Current Status, Window Ends At*.
-  - Empty state: "No contacts match yet. The upstream template may not have been sent, or the wait window hasn't surfaced any matches."
-- Read-only — no edits, no sends, no writes anywhere.
+- Messages with no SID (still queued / failed before send) — skipped for status conditions; never match positive `read`.
+- Older messages logged before `journey_message_events` was populated — fall back to current `status` only for `delivered`/`failed`/`undelivered`; for `read` require the event row (otherwise we cannot honor the window and would re-introduce the current bug). Document this in a small comment.
+- Multiple `read` webhooks for the same SID — `(whatsapp_message_sid, event_type)` is unique, so at most one row per event per SID.
 
-## Files touched
+### Scope
 
-- `src/components/journey/NodePropertyPanel.tsx` — add button + dialog state.
-- `src/components/journey/MessageResponseAudiencePreviewDialog.tsx` — new component encapsulating the query and table.
+- Frontend only. No edge function, schema, or other workflow changes.
+- File touched: `src/components/journey/MessageResponseAudiencePreviewDialog.tsx`.
 
-No edge function changes, no DB migration, no changes to evaluation logic in `process-journeys`, no changes to other node types.
+### Verification
 
-## Example
-
-Template sent to user A at 27 Jun 10:05 IST. Wait = 3 days, Condition = Read.
-- Window ends 30 Jun 10:05 IST.
-- If a `read`/`delivery_status=read` row exists for A with `sent_at` 27 Jun 10:05 (same row updated on Twilio webhook) and the read happened within the window → A appears in preview.
-- If A only reached `delivered` and 30 Jun 10:05 has passed → A is excluded (preview is "would route Yes today").
+- Open the same node with "within 1 hour" and "within 3 days" — counts should differ (1h ≤ 3d).
+- Spot-check one matched contact in View Logs: their Twilio `read` timestamp should be within 1 hour after `sent_at`.
+- Reset to "within 30 days" — count should be ≥ the 3-day count and ≤ total contacts whose current status is Read.
