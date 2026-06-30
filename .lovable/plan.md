@@ -1,86 +1,56 @@
-## Goal
-Add a new Journey node type — **Message Response** — that branches based on how a participant engaged with a previously sent WhatsApp Template message. Reuses existing webhook/event tracking, no schema migration, fully backward compatible with existing draft/active/paused journeys.
+# Preview Audience for Message Response Node
 
-## Scope
-Frontend (Journey Builder canvas + property panel + analytics) and the `process-journeys` edge function. No DB schema changes. No changes to existing node types, message sending, or webhook code.
+Add a **Preview Audience** button inside the Message Response node's property panel (right side editor). It evaluates, against the live `journey_message_log` for the selected upstream WhatsApp Template node, which contacts would currently satisfy the configured condition within the configured wait window.
 
----
+## Where it appears
 
-## 1. New Node Component
-**File:** `src/components/journey/MessageResponseNode.tsx` (new)
-- Visual style mirrors `DecisionNode`: rounded card, target handle on top, two source handles (`yes` green / `no` red) on bottom.
-- Icon: `MessageCircle` (lucide-react), accent color teal/cyan to distinguish from purple Decision node.
-- Body shows: target template node label (e.g. "Welcome Template"), condition (e.g. "Read"), and wait period (e.g. "Wait 1h").
+In `src/components/journey/NodePropertyPanel.tsx`, inside the existing `node.type === "message_response"` block (around line 693), directly below the **Wait Period** section. The button is enabled only when:
+- An upstream template node is selected (`target_node_id` exists), AND
+- Wait Period is set (any value, including 0 = "Immediately").
 
-## 2. Register Node Type
-**File:** `src/pages/communication/JourneyBuilder.tsx`
-- Import `MessageResponseNode`, add `message_response: MessageResponseNode` to `nodeTypes`.
-- Add a new toolbar button (between Decision and Exit) labeled "Message Response" with `MessageCircle` icon.
-- Default node data: `{ target_node_id: null, condition: "read", wait_value: 1, wait_unit: "hours" }`.
+Disabled state shows a tooltip: *"Select an upstream template and wait period first."*
 
-## 3. Property Panel Editor
-**File:** `src/components/journey/NodePropertyPanel.tsx`
-Add a new editor block for `node.type === "message_response"` with:
-- **Evaluate Message** dropdown — built from `nodes` prop, listing only message nodes that:
-  - appear **before** the current node in the graph (BFS from entry, stop at current node), AND
-  - have `channel === "whatsapp_template"` (or `message_type === "template"`).
-  - Each option label = template name or node label; value = node id.
-  - If no eligible upstream template node exists → show warning: *"Add a WhatsApp Template message node before this node to enable engagement tracking."*
-- **Condition** dropdown — Delivered, Not Delivered, Read, Not Read, Replied, Not Replied, Failed, Undelivered.
-- **Wait Period** — preset chips (Immediately, 30 min, 1 hr, 6 hr, 24 hr) + Custom (number + unit minutes/hours/days).
-- Validation: if `target_node_id` references a deleted node, show red banner *"Referenced message node no longer exists — please reselect."*
+## What it does (no backend changes)
 
-## 4. Execution Logic
-**File:** `supabase/functions/process-journeys/index.ts` — add a new `if (nodeType === "message_response")` branch (parallel to the existing `decision` block at line 1161).
+On click, opens a dialog that runs a Supabase query against the existing `journey_message_log` table — same source already powering Journey Analytics → View Logs.
 
-Algorithm per enrollment:
-1. Read `target_node_id`, `condition`, `wait_value`, `wait_unit` from node data.
-2. **Wait gate** — compute `waitMs`; if `Date.now() < arrived_at + waitMs`, return without advancing (the existing `next_action_at` mechanism handles re-checking). On first visit, set `next_action_at = arrived_at + waitMs` so the cron picks it up at the right time.
-3. **Find the sent message** — query `journey_message_log` for `(enrollment_id = X, node_id = target_node_id)` to get the `twilio_message_sid` (or fall back to `(contact_id, journey_id, node_id)` for older rows).
-4. **Evaluate condition** against existing data:
-   - `delivered` / `read` / `failed` / `undelivered` → check `journey_message_log.delivery_status` / `status`.
-   - `replied` → check `whatsapp_messages` for inbound rows from the contact's phone with `created_at > sent_at`.
-   - Negative conditions (`not_delivered`, `not_read`, `not_replied`) → invert the result.
-5. Pick branch (`yes` / `no`) using the same `sourceHandle` matching pattern as the decision node, advance `current_node_id`.
-6. Evaluate **once** per visit — no retry loop.
+Logic (client-side):
+1. Compute `waitMs` from `wait_value` + `wait_unit` (minutes/hours/days).
+2. Query rows for this journey scoped to the selected upstream message node:
+   ```ts
+   supabase.from("journey_message_log")
+     .select("id, contact_id, status, delivery_status, sent_at, twilio_message_sid, journey_contacts(name, phone)")
+     .eq("journey_id", journeyId)
+     .eq("node_id", target_node_id)
+     .not("sent_at", "is", null)
+     .order("sent_at", { ascending: false });
+   ```
+   Paginated in 1000-row batches like `useJourneyMessageLogs` already does.
+3. For the **Replied** / **Not Replied** conditions, also fetch inbound `whatsapp_messages` (paginated) and match by last-10-digits of phone with `created_at > sent_at` and `created_at <= sent_at + waitMs` — mirroring the existing `process-journeys` reply-detection rule, so preview matches the live evaluation.
+4. For each contact, evaluate condition within the wait window:
+   - **Delivered / Read / Failed / Undelivered / Replied**: status (or reply) achieved at any timestamp ≤ `sent_at + waitMs`.
+   - **Not Delivered / Not Read / Not Replied**: contact has a `sent_at` row but did NOT reach the target status by `sent_at + waitMs` AND `now() >= sent_at + waitMs` (so we don't count contacts still inside the wait window as "Not …" yet).
+5. Deduplicate by `contact_id` (keep most recent send).
 
-If the referenced template node was deleted or the message was never sent, route through `no` branch and log a warning event (so the journey doesn't deadlock).
+## UI
 
-## 5. Analytics
-**File:** `src/hooks/useJourneyAnalytics.ts` and `src/pages/communication/JourneyAnalytics.tsx`
-- For each `message_response` node in the canvas, compute and surface:
-  - **Evaluated** — enrollments that passed through the node.
-  - **Matched (Yes)** — routed down `yes` handle.
-  - **Unmatched (No)** — routed down `no` handle.
-  - **Match Rate %** — Matched / Evaluated.
-- Reuse existing per-node aggregation pattern already used for message nodes; new metric rows appear in the Node Performance table with a distinct "Response" badge.
+- Button label: **Preview Audience** with refresh icon. Sits below Wait Period section.
+- On click → `Dialog` titled "Audience Preview — {condition} within {wait_value} {wait_unit}".
+  - Header: total matching count (e.g. "12 contacts will route to **Yes**").
+  - Body: scrollable table with columns *Name, Phone, Sent At, Current Status, Window Ends At*.
+  - Empty state: "No contacts match yet. The upstream template may not have been sent, or the wait window hasn't surfaced any matches."
+- Read-only — no edits, no sends, no writes anywhere.
 
-## 6. Backward Compatibility
-- No DB schema changes.
-- Existing journeys load unchanged (no `message_response` nodes present).
-- New node type only activates when explicitly added.
-- Existing `decision`, `message`, `delay`, `entry`, `exit` paths and webhook handlers untouched.
+## Files touched
 
----
+- `src/components/journey/NodePropertyPanel.tsx` — add button + dialog state.
+- `src/components/journey/MessageResponseAudiencePreviewDialog.tsx` — new component encapsulating the query and table.
 
-## Technical Notes (for developer reference)
+No edge function changes, no DB migration, no changes to evaluation logic in `process-journeys`, no changes to other node types.
 
-**Canvas data shape (stored in `journeys.canvas_data` JSONB):**
-```json
-{
-  "id": "node_xxx",
-  "type": "message_response",
-  "data": {
-    "target_node_id": "node_yyy",
-    "condition": "read",
-    "wait_value": 1,
-    "wait_unit": "hours"
-  }
-}
-```
+## Example
 
-**Wait-gate persistence:** reuse `enrollment.next_action_at`. On first arrival at the node, if `next_action_at` was set at edge-traversal time (current behavior), compute `delayUntil = next_action_at + waitMs` and if `now < delayUntil`, push `next_action_at = delayUntil` and return; otherwise evaluate.
-
-**Reply detection query:** `whatsapp_messages` where `direction='inbound'` and normalized phone matches `journey_contacts.phone` and `created_at >` the matching `journey_message_log.sent_at`.
-
-**No new tables, no new columns, no migrations.**
+Template sent to user A at 27 Jun 10:05 IST. Wait = 3 days, Condition = Read.
+- Window ends 30 Jun 10:05 IST.
+- If a `read`/`delivery_status=read` row exists for A with `sent_at` 27 Jun 10:05 (same row updated on Twilio webhook) and the read happened within the window → A appears in preview.
+- If A only reached `delivered` and 30 Jun 10:05 has passed → A is excluded (preview is "would route Yes today").
