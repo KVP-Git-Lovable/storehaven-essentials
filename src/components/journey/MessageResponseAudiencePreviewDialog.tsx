@@ -135,21 +135,8 @@ export function MessageResponseAudiencePreviewDialog({
     return () => { cancel = true; };
   }, [open, journeyId, targetNodeId, isReplyCond]);
 
-  // Dedupe by contact_id keeping most recent send (rows already sorted desc).
-  const dedupedRows = useMemo(() => {
-    const seen = new Set<string>();
-    const out: LogRow[] = [];
-    for (const r of rows) {
-      if (!r.contact_id || seen.has(r.contact_id)) continue;
-      seen.add(r.contact_id);
-      out.push(r);
-    }
-    return out;
-  }, [rows]);
-
   const evaluation = useMemo(() => {
     const now = Date.now();
-    const matches: Array<{ row: LogRow; windowEnd: Date; matched: boolean; windowClosed: boolean }> = [];
     // Precompute reply set by last-10 digits with timestamps
     const repliesByPhone = new Map<string, string[]>();
     if (isReplyCond) {
@@ -161,7 +148,10 @@ export function MessageResponseAudiencePreviewDialog({
         repliesByPhone.set(k, arr);
       }
     }
-    for (const row of dedupedRows) {
+    // Evaluate every row first, then dedupe by contact_id keeping the best (matched) result.
+    // This avoids dropping contacts whose latest send is queued/sending while an earlier send was Read.
+    const perRow: Array<{ row: LogRow; windowEnd: Date; matched: boolean; windowClosed: boolean }> = [];
+    for (const row of rows) {
       const sent = new Date(row.sent_at).getTime();
       const winEnd = sent + windowMs;
       const windowClosed = now >= winEnd;
@@ -174,18 +164,24 @@ export function MessageResponseAudiencePreviewDialog({
           return t > sent && t <= winEnd;
         });
       } else if (POSITIVE.has(baseCond)) {
-        // We can only check current status (no per-status timestamps stored).
-        // Treat current achievement as occurring within the window if window not yet closed,
-        // or if closed, only count as matched (mirrors process-journeys behavior of evaluating once when window ends).
         conditionMet = reachedStatus(row, baseCond);
       }
       const matched = isNegative
         ? windowClosed && !conditionMet
         : conditionMet;
-      matches.push({ row, windowEnd: new Date(winEnd), matched, windowClosed });
+      perRow.push({ row, windowEnd: new Date(winEnd), matched, windowClosed });
     }
-    return matches;
-  }, [dedupedRows, replyPhones, isReplyCond, isNegative, baseCond, windowMs]);
+    // Dedupe by contact_id: prefer a matched row; otherwise keep the most recent (rows already desc sorted).
+    const byContact = new Map<string, { row: LogRow; windowEnd: Date; matched: boolean; windowClosed: boolean }>();
+    for (const entry of perRow) {
+      const cid = entry.row.contact_id;
+      if (!cid) continue;
+      const existing = byContact.get(cid);
+      if (!existing) { byContact.set(cid, entry); continue; }
+      if (!existing.matched && entry.matched) byContact.set(cid, entry);
+    }
+    return Array.from(byContact.values());
+  }, [rows, replyPhones, isReplyCond, isNegative, baseCond, windowMs]);
 
   const matched = evaluation.filter((e) => e.matched);
 
@@ -212,7 +208,7 @@ export function MessageResponseAudiencePreviewDialog({
             <>
               <div className="mb-3">
                 <span className="text-lg font-semibold text-green-600">{matched.length}</span>{" "}
-                <span className="text-muted-foreground">of {dedupedRows.length} sent recipients would route to <b>Yes</b> right now.</span>
+                <span className="text-muted-foreground">of {evaluation.length} sent recipients would route to <b>Yes</b> right now.</span>
               </div>
               <div className="overflow-auto border rounded-md max-h-[55vh]">
                 <Table>
