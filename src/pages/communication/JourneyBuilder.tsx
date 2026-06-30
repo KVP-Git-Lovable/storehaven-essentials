@@ -21,10 +21,11 @@ import { MessageNode } from "@/components/journey/MessageNode";
 import { DelayNode } from "@/components/journey/DelayNode";
 import { DecisionNode } from "@/components/journey/DecisionNode";
 import { ExitNode } from "@/components/journey/ExitNode";
+import { MessageResponseNode } from "@/components/journey/MessageResponseNode";
 import { NodePropertyPanel } from "@/components/journey/NodePropertyPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Save, Play, Pause, Users, Mail, Clock, GitBranch, LogOut, BarChart3, MessageCircleMore, Pencil, MousePointerClick } from "lucide-react";
+import { ArrowLeft, Save, Play, Pause, Users, Mail, Clock, GitBranch, LogOut, BarChart3, MessageCircleMore, Pencil, MousePointerClick, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { EditJourneyDetailsDialog } from "@/components/journey/EditJourneyDetailsDialog";
 
@@ -34,6 +35,7 @@ const nodeTypes = {
   delay: DelayNode,
   decision: DecisionNode,
   exit: ExitNode,
+  message_response: MessageResponseNode,
 };
 
 let idCounter = 0;
@@ -101,6 +103,7 @@ export default function JourneyBuilder() {
       message: { channel: "email", template_body: "", whatsapp_template_id: null, whatsapp_template_name: "", template_variables: {} },
       delay: { duration: 1, unit: "days" },
       decision: { condition: "opened" },
+      message_response: { target_node_id: null, target_node_label: "", condition: "read", wait_value: 1, wait_unit: "hours" },
       exit: {},
     };
     const newNode: Node = {
@@ -252,6 +255,9 @@ export default function JourneyBuilder() {
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => addNode("decision")} title="Decision Node">
                   <GitBranch className="h-4 w-4 mr-1" /> Decision
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => addNode("message_response")} title="Message Response Node">
+                  <MessageCircle className="h-4 w-4 mr-1" /> Message Response
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => addNode("exit")} title="Exit Node">
                   <LogOut className="h-4 w-4 mr-1" /> Exit
