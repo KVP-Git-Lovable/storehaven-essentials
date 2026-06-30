@@ -73,6 +73,25 @@ function normalizeStatus(row: any, clickedSids: Set<string>): string {
   return s || "unknown";
 }
 
+// Higher = "better" outcome. Used to dedupe multiple sends per contact so the
+// View Logs counts match the cumulative unique-contact Journey Funnel.
+const STATUS_RANK: Record<string, number> = {
+  clicked: 7,
+  read: 6,
+  delivered: 5,
+  sent: 4,
+  sending: 3,
+  queued: 2,
+  undelivered: 1,
+  failed: 0,
+  unknown: -1,
+};
+
+function last10(p: string | null | undefined) {
+  const d = String(p || "").replace(/\D/g, "");
+  return d.slice(-10);
+}
+
 export function useJourneyMessageLogs(journeyId: string | undefined, enabled: boolean) {
   return useQuery({
     queryKey: ["journey-message-logs-full", journeyId],
@@ -82,7 +101,7 @@ export function useJourneyMessageLogs(journeyId: string | undefined, enabled: bo
         fetchAllLogs(journeyId!),
         fetchClickedSids(journeyId!),
       ]);
-      return logs.map((r) => ({
+      const mapped: JourneyLogRow[] = logs.map((r) => ({
         id: r.id,
         contact_id: r.contact_id,
         name: r.journey_contacts?.name || "—",
@@ -96,6 +115,23 @@ export function useJourneyMessageLogs(journeyId: string | undefined, enabled: bo
         sid: r.twilio_message_sid,
         channel: r.channel,
       }));
+
+      // Dedupe per contact (phone last-10, fallback contact_id) keeping the
+      // best-outcome row so totals align with the unique-contact Journey Funnel.
+      const byContact = new Map<string, JourneyLogRow>();
+      for (const row of mapped) {
+        const key = last10(row.phone) || row.contact_id || row.id;
+        const existing = byContact.get(key);
+        if (!existing) { byContact.set(key, row); continue; }
+        const a = STATUS_RANK[row.status] ?? -1;
+        const b = STATUS_RANK[existing.status] ?? -1;
+        if (a > b || (a === b && new Date(row.sent_at) > new Date(existing.sent_at))) {
+          byContact.set(key, row);
+        }
+      }
+      return Array.from(byContact.values()).sort(
+        (x, y) => new Date(y.sent_at).getTime() - new Date(x.sent_at).getTime()
+      );
     },
   });
 }
