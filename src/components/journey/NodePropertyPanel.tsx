@@ -562,6 +562,145 @@ export function NodePropertyPanel({ node, nodes = [], edges = [], onUpdate, onDe
         </Button>
       </div>
 
+      {node.type === "message_response" && (() => {
+        // Find all upstream WhatsApp Template message nodes (those reachable backwards from this node)
+        const upstreamIds = new Set<string>();
+        const queue: string[] = [node.id];
+        const visited = new Set<string>();
+        while (queue.length) {
+          const cur = queue.shift()!;
+          if (visited.has(cur)) continue;
+          visited.add(cur);
+          for (const e of edges.filter((ed) => ed.target === cur)) {
+            upstreamIds.add(e.source);
+            queue.push(e.source);
+          }
+        }
+        const templateOptions = nodes.filter((n) => {
+          if (!upstreamIds.has(n.id)) return false;
+          if (n.type !== "message") return false;
+          const d: any = n.data || {};
+          const messageType = d.message_type || (d.channel === "whatsapp_template" ? "template" : (d.channel ? "freeform" : "template"));
+          return messageType === "template";
+        });
+
+        const targetId = (node.data as any).target_node_id || "";
+        const targetExists = targetId && nodes.some((n) => n.id === targetId);
+
+        const updateMR = (patch: Record<string, any>) =>
+          onUpdate(node.id, { ...node.data, ...patch });
+
+        const presets: { label: string; v: number; u: string }[] = [
+          { label: "Immediately", v: 0, u: "minutes" },
+          { label: "30 min", v: 30, u: "minutes" },
+          { label: "1 hr", v: 1, u: "hours" },
+          { label: "6 hr", v: 6, u: "hours" },
+          { label: "24 hr", v: 24, u: "hours" },
+        ];
+        const waitV = Number((node.data as any).wait_value ?? 1);
+        const waitU = String((node.data as any).wait_unit ?? "hours");
+
+        return (
+          <div className="space-y-3 pt-2">
+            {templateOptions.length === 0 && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-800 flex gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                Add a WhatsApp Template message node before this node to enable engagement tracking.
+              </div>
+            )}
+            {targetId && !targetExists && (
+              <div className="rounded-md border border-destructive bg-destructive/10 p-2 text-[11px] text-destructive">
+                Referenced message node no longer exists — please reselect.
+              </div>
+            )}
+            <div>
+              <Label>Evaluate Message</Label>
+              <Select
+                value={targetExists ? targetId : ""}
+                onValueChange={(v) => {
+                  const n = nodes.find((x) => x.id === v);
+                  const d: any = n?.data || {};
+                  const label = d.whatsapp_template_name || d.label || "WhatsApp Template";
+                  updateMR({ target_node_id: v, target_node_label: label });
+                }}
+                disabled={templateOptions.length === 0}
+              >
+                <SelectTrigger><SelectValue placeholder="Select an upstream template message" /></SelectTrigger>
+                <SelectContent>
+                  {templateOptions.map((n) => {
+                    const d: any = n.data || {};
+                    const label = d.whatsapp_template_name || d.label || `Message ${n.id.slice(-4)}`;
+                    return <SelectItem key={n.id} value={n.id}>{label}</SelectItem>;
+                  })}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Only upstream WhatsApp Template message nodes are eligible.
+              </p>
+            </div>
+            <div>
+              <Label>Condition</Label>
+              <Select
+                value={String((node.data as any).condition || "read")}
+                onValueChange={(v) => updateMR({ condition: v })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="delivered">Delivered</SelectItem>
+                  <SelectItem value="not_delivered">Not Delivered</SelectItem>
+                  <SelectItem value="read">Read</SelectItem>
+                  <SelectItem value="not_read">Not Read</SelectItem>
+                  <SelectItem value="replied">Replied</SelectItem>
+                  <SelectItem value="not_replied">Not Replied</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="undelivered">Undelivered</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Wait Period</Label>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {presets.map((p) => {
+                  const active = waitV === p.v && waitU === p.u;
+                  return (
+                    <Button
+                      key={p.label}
+                      type="button"
+                      size="sm"
+                      variant={active ? "default" : "outline"}
+                      className="h-7 text-[11px]"
+                      onClick={() => updateMR({ wait_value: p.v, wait_unit: p.u })}
+                    >
+                      {p.label}
+                    </Button>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2 mt-2">
+                <Input
+                  type="number"
+                  min={0}
+                  value={String(waitV)}
+                  onChange={(e) => updateMR({ wait_value: parseInt(e.target.value) || 0 })}
+                  className="w-24"
+                />
+                <Select value={waitU} onValueChange={(v) => updateMR({ wait_unit: v })}>
+                  <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="minutes">Minutes</SelectItem>
+                    <SelectItem value="hours">Hours</SelectItem>
+                    <SelectItem value="days">Days</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                The journey waits this long after the template is sent before evaluating the condition.
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
