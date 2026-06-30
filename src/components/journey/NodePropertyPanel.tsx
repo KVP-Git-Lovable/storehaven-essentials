@@ -694,6 +694,36 @@ export function NodePropertyPanel({ node, nodes = [], edges = [], onUpdate, onDe
                 The journey waits this long after the template is sent before evaluating the condition.
               </p>
             </div>
+            <div className="pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full"
+                disabled={!targetExists || !journeyId}
+                onClick={() => setPreviewOpen(true)}
+                title={!targetExists ? "Select an upstream template and wait period first." : ""}
+              >
+                <Eye className="h-4 w-4 mr-1" /> Preview Audience
+              </Button>
+              {!journeyId && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Save the journey first to enable preview.
+                </p>
+              )}
+            </div>
+            {previewOpen && targetExists && journeyId && (
+              <MessageResponseAudiencePreviewDialog
+                open={previewOpen}
+                onOpenChange={setPreviewOpen}
+                journeyId={journeyId}
+                targetNodeId={targetId}
+                targetLabel={(node.data as any).target_node_label || "Selected template"}
+                condition={String((node.data as any).condition || "read")}
+                waitValue={waitV}
+                waitUnit={waitU}
+              />
+            )}
           </div>
         );
       })()}
