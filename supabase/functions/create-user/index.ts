@@ -129,12 +129,24 @@ Deno.serve(async (req) => {
     });
 
     if (profileError) {
+      console.error("create-user: profile insert failed", {
+        userId,
+        email,
+        code: (profileError as any).code,
+        message: profileError.message,
+        details: (profileError as any).details,
+        hint: (profileError as any).hint,
+      });
       // Only rollback auth user if we just created it
       if (!createError) {
         await supabaseAdmin.auth.admin.deleteUser(userId);
       }
       return new Response(
-        JSON.stringify({ error: profileError.message }),
+        JSON.stringify({
+          error:
+            profileError.message +
+            ((profileError as any).details ? ` — ${(profileError as any).details}` : ""),
+        }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -149,6 +161,7 @@ Deno.serve(async (req) => {
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred";
+    console.error("create-user: unhandled error", errorMessage, error);
     return new Response(
       JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
