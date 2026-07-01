@@ -132,7 +132,12 @@ export function UserFormDialog({
       .select("id, username")
       .eq("status", "active")
       .order("username");
-    if (data) setProfiles(data.filter((p) => p.id !== user?.id));
+    if (data) {
+      // Only exclude self when editing (to avoid self-reporting loop).
+      // When creating a new user, all active profiles must be selectable
+      // as managers — including super-admins like the current user.
+      setProfiles(user?.id ? data.filter((p) => p.id !== user.id) : data);
+    }
   };
 
   const handleSubmit = async (data: UserFormData) => {
@@ -174,7 +179,25 @@ export function UserFormDialog({
         });
 
         if (response.error) {
-          throw new Error(response.error.message || "Failed to create user");
+          // supabase-js wraps non-2xx responses as FunctionsHttpError.
+          // The descriptive JSON body from our edge function is on
+          // error.context — read it so the user sees the real reason
+          // instead of a generic "non-2xx status code" message.
+          let detail = response.error.message || "Failed to create user";
+          try {
+            const ctx: any = (response.error as any).context;
+            const resp: Response | undefined = ctx?.response ?? ctx;
+            if (resp && typeof resp.text === "function") {
+              const raw = await resp.text();
+              try {
+                const parsed = JSON.parse(raw);
+                if (parsed?.error) detail = parsed.error;
+              } catch {
+                if (raw) detail = raw;
+              }
+            }
+          } catch { /* ignore */ }
+          throw new Error(detail);
         }
 
         if (response.data?.error) {
