@@ -1,5 +1,5 @@
-// Sends transactional email via Twilio SendGrid's v3 Mail Send API.
-// The sending address is fixed to info@quickapp.ai on the authenticated quickapp.ai domain.
+// Sends transactional email via Twilio Email API (Comms API).
+// Authenticates with the existing TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN via HTTP Basic Auth.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -9,9 +9,22 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const SENDGRID_URL = "https://api.sendgrid.com/v3/mail/send";
-const FROM_EMAIL = "info@quickapp.ai";
-const FROM_NAME = "QuickApp";
+const TWILIO_EMAIL_URL = "https://comms.twilio.com/v1/Emails";
+const FROM_EMAIL = Deno.env.get("EMAIL_FROM_ADDRESS") || "info@quickapp.ai";
+const FROM_NAME = Deno.env.get("EMAIL_FROM_NAME") || "QuickApp";
+
+function looksLikeHtml(s: string): boolean {
+  return /<\/?[a-z][\s\S]*>/i.test(s);
+}
+
+function toHtml(s: string): string {
+  if (looksLikeHtml(s)) return s;
+  const escaped = s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return `<p>${escaped.replace(/\n/g, "<br/>")}</p>`;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -73,35 +86,51 @@ Deno.serve(async (req) => {
       });
     }
 
-    const SENDGRID_API_KEY = Deno.env.get("SENDGRID_API_KEY");
-    if (!SENDGRID_API_KEY) {
-      return new Response(JSON.stringify({ error: "SENDGRID_API_KEY is not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const TWILIO_ACCOUNT_SID = Deno.env.get("TWILIO_ACCOUNT_SID");
+    const TWILIO_AUTH_TOKEN = Deno.env.get("TWILIO_AUTH_TOKEN");
+    if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+      return new Response(
+        JSON.stringify({ error: "Twilio credentials are not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
-    const sgResponse = await fetch(SENDGRID_URL, {
+    const basic = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
+    const payload = {
+      from: { address: FROM_EMAIL, name: FROM_NAME },
+      to: [{ address: to_email }],
+      content: {
+        subject,
+        text: emailBody,
+        html: toHtml(emailBody),
+      },
+      headers: { "X-CRM": "quickapp" },
+      tags: {
+        channel: "email",
+        environment: "production",
+        source: internal_caller ? "internal" : "email-center",
+      },
+    };
+
+    const twResponse = await fetch(TWILIO_EMAIL_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${SENDGRID_API_KEY}`,
+        Authorization: `Basic ${basic}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: to_email }] }],
-        from: { email: FROM_EMAIL, name: FROM_NAME },
-        subject,
-        content: [{ type: "text/plain", value: emailBody }],
-      }),
+      body: JSON.stringify(payload),
     });
 
-    const sendgridMessageId = sgResponse.headers.get("X-Message-Id");
-    const status = sgResponse.ok ? "sent" : "failed";
+    const rawText = await twResponse.text();
+    let parsed: any = null;
+    try { parsed = rawText ? JSON.parse(rawText) : null; } catch { /* ignore */ }
+    const operationId: string | null = parsed?.operationId || parsed?.operation_id || null;
+    const status = twResponse.ok ? "sent" : "failed";
     let errorMessage: string | null = null;
 
-    if (!sgResponse.ok) {
-      const errText = await sgResponse.text();
-      errorMessage = `SendGrid error [${sgResponse.status}]: ${errText}`;
+    if (!twResponse.ok) {
+      errorMessage = `Twilio Email error [${twResponse.status}]: ${rawText}`;
+      console.error("[email-send] twilio error", twResponse.status, rawText);
     }
 
     await supabase.from("email_message_log").insert({
@@ -110,19 +139,19 @@ Deno.serve(async (req) => {
       subject,
       body: emailBody,
       status,
-      sendgrid_message_id: sendgridMessageId,
+      sendgrid_message_id: operationId,
       error_message: errorMessage,
       sent_by: userId,
     });
 
-    if (!sgResponse.ok) {
+    if (!twResponse.ok) {
       return new Response(JSON.stringify({ error: errorMessage }), {
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    return new Response(JSON.stringify({ success: true, message_id: sendgridMessageId }), {
+    return new Response(JSON.stringify({ success: true, message_id: operationId }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
