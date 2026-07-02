@@ -1368,6 +1368,53 @@ export type Database = {
         }
         Relationships: []
       }
+      email_message_log: {
+        Row: {
+          body: string
+          error_message: string | null
+          from_email: string
+          id: string
+          sendgrid_message_id: string | null
+          sent_at: string
+          sent_by: string | null
+          status: string
+          subject: string
+          to_email: string
+        }
+        Insert: {
+          body: string
+          error_message?: string | null
+          from_email?: string
+          id?: string
+          sendgrid_message_id?: string | null
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+          subject: string
+          to_email: string
+        }
+        Update: {
+          body?: string
+          error_message?: string | null
+          from_email?: string
+          id?: string
+          sendgrid_message_id?: string | null
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+          subject?: string
+          to_email?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_message_log_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employee_attachments: {
         Row: {
           created_at: string
