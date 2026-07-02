@@ -33,7 +33,7 @@ const EmailCenter = () => {
   const { data: logs, isLoading: logsLoading } = useQuery({
     queryKey: ["email-message-log"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("email_message_log")
         .select("id, to_email, subject, status, sent_at")
         .order("sent_at", { ascending: false })

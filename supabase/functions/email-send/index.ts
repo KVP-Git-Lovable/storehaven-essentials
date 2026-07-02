@@ -1,7 +1,5 @@
-// Sends transactional email via Twilio's Email API (comms.twilio.com), using
-// the same TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN already configured for the
-// WhatsApp integration, authenticated with HTTP Basic Auth (no SendGrid SDK
-// or SendGrid API key involved).
+// Sends transactional email via Twilio Email API (Comms API).
+// Authenticates with the existing TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN via HTTP Basic Auth.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -12,16 +10,20 @@ const corsHeaders = {
 };
 
 const TWILIO_EMAIL_URL = "https://comms.twilio.com/v1/Emails";
-const DEFAULT_FROM_EMAIL = "info@quickapp.ai";
-const DEFAULT_FROM_NAME = "QuickApp";
+const FROM_EMAIL = Deno.env.get("EMAIL_FROM_ADDRESS") || "info@quickapp.ai";
+const FROM_NAME = Deno.env.get("EMAIL_FROM_NAME") || "QuickApp";
 
-function escapeHtml(text: string): string {
-  return text
+function looksLikeHtml(s: string): boolean {
+  return /<\/?[a-z][\s\S]*>/i.test(s);
+}
+
+function toHtml(s: string): string {
+  if (looksLikeHtml(s)) return s;
+  const escaped = s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replace(/>/g, "&gt;");
+  return `<p>${escaped.replace(/\n/g, "<br/>")}</p>`;
 }
 
 Deno.serve(async (req) => {
@@ -88,60 +90,53 @@ Deno.serve(async (req) => {
     const TWILIO_AUTH_TOKEN = Deno.env.get("TWILIO_AUTH_TOKEN");
     if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
       return new Response(
-        JSON.stringify({ error: "TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN is not configured" }),
+        JSON.stringify({ error: "Twilio credentials are not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // Sender comes from config/env, never hardcoded as the only source — falls
-    // back to the verified quickapp.ai default only if no override is set.
-    const fromAddress = Deno.env.get("TWILIO_EMAIL_FROM_ADDRESS") || DEFAULT_FROM_EMAIL;
-    const fromName = Deno.env.get("TWILIO_EMAIL_FROM_NAME") || DEFAULT_FROM_NAME;
+    const basic = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
+    const payload = {
+      from: { address: FROM_EMAIL, name: FROM_NAME },
+      to: [{ address: to_email }],
+      content: {
+        subject,
+        text: emailBody,
+        html: toHtml(emailBody),
+      },
+    };
 
-    const basicAuth = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
-
-    const twilioResponse = await fetch(TWILIO_EMAIL_URL, {
+    const twResponse = await fetch(TWILIO_EMAIL_URL, {
       method: "POST",
       headers: {
-        Authorization: `Basic ${basicAuth}`,
+        Authorization: `Basic ${basic}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        from: { address: fromAddress, name: fromName },
-        to: [{ address: to_email }],
-        content: {
-          subject,
-          html: `<p>${escapeHtml(emailBody).replace(/\n/g, "<br>")}</p>`,
-          text: emailBody,
-        },
-      }),
+      body: JSON.stringify(payload),
     });
 
-    const twilioData = await twilioResponse.json().catch(() => ({}));
-    const operationId = twilioData?.operationId ?? null;
-    const status = twilioResponse.ok ? "sent" : "failed";
+    const rawText = await twResponse.text();
+    let parsed: any = null;
+    try { parsed = rawText ? JSON.parse(rawText) : null; } catch { /* ignore */ }
+    const operationId: string | null = parsed?.operationId || parsed?.operation_id || null;
+    const status = twResponse.ok ? "sent" : "failed";
     let errorMessage: string | null = null;
 
-    if (!twilioResponse.ok) {
-      errorMessage = `Twilio error [${twilioResponse.status}]: ${JSON.stringify(twilioData)}`;
-      console.error("[email-send] Twilio API failure", {
-        status: twilioResponse.status,
-        body: twilioData,
-        operationId,
-      });
-    } else {
-      console.log("[email-send] Twilio accepted email", {
-        operationId,
-        operationLocation: twilioData?.operationLocation ?? null,
+    if (!twResponse.ok) {
+      const code = parsed?.code ?? parsed?.error?.code ?? null;
+      const message = parsed?.message ?? parsed?.error?.message ?? null;
+      errorMessage = `Twilio Email error [${twResponse.status}]: ${rawText}`;
+      console.error("[email-send] twilio error", {
+        status: twResponse.status,
+        code,
+        message,
+        body: rawText,
       });
     }
 
-    // No dedicated delivery-tracking store exists yet — persist the operationId
-    // on the existing message-log row (reusing its provider-id column) so it's
-    // at least available for follow-up lookups later.
     await supabase.from("email_message_log").insert({
       to_email,
-      from_email: fromAddress,
+      from_email: FROM_EMAIL,
       subject,
       body: emailBody,
       status,
@@ -150,14 +145,14 @@ Deno.serve(async (req) => {
       sent_by: userId,
     });
 
-    if (!twilioResponse.ok) {
+    if (!twResponse.ok) {
       return new Response(JSON.stringify({ error: errorMessage }), {
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    return new Response(JSON.stringify({ success: true, operation_id: operationId }), {
+    return new Response(JSON.stringify({ success: true, message_id: operationId }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
