@@ -77,7 +77,10 @@ const EmailCenter = () => {
       <div>
         <h1 className="text-2xl md:text-3xl font-semibold">Email Center</h1>
         <p className="text-muted-foreground mt-1">
-          Send email via Twilio SendGrid from the authenticated quickapp.ai domain.
+          Send email via back-end APIs from the authenticated quickapp.ai domain.
+        </p>
+        <p className="text-sm text-blue-600 mt-1">
+          Note: Confirm from the back-end whether the Email quota is present before attempting to send any e-mail.
         </p>
       </div>
 
