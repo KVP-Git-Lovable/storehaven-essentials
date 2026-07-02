@@ -104,12 +104,6 @@ Deno.serve(async (req) => {
         text: emailBody,
         html: toHtml(emailBody),
       },
-      headers: { "X-CRM": "quickapp" },
-      tags: {
-        channel: "email",
-        environment: "production",
-        source: internal_caller ? "internal" : "email-center",
-      },
     };
 
     const twResponse = await fetch(TWILIO_EMAIL_URL, {
@@ -129,8 +123,15 @@ Deno.serve(async (req) => {
     let errorMessage: string | null = null;
 
     if (!twResponse.ok) {
+      const code = parsed?.code ?? parsed?.error?.code ?? null;
+      const message = parsed?.message ?? parsed?.error?.message ?? null;
       errorMessage = `Twilio Email error [${twResponse.status}]: ${rawText}`;
-      console.error("[email-send] twilio error", twResponse.status, rawText);
+      console.error("[email-send] twilio error", {
+        status: twResponse.status,
+        code,
+        message,
+        body: rawText,
+      });
     }
 
     await supabase.from("email_message_log").insert({
