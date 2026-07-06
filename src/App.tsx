@@ -114,6 +114,7 @@ const CompanyInformation = lazyWithRetry(() => import("./pages/admin/CompanyInfo
 const WhatsAppPricing = lazyWithRetry(() => import("./pages/admin/WhatsAppPricing"), "WhatsAppPricing");
 const NotFound = lazyWithRetry(() => import("./pages/NotFound"), "NotFound");
 const VendorContractView = lazyWithRetry(() => import("./pages/vendor/VendorContractView"), "VendorContractView");
+const UnsubscribePage = lazyWithRetry(() => import("./pages/UnsubscribePage"), "UnsubscribePage");
 const AssetManagementDashboard = lazyWithRetry(() => import("./pages/dashboards/AssetManagementDashboard"), "AssetManagementDashboard");
 const InventoryDashboard = lazyWithRetry(() => import("./pages/dashboards/InventoryDashboard"), "InventoryDashboard");
 const EmployeesDashboard = lazyWithRetry(() => import("./pages/dashboards/EmployeesDashboard"), "EmployeesDashboard");
@@ -164,6 +165,7 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="/install" element={<Install />} />
               <Route path="/vendor/contract/:token" element={<VendorContractView />} />
+              <Route path="/unsubscribe" element={<UnsubscribePage />} />
               
               {/* Protected routes */}
               <Route
