@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
       return new Response("invalid signature", { status: 401, headers: corsHeaders });
     }
   } else {
-    console.warn("SENDGRID_WEBHOOK_PUBLIC_KEY not configured; skipping signature check");
+    console.warn("SendGrid webhook signature verification disabled.");
   }
 
   let events: any[] = [];
@@ -89,6 +89,15 @@ Deno.serve(async (req) => {
   } catch {
     return new Response("bad json", { status: 400, headers: corsHeaders });
   }
+
+  console.log(`SendGrid webhook received: ${events.length} events`);
+
+  const SUPPORTED = new Set([
+    "processed","delivered","open","click","bounce","dropped",
+    "deferred","spamreport","unsubscribe","group_unsubscribe",
+  ]);
+  let ignored = 0;
+  let failed = 0;
 
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
@@ -113,68 +122,98 @@ Deno.serve(async (req) => {
   }
 
   for (const ev of events) {
-    const cid = ev.campaign_id
-      || ev.custom_args?.campaign_id
-      || ssToCampaign.get(ev.singlesend_id || ev.sg_singlesend_id)
-      || null;
-    const email = String(ev.email || "").toLowerCase();
-    const type = String(ev.event || "").toLowerCase();
+    try {
+      const type = String(ev.event || "").toLowerCase();
+      if (!SUPPORTED.has(type)) { ignored++; continue; }
 
-    eventRows.push({
-      campaign_id: cid,
-      recipient_email: email,
-      event_type: type,
-      url: ev.url || null,
-      reason: ev.reason || ev.response || null,
-      sg_event_id: ev.sg_event_id || null,
-      sg_message_id: ev.sg_message_id || null,
-      event_timestamp: ev.timestamp ? new Date(ev.timestamp * 1000).toISOString() : new Date().toISOString(),
-      raw: ev,
-    });
+      const cid = ev.campaign_id
+        || ev.custom_args?.campaign_id
+        || ssToCampaign.get(ev.singlesend_id || ev.sg_singlesend_id)
+        || null;
+      const email = String(ev.email || "").toLowerCase();
 
-    if (cid) {
-      switch (type) {
-        case "processed": bump(cid, "processed_count"); bump(cid, "sent_count"); break;
-        case "delivered": bump(cid, "delivered_count"); break;
-        case "open": bump(cid, "open_count"); break;
-        case "click": bump(cid, "click_count"); break;
-        case "bounce": bump(cid, "bounce_count"); break;
-        case "dropped": bump(cid, "dropped_count"); break;
-        case "spamreport": bump(cid, "spam_count"); break;
-        case "unsubscribe":
-        case "group_unsubscribe": bump(cid, "unsubscribe_count"); break;
+      eventRows.push({
+        campaign_id: cid,
+        recipient_email: email,
+        event_type: type,
+        url: ev.url || null,
+        reason: ev.reason || ev.response || null,
+        sg_event_id: ev.sg_event_id || null,
+        sg_message_id: ev.sg_message_id || null,
+        event_timestamp: ev.timestamp ? new Date(ev.timestamp * 1000).toISOString() : new Date().toISOString(),
+        raw: ev,
+      });
+
+      // Counters bumped only for freshly-inserted rows (see dedup step below).
+      if (email && (type === "bounce" || type === "spamreport" || type === "unsubscribe" || type === "group_unsubscribe" || type === "dropped")) {
+        suppressionRows.push({ email, reason: type, campaign_id: cid });
       }
-    }
-
-    if (email && (type === "bounce" || type === "spamreport" || type === "unsubscribe" || type === "group_unsubscribe" || type === "dropped")) {
-      suppressionRows.push({ email, reason: type, campaign_id: cid });
+    } catch (err) {
+      failed++;
+      console.error("event processing failed:", err);
     }
   }
 
-  // Bulk insert events (idempotent via sg_event_id unique)
-  if (eventRows.length) {
-    await supabase.from("email_marketing_events").upsert(eventRows.filter((r) => r.sg_event_id), { onConflict: "sg_event_id", ignoreDuplicates: true });
-    // Rows without sg_event_id (shouldn't happen in prod) — plain insert
-    const noId = eventRows.filter((r) => !r.sg_event_id);
-    if (noId.length) await supabase.from("email_marketing_events").insert(noId);
+  // Bulk insert events (idempotent via sg_event_id unique). Track which rows were
+  // actually inserted so counters don't double count on SendGrid retries.
+  let duplicates = 0;
+  const insertedRows: any[] = [];
+  const withId = eventRows.filter((r) => r.sg_event_id);
+  const noId = eventRows.filter((r) => !r.sg_event_id);
+  if (withId.length) {
+    const { data, error } = await supabase
+      .from("email_marketing_events")
+      .upsert(withId, { onConflict: "sg_event_id", ignoreDuplicates: true })
+      .select("sg_event_id");
+    if (error) console.error("event upsert error:", error.message);
+    const insertedIds = new Set((data || []).map((r: any) => r.sg_event_id));
+    duplicates = withId.length - insertedIds.size;
+    for (const r of withId) if (insertedIds.has(r.sg_event_id)) insertedRows.push(r);
+  }
+  if (noId.length) {
+    const { error } = await supabase.from("email_marketing_events").insert(noId);
+    if (error) console.error("event insert (no id) error:", error.message);
+    else insertedRows.push(...noId);
+  }
+
+  // Bump counters only for newly inserted events.
+  for (const r of insertedRows) {
+    if (!r.campaign_id) continue;
+    switch (r.event_type) {
+      case "processed": bump(r.campaign_id, "processed_count"); bump(r.campaign_id, "sent_count"); break;
+      case "delivered": bump(r.campaign_id, "delivered_count"); break;
+      case "open": bump(r.campaign_id, "open_count"); break;
+      case "click": bump(r.campaign_id, "click_count"); break;
+      case "bounce": bump(r.campaign_id, "bounce_count"); break;
+      case "dropped": bump(r.campaign_id, "dropped_count"); break;
+      case "spamreport": bump(r.campaign_id, "spam_count"); break;
+      case "unsubscribe":
+      case "group_unsubscribe": bump(r.campaign_id, "unsubscribe_count"); break;
+    }
   }
 
   // Apply counters
   for (const [cid, cols] of Object.entries(counterUpdates)) {
     const patch: Record<string, any> = {};
     // Fetch current counters then increment (no rpc dependency)
-    const { data } = await supabase.from("email_marketing_campaigns").select(Object.keys(cols).join(",")).eq("id", cid).maybeSingle();
+    const { data, error } = await supabase.from("email_marketing_campaigns").select(Object.keys(cols).join(",")).eq("id", cid).maybeSingle();
+    if (error) { console.error("counter fetch error:", error.message); continue; }
     if (data) {
       for (const [k, v] of Object.entries(cols)) patch[k] = (Number((data as any)[k]) || 0) + v;
-      await supabase.from("email_marketing_campaigns").update(patch).eq("id", cid);
+      const { error: uErr } = await supabase.from("email_marketing_campaigns").update(patch).eq("id", cid);
+      if (uErr) console.error("counter update error:", uErr.message);
     }
   }
 
   if (suppressionRows.length) {
-    await supabase.from("email_marketing_suppressions").upsert(suppressionRows, { onConflict: "email", ignoreDuplicates: true });
+    const { error } = await supabase.from("email_marketing_suppressions").upsert(suppressionRows, { onConflict: "email", ignoreDuplicates: true });
+    if (error) console.error("suppression upsert error:", error.message);
   }
 
-  return new Response(JSON.stringify({ ok: true, processed: events.length }), {
+  const processed = insertedRows.length;
+  console.log(`SendGrid webhook done: processed=${processed} duplicates=${duplicates} ignored=${ignored} failed=${failed}`);
+
+  return new Response(JSON.stringify({ success: true, processed, duplicates, ignored }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 });
