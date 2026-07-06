@@ -1368,6 +1368,322 @@ export type Database = {
         }
         Relationships: []
       }
+      email_marketing_campaigns: {
+        Row: {
+          audience_config: Json
+          audience_snapshot_count: number | null
+          bounce_count: number
+          click_count: number
+          created_at: string
+          created_by: string | null
+          delivered_count: number
+          dropped_count: number
+          from_email: string
+          from_name: string
+          html: string
+          id: string
+          last_error: string | null
+          name: string
+          open_count: number
+          preview_text: string | null
+          processed_count: number
+          reply_to: string | null
+          scheduled_at: string | null
+          sendgrid_import_job_id: string | null
+          sendgrid_list_id: string | null
+          sendgrid_single_send_id: string | null
+          sent_count: number
+          spam_count: number
+          status: string
+          subject: string
+          timezone: string | null
+          unsubscribe_count: number
+          updated_at: string
+        }
+        Insert: {
+          audience_config?: Json
+          audience_snapshot_count?: number | null
+          bounce_count?: number
+          click_count?: number
+          created_at?: string
+          created_by?: string | null
+          delivered_count?: number
+          dropped_count?: number
+          from_email: string
+          from_name: string
+          html?: string
+          id?: string
+          last_error?: string | null
+          name: string
+          open_count?: number
+          preview_text?: string | null
+          processed_count?: number
+          reply_to?: string | null
+          scheduled_at?: string | null
+          sendgrid_import_job_id?: string | null
+          sendgrid_list_id?: string | null
+          sendgrid_single_send_id?: string | null
+          sent_count?: number
+          spam_count?: number
+          status?: string
+          subject: string
+          timezone?: string | null
+          unsubscribe_count?: number
+          updated_at?: string
+        }
+        Update: {
+          audience_config?: Json
+          audience_snapshot_count?: number | null
+          bounce_count?: number
+          click_count?: number
+          created_at?: string
+          created_by?: string | null
+          delivered_count?: number
+          dropped_count?: number
+          from_email?: string
+          from_name?: string
+          html?: string
+          id?: string
+          last_error?: string | null
+          name?: string
+          open_count?: number
+          preview_text?: string | null
+          processed_count?: number
+          reply_to?: string | null
+          scheduled_at?: string | null
+          sendgrid_import_job_id?: string | null
+          sendgrid_list_id?: string | null
+          sendgrid_single_send_id?: string | null
+          sent_count?: number
+          spam_count?: number
+          status?: string
+          subject?: string
+          timezone?: string | null
+          unsubscribe_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_marketing_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_marketing_events: {
+        Row: {
+          campaign_id: string | null
+          created_at: string
+          event_timestamp: string
+          event_type: string
+          id: string
+          raw: Json | null
+          reason: string | null
+          recipient_email: string
+          sg_event_id: string | null
+          sg_message_id: string | null
+          url: string | null
+        }
+        Insert: {
+          campaign_id?: string | null
+          created_at?: string
+          event_timestamp?: string
+          event_type: string
+          id?: string
+          raw?: Json | null
+          reason?: string | null
+          recipient_email: string
+          sg_event_id?: string | null
+          sg_message_id?: string | null
+          url?: string | null
+        }
+        Update: {
+          campaign_id?: string | null
+          created_at?: string
+          event_timestamp?: string
+          event_type?: string
+          id?: string
+          raw?: Json | null
+          reason?: string | null
+          recipient_email?: string
+          sg_event_id?: string | null
+          sg_message_id?: string | null
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_marketing_events_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "email_marketing_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_marketing_recipients: {
+        Row: {
+          campaign_id: string
+          contact_ref: Json | null
+          created_at: string
+          email: string
+          id: string
+          merge_vars: Json | null
+          status: string
+        }
+        Insert: {
+          campaign_id: string
+          contact_ref?: Json | null
+          created_at?: string
+          email: string
+          id?: string
+          merge_vars?: Json | null
+          status?: string
+        }
+        Update: {
+          campaign_id?: string
+          contact_ref?: Json | null
+          created_at?: string
+          email?: string
+          id?: string
+          merge_vars?: Json | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_marketing_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "email_marketing_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_marketing_suppressions: {
+        Row: {
+          campaign_id: string | null
+          created_at: string
+          email: string
+          id: string
+          reason: string
+        }
+        Insert: {
+          campaign_id?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          reason?: string
+        }
+        Update: {
+          campaign_id?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_marketing_suppressions_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "email_marketing_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_marketing_templates: {
+        Row: {
+          category: string
+          created_at: string
+          created_by: string | null
+          html: string
+          id: string
+          name: string
+          preview_text: string | null
+          subject: string | null
+          thumbnail_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          html?: string
+          id?: string
+          name: string
+          preview_text?: string | null
+          subject?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          html?: string
+          id?: string
+          name?: string
+          preview_text?: string | null
+          subject?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_marketing_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_marketing_test_sends: {
+        Row: {
+          campaign_id: string | null
+          error_message: string | null
+          id: string
+          recipients: string[]
+          sent_at: string
+          sent_by: string | null
+          status: string
+        }
+        Insert: {
+          campaign_id?: string | null
+          error_message?: string | null
+          id?: string
+          recipients: string[]
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+        }
+        Update: {
+          campaign_id?: string | null
+          error_message?: string | null
+          id?: string
+          recipients?: string[]
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_marketing_test_sends_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "email_marketing_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_marketing_test_sends_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employee_attachments: {
         Row: {
           created_at: string
