@@ -20,6 +20,7 @@ interface Props {
     warranty: string | null;
     price: number | null;
     stock_qty: number | null;
+    image_url?: string | null;
   } | null;
   mode?: "create" | "edit" | "view";
 }
@@ -117,6 +118,15 @@ export function ProductFormDialog({ open, onOpenChange, product = null, mode = "
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
+        {product?.image_url && (
+          <div className="flex justify-center">
+            <img
+              src={product.image_url}
+              alt={product.name}
+              className="h-40 w-40 object-cover rounded-md border"
+            />
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="col-span-2">
             <Label>Name *</Label>
