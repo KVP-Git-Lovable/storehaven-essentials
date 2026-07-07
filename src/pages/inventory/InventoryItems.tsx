@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Plus, Search, Package, Barcode, AlertTriangle, CalendarIcon, Eye, Edit, Trash2, ScanLine } from "lucide-react";
+import { Upload, X, Image as ImageIcon } from "lucide-react";
 import { BarcodeScanner } from "@/components/inventory/BarcodeScanner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -66,6 +67,7 @@ const itemSchema = z.object({
   status: z.string().min(1),
   asset_master_id: z.string().optional(),
   vendor_id: z.string().optional(),
+  image_url: z.string().optional().nullable(),
   rate_validity_type: z.enum(["date", "days", "none"]),
   rate_validity_date: z.date().optional().nullable(),
   rate_validity_days: z.coerce.number().min(1).optional().nullable(),
@@ -89,6 +91,7 @@ interface InventoryItem {
   created_at: string;
   asset_master_id: string | null;
   vendor_id: string | null;
+  image_url: string | null;
   rate_validity_date: string | null;
   rate_validity_days: number | null;
 }
@@ -131,6 +134,7 @@ export default function InventoryItems() {
     status: "active",
     asset_master_id: "",
     vendor_id: "",
+    image_url: "",
     rate_validity_type: "none" as const,
     rate_validity_date: null,
     rate_validity_days: null,
@@ -142,6 +146,35 @@ export default function InventoryItems() {
   });
 
   const rateValidityType = form.watch("rate_validity_type");
+  const imageUrl = form.watch("image_url");
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be under 5 MB");
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `items/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("inventory-images")
+        .upload(path, file, { cacheControl: "3600", upsert: false });
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from("inventory-images").getPublicUrl(path);
+      form.setValue("image_url", data.publicUrl, { shouldDirty: true });
+      toast.success("Image uploaded");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Upload failed");
+    } finally {
+      setUploadingImage(false);
+      e.target.value = "";
+    }
+  };
 
   useEffect(() => {
     fetchItems();
@@ -212,6 +245,7 @@ export default function InventoryItems() {
         status: data.status,
         asset_master_id: data.asset_master_id || null,
         vendor_id: data.vendor_id || null,
+        image_url: data.image_url || null,
         rate_validity_date: data.rate_validity_type === "date" && data.rate_validity_date 
           ? format(data.rate_validity_date, "yyyy-MM-dd") 
           : null,
@@ -258,6 +292,7 @@ export default function InventoryItems() {
       status: item.status,
       asset_master_id: item.asset_master_id || "",
       vendor_id: item.vendor_id || "",
+      image_url: item.image_url || "",
       rate_validity_type: item.rate_validity_date ? "date" : item.rate_validity_days ? "days" : "none",
       rate_validity_date: item.rate_validity_date ? new Date(item.rate_validity_date) : null,
       rate_validity_days: item.rate_validity_days,
@@ -325,6 +360,43 @@ export default function InventoryItems() {
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                {/* Item Image */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Item Image</label>
+                  <div className="flex items-center gap-4">
+                    <div className="h-24 w-24 rounded-md border bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                      {imageUrl ? (
+                        <img src={imageUrl} alt="Item" className="h-full w-full object-cover" />
+                      ) : (
+                        <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleImageUpload}
+                          disabled={uploadingImage}
+                        />
+                        <span className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
+                          <Upload className="h-4 w-4" />
+                          {uploadingImage ? "Uploading..." : imageUrl ? "Replace" : "Upload"}
+                        </span>
+                      </label>
+                      {imageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => form.setValue("image_url", "", { shouldDirty: true })}
+                          className="inline-flex items-center gap-1 text-xs text-destructive hover:underline"
+                        >
+                          <X className="h-3 w-3" /> Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
                 <FormField
                   control={form.control}
                   name="name"
@@ -755,8 +827,19 @@ export default function InventoryItems() {
                     onClick={() => setViewItem(item)}
                   >
                     <TableCell>
-                      <div className="font-medium">{item.name}</div>
-                      <div className="text-sm text-muted-foreground">{item.unit}</div>
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded border bg-muted overflow-hidden shrink-0 flex items-center justify-center">
+                          {item.image_url ? (
+                            <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
+                          ) : (
+                            <Package className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-medium">{item.name}</div>
+                          <div className="text-sm text-muted-foreground">{item.unit}</div>
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="text-sm">{item.sku || '-'}</div>

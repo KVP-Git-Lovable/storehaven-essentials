@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Eye, Info, ArrowRight } from "lucide-react";
+import { Search, Eye, Info, ArrowRight, Package } from "lucide-react";
 import { format } from "date-fns";
 import { EntityListViewsBar } from "@/components/transactions/EntityListViewsBar";
 import { ProductFormDialog } from "@/components/transactions/ProductFormDialog";
@@ -126,7 +126,18 @@ export default function ProductsList() {
                   onClick={() => { setSelectedProduct(p); setDialogMode("view"); setCreateOpen(true); }}
                 >
                   <TableCell className="font-mono text-xs">{p.sku || "—"}</TableCell>
-                  <TableCell className="font-medium">{p.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded border bg-muted overflow-hidden shrink-0 flex items-center justify-center">
+                        {p.image_url ? (
+                          <img src={p.image_url} alt={p.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <Package className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </div>
+                      <span>{p.name}</span>
+                    </div>
+                  </TableCell>
                   <TableCell><Badge variant="outline">{p.category || "—"}</Badge></TableCell>
                   <TableCell>{p.brand || "—"}</TableCell>
                   <TableCell className="text-right font-medium">{inr(Number(p.price))}</TableCell>
