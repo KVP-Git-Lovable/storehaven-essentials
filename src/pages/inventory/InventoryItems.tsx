@@ -360,6 +360,43 @@ export default function InventoryItems() {
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                {/* Item Image */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Item Image</label>
+                  <div className="flex items-center gap-4">
+                    <div className="h-24 w-24 rounded-md border bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                      {imageUrl ? (
+                        <img src={imageUrl} alt="Item" className="h-full w-full object-cover" />
+                      ) : (
+                        <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleImageUpload}
+                          disabled={uploadingImage}
+                        />
+                        <span className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
+                          <Upload className="h-4 w-4" />
+                          {uploadingImage ? "Uploading..." : imageUrl ? "Replace" : "Upload"}
+                        </span>
+                      </label>
+                      {imageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => form.setValue("image_url", "", { shouldDirty: true })}
+                          className="inline-flex items-center gap-1 text-xs text-destructive hover:underline"
+                        >
+                          <X className="h-3 w-3" /> Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
                 <FormField
                   control={form.control}
                   name="name"
