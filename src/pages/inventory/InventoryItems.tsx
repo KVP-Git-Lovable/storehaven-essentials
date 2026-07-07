@@ -827,8 +827,19 @@ export default function InventoryItems() {
                     onClick={() => setViewItem(item)}
                   >
                     <TableCell>
-                      <div className="font-medium">{item.name}</div>
-                      <div className="text-sm text-muted-foreground">{item.unit}</div>
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded border bg-muted overflow-hidden shrink-0 flex items-center justify-center">
+                          {item.image_url ? (
+                            <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
+                          ) : (
+                            <Package className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-medium">{item.name}</div>
+                          <div className="text-sm text-muted-foreground">{item.unit}</div>
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="text-sm">{item.sku || '-'}</div>
