@@ -364,7 +364,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
               const calculated = enrichedItems[index];
               return (
                 <Card key={calculated.key} className="p-4">
-                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_110px_110px_100px_100px_110px_110px_auto] lg:items-end md:grid-cols-2">
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_110px_130px_100px_100px_110px_130px_auto] lg:items-start md:grid-cols-2">
                     <div className="min-w-0">
                       <Label>Product {index + 1}</Label>
                       <SearchableSelect
@@ -437,7 +437,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                       <Label>Line Total</Label>
                       <Input value={`₹${Math.round(calculated.lineTotal).toLocaleString("en-IN")}`} disabled />
                     </div>
-                    <div className="flex justify-end lg:items-end">
+                    <div className="flex justify-end lg:pt-[26px]">
                       <Button type="button" variant="outline" size="icon" className="h-9 w-9" onClick={() => removeLineItem(index)} disabled={isView || lineItems.length === 1}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
