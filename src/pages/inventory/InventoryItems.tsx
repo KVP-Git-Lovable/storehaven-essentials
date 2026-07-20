@@ -95,6 +95,29 @@ interface InventoryItem {
   image_url: string | null;
   rate_validity_date: string | null;
   rate_validity_days: number | null;
+  // Jewellery / memo-inward fields
+  style_no?: string | null;
+  main_metal?: string | null;
+  product_size?: string | null;
+  colour?: string | null;
+  gross_wt?: number | null;
+  net_wt?: number | null;
+  total_diamond_wt?: number | null;
+  total_colour_stone_wt?: number | null;
+  material_type?: string | null;
+  material_quality?: string | null;
+  material_inter_quality?: string | null;
+  product_cert_no?: string | null;
+  product_cert_by?: string | null;
+  rm_cert_by?: string | null;
+  rm_cert_no?: string | null;
+  length?: number | null;
+  material_weight?: number | null;
+  material_pcs?: number | null;
+  item_price?: number | null;
+  p_amount?: number | null;
+  category_group?: string | null;
+  material_rate?: number | null;
 }
 
 interface AssetMaster {
@@ -794,7 +817,8 @@ export default function InventoryItems() {
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          <Table>
+          <div className="overflow-x-auto w-full">
+          <Table className="min-w-max">
             <TableHeader>
               <TableRow>
                 <TableHead>Item</TableHead>
@@ -805,17 +829,39 @@ export default function InventoryItems() {
                 <TableHead>Stock Levels</TableHead>
                 <TableHead>Current Stock</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Style No</TableHead>
+                <TableHead>Main Metal</TableHead>
+                <TableHead>Product Size</TableHead>
+                <TableHead>Colour</TableHead>
+                <TableHead>Gross Wt</TableHead>
+                <TableHead>Net Wt</TableHead>
+                <TableHead>Diamond Wt</TableHead>
+                <TableHead>Colour Stone Wt</TableHead>
+                <TableHead>Material Type</TableHead>
+                <TableHead>Material Quality</TableHead>
+                <TableHead>Material Inter. Quality</TableHead>
+                <TableHead>Product CERTNO</TableHead>
+                <TableHead>Product Cert By</TableHead>
+                <TableHead>RM Cert By</TableHead>
+                <TableHead>RM Cert No</TableHead>
+                <TableHead>Length</TableHead>
+                <TableHead>Material Weight</TableHead>
+                <TableHead>Material Pcs</TableHead>
+                <TableHead>Item Price</TableHead>
+                <TableHead>P Amount</TableHead>
+                <TableHead>Category Group</TableHead>
+                <TableHead>Material Rate</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">Loading...</TableCell>
+                  <TableCell colSpan={31} className="text-center py-8">Loading...</TableCell>
                 </TableRow>
               ) : filteredItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={31} className="text-center py-8 text-muted-foreground">
                     No items found. Add your first inventory item.
                   </TableCell>
                 </TableRow>
@@ -888,6 +934,28 @@ export default function InventoryItems() {
                         {item.status}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-sm">{item.style_no || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.main_metal || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.product_size || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.colour || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.gross_wt ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.net_wt ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.total_diamond_wt ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.total_colour_stone_wt ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.material_type || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.material_quality || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.material_inter_quality || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.product_cert_no || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.product_cert_by || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.rm_cert_by || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.rm_cert_no || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.length ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.material_weight ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.material_pcs ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.item_price != null ? `₹${Number(item.item_price).toLocaleString('en-IN')}` : '-'}</TableCell>
+                    <TableCell className="text-sm">{item.p_amount ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.category_group || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.material_rate ?? '-'}</TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
                         <Button variant="ghost" size="icon" onClick={() => setViewItem(item)}>
@@ -932,6 +1000,7 @@ export default function InventoryItems() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
