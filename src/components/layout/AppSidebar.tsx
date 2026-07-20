@@ -257,7 +257,7 @@ const navigation: NavItem[] = [
         title: "Company", 
         isSubSection: true,
         subChildren: [
-          { title: "Company Information", href: "/admin/company", moduleKey: "admin.company" },
+          { title: "Company Information", href: "/admin/company" },
         ]
       },
     ],
