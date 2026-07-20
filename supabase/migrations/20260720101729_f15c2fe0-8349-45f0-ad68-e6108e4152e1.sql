@@ -1,0 +1,4 @@
+ALTER TABLE public.order_items
+  ADD COLUMN IF NOT EXISTS dia_price numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS cs_price numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS making_charges numeric NOT NULL DEFAULT 0;
