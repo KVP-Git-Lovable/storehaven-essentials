@@ -373,7 +373,7 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-background overflow-hidden">
             <img src={companyInfo?.logo_url || trayiLogo} alt={companyInfo?.company_name || "Trayi"} className="h-8 w-8 object-contain" />
           </div>
-          {!collapsed && <span className="font-display text-lg font-semibold">{companyInfo?.company_name || "Trayi"}</span>}
+          {!collapsed && <span className="font-display text-sm font-semibold tracking-wide whitespace-nowrap">{(companyInfo?.company_name || "TRAYI JEWELLERS").toUpperCase()}</span>}
         </div>
         {isMobile && (
           <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8">
