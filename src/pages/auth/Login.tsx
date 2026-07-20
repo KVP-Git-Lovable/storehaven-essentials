@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import quickappLogo from "@/assets/quickapp-logo.png";
+import trayiLogoAsset from "@/assets/trayi-logo.jpeg.asset.json";
+const trayiLogo = trayiLogoAsset.url;
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -118,8 +119,8 @@ export default function Login() {
       <div className="w-full max-w-md space-y-8">
         {/* Logo */}
         <div className="flex flex-col items-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 overflow-hidden mb-6">
-            <img src={quickappLogo} alt="StoreOps" className="h-14 w-14 object-contain" />
+          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-background overflow-hidden mb-6 border border-border">
+            <img src={trayiLogo} alt="Trayi" className="h-20 w-20 object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-foreground">
             {isLogin ? "Welcome Back" : "Create Account"}
@@ -127,7 +128,7 @@ export default function Login() {
           <p className="mt-2 text-sm text-muted-foreground">
             {isLogin
               ? "Sign in to access your dashboard"
-              : "Sign up to get started with StoreOps"}
+              : "Sign up to get started with Trayi"}
           </p>
         </div>
 
