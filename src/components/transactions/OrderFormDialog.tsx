@@ -74,15 +74,17 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     queryFn: async () => {
       const { data } = await supabase
         .from("inventory_items")
-        .select("id, name, selling_price, status, net_wt, main_metal")
+        .select("id, name, sku, selling_price, status, net_wt, gross_wt, main_metal")
         .eq("status", "active")
         .order("name")
         .limit(1000);
       return (data || []).map((row: any) => ({
         id: row.id,
         name: row.name,
+        sku: row.sku || "",
         price: Number(row.selling_price) || 0,
         netWt: Number(row.net_wt) || 0,
+        grossWt: Number(row.gross_wt) || 0,
         karat: karatOf(row.main_metal),
       }));
     },
@@ -383,6 +385,13 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                       {calculated.product && calculated.priceSource === "fallback" && calculated.product.karat && (
                         <p className="text-[11px] text-muted-foreground mt-1">Set today's gold rate for {calculated.product.karat} to auto-price by weight.</p>
                       )}
+                      {calculated.product && (
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                          {calculated.product.sku && <span>LL-Code: <span className="font-medium text-foreground">{calculated.product.sku}</span></span>}
+                          {calculated.product.netWt > 0 && <span>Net Wt: <span className="font-medium text-foreground">{calculated.product.netWt}g</span></span>}
+                          {calculated.product.grossWt > 0 && <span>Gross Wt: <span className="font-medium text-foreground">{calculated.product.grossWt}g</span></span>}
+                        </div>
+                      )}
                     </div>
                     <div className="min-w-0">
                       <Label>Quantity</Label>
@@ -406,6 +415,11 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                     <div className="min-w-0">
                       <Label>Unit Price</Label>
                       <Input value={`₹${Math.round(calculated.unitPrice).toLocaleString("en-IN")}`} disabled />
+                      {calculated.product && calculated.priceSource === "gold" && calculated.product.karat && (
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          {calculated.product.netWt}g × ₹{Math.round(goldRates[calculated.product.karat!] || 0).toLocaleString("en-IN")}/g ({calculated.product.karat})
+                        </p>
+                      )}
                     </div>
                     <div className="min-w-0">
                       <Label>Dia Price</Label>
