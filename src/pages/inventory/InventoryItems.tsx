@@ -95,6 +95,29 @@ interface InventoryItem {
   image_url: string | null;
   rate_validity_date: string | null;
   rate_validity_days: number | null;
+  // Jewellery / memo-inward fields
+  style_no?: string | null;
+  main_metal?: string | null;
+  product_size?: string | null;
+  colour?: string | null;
+  gross_wt?: number | null;
+  net_wt?: number | null;
+  total_diamond_wt?: number | null;
+  total_colour_stone_wt?: number | null;
+  material_type?: string | null;
+  material_quality?: string | null;
+  material_inter_quality?: string | null;
+  product_cert_no?: string | null;
+  product_cert_by?: string | null;
+  rm_cert_by?: string | null;
+  rm_cert_no?: string | null;
+  length?: number | null;
+  material_weight?: number | null;
+  material_pcs?: number | null;
+  item_price?: number | null;
+  p_amount?: number | null;
+  category_group?: string | null;
+  material_rate?: number | null;
 }
 
 interface AssetMaster {
