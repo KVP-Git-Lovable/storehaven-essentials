@@ -92,6 +92,7 @@ const navigation: NavItem[] = [
       { title: "Customers", href: "/transactions/customers", moduleKey: "transactions.customers" },
       { title: "Products", href: "/transactions/products", moduleKey: "transactions.products" },
       { title: "Orders", href: "/transactions/orders", moduleKey: "transactions.orders" },
+      { title: "Reports", href: "/transactions/reports", moduleKey: "transactions.orders" },
     ],
   },
   {

@@ -1,94 +1,42 @@
-## Goal
+## Add Reports subsection under Transactions
 
-Add a new **Invoice Template** section under **Admin → Company** and wire the existing **Generate Invoice** button in Order View to render a print-ready GST tax invoice styled per the template, matching the Trayi Jewellers sample invoice.
+### Navigation
+- In `src/components/layout/AppSidebar.tsx`, add a new child under **Transactions** (below Orders):
+  - `{ title: "Reports", href: "/transactions/reports", moduleKey: "transactions.orders" }`
+- Register route `/transactions/reports` → new page `src/pages/transactions/Reports.tsx` in `src/App.tsx`.
 
-## 1. Database
+### Reports page (`src/pages/transactions/Reports.tsx`)
+Top toolbar with three controls (matching the analytics-style layout in screenshot 2):
 
-New table `invoice_templates` (single-row per company, upserted):
+1. **Report type dropdown** — default `Orders`. Options: `Orders`, `Customers`, `Leads`, `Products`. (Only Orders wired in this pass; others show "Coming soon" placeholder to keep scope tight.)
+2. **Quick range dropdown** — Today, Yesterday, This Week, This Month, This Quarter, This FY (Apr–Mar), Last Week, Last Month, Last Quarter, Last FY, Last 60 Days, All Time.
+3. **Custom From / To date pickers** — selecting either clears the quick range; picking a quick range clears custom dates. (Same either/or behavior shown in screenshot 2.)
+4. **Refresh** button.
+5. **Export** dropdown button on the right: Excel (.xlsx), CSV, PDF.
 
-- `company_name_override`, `tagline_override` (optional; default = pull from `company_information`)
-- Toggles for header fields: `show_logo`, `show_gst`, `show_pan`, `show_cin`, `show_phone`, `show_address`, `show_bank_details`
-- `invoice_title` (default "TAX INVOICE")
-- `invoice_prefix` (e.g. `TJ-26/27-`), `next_invoice_number` (int)
-- Bank details block: `bank_name`, `bank_account_no`, `bank_branch`, `bank_rtgs_ifsc`
-- Tax config: `sgst_rate` (default 1.5), `cgst_rate` (default 1.5), `igst_rate` (default 3.0), `hsn_code` (default 71131930)
-- Theme: `color_primary` (header band), `color_accent`, `font_family` (Serif / Sans / Mono)
-- `terms_and_conditions`, `footer_note`, `authorised_signatory_label`
-- `signature_url`, `seal_url` (optional uploads to `company-assets` bucket)
+### Orders report content
+Fetch `orders` in the selected date range (joined with `customers` and `order_items` + `inventory_items`), then render grouped rows in a table styled like the sample invoice register (screenshot 1):
 
-Add `invoice_number` (text, nullable, unique) and `invoice_generated_at` (timestamptz) to `orders` so invoice numbers persist once generated.
+Grouping: **by Customer**, sorted alphabetically. For each customer:
+- One row per invoice line item with columns:
+  - Invoice Date, Invoice #, Customer, Category, Item # (SKU), Gross Wt, Metal Wt (net_wt), Dia Wt, Dia Pcs, Quantity, Amount (subtotal-of-line pre-tax), Discount, Net Amount, Total Tax, Gross Amount (line total incl. tax)
+- A **Total For {Customer}** row aggregating numeric columns.
+- A grand total row at the bottom.
 
-RLS: authenticated read+write, service_role all (same pattern as `company_information`).
+Header block above the table: company name + address from `useCompanyInfo`, and a subtitle "Sales INV Report – RT WITH TAX" with the selected date range.
 
-## 2. New page: `/admin/company/invoice-template`
+Currency formatted `en-IN`. Weights to 3 decimals. Zeros shown as `0` / `0.000` (not dashes) to match the reference.
 
-Two-pane layout:
+### Exports
+- **CSV** — build from the same row set in-memory; `Blob` download.
+- **Excel** — use existing `xlsx` package (already in project via memo import) to write a single sheet with header + grouped rows + totals.
+- **PDF** — use `window.print()` on a print-scoped view of the report (reuses the `@media print` approach already used for invoices). Add a hidden print stylesheet in the page.
 
-- **Left – Settings form** (grouped cards):
-  - Branding: logo toggle, color picker (primary/accent), font family select
-  - Header Fields: checkboxes for GST/PAN/CIN/Phone/Address, invoice title text
-  - Numbering: prefix + next number preview (e.g. `TJ-26/27-0033`)
-  - Tax: SGST/CGST/IGST %, default HSN
-  - Bank Details: name, a/c, branch, IFSC
-  - Signature/Seal upload
-  - Terms & footer note textareas
-- **Right – Live Preview**: renders the same `InvoiceDocument` component used for printing, populated with sample data + current company info, so users see changes instantly.
+### Out of scope (explicit)
+- No changes to Journey Builder, WhatsApp, Email, Order create/edit flows, or invoice generation.
+- No new DB tables, migrations, or edge functions — pure read/aggregation on client from existing tables.
 
-Sidebar wiring: add "Invoice Template" as a second item under **Admin → COMPANY** in `src/components/layout/AppSidebar.tsx`, route `/admin/company/invoice-template`.
-
-## 3. Invoice rendering
-
-New component `src/components/invoice/InvoiceDocument.tsx` — pure presentational, accepts `{ template, company, order, customer, lineItems }`. Layout mirrors the attached sample:
-
-```text
-┌───────────────────────────────────────────────────────────┐
-│  [Logo]         COMPANY NAME (banner)                     │
-│  GST / PAN / CIN / Address / Phone                        │
-├───────────────────────────────────────────────────────────┤
-│              TAX INVOICE                                  │
-│  Invoice No / Date / Dispatch / Terms / Ref               │
-├──────────────────────────┬────────────────────────────────┤
-│  Billed To (customer)    │  Consignor / Shipped To        │
-├──────────────────────────┴────────────────────────────────┤
-│  SlNo | Description | HSN | Cert# | GWt | NWt | DWt | SWt │
-│       |  Rate | Amount                                    │
-│  … line rows …                                            │
-│  Total row                                                │
-├───────────────────────────────────────────────────────────┤
-│                       SGST / CGST / IGST                  │
-│                       Grand Total                         │
-│  Amount in Words                                          │
-├───────────────────────────────────────────────────────────┤
-│  Bank Details               │  Authorised Signatory       │
-└───────────────────────────────────────────────────────────┘
-```
-
-Uses semantic tokens; primary color band + font family come from template. Amount-in-words via a small `numberToIndianWords` util.
-
-## 4. Wire "Generate Invoice" in Order View
-
-In `src/components/transactions/OrderFormDialog.tsx` (view mode) the stub button becomes: open new dialog `InvoiceViewerDialog` that:
-
-1. If the order has no `invoice_number`, allocate one atomically (RPC `allocate_invoice_number(prefix)` increments `next_invoice_number` and returns formatted string), then update the order row.
-2. Fetch template + company + customer + line items (with `sku`, `net_wt`, `gross_wt`, certificate no, dia_wt, stone_wt from `inventory_items`).
-3. Render `<InvoiceDocument … />` inside a scrollable dialog with **Print** and **Download PDF** actions.
-4. Print uses `window.print()` scoped via a `@media print` stylesheet that hides app chrome and shows only `.invoice-print-root`.
-5. PDF uses `html2canvas` + `jspdf` (already common in stack — add if missing) to export A4.
-
-## 5. Data mapping for line items
-
-Extend `order_items` queries to also fetch related `inventory_items` fields already used elsewhere: `sku` (LL code), `certificate_no`, `gross_wt`, `net_wt`, `dia_wt`, `stone_wt`, `hsn_code`. `Rate` and `Amount` derive from existing `unit_price + dia_price + cs_price + making_charges` × quantity. No changes to order calculation logic.
-
-## Out of scope
-
-- No changes to POS, Journey Builder, WhatsApp, or existing order pricing math.
-- No credit-note module (Quickapp reference has one; skipping unless requested).
-- No email/WhatsApp send of the generated invoice (can be a follow-up).
-
-## Technical notes
-
-- Sidebar entry gated the same way as Company Information (no `moduleKey`).
-- Template row is singleton — upsert pattern like `company_information`.
-- Color pickers: use existing `Input type="color"` to avoid new deps.
-- Print CSS lives in `src/index.css` under a scoped `@media print` block targeting `.invoice-print-root` only.
-- `numberToIndianWords` implemented inline (~40 LOC), no new dep.
+### Technical notes
+- Reuse `useCompanyInfo`, `useInvoiceTemplate` for tax %.
+- Date range helpers in a small local util inside the page file (no shared lib change).
+- Query uses supabase select `orders(*, customers(name), order_items(quantity, unit_price, total_amount, dia_price, cs_price, making_charges, tax_amount, item_id, inventory_items(sku, main_metal, category, gross_wt, net_wt, total_diamond_wt, diamond_pieces)))` filtered by `created_at` between range, `status != 'cancelled'`.
