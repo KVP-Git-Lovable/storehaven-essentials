@@ -15,6 +15,7 @@ import { assertStockAvailable, recordSaleLedger } from "@/lib/inventoryStock";
 import { useInventoryStockMap } from "@/hooks/useInventoryStock";
 import { format } from "date-fns";
 import { InvoiceViewerDialog } from "@/components/invoice/InvoiceViewerDialog";
+import { useInvoiceTemplate } from "@/hooks/useInvoiceTemplate";
 
 type LineItem = {
   productId: string;
@@ -124,7 +125,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     queryFn: async () => {
       const { data, error } = await supabase
         .from("order_items")
-        .select("item_id, quantity")
+        .select("item_id, quantity, dia_price, cs_price, making_charges")
         .eq("order_id", order!.id);
       if (error) throw error;
       return data || [];
@@ -151,9 +152,9 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       setLineItems(existingOrderItems.map((item: any) => ({
         productId: item.item_id,
         quantity: String(item.quantity || 1),
-        diaPrice: "0",
-        csPrice: "0",
-        makingCharges: "0",
+        diaPrice: String(item.dia_price ?? 0),
+        csPrice: String(item.cs_price ?? 0),
+        makingCharges: String(item.making_charges ?? 0),
       })));
     }
   }, [open, order?.id, existingOrderItems]);
@@ -176,6 +177,9 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
             unitPrice,
             lineTotal: quantity * unitPrice,
             name: product?.name as string | undefined,
+            diaPrice: dia,
+            csPrice: cs,
+            makingCharges: making,
           };
         })
         .filter((item) => item.productId && item.unitPrice > 0);
@@ -222,6 +226,9 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
             unit_price: item.unitPrice,
             total_amount: item.lineTotal,
             tax_amount: 0,
+            dia_price: item.diaPrice,
+            cs_price: item.csPrice,
+            making_charges: item.makingCharges,
           })) as any
         );
         if (itemErr) throw itemErr;
@@ -255,6 +262,9 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
           unit_price: item.unitPrice,
           total_amount: item.lineTotal,
           tax_amount: 0,
+          dia_price: item.diaPrice,
+          cs_price: item.csPrice,
+          making_charges: item.makingCharges,
         })) as any
       );
       if (itemErr) throw itemErr;
@@ -304,7 +314,14 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
 
   const subtotal = enrichedItems.reduce((sum, item) => sum + item.lineTotal, 0);
   const discountAmount = Math.max(0, Number(discount) || 0);
-  const total = Math.max(0, subtotal - discountAmount);
+  const { data: invoiceTemplate } = useInvoiceTemplate();
+  const taxable = Math.max(0, subtotal - discountAmount);
+  const sgstRate = Number(invoiceTemplate?.sgst_rate) || 0;
+  const cgstRate = Number(invoiceTemplate?.cgst_rate) || 0;
+  const sgstAmt = (taxable * sgstRate) / 100;
+  const cgstAmt = (taxable * cgstRate) / 100;
+  const taxAmount = sgstAmt + cgstAmt;
+  const total = taxable + taxAmount;
   const title = isView ? "View Order" : isEdit ? "Edit Order" : "New Order";
 
   const updateLineItem = (index: number, patch: Partial<LineItem>) => {
@@ -482,10 +499,24 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                   className="w-40 text-right"
                 />
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Tax</span>
-                <span className="font-medium">₹0</span>
-              </div>
+              {sgstRate > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">SGST ({sgstRate.toFixed(1)}%)</span>
+                  <span className="font-medium">₹{sgstAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {cgstRate > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">CGST ({cgstRate.toFixed(1)}%)</span>
+                  <span className="font-medium">₹{cgstAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {sgstRate === 0 && cgstRate === 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Tax</span>
+                  <span className="font-medium">₹0</span>
+                </div>
+              )}
               <Separator />
               <div className="flex items-center justify-between text-base">
                 <span className="font-medium">Grand Total</span>
