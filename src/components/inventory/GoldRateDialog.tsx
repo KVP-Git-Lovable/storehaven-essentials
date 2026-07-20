@@ -21,12 +21,12 @@ export function GoldRateDialog() {
     queryKey: ["gold-rate-today", today],
     enabled: open,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("gold_rates" as any)
+      const { data, error } = await (supabase as any)
+        .from("gold_rates")
         .select("karat, price_per_gram")
         .eq("rate_date", today);
       if (error) throw error;
-      return data || [];
+      return (data || []) as { karat: string; price_per_gram: number }[];
     },
   });
 
