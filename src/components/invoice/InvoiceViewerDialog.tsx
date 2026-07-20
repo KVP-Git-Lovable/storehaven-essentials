@@ -43,7 +43,7 @@ export function InvoiceViewerDialog({ open, onOpenChange, orderId }: Props) {
       if (itemIds.length) {
         const { data: inv } = await (supabase as any)
           .from("inventory_items")
-          .select("id, name, sku, net_wt, gross_wt, dia_wt, stone_wt, certificate_no, hsn_code")
+          .select("id, name, sku, main_metal, category, net_wt, gross_wt, total_diamond_wt, total_colour_stone_wt, product_cert_no")
           .in("id", itemIds);
         (inv || []).forEach((r: any) => { inventoryMap[r.id] = r; });
       }
@@ -102,16 +102,19 @@ export function InvoiceViewerDialog({ open, onOpenChange, orderId }: Props) {
     const qty = Number(it.quantity) || 1;
     const rate = Number(it.unit_price) || 0;
     const amount = Number(it.total_amount) || rate * qty;
+    const metal = inv.main_metal ? String(inv.main_metal).trim() : "";
+    const category = inv.category ? String(inv.category).trim() : "";
+    const description = [metal, category].filter(Boolean).join(" ") || inv.name || "Item";
     return {
       sl: idx + 1,
-      description: inv.name || "Item",
+      description,
       sku: inv.sku,
-      hsn: inv.hsn_code || template?.default_hsn_code || null,
-      certificate_no: inv.certificate_no,
+      hsn: template?.default_hsn_code || null,
+      certificate_no: inv.product_cert_no,
       gross_wt: inv.gross_wt,
       net_wt: inv.net_wt,
-      dia_wt: inv.dia_wt,
-      stone_wt: inv.stone_wt,
+      dia_wt: inv.total_diamond_wt,
+      stone_wt: inv.total_colour_stone_wt,
       quantity: qty,
       rate,
       amount,
