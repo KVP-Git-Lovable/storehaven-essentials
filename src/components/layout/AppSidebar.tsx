@@ -24,7 +24,8 @@ import {
   Rocket,
   Receipt,
 } from "lucide-react";
-import quickappLogo from "@/assets/quickapp-logo.png";
+import trayiLogoAsset from "@/assets/trayi-logo.jpeg.asset.json";
+const trayiLogo = trayiLogoAsset.url;
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -369,10 +370,10 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
         collapsed ? "px-2" : "px-4 md:px-6"
       )}>
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 overflow-hidden">
-            <img src={companyInfo?.logo_url || quickappLogo} alt={companyInfo?.company_name || "StoreOps"} className="h-6 w-6 object-contain" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-background overflow-hidden">
+            <img src={companyInfo?.logo_url || trayiLogo} alt={companyInfo?.company_name || "Trayi"} className="h-8 w-8 object-contain" />
           </div>
-          {!collapsed && <span className="font-display text-lg font-semibold">{companyInfo?.company_name || "StoreOps"}</span>}
+          {!collapsed && <span className="font-display text-lg font-semibold">{companyInfo?.company_name || "Trayi"}</span>}
         </div>
         {isMobile && (
           <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8">
