@@ -817,7 +817,8 @@ export default function InventoryItems() {
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          <Table>
+          <div className="overflow-x-auto w-full">
+          <Table className="min-w-max">
             <TableHeader>
               <TableRow>
                 <TableHead>Item</TableHead>
@@ -828,17 +829,39 @@ export default function InventoryItems() {
                 <TableHead>Stock Levels</TableHead>
                 <TableHead>Current Stock</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Style No</TableHead>
+                <TableHead>Main Metal</TableHead>
+                <TableHead>Product Size</TableHead>
+                <TableHead>Colour</TableHead>
+                <TableHead>Gross Wt</TableHead>
+                <TableHead>Net Wt</TableHead>
+                <TableHead>Diamond Wt</TableHead>
+                <TableHead>Colour Stone Wt</TableHead>
+                <TableHead>Material Type</TableHead>
+                <TableHead>Material Quality</TableHead>
+                <TableHead>Material Inter. Quality</TableHead>
+                <TableHead>Product CERTNO</TableHead>
+                <TableHead>Product Cert By</TableHead>
+                <TableHead>RM Cert By</TableHead>
+                <TableHead>RM Cert No</TableHead>
+                <TableHead>Length</TableHead>
+                <TableHead>Material Weight</TableHead>
+                <TableHead>Material Pcs</TableHead>
+                <TableHead>Item Price</TableHead>
+                <TableHead>P Amount</TableHead>
+                <TableHead>Category Group</TableHead>
+                <TableHead>Material Rate</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">Loading...</TableCell>
+                  <TableCell colSpan={31} className="text-center py-8">Loading...</TableCell>
                 </TableRow>
               ) : filteredItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={31} className="text-center py-8 text-muted-foreground">
                     No items found. Add your first inventory item.
                   </TableCell>
                 </TableRow>
