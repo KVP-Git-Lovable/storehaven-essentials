@@ -52,6 +52,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { useInventoryStockMap } from "@/hooks/useInventoryStock";
 import { EditStockDialog } from "@/components/inventory/EditStockDialog";
+import { MemoImportDialog } from "@/components/inventory/MemoImportDialog";
 
 const itemSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -349,11 +350,14 @@ export default function InventoryItems() {
             form.reset(defaultFormValues);
           }
         }}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" /> Add Item
-            </Button>
-          </DialogTrigger>
+          <div className="flex gap-2">
+            <MemoImportDialog onImported={fetchItems} />
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" /> Add Item
+              </Button>
+            </DialogTrigger>
+          </div>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingItem ? "Edit Inventory Item" : "Add Inventory Item"}</DialogTitle>

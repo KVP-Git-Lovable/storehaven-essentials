@@ -3164,22 +3164,44 @@ export type Database = {
           barcode: string | null
           brand: string | null
           category: string
+          category_group: string | null
+          colour: string | null
           cost_price: number | null
           created_at: string
           expiry_tracking: boolean | null
+          gross_wt: number | null
           id: string
           image_url: string | null
           is_favorite: boolean
+          item_price: number | null
+          length: number | null
+          main_metal: string | null
+          material_inter_quality: string | null
+          material_pcs: number | null
+          material_quality: string | null
+          material_rate: number | null
+          material_type: string | null
+          material_weight: number | null
           max_stock: number | null
           min_stock: number
           model: string | null
           name: string
+          net_wt: number | null
+          p_amount: number | null
+          product_cert_by: string | null
+          product_cert_no: string | null
+          product_size: string | null
           rate_validity_date: string | null
           rate_validity_days: number | null
+          rm_cert_by: string | null
+          rm_cert_no: string | null
           selling_price: number
           sku: string | null
           status: string
+          style_no: string | null
           tax_rate: number | null
+          total_colour_stone_wt: number | null
+          total_diamond_wt: number | null
           unit: string
           unit_cost: number
           updated_at: string
@@ -3191,22 +3213,44 @@ export type Database = {
           barcode?: string | null
           brand?: string | null
           category: string
+          category_group?: string | null
+          colour?: string | null
           cost_price?: number | null
           created_at?: string
           expiry_tracking?: boolean | null
+          gross_wt?: number | null
           id?: string
           image_url?: string | null
           is_favorite?: boolean
+          item_price?: number | null
+          length?: number | null
+          main_metal?: string | null
+          material_inter_quality?: string | null
+          material_pcs?: number | null
+          material_quality?: string | null
+          material_rate?: number | null
+          material_type?: string | null
+          material_weight?: number | null
           max_stock?: number | null
           min_stock?: number
           model?: string | null
           name: string
+          net_wt?: number | null
+          p_amount?: number | null
+          product_cert_by?: string | null
+          product_cert_no?: string | null
+          product_size?: string | null
           rate_validity_date?: string | null
           rate_validity_days?: number | null
+          rm_cert_by?: string | null
+          rm_cert_no?: string | null
           selling_price?: number
           sku?: string | null
           status?: string
+          style_no?: string | null
           tax_rate?: number | null
+          total_colour_stone_wt?: number | null
+          total_diamond_wt?: number | null
           unit?: string
           unit_cost?: number
           updated_at?: string
@@ -3218,22 +3262,44 @@ export type Database = {
           barcode?: string | null
           brand?: string | null
           category?: string
+          category_group?: string | null
+          colour?: string | null
           cost_price?: number | null
           created_at?: string
           expiry_tracking?: boolean | null
+          gross_wt?: number | null
           id?: string
           image_url?: string | null
           is_favorite?: boolean
+          item_price?: number | null
+          length?: number | null
+          main_metal?: string | null
+          material_inter_quality?: string | null
+          material_pcs?: number | null
+          material_quality?: string | null
+          material_rate?: number | null
+          material_type?: string | null
+          material_weight?: number | null
           max_stock?: number | null
           min_stock?: number
           model?: string | null
           name?: string
+          net_wt?: number | null
+          p_amount?: number | null
+          product_cert_by?: string | null
+          product_cert_no?: string | null
+          product_size?: string | null
           rate_validity_date?: string | null
           rate_validity_days?: number | null
+          rm_cert_by?: string | null
+          rm_cert_no?: string | null
           selling_price?: number
           sku?: string | null
           status?: string
+          style_no?: string | null
           tax_rate?: number | null
+          total_colour_stone_wt?: number | null
+          total_diamond_wt?: number | null
           unit?: string
           unit_cost?: number
           updated_at?: string
