@@ -319,7 +319,19 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[1200px]">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <div className="flex items-center justify-between gap-4 pr-8">
+            <DialogTitle>{title}</DialogTitle>
+            {isView && order && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => toast.info("Invoice generation coming soon")}
+              >
+                Generate Invoice
+              </Button>
+            )}
+          </div>
         </DialogHeader>
         <div className="space-y-4 py-2">
           {order?.order_number && (
