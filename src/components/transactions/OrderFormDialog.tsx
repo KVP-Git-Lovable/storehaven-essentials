@@ -125,7 +125,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     queryFn: async () => {
       const { data, error } = await supabase
         .from("order_items")
-        .select("item_id, quantity, dia_price, cs_price, making_charges")
+        .select("item_id, quantity, unit_price, dia_price, cs_price, making_charges")
         .eq("order_id", order!.id);
       if (error) throw error;
       return data || [];
@@ -149,15 +149,29 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   useEffect(() => {
     if (!open || !order?.id) return;
     if (existingOrderItems.length) {
-      setLineItems(existingOrderItems.map((item: any) => ({
-        productId: item.item_id,
-        quantity: String(item.quantity || 1),
-        diaPrice: String(item.dia_price ?? 0),
-        csPrice: String(item.cs_price ?? 0),
-        makingCharges: String(item.making_charges ?? 0),
-      })));
+      setLineItems(existingOrderItems.map((item: any) => {
+        const product = products.find((p: any) => p.id === item.item_id);
+        const base = product ? unitPriceOf(product).price : 0;
+        const storedUnit = Number(item.unit_price) || 0;
+        let dia = Number(item.dia_price) || 0;
+        let cs = Number(item.cs_price) || 0;
+        let making = Number(item.making_charges) || 0;
+        // Backfill: if components are all zero but stored unit_price exceeds
+        // today's base, treat the residual as making charges so the view
+        // matches what was originally entered (and what the invoice shows).
+        if (dia === 0 && cs === 0 && making === 0 && storedUnit > base + 0.5) {
+          making = Math.round((storedUnit - base) * 100) / 100;
+        }
+        return {
+          productId: item.item_id,
+          quantity: String(item.quantity || 1),
+          diaPrice: String(dia),
+          csPrice: String(cs),
+          makingCharges: String(making),
+        };
+      }));
     }
-  }, [open, order?.id, existingOrderItems]);
+  }, [open, order?.id, existingOrderItems, products, goldRates]);
 
   const createMut = useMutation({
     mutationFn: async () => {
