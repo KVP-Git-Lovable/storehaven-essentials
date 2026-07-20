@@ -13,6 +13,25 @@ import { Minus, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { assertStockAvailable, recordSaleLedger } from "@/lib/inventoryStock";
 import { useInventoryStockMap } from "@/hooks/useInventoryStock";
+import { format } from "date-fns";
+
+type LineItem = {
+  productId: string;
+  quantity: string;
+  diaPrice: string;
+  csPrice: string;
+  makingCharges: string;
+};
+
+const emptyLine = (): LineItem => ({ productId: "", quantity: "1", diaPrice: "0", csPrice: "0", makingCharges: "0" });
+
+function karatOf(mainMetal?: string | null): "18K" | "22K" | null {
+  if (!mainMetal) return null;
+  const s = String(mainMetal).toUpperCase();
+  if (s.includes("18")) return "18K";
+  if (s.includes("22")) return "22K";
+  return null;
+}
 
 interface Props {
   open: boolean;
@@ -35,7 +54,8 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   const qc = useQueryClient();
   const [customerId, setCustomerId] = useState("");
   const [status, setStatus] = useState("completed");
-  const [lineItems, setLineItems] = useState([{ productId: "", quantity: "1" }]);
+  const [lineItems, setLineItems] = useState<LineItem[]>([emptyLine()]);
+  const [discount, setDiscount] = useState("0");
   const isView = mode === "view";
   const isEdit = mode === "edit";
 
@@ -54,7 +74,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     queryFn: async () => {
       const { data } = await supabase
         .from("inventory_items")
-        .select("id, name, selling_price, status")
+        .select("id, name, selling_price, status, net_wt, main_metal")
         .eq("status", "active")
         .order("name")
         .limit(1000);
@@ -62,12 +82,37 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
         id: row.id,
         name: row.name,
         price: Number(row.selling_price) || 0,
+        netWt: Number(row.net_wt) || 0,
+        karat: karatOf(row.main_metal),
       }));
     },
   });
 
   const productIds = useMemo(() => products.map((p: any) => p.id), [products]);
   const { data: stockMap = {} } = useInventoryStockMap(productIds, open);
+
+  const today = format(new Date(), "yyyy-MM-dd");
+  const { data: goldRates = { "18K": 0, "22K": 0 } } = useQuery({
+    queryKey: ["gold-rate-today", today],
+    enabled: open,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("gold_rates")
+        .select("karat, price_per_gram")
+        .eq("rate_date", today);
+      if (error) throw error;
+      const map: Record<string, number> = { "18K": 0, "22K": 0 };
+      (data || []).forEach((r: any) => { map[r.karat] = Number(r.price_per_gram) || 0; });
+      return map;
+    },
+  });
+
+  const unitPriceOf = (product: any): { price: number; source: "gold" | "fallback" } => {
+    if (product?.karat && product.netWt > 0 && goldRates[product.karat] > 0) {
+      return { price: goldRates[product.karat] * product.netWt, source: "gold" };
+    }
+    return { price: Number(product?.price) || 0, source: "fallback" };
+  };
 
   const { data: existingOrderItems = [] } = useQuery({
     queryKey: ["order-form-items", order?.id],
@@ -87,17 +132,25 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     if (!order) {
       setCustomerId("");
       setStatus("completed");
-      setLineItems([{ productId: "", quantity: "1" }]);
+      setLineItems([emptyLine()]);
+      setDiscount("0");
       return;
     }
     setCustomerId(order.customer_id || "");
     setStatus(order.status || "completed");
+    setDiscount(String((order as any).discount_amount ?? 0));
   }, [open, order]);
 
   useEffect(() => {
     if (!open || !order?.id) return;
     if (existingOrderItems.length) {
-      setLineItems(existingOrderItems.map((item: any) => ({ productId: item.item_id, quantity: String(item.quantity || 1) })));
+      setLineItems(existingOrderItems.map((item: any) => ({
+        productId: item.item_id,
+        quantity: String(item.quantity || 1),
+        diaPrice: "0",
+        csPrice: "0",
+        makingCharges: "0",
+      })));
     }
   }, [open, order?.id, existingOrderItems]);
 
@@ -108,7 +161,11 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
         .map((item) => {
           const product = products.find((p: any) => p.id === item.productId);
           const quantity = Math.max(1, Number(item.quantity) || 1);
-          const unitPrice = Number(product?.price) || 0;
+          const base = unitPriceOf(product).price;
+          const dia = Number(item.diaPrice) || 0;
+          const cs = Number(item.csPrice) || 0;
+          const making = Number(item.makingCharges) || 0;
+          const unitPrice = base + dia + cs + making;
           return {
             productId: item.productId,
             quantity,
@@ -130,8 +187,9 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       }
 
       const subtotal = validItems.reduce((sum, item) => sum + item.lineTotal, 0);
+      const discountAmount = Math.max(0, Number(discount) || 0);
       const taxAmount = 0;
-      const total = subtotal + taxAmount;
+      const total = Math.max(0, subtotal - discountAmount) + taxAmount;
       const paymentStatus = status === "completed" ? "paid" : status === "cancelled" ? "cancelled" : "pending";
 
       if (isEdit && order) {
@@ -144,6 +202,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
             subtotal,
             tax_amount: taxAmount,
             total_amount: total,
+            discount_amount: discountAmount,
           } as any)
           .eq("id", order.id);
         if (updateError) throw updateError;
@@ -177,6 +236,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
           subtotal,
           tax_amount: taxAmount,
           total_amount: total,
+          discount_amount: discountAmount,
           created_by: user?.id || "manual-entry",
         } as any)
         .select()
@@ -209,7 +269,8 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       onOpenChange(false);
       setCustomerId("");
       setStatus("completed");
-      setLineItems([{ productId: "", quantity: "1" }]);
+      setLineItems([emptyLine()]);
+      setDiscount("0");
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -218,27 +279,35 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     () => lineItems.map((item, index) => {
       const product = products.find((p: any) => p.id === item.productId);
       const quantity = Math.max(1, Number(item.quantity) || 1);
-      const unitPrice = Number(product?.price) || 0;
+      const up = unitPriceOf(product);
+      const dia = Number(item.diaPrice) || 0;
+      const cs = Number(item.csPrice) || 0;
+      const making = Number(item.makingCharges) || 0;
+      const unitPrice = up.price;
+      const lineTotal = quantity * (unitPrice + dia + cs + making);
       return {
         key: `${index}-${item.productId}`,
         index,
         quantity,
         unitPrice,
-        lineTotal: quantity * unitPrice,
+        lineTotal,
+        priceSource: up.source,
+        product,
       };
     }),
-    [lineItems, products]
+    [lineItems, products, goldRates]
   );
 
   const subtotal = enrichedItems.reduce((sum, item) => sum + item.lineTotal, 0);
-  const total = subtotal;
+  const discountAmount = Math.max(0, Number(discount) || 0);
+  const total = Math.max(0, subtotal - discountAmount);
   const title = isView ? "View Order" : isEdit ? "Edit Order" : "New Order";
 
-  const updateLineItem = (index: number, patch: Partial<{ productId: string; quantity: string }>) => {
+  const updateLineItem = (index: number, patch: Partial<LineItem>) => {
     setLineItems((current) => current.map((item, i) => (i === index ? { ...item, ...patch } : item)));
   };
 
-  const addLineItem = () => setLineItems((current) => [...current, { productId: "", quantity: "1" }]);
+  const addLineItem = () => setLineItems((current) => [...current, emptyLine()]);
 
   const removeLineItem = (index: number) => {
     setLineItems((current) => (current.length === 1 ? current : current.filter((_, i) => i !== index)));
@@ -246,7 +315,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[1200px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -293,28 +362,32 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
               const calculated = enrichedItems[index];
               return (
                 <Card key={calculated.key} className="p-4">
-                  <div className="grid gap-4 md:grid-cols-[minmax(0,1.7fr)_120px_120px_auto] md:items-end">
-                    <div>
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_110px_110px_100px_100px_110px_110px_auto] lg:items-end md:grid-cols-2">
+                    <div className="min-w-0">
                       <Label>Product {index + 1}</Label>
                       <SearchableSelect
                         value={item.productId}
                         onValueChange={(value) => updateLineItem(index, { productId: value })}
                         options={products.map((p: any) => {
                           const stock = stockMap[p.id] ?? 0;
+                          const up = unitPriceOf(p);
                           return {
                             value: p.id,
-                            label: `${p.name} — ₹${Number(p.price).toLocaleString("en-IN")} (Stock: ${stock})`,
+                            label: `${p.name} — ₹${Math.round(up.price).toLocaleString("en-IN")} (Stock: ${stock})`,
                             disabled: !isEdit && stock <= 0,
                           };
                         })}
                         placeholder="Select product..."
                         disabled={isView}
                       />
+                      {calculated.product && calculated.priceSource === "fallback" && calculated.product.karat && (
+                        <p className="text-[11px] text-muted-foreground mt-1">Set today's gold rate for {calculated.product.karat} to auto-price by weight.</p>
+                      )}
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <Label>Quantity</Label>
-                      <div className="flex items-center gap-2">
-                        <Button type="button" variant="outline" size="icon" disabled={isView} onClick={() => updateLineItem(index, { quantity: String(Math.max(1, (Number(item.quantity) || 1) - 1)) })}>
+                      <div className="flex items-center gap-1">
+                        <Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0" disabled={isView} onClick={() => updateLineItem(index, { quantity: String(Math.max(1, (Number(item.quantity) || 1) - 1)) })}>
                           <Minus className="h-4 w-4" />
                         </Button>
                         <Input
@@ -325,23 +398,33 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                           onChange={(e) => updateLineItem(index, { quantity: e.target.value })}
                           className="text-center"
                         />
-                        <Button type="button" variant="outline" size="icon" disabled={isView} onClick={() => updateLineItem(index, { quantity: String((Number(item.quantity) || 1) + 1) })}>
+                        <Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0" disabled={isView} onClick={() => updateLineItem(index, { quantity: String((Number(item.quantity) || 1) + 1) })}>
                           <Plus className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
-                    <div className="space-y-1 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Unit Price</p>
-                        <p className="font-medium">₹{calculated.unitPrice.toLocaleString("en-IN")}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Line Total</p>
-                        <p className="font-medium">₹{calculated.lineTotal.toLocaleString("en-IN")}</p>
-                      </div>
+                    <div className="min-w-0">
+                      <Label>Unit Price</Label>
+                      <Input value={`₹${Math.round(calculated.unitPrice).toLocaleString("en-IN")}`} disabled />
                     </div>
-                    <div className="flex justify-end">
-                      <Button type="button" variant="outline" size="icon" onClick={() => removeLineItem(index)} disabled={isView || lineItems.length === 1}>
+                    <div className="min-w-0">
+                      <Label>Dia Price</Label>
+                      <Input type="number" min="0" step="0.01" value={item.diaPrice} disabled={isView} onChange={(e) => updateLineItem(index, { diaPrice: e.target.value })} />
+                    </div>
+                    <div className="min-w-0">
+                      <Label>CS Price</Label>
+                      <Input type="number" min="0" step="0.01" value={item.csPrice} disabled={isView} onChange={(e) => updateLineItem(index, { csPrice: e.target.value })} />
+                    </div>
+                    <div className="min-w-0">
+                      <Label>Making</Label>
+                      <Input type="number" min="0" step="0.01" value={item.makingCharges} disabled={isView} onChange={(e) => updateLineItem(index, { makingCharges: e.target.value })} />
+                    </div>
+                    <div className="min-w-0">
+                      <Label>Line Total</Label>
+                      <Input value={`₹${Math.round(calculated.lineTotal).toLocaleString("en-IN")}`} disabled />
+                    </div>
+                    <div className="flex justify-end lg:items-end">
+                      <Button type="button" variant="outline" size="icon" className="h-9 w-9" onClick={() => removeLineItem(index)} disabled={isView || lineItems.length === 1}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -356,6 +439,19 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Subtotal</span>
                 <span className="font-medium">₹{subtotal.toLocaleString("en-IN")}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground">Discount</span>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={discount}
+                  disabled={isView}
+                  onChange={(e) => setDiscount(e.target.value)}
+                  placeholder="0"
+                  className="w-40 text-right"
+                />
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Tax</span>

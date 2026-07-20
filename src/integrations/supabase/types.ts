@@ -2661,6 +2661,33 @@ export type Database = {
           },
         ]
       }
+      gold_rates: {
+        Row: {
+          created_at: string
+          id: string
+          karat: string
+          price_per_gram: number
+          rate_date: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          karat: string
+          price_per_gram: number
+          rate_date: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          karat?: string
+          price_per_gram?: number
+          rate_date?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       grn: {
         Row: {
           created_at: string

@@ -53,6 +53,7 @@ import { cn } from "@/lib/utils";
 import { useInventoryStockMap } from "@/hooks/useInventoryStock";
 import { EditStockDialog } from "@/components/inventory/EditStockDialog";
 import { MemoImportDialog } from "@/components/inventory/MemoImportDialog";
+import { GoldRateDialog } from "@/components/inventory/GoldRateDialog";
 
 const itemSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -374,6 +375,7 @@ export default function InventoryItems() {
           }
         }}>
           <div className="flex gap-2">
+            <GoldRateDialog />
             <MemoImportDialog onImported={fetchItems} />
             <DialogTrigger asChild>
               <Button>
