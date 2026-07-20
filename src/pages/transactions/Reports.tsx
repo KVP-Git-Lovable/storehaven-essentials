@@ -342,9 +342,9 @@ export default function Reports() {
         <Card className="p-4 print:shadow-none print:border-0">
           <div className="text-center mb-4">
             <h2 className="text-lg font-bold uppercase">{company?.company_name || "Company"}</h2>
-            {company?.address_line_1 && (
+            {company?.address_line1 && (
               <div className="text-xs text-muted-foreground">
-                {[company.address_line_1, company.address_line_2, company.city, company.state, company.pincode].filter(Boolean).join(", ")}
+                {[company.address_line1, company.address_line2, company.city, company.state, company.postal_code].filter(Boolean).join(", ")}
               </div>
             )}
             <div className="text-sm font-semibold mt-2">Sales INV Report – RT WITH TAX</div>
