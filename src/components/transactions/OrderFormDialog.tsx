@@ -503,5 +503,9 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {isView && order && (
+      <InvoiceViewerDialog open={invoiceOpen} onOpenChange={setInvoiceOpen} orderId={order.id} />
+    )}
+  </>
   );
 }
