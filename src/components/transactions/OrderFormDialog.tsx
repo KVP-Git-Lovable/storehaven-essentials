@@ -196,8 +196,11 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
 
       const subtotal = validItems.reduce((sum, item) => sum + item.lineTotal, 0);
       const discountAmount = Math.max(0, Number(discount) || 0);
-      const taxAmount = 0;
-      const total = Math.max(0, subtotal - discountAmount) + taxAmount;
+      const taxableBase = Math.max(0, subtotal - discountAmount);
+      const sRate = Number(invoiceTemplate?.sgst_rate) || 0;
+      const cRate = Number(invoiceTemplate?.cgst_rate) || 0;
+      const taxAmount = (taxableBase * (sRate + cRate)) / 100;
+      const total = taxableBase + taxAmount;
       const paymentStatus = status === "completed" ? "paid" : status === "cancelled" ? "cancelled" : "pending";
 
       if (isEdit && order) {
