@@ -111,6 +111,7 @@ const RolePermissions = lazyWithRetry(() => import("./pages/admin/RolePermission
 const Profile = lazyWithRetry(() => import("./pages/admin/Profile"), "Profile");
 const Settings = lazyWithRetry(() => import("./pages/admin/Settings"), "Settings");
 const CompanyInformation = lazyWithRetry(() => import("./pages/admin/CompanyInformation"), "CompanyInformation");
+const InvoiceTemplatePage = lazyWithRetry(() => import("./pages/admin/InvoiceTemplate"), "InvoiceTemplate");
 const WhatsAppPricing = lazyWithRetry(() => import("./pages/admin/WhatsAppPricing"), "WhatsAppPricing");
 const NotFound = lazyWithRetry(() => import("./pages/NotFound"), "NotFound");
 const VendorContractView = lazyWithRetry(() => import("./pages/vendor/VendorContractView"), "VendorContractView");
@@ -300,6 +301,7 @@ const App = () => (
                 <Route path="/admin/hierarchy" element={<UserHierarchy />} />
                 <Route path="/admin/permissions" element={<RolePermissions />} />
                 <Route path="/admin/company" element={<CompanyInformation />} />
+                <Route path="/admin/company/invoice-template" element={<InvoiceTemplatePage />} />
                 <Route path="/admin/whatsapp-pricing" element={<WhatsAppPricing />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/settings" element={<Settings />} />
