@@ -110,7 +110,8 @@ export default function Reports() {
     return QUICK_RANGES.find((r) => r.value === quick)?.label ?? "";
   }, [quick, fromDate, toDate]);
 
-  const taxRate = (Number(template?.sgst_rate) || 0) + (Number(template?.cgst_rate) || 0) + (Number(template?.igst_rate) || 0);
+  // Intra-state orders use SGST + CGST (IGST is inter-state and not applied here — matches Invoice/View Order).
+  const taxRate = (Number(template?.sgst_rate) || 0) + (Number(template?.cgst_rate) || 0);
 
   const { data: rows = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: ["report-orders", activeRange.from?.toISOString(), activeRange.to?.toISOString(), taxRate],
@@ -156,10 +157,14 @@ export default function Reports() {
         // Distribute order-level discount and tax across lines
         const cnt = orderItemCount.get(it.order_id) || 1;
         const discount = (Number(o.discount_amount) || 0) / cnt;
+        // Prefer the item's stored tax; fall back to order-level tax distributed by line; else compute from template.
+        const itemTax = Number(it.tax_amount) || 0;
         const orderTax = Number(o.tax_amount) || 0;
-        const tax = orderTax
-          ? orderTax / cnt
-          : ((line - discount) * (taxRate / 100));
+        const tax = itemTax > 0
+          ? itemTax
+          : orderTax > 0
+            ? orderTax / cnt
+            : ((line - discount) * (taxRate / 100));
         const net = line - discount;
         const gross = net + tax;
         const customerName = o.customers?.name || "Walk-in Customer";
@@ -278,7 +283,17 @@ export default function Reports() {
 
   return (
     <div className="space-y-6 reports-page">
-      <style>{`@media print { .no-print { display: none !important; } .reports-page { padding: 0 !important; } }`}</style>
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          .reports-page { padding: 0 !important; }
+          .screen-only { display: none !important; }
+          .print-only { display: block !important; }
+          .print-table { font-size: 10px !important; }
+          .print-table td, .print-table th { padding: 2px 6px !important; }
+        }
+        @media screen { .print-only { display: none !important; } }
+      `}</style>
       <div className="flex items-start justify-between no-print">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
@@ -351,8 +366,112 @@ export default function Reports() {
             <div className="text-xs text-muted-foreground">{rangeLabel}</div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse">
+          {/* Screen-only modern list layout */}
+          <div className="screen-only">
+            {isLoading ? (
+              <div className="text-center py-12 text-muted-foreground text-sm">Loading…</div>
+            ) : rows.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground text-sm">No orders in the selected range.</div>
+            ) : (
+              <div className="rounded-lg border overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/40">
+                      <tr className="text-muted-foreground">
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide whitespace-nowrap">Invoice Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide whitespace-nowrap">Invoice #</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide whitespace-nowrap">Category</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide whitespace-nowrap">Item #</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide whitespace-nowrap">Gross Wt</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide whitespace-nowrap">Metal Wt</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide whitespace-nowrap">Dia Wt</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide whitespace-nowrap">Dia Pcs</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide whitespace-nowrap">Qty</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide whitespace-nowrap">Amount</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide whitespace-nowrap">Discount</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide whitespace-nowrap">Net Amount</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide whitespace-nowrap">Tax</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide whitespace-nowrap">Gross Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {Array.from(groups.entries()).map(([cust, list]) => {
+                        const tot = list.reduce((a, r) => ({
+                          gw: a.gw + r.gross_wt, mw: a.mw + r.metal_wt, dw: a.dw + r.dia_wt, dp: a.dp + r.dia_pcs,
+                          qt: a.qt + r.quantity, am: a.am + r.amount, dc: a.dc + r.discount, na: a.na + r.net_amount,
+                          tx: a.tx + r.tax, ga: a.ga + r.gross_amount,
+                        }), { gw:0, mw:0, dw:0, dp:0, qt:0, am:0, dc:0, na:0, tx:0, ga:0 });
+                        return (
+                          <Fragment key={`s-${cust}`}>
+                            <tr className="bg-muted/20">
+                              <td colSpan={14} className="px-4 py-2 font-semibold text-sm uppercase tracking-wide">{cust}</td>
+                            </tr>
+                            {list.map((r, i) => (
+                              <tr key={`s-${cust}-${i}`} className="hover:bg-muted/10 transition-colors">
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                                    {format(new Date(r.invoice_date), "dd MMM, HH:mm")}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">{r.invoice_no}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">{r.category}</td>
+                                <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">{r.item_no}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">{num(r.gross_wt, 3)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">{num(r.metal_wt, 3)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">{num(r.dia_wt, 3)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">{r.dia_pcs}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">{r.quantity}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">₹{num(r.amount)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{num(r.discount)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">₹{num(r.net_amount)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{num(r.tax)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums font-semibold">₹{num(r.gross_amount)}</td>
+                              </tr>
+                            ))}
+                            <tr className="bg-muted/30 font-semibold">
+                              <td className="px-4 py-2" colSpan={4}>Total for {cust}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">{num(tot.gw, 3)}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">{num(tot.mw, 3)}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">{num(tot.dw, 3)}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">{tot.dp}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">{tot.qt}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">₹{num(tot.am)}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">{num(tot.dc)}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">₹{num(tot.na)}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">{num(tot.tx)}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">₹{num(tot.ga)}</td>
+                            </tr>
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-primary/5 border-t-2 font-bold">
+                        <td className="px-4 py-3" colSpan={4}>Grand Total</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{num(grand.gross_wt, 3)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{num(grand.metal_wt, 3)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{num(grand.dia_wt, 3)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{grand.dia_pcs}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{grand.quantity}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">₹{num(grand.amount)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{num(grand.discount)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">₹{num(grand.net_amount)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{num(grand.tax)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-primary">₹{num(grand.gross_amount)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
+            {rows.length > 0 && (
+              <div className="mt-3 text-sm text-muted-foreground text-right">Grand Total: <span className="font-semibold text-foreground">{inr(grand.gross_amount)}</span></div>
+            )}
+          </div>
+
+          {/* Print-only classic tabular layout */}
+          <div className="print-only overflow-x-auto">
+            <table className="w-full text-xs border-collapse print-table">
               <thead>
                 <tr className="bg-muted/60 border-y">
                   {columns.map((c) => (
