@@ -1,64 +1,65 @@
-# Import Memo Inward — Inventory Items
+## Set Gold Rate + Dynamic Jewellery Pricing in Orders
 
-Add an **Import Memo Inward** button on `/inventory/items` that accepts a CSV/XLSX in the attached Trayi Jewellers format and creates inventory item rows. All existing functionality (POS, WhatsApp, Journeys, Orders, GRN) stays untouched — this is purely additive.
+Add daily gold rate management on `/inventory/items` and use it to auto-price jewellery products in the New Order modal, with per-line Dia / CS / Making charges and an order-level Discount.
 
-## Import rules
+### 1. New table: `gold_rates`
 
-- Only rows where **Item No** is non-blank are imported. Blank-Item-No rows in the sample are stone/size sub-rows for the previous item and are ignored (grouping of sub-rows into a single item is out of scope for v1).
-- Field mapping per imported row:
-  - `sku` = `barcode` = **Item No** (e.g. `LL-55998`)
-  - `category` = the **Name** in Category Master (`/master/category`) whose name matches Excel's **Category** (case-insensitive). If no match, the row is skipped and reported in the import summary.
-  - `name` (the "Item" field) = `Main Metal + " " + Category` (e.g. `18KT Earring`)
-  - All other Excel columns are stored in new dedicated columns (see below).
-- Duplicate handling: if `sku` already exists → **update** that row; otherwise **insert**. Reported separately in the summary.
+One row per day per karat.
 
-## Data model (additive)
+| Column | Type |
+|---|---|
+| `id` | uuid PK |
+| `rate_date` | date (unique with `karat`) |
+| `karat` | text (`18K` or `22K`) |
+| `price_per_gram` | numeric |
+| `created_at` / `updated_at` | timestamptz |
 
-New nullable columns on `public.inventory_items` (one migration, no changes to existing columns):
+RLS: authenticated users can read/insert/update; service_role full. GRANTs to authenticated + service_role. Unique index on `(rate_date, karat)` so save = upsert.
 
-| Column | Type | Source |
-|---|---|---|
-| `style_no` | text | Style No |
-| `main_metal` | text | Main Metal |
-| `product_size` | text | Product Size |
-| `colour` | text | Colour |
-| `gross_wt` | numeric | Gross Wt |
-| `net_wt` | numeric | Net Wt |
-| `total_diamond_wt` | numeric | Total Diamond Wt. |
-| `total_colour_stone_wt` | numeric | Total Color Stone Wt. |
-| `material_type` | text | Material Type |
-| `material_quality` | text | Material Quality |
-| `material_inter_quality` | text | Material Inter. Quality |
-| `product_cert_no` | text | Product CERTNO |
-| `product_cert_by` | text | Product Cert By |
-| `rm_cert_by` | text | Rm Cert By |
-| `rm_cert_no` | text | Rm Cert NO |
-| `length` | numeric | Length |
-| `material_weight` | numeric | Material Weight |
-| `material_pcs` | integer | Material Pcs |
-| `item_price` | numeric | Item Price (also copied to existing `selling_price`) |
-| `p_amount` | numeric | P amount |
-| `category_group` | text | Category Group |
-| `material_rate` | numeric | material rate |
+### 2. Inventory Items page — "Set Gold Rate" button
 
-No new tables, no RLS/grant changes (existing policies on `inventory_items` already cover authenticated users).
+- Add a **Set Gold Rate** button to the header of `src/pages/inventory/InventoryItems.tsx`, placed immediately to the left of **Import Memo Inward**.
+- New component `src/components/inventory/GoldRateDialog.tsx`:
+  - Shows today's date (read-only, `dd MMM yyyy`).
+  - Two numeric inputs: **18K – price per 1g** and **22K – price per 1g**.
+  - On open, pre-fills with today's existing rates (if any).
+  - **Save** upserts both rows into `gold_rates` for today, invalidates the `gold-rate-today` query, toasts success.
 
-## UI changes (scope = `/inventory/items` only)
+### 3. Order modal pricing logic
 
-1. **Import Memo Inward** button in the header (next to Add Item).
-2. **Import dialog** — file picker (.csv, .xlsx), a downloadable sample template, and post-import summary: `Imported X · Updated Y · Skipped Z (reasons listed)`.
-3. **Inventory Items table** — append the new jewellery columns after the existing ones so nothing existing shifts or is removed. Columns overflow horizontally via existing table scroll.
-4. **Edit dialog** — add a collapsible "Memo / Jewellery details" section exposing the new fields so imported values can be reviewed/edited. Existing fields stay in place.
+Update `src/components/transactions/OrderFormDialog.tsx`:
 
-## Technical notes
+- Fetch products with `net_wt`, `main_metal`, plus existing fields.
+- Fetch today's gold rates once (`gold-rate-today` query) → `{ "18K": number, "22K": number }`.
+- Derive karat from product's `main_metal` (match `18` → 18K, `22` → 22K; fallback: no gold component → 0).
+- Extend each line item state with `diaPrice`, `csPrice`, `makingCharges` (all default `"0"`, editable numeric inputs).
+- **Per-line calculation:**
+  - `goldValue = todaysRate(karat) * (net_wt || 0)`
+  - `unitPrice` displayed = `goldValue` (read-only, derived; replaces the old `selling_price` source for jewellery lines)
+  - `lineTotal = unitPrice + diaPrice + csPrice + makingCharges`  (× quantity)
+  - If no gold rate is set for today OR product has no `net_wt`, fall back to product `selling_price` for `unitPrice` and show a subtle hint "Set today's gold rate".
+- **Order totals block:**
+  - `Subtotal = Σ lineTotal`
+  - New **Discount** input (numeric, blank = 0), subtracted from Subtotal.
+  - `Grand Total = (Subtotal − Discount) + Tax` (Tax stays 0 as today).
+  - Persist discount into `orders.discount_amount` (already exists on `orders`; if not, add nullable column in the same migration — will confirm during exploration/build).
 
-- Parse CSV with PapaParse (already commonly used) and XLSX via `xlsx` if the file is `.xlsx`; add whichever isn't installed.
-- All parsing/insert/update runs client-side against Supabase using the existing `inventory_items` policies — no edge function needed.
-- Category matching uses `categories` table `name ILIKE excel_category`.
-- `selling_price` on new rows = `item_price` (so POS/order flows keep working); `unit_cost` defaults to 0 unless already set on an update.
-- `unit` defaults to `pcs`, `status` defaults to `active` on insert.
+### 4. Modal layout
 
-## Out of scope
+- Widen `DialogContent` from `sm:max-w-3xl` to `sm:max-w-6xl` (or `max-w-[1200px]`) so each product row fits on one line.
+- Restructure line item grid to a single responsive row:
+  `[Product | Qty | Unit Price | Dia Price | CS Price | Making | Line Total | 🗑]`
+  Inputs for Dia/CS/Making are compact numeric fields.
+- Keep mobile stacking (grid collapses to 1 col below `md`).
 
-- Merging multi-row (stone/size sub-row) items into one composite record.
-- Any change to Products, POS, WhatsApp, Journey Builder, Orders, GRN, or other modules.
+### 5. Scope guardrails
+
+- No changes to WhatsApp, Journey Builder, POS, GRN, or other order-adjacent flows.
+- POS (`PointOfSale.tsx`) continues to use `selling_price` — out of scope for this change (can be added later on request).
+- Existing order edit/view modes keep working: on edit, load stored `unit_price` per line as-is and recompute totals from the new fields only when the user changes them.
+
+### Technical notes
+
+- New query key: `["gold-rate-today"]` invalidated on rate save.
+- `unit_price` written to `order_items` = the composed per-unit value `(goldValue + dia + cs + making)` so downstream reports keep matching `total_amount`.
+- Category-agnostic: logic is driven purely by `main_metal` + `net_wt`; non-jewellery products with no net weight fall back to `selling_price` cleanly.
