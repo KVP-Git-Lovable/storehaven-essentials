@@ -934,6 +934,28 @@ export default function InventoryItems() {
                         {item.status}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-sm">{item.style_no || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.main_metal || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.product_size || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.colour || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.gross_wt ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.net_wt ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.total_diamond_wt ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.total_colour_stone_wt ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.material_type || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.material_quality || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.material_inter_quality || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.product_cert_no || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.product_cert_by || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.rm_cert_by || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.rm_cert_no || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.length ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.material_weight ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.material_pcs ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.item_price != null ? `₹${Number(item.item_price).toLocaleString('en-IN')}` : '-'}</TableCell>
+                    <TableCell className="text-sm">{item.p_amount ?? '-'}</TableCell>
+                    <TableCell className="text-sm">{item.category_group || '-'}</TableCell>
+                    <TableCell className="text-sm">{item.material_rate ?? '-'}</TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
                         <Button variant="ghost" size="icon" onClick={() => setViewItem(item)}>
@@ -978,6 +1000,7 @@ export default function InventoryItems() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
