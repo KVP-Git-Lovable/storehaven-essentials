@@ -6158,10 +6158,13 @@ export type Database = {
       order_items: {
         Row: {
           created_at: string
+          cs_price: number
+          dia_price: number
           discount_amount: number | null
           discount_percent: number | null
           id: string
           item_id: string
+          making_charges: number
           order_id: string
           quantity: number
           tax_amount: number | null
@@ -6171,10 +6174,13 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          cs_price?: number
+          dia_price?: number
           discount_amount?: number | null
           discount_percent?: number | null
           id?: string
           item_id: string
+          making_charges?: number
           order_id: string
           quantity: number
           tax_amount?: number | null
@@ -6184,10 +6190,13 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          cs_price?: number
+          dia_price?: number
           discount_amount?: number | null
           discount_percent?: number | null
           id?: string
           item_id?: string
+          making_charges?: number
           order_id?: string
           quantity?: number
           tax_amount?: number | null
