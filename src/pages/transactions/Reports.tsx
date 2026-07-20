@@ -272,7 +272,54 @@ export default function Reports() {
     XLSX.writeFile(wb, `orders-report-${Date.now()}.xlsx`);
   };
 
-  const exportPDF = () => window.print();
+  const exportPDF = () => {
+    const aoa = buildExportRows();
+    if (!aoa || aoa.length === 0) return;
+    const header = aoa[0] as string[];
+    const body = aoa.slice(1);
+    const rightAligned = new Set(["Gross Wt","Metal Wt","Dia Wt","Dia Pcs","Quantity","Amount","Discount","Net Amount","Total Tax","Gross Amount"]);
+    const rightIdx = header.map((h) => rightAligned.has(h));
+    const esc = (v: unknown) => String(v ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]!));
+    const title = `Orders Report ${activeRange.from ? format(activeRange.from, "dd/MM/yyyy") : "—"} to ${activeRange.to ? format(activeRange.to, "dd/MM/yyyy") : "—"}`;
+    const rowsHtml = body.map((row) => {
+      const first = String(row[0] ?? "");
+      const isCustomerHeader = row.slice(1).every((c) => c === "" || c === undefined) && first !== "";
+      const isSubtotal = /^Total For /.test(first);
+      const isGrand = first === "Grand Total";
+      if (isCustomerHeader) {
+        return `<tr class="cust"><td colspan="${header.length}">${esc(first)}</td></tr>`;
+      }
+      const cls = isGrand ? "grand" : isSubtotal ? "subtotal" : "";
+      const tds = row.map((c, i) => `<td class="${rightIdx[i] ? "r" : ""}">${esc(c)}</td>`).join("");
+      return `<tr class="${cls}">${tds}</tr>`;
+    }).join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)}</title>
+      <style>
+        *{box-sizing:border-box}
+        body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:16px;}
+        h1{font-size:16px;margin:0 0 4px;text-align:center;text-transform:uppercase}
+        .sub{font-size:11px;text-align:center;color:#444;margin-bottom:10px}
+        table{width:100%;border-collapse:collapse;font-size:10px}
+        th,td{border:1px solid #999;padding:3px 5px;vertical-align:top}
+        th{background:#eee;text-align:left;font-weight:600}
+        td.r,th.r{text-align:right}
+        tr.cust td{background:#f3f4f6;font-weight:700}
+        tr.subtotal td{background:#f9fafb;font-weight:600}
+        tr.grand td{background:#e5e7eb;font-weight:700;border-top:2px solid #111}
+        @page{size:A4 landscape;margin:10mm}
+      </style></head><body>
+      <h1>${esc(company?.company_name || "Company")}</h1>
+      <div class="sub">${esc(title)}</div>
+      <table><thead><tr>${header.map((h,i)=>`<th class="${rightIdx[i]?"r":""}">${esc(h)}</th>`).join("")}</tr></thead>
+      <tbody>${rowsHtml}</tbody></table>
+      <script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script>
+      </body></html>`;
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  };
 
   const downloadBlob = (blob: Blob, name: string) => {
     const url = URL.createObjectURL(blob);
