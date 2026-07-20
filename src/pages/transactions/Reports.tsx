@@ -110,7 +110,8 @@ export default function Reports() {
     return QUICK_RANGES.find((r) => r.value === quick)?.label ?? "";
   }, [quick, fromDate, toDate]);
 
-  const taxRate = (Number(template?.sgst_rate) || 0) + (Number(template?.cgst_rate) || 0) + (Number(template?.igst_rate) || 0);
+  // Intra-state orders use SGST + CGST (IGST is inter-state and not applied here — matches Invoice/View Order).
+  const taxRate = (Number(template?.sgst_rate) || 0) + (Number(template?.cgst_rate) || 0);
 
   const { data: rows = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: ["report-orders", activeRange.from?.toISOString(), activeRange.to?.toISOString(), taxRate],
@@ -156,10 +157,14 @@ export default function Reports() {
         // Distribute order-level discount and tax across lines
         const cnt = orderItemCount.get(it.order_id) || 1;
         const discount = (Number(o.discount_amount) || 0) / cnt;
+        // Prefer the item's stored tax; fall back to order-level tax distributed by line; else compute from template.
+        const itemTax = Number(it.tax_amount) || 0;
         const orderTax = Number(o.tax_amount) || 0;
-        const tax = orderTax
-          ? orderTax / cnt
-          : ((line - discount) * (taxRate / 100));
+        const tax = itemTax > 0
+          ? itemTax
+          : orderTax > 0
+            ? orderTax / cnt
+            : ((line - discount) * (taxRate / 100));
         const net = line - discount;
         const gross = net + tax;
         const customerName = o.customers?.name || "Walk-in Customer";
