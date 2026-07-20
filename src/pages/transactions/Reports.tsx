@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -373,8 +373,8 @@ export default function Reports() {
                       tx: a.tx + r.tax, ga: a.ga + r.gross_amount,
                     }), { gw:0, mw:0, dw:0, dp:0, qt:0, am:0, dc:0, na:0, tx:0, ga:0 });
                     return (
-                      <>
-                        <tr key={`h-${cust}`} className="bg-muted/30">
+                      <Fragment key={cust}>
+                        <tr className="bg-muted/30">
                           <td colSpan={columns.length} className="px-2 py-1 font-semibold">{cust}</td>
                         </tr>
                         {list.map((r, i) => (
@@ -396,7 +396,7 @@ export default function Reports() {
                             <td className="px-2 py-1 text-right">{num(r.gross_amount)}</td>
                           </tr>
                         ))}
-                        <tr key={`t-${cust}`} className="border-y font-semibold bg-muted/20">
+                        <tr className="border-y font-semibold bg-muted/20">
                           <td className="px-2 py-1" colSpan={5}>Total For {cust}</td>
                           <td className="px-2 py-1 text-right">{num(tot.gw, 3)}</td>
                           <td className="px-2 py-1 text-right">{num(tot.mw, 3)}</td>
@@ -409,7 +409,7 @@ export default function Reports() {
                           <td className="px-2 py-1 text-right">{num(tot.tx)}</td>
                           <td className="px-2 py-1 text-right">{num(tot.ga)}</td>
                         </tr>
-                      </>
+                      </Fragment>
                     );
                   })
                 )}
