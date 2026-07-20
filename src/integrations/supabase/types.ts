@@ -3350,6 +3350,111 @@ export type Database = {
           },
         ]
       }
+      invoice_templates: {
+        Row: {
+          authorised_signatory_label: string | null
+          bank_account_no: string | null
+          bank_branch: string | null
+          bank_name: string | null
+          bank_rtgs_ifsc: string | null
+          cgst_rate: number
+          color_accent: string
+          color_primary: string
+          company_name_override: string | null
+          created_at: string
+          default_hsn_code: string | null
+          font_family: string
+          footer_note: string | null
+          id: string
+          igst_rate: number
+          invoice_number_padding: number
+          invoice_prefix: string
+          invoice_title: string
+          next_invoice_number: number
+          seal_url: string | null
+          sgst_rate: number
+          show_address: boolean
+          show_bank_details: boolean
+          show_cin: boolean
+          show_gst: boolean
+          show_logo: boolean
+          show_pan: boolean
+          show_phone: boolean
+          signature_url: string | null
+          tagline_override: string | null
+          terms_and_conditions: string | null
+          updated_at: string
+        }
+        Insert: {
+          authorised_signatory_label?: string | null
+          bank_account_no?: string | null
+          bank_branch?: string | null
+          bank_name?: string | null
+          bank_rtgs_ifsc?: string | null
+          cgst_rate?: number
+          color_accent?: string
+          color_primary?: string
+          company_name_override?: string | null
+          created_at?: string
+          default_hsn_code?: string | null
+          font_family?: string
+          footer_note?: string | null
+          id?: string
+          igst_rate?: number
+          invoice_number_padding?: number
+          invoice_prefix?: string
+          invoice_title?: string
+          next_invoice_number?: number
+          seal_url?: string | null
+          sgst_rate?: number
+          show_address?: boolean
+          show_bank_details?: boolean
+          show_cin?: boolean
+          show_gst?: boolean
+          show_logo?: boolean
+          show_pan?: boolean
+          show_phone?: boolean
+          signature_url?: string | null
+          tagline_override?: string | null
+          terms_and_conditions?: string | null
+          updated_at?: string
+        }
+        Update: {
+          authorised_signatory_label?: string | null
+          bank_account_no?: string | null
+          bank_branch?: string | null
+          bank_name?: string | null
+          bank_rtgs_ifsc?: string | null
+          cgst_rate?: number
+          color_accent?: string
+          color_primary?: string
+          company_name_override?: string | null
+          created_at?: string
+          default_hsn_code?: string | null
+          font_family?: string
+          footer_note?: string | null
+          id?: string
+          igst_rate?: number
+          invoice_number_padding?: number
+          invoice_prefix?: string
+          invoice_title?: string
+          next_invoice_number?: number
+          seal_url?: string | null
+          sgst_rate?: number
+          show_address?: boolean
+          show_bank_details?: boolean
+          show_cin?: boolean
+          show_gst?: boolean
+          show_logo?: boolean
+          show_pan?: boolean
+          show_phone?: boolean
+          signature_url?: string | null
+          tagline_override?: string | null
+          terms_and_conditions?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       job_requisitions: {
         Row: {
           approved_at: string | null
@@ -6153,6 +6258,8 @@ export type Database = {
           gift_card_amount: number | null
           gift_card_id: string | null
           id: string
+          invoice_generated_at: string | null
+          invoice_number: string | null
           loyalty_points_earned: number | null
           loyalty_points_redeemed: number | null
           notes: string | null
@@ -6179,6 +6286,8 @@ export type Database = {
           gift_card_amount?: number | null
           gift_card_id?: string | null
           id?: string
+          invoice_generated_at?: string | null
+          invoice_number?: string | null
           loyalty_points_earned?: number | null
           loyalty_points_redeemed?: number | null
           notes?: string | null
@@ -6205,6 +6314,8 @@ export type Database = {
           gift_card_amount?: number | null
           gift_card_id?: string | null
           id?: string
+          invoice_generated_at?: string | null
+          invoice_number?: string | null
           loyalty_points_earned?: number | null
           loyalty_points_redeemed?: number | null
           notes?: string | null
@@ -11862,6 +11973,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      allocate_invoice_number: { Args: never; Returns: string }
       get_hierarchy_accessible_users: {
         Args: { _user_id: string }
         Returns: string[]
