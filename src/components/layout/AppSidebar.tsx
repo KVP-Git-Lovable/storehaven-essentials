@@ -258,6 +258,7 @@ const navigation: NavItem[] = [
         isSubSection: true,
         subChildren: [
           { title: "Company Information", href: "/admin/company" },
+          { title: "Invoice Template", href: "/admin/company/invoice-template" },
         ]
       },
     ],

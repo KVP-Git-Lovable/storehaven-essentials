@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { assertStockAvailable, recordSaleLedger } from "@/lib/inventoryStock";
 import { useInventoryStockMap } from "@/hooks/useInventoryStock";
 import { format } from "date-fns";
+import { InvoiceViewerDialog } from "@/components/invoice/InvoiceViewerDialog";
 
 type LineItem = {
   productId: string;
@@ -56,6 +57,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   const [status, setStatus] = useState("completed");
   const [lineItems, setLineItems] = useState<LineItem[]>([emptyLine()]);
   const [discount, setDiscount] = useState("0");
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
   const isView = mode === "view";
   const isEdit = mode === "edit";
 
@@ -316,6 +318,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[1200px]">
         <DialogHeader>
@@ -326,7 +329,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => toast.info("Invoice generation coming soon")}
+                onClick={() => setInvoiceOpen(true)}
               >
                 Generate Invoice
               </Button>
@@ -501,5 +504,9 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {isView && order && (
+      <InvoiceViewerDialog open={invoiceOpen} onOpenChange={setInvoiceOpen} orderId={order.id} />
+    )}
+  </>
   );
 }
