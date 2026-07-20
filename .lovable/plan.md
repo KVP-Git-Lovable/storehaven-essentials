@@ -1,65 +1,94 @@
-## Set Gold Rate + Dynamic Jewellery Pricing in Orders
+## Goal
 
-Add daily gold rate management on `/inventory/items` and use it to auto-price jewellery products in the New Order modal, with per-line Dia / CS / Making charges and an order-level Discount.
+Add a new **Invoice Template** section under **Admin → Company** and wire the existing **Generate Invoice** button in Order View to render a print-ready GST tax invoice styled per the template, matching the Trayi Jewellers sample invoice.
 
-### 1. New table: `gold_rates`
+## 1. Database
 
-One row per day per karat.
+New table `invoice_templates` (single-row per company, upserted):
 
-| Column | Type |
-|---|---|
-| `id` | uuid PK |
-| `rate_date` | date (unique with `karat`) |
-| `karat` | text (`18K` or `22K`) |
-| `price_per_gram` | numeric |
-| `created_at` / `updated_at` | timestamptz |
+- `company_name_override`, `tagline_override` (optional; default = pull from `company_information`)
+- Toggles for header fields: `show_logo`, `show_gst`, `show_pan`, `show_cin`, `show_phone`, `show_address`, `show_bank_details`
+- `invoice_title` (default "TAX INVOICE")
+- `invoice_prefix` (e.g. `TJ-26/27-`), `next_invoice_number` (int)
+- Bank details block: `bank_name`, `bank_account_no`, `bank_branch`, `bank_rtgs_ifsc`
+- Tax config: `sgst_rate` (default 1.5), `cgst_rate` (default 1.5), `igst_rate` (default 3.0), `hsn_code` (default 71131930)
+- Theme: `color_primary` (header band), `color_accent`, `font_family` (Serif / Sans / Mono)
+- `terms_and_conditions`, `footer_note`, `authorised_signatory_label`
+- `signature_url`, `seal_url` (optional uploads to `company-assets` bucket)
 
-RLS: authenticated users can read/insert/update; service_role full. GRANTs to authenticated + service_role. Unique index on `(rate_date, karat)` so save = upsert.
+Add `invoice_number` (text, nullable, unique) and `invoice_generated_at` (timestamptz) to `orders` so invoice numbers persist once generated.
 
-### 2. Inventory Items page — "Set Gold Rate" button
+RLS: authenticated read+write, service_role all (same pattern as `company_information`).
 
-- Add a **Set Gold Rate** button to the header of `src/pages/inventory/InventoryItems.tsx`, placed immediately to the left of **Import Memo Inward**.
-- New component `src/components/inventory/GoldRateDialog.tsx`:
-  - Shows today's date (read-only, `dd MMM yyyy`).
-  - Two numeric inputs: **18K – price per 1g** and **22K – price per 1g**.
-  - On open, pre-fills with today's existing rates (if any).
-  - **Save** upserts both rows into `gold_rates` for today, invalidates the `gold-rate-today` query, toasts success.
+## 2. New page: `/admin/company/invoice-template`
 
-### 3. Order modal pricing logic
+Two-pane layout:
 
-Update `src/components/transactions/OrderFormDialog.tsx`:
+- **Left – Settings form** (grouped cards):
+  - Branding: logo toggle, color picker (primary/accent), font family select
+  - Header Fields: checkboxes for GST/PAN/CIN/Phone/Address, invoice title text
+  - Numbering: prefix + next number preview (e.g. `TJ-26/27-0033`)
+  - Tax: SGST/CGST/IGST %, default HSN
+  - Bank Details: name, a/c, branch, IFSC
+  - Signature/Seal upload
+  - Terms & footer note textareas
+- **Right – Live Preview**: renders the same `InvoiceDocument` component used for printing, populated with sample data + current company info, so users see changes instantly.
 
-- Fetch products with `net_wt`, `main_metal`, plus existing fields.
-- Fetch today's gold rates once (`gold-rate-today` query) → `{ "18K": number, "22K": number }`.
-- Derive karat from product's `main_metal` (match `18` → 18K, `22` → 22K; fallback: no gold component → 0).
-- Extend each line item state with `diaPrice`, `csPrice`, `makingCharges` (all default `"0"`, editable numeric inputs).
-- **Per-line calculation:**
-  - `goldValue = todaysRate(karat) * (net_wt || 0)`
-  - `unitPrice` displayed = `goldValue` (read-only, derived; replaces the old `selling_price` source for jewellery lines)
-  - `lineTotal = unitPrice + diaPrice + csPrice + makingCharges`  (× quantity)
-  - If no gold rate is set for today OR product has no `net_wt`, fall back to product `selling_price` for `unitPrice` and show a subtle hint "Set today's gold rate".
-- **Order totals block:**
-  - `Subtotal = Σ lineTotal`
-  - New **Discount** input (numeric, blank = 0), subtracted from Subtotal.
-  - `Grand Total = (Subtotal − Discount) + Tax` (Tax stays 0 as today).
-  - Persist discount into `orders.discount_amount` (already exists on `orders`; if not, add nullable column in the same migration — will confirm during exploration/build).
+Sidebar wiring: add "Invoice Template" as a second item under **Admin → COMPANY** in `src/components/layout/AppSidebar.tsx`, route `/admin/company/invoice-template`.
 
-### 4. Modal layout
+## 3. Invoice rendering
 
-- Widen `DialogContent` from `sm:max-w-3xl` to `sm:max-w-6xl` (or `max-w-[1200px]`) so each product row fits on one line.
-- Restructure line item grid to a single responsive row:
-  `[Product | Qty | Unit Price | Dia Price | CS Price | Making | Line Total | 🗑]`
-  Inputs for Dia/CS/Making are compact numeric fields.
-- Keep mobile stacking (grid collapses to 1 col below `md`).
+New component `src/components/invoice/InvoiceDocument.tsx` — pure presentational, accepts `{ template, company, order, customer, lineItems }`. Layout mirrors the attached sample:
 
-### 5. Scope guardrails
+```text
+┌───────────────────────────────────────────────────────────┐
+│  [Logo]         COMPANY NAME (banner)                     │
+│  GST / PAN / CIN / Address / Phone                        │
+├───────────────────────────────────────────────────────────┤
+│              TAX INVOICE                                  │
+│  Invoice No / Date / Dispatch / Terms / Ref               │
+├──────────────────────────┬────────────────────────────────┤
+│  Billed To (customer)    │  Consignor / Shipped To        │
+├──────────────────────────┴────────────────────────────────┤
+│  SlNo | Description | HSN | Cert# | GWt | NWt | DWt | SWt │
+│       |  Rate | Amount                                    │
+│  … line rows …                                            │
+│  Total row                                                │
+├───────────────────────────────────────────────────────────┤
+│                       SGST / CGST / IGST                  │
+│                       Grand Total                         │
+│  Amount in Words                                          │
+├───────────────────────────────────────────────────────────┤
+│  Bank Details               │  Authorised Signatory       │
+└───────────────────────────────────────────────────────────┘
+```
 
-- No changes to WhatsApp, Journey Builder, POS, GRN, or other order-adjacent flows.
-- POS (`PointOfSale.tsx`) continues to use `selling_price` — out of scope for this change (can be added later on request).
-- Existing order edit/view modes keep working: on edit, load stored `unit_price` per line as-is and recompute totals from the new fields only when the user changes them.
+Uses semantic tokens; primary color band + font family come from template. Amount-in-words via a small `numberToIndianWords` util.
 
-### Technical notes
+## 4. Wire "Generate Invoice" in Order View
 
-- New query key: `["gold-rate-today"]` invalidated on rate save.
-- `unit_price` written to `order_items` = the composed per-unit value `(goldValue + dia + cs + making)` so downstream reports keep matching `total_amount`.
-- Category-agnostic: logic is driven purely by `main_metal` + `net_wt`; non-jewellery products with no net weight fall back to `selling_price` cleanly.
+In `src/components/transactions/OrderFormDialog.tsx` (view mode) the stub button becomes: open new dialog `InvoiceViewerDialog` that:
+
+1. If the order has no `invoice_number`, allocate one atomically (RPC `allocate_invoice_number(prefix)` increments `next_invoice_number` and returns formatted string), then update the order row.
+2. Fetch template + company + customer + line items (with `sku`, `net_wt`, `gross_wt`, certificate no, dia_wt, stone_wt from `inventory_items`).
+3. Render `<InvoiceDocument … />` inside a scrollable dialog with **Print** and **Download PDF** actions.
+4. Print uses `window.print()` scoped via a `@media print` stylesheet that hides app chrome and shows only `.invoice-print-root`.
+5. PDF uses `html2canvas` + `jspdf` (already common in stack — add if missing) to export A4.
+
+## 5. Data mapping for line items
+
+Extend `order_items` queries to also fetch related `inventory_items` fields already used elsewhere: `sku` (LL code), `certificate_no`, `gross_wt`, `net_wt`, `dia_wt`, `stone_wt`, `hsn_code`. `Rate` and `Amount` derive from existing `unit_price + dia_price + cs_price + making_charges` × quantity. No changes to order calculation logic.
+
+## Out of scope
+
+- No changes to POS, Journey Builder, WhatsApp, or existing order pricing math.
+- No credit-note module (Quickapp reference has one; skipping unless requested).
+- No email/WhatsApp send of the generated invoice (can be a follow-up).
+
+## Technical notes
+
+- Sidebar entry gated the same way as Company Information (no `moduleKey`).
+- Template row is singleton — upsert pattern like `company_information`.
+- Color pickers: use existing `Input type="color"` to avoid new deps.
+- Print CSS lives in `src/index.css` under a scoped `@media print` block targeting `.invoice-print-root` only.
+- `numberToIndianWords` implemented inline (~40 LOC), no new dep.
