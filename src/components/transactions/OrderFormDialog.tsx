@@ -226,7 +226,10 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       }
 
       const subtotal = validItems.reduce((sum, item) => sum + item.lineTotal, 0);
-      const discountAmount = Math.max(0, Number(discount) || 0);
+      const pct = Math.max(0, Math.min(100, Number(discountPct) || 0));
+      const discountAmount = pct > 0
+        ? (subtotal * pct) / 100
+        : Math.max(0, Number(discount) || 0);
       const taxableBase = Math.max(0, subtotal - discountAmount);
       const sRate = Number(invoiceTemplate?.sgst_rate) || 0;
       const cRate = Number(invoiceTemplate?.cgst_rate) || 0;
@@ -348,7 +351,10 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   );
 
   const subtotal = enrichedItems.reduce((sum, item) => sum + item.lineTotal, 0);
-  const discountAmount = Math.max(0, Number(discount) || 0);
+  const pctNum = Math.max(0, Math.min(100, Number(discountPct) || 0));
+  const discountAmount = pctNum > 0
+    ? (subtotal * pctNum) / 100
+    : Math.max(0, Number(discount) || 0);
   const { data: invoiceTemplate } = useInvoiceTemplate();
   const taxable = Math.max(0, subtotal - discountAmount);
   const sgstRate = Number(invoiceTemplate?.sgst_rate) || 0;
