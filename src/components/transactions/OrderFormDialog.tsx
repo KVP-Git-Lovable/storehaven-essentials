@@ -392,7 +392,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[1200px]">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[1400px]">
         <DialogHeader>
           <div className="flex items-center justify-between gap-4 pr-8">
             <DialogTitle>{title}</DialogTitle>
@@ -451,7 +451,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
               const calculated = enrichedItems[index];
               return (
                 <Card key={calculated.key} className="p-4">
-                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_110px_130px_100px_100px_110px_130px_auto] lg:items-start md:grid-cols-2">
+                   <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_110px_130px_100px_100px_110px_130px_auto] lg:items-start md:grid-cols-2">
                     <div className="min-w-0">
                       <Label>Product {index + 1}</Label>
                       <SearchableSelect
@@ -459,14 +459,24 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                         onValueChange={(value) => updateLineItem(index, { productId: value })}
                         options={products.map((p: any) => {
                           const stock = stockMap[p.id] ?? 0;
-                          const up = unitPriceOf(p);
+                          const sku = p.sku || "";
                           return {
                             value: p.id,
-                            label: `${p.name} — ₹${Math.round(up.price).toLocaleString("en-IN")} (Stock: ${stock})`,
+                            label: `${sku ? sku + " — " : ""}${p.name} (Stock: ${stock})`,
+                            labelNode: (
+                              <span>
+                                {sku && <span className="font-mono font-bold">{sku}</span>}
+                                {sku && <span> — </span>}
+                                <span>{p.name}</span>
+                                <span className="text-muted-foreground"> (Stock: {stock})</span>
+                              </span>
+                            ),
+                            searchValue: `${sku} ${p.name} ${stock}`,
                             disabled: !isEdit && stock <= 0,
                           };
                         })}
                         placeholder="Select product..."
+                        searchPlaceholder="Search by SKU / Barcode or name..."
                         disabled={isView}
                       />
                       {calculated.product && calculated.priceSource === "fallback" && calculated.product.karat && (
