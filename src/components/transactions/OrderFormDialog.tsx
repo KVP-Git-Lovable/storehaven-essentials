@@ -58,6 +58,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   const [status, setStatus] = useState("completed");
   const [lineItems, setLineItems] = useState<LineItem[]>([emptyLine()]);
   const [discount, setDiscount] = useState("0");
+  const [discountPct, setDiscountPct] = useState("");
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const isView = mode === "view";
   const isEdit = mode === "edit";
@@ -153,11 +154,13 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       setStatus("completed");
       setLineItems([emptyLine()]);
       setDiscount("0");
+      setDiscountPct("");
       return;
     }
     setCustomerId(order.customer_id || "");
     setStatus(order.status || "completed");
     setDiscount(String((order as any).discount_amount ?? 0));
+    setDiscountPct("");
   }, [open, order]);
 
   useEffect(() => {
@@ -223,7 +226,10 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       }
 
       const subtotal = validItems.reduce((sum, item) => sum + item.lineTotal, 0);
-      const discountAmount = Math.max(0, Number(discount) || 0);
+      const pct = Math.max(0, Math.min(100, Number(discountPct) || 0));
+      const discountAmount = pct > 0
+        ? (subtotal * pct) / 100
+        : Math.max(0, Number(discount) || 0);
       const taxableBase = Math.max(0, subtotal - discountAmount);
       const sRate = Number(invoiceTemplate?.sgst_rate) || 0;
       const cRate = Number(invoiceTemplate?.cgst_rate) || 0;
@@ -316,6 +322,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       setStatus("completed");
       setLineItems([emptyLine()]);
       setDiscount("0");
+      setDiscountPct("");
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -344,7 +351,10 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   );
 
   const subtotal = enrichedItems.reduce((sum, item) => sum + item.lineTotal, 0);
-  const discountAmount = Math.max(0, Number(discount) || 0);
+  const pctNum = Math.max(0, Math.min(100, Number(discountPct) || 0));
+  const discountAmount = pctNum > 0
+    ? (subtotal * pctNum) / 100
+    : Math.max(0, Number(discount) || 0);
   const { data: invoiceTemplate } = useInvoiceTemplate();
   const taxable = Math.max(0, subtotal - discountAmount);
   const sgstRate = Number(invoiceTemplate?.sgst_rate) || 0;
@@ -533,17 +543,39 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
               </div>
               <div className="flex items-center justify-between gap-4">
                 <span className="text-muted-foreground">Discount</span>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={discount}
-                  disabled={isView}
-                  onChange={(e) => setDiscount(e.target.value)}
-                  placeholder="0"
-                  className="w-40 text-right"
-                />
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={discountPct}
+                      disabled={isView || (Number(discount) > 0)}
+                      onChange={(e) => { setDiscountPct(e.target.value); if (e.target.value) setDiscount("0"); }}
+                      placeholder="%"
+                      className="w-24 text-right pr-6"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                  </div>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={discount}
+                    disabled={isView || (Number(discountPct) > 0)}
+                    onChange={(e) => { setDiscount(e.target.value); if (e.target.value && Number(e.target.value) > 0) setDiscountPct(""); }}
+                    placeholder="Amount"
+                    className="w-32 text-right"
+                  />
+                </div>
               </div>
+              {pctNum > 0 && (
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Discount ({pctNum}%)</span>
+                  <span>-₹{discountAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
               {sgstRate > 0 && (
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">SGST ({sgstRate.toFixed(1)}%)</span>
