@@ -24,6 +24,10 @@ export type SearchableSelectOption = {
   label: string;
   subtitle?: string;
   disabled?: boolean;
+  /** Overrides the string cmdk uses to match search input. Falls back to label. */
+  searchValue?: string;
+  /** Optional custom node to render inside the item (overrides label rendering). */
+  labelNode?: React.ReactNode;
 };
 
 interface SearchableSelectProps {
@@ -116,7 +120,7 @@ export function SearchableSelect({
               {options.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={option.label}
+                  value={option.searchValue ?? option.label}
                   disabled={option.disabled}
                   onSelect={() => {
                     if (option.disabled) return;
@@ -133,7 +137,7 @@ export function SearchableSelect({
                     )}
                   />
                   <div className="flex flex-col">
-                    <span>{option.label}</span>
+                    <span>{option.labelNode ?? option.label}</span>
                     {option.subtitle && (
                       <span className="text-xs text-muted-foreground">{option.subtitle}</span>
                     )}
