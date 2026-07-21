@@ -209,6 +209,41 @@ export default function PriceConfiguration() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
+            <Hammer className="h-5 w-5" /> Making Charges Rate
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <Label>Date</Label>
+              <Input value={todayLabel} disabled />
+            </div>
+            <div>
+              <Label>Making Charges – Price per 1g (₹)</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={making}
+                onChange={(e) => setMaking(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Making Charges on an order line = Net Wt of the product × today's Making Charges rate.
+          </p>
+          <div className="flex justify-end">
+            <Button onClick={saveMaking} disabled={savingMaking}>
+              {savingMaking ? "Saving..." : "Save Making Charges Rate"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
             <Coins className="h-5 w-5" /> Gold Rate
           </CardTitle>
         </CardHeader>
