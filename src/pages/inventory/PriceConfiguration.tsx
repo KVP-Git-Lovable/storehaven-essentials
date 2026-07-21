@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { Coins, Gem, Sparkles } from "lucide-react";
+import { Coins, Gem, Sparkles, Hammer } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +17,48 @@ export default function PriceConfiguration() {
   const qc = useQueryClient();
   const today = format(new Date(), "yyyy-MM-dd");
   const todayLabel = format(new Date(), "dd MMM yyyy");
+
+  // ---------- Making Charges ----------
+  const [making, setMaking] = useState("");
+  const [savingMaking, setSavingMaking] = useState(false);
+
+  const { data: makingRow } = useQuery({
+    queryKey: ["making-rate-today", today],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("making_charges_rates")
+        .select("price_per_gram")
+        .eq("rate_date", today)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { price_per_gram: number } | null;
+    },
+  });
+
+  useEffect(() => {
+    if (makingRow) setMaking(String(makingRow.price_per_gram));
+  }, [makingRow]);
+
+  const saveMaking = async () => {
+    const v = Number(making);
+    if (!(v > 0)) {
+      toast.error("Enter a valid Making Charges rate");
+      return;
+    }
+    setSavingMaking(true);
+    try {
+      const { error } = await (supabase as any)
+        .from("making_charges_rates")
+        .upsert([{ rate_date: today, price_per_gram: v }], { onConflict: "rate_date" });
+      if (error) throw error;
+      toast.success("Making Charges rate saved for today");
+      qc.invalidateQueries({ queryKey: ["making-rate-today"] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to save Making Charges rate");
+    } finally {
+      setSavingMaking(false);
+    }
+  };
 
   // ---------- Gold ----------
   const [gold, setGold] = useState<Record<Karat, string>>({ "14K": "", "18K": "", "22K": "" });

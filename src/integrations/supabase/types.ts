@@ -5353,6 +5353,30 @@ export type Database = {
           },
         ]
       }
+      making_charges_rates: {
+        Row: {
+          created_at: string
+          id: string
+          price_per_gram: number
+          rate_date: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          price_per_gram: number
+          rate_date: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          price_per_gram?: number
+          rate_date?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       manager_feedback: {
         Row: {
           action_items: string | null
