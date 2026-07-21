@@ -112,6 +112,20 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     },
   });
 
+  const { data: makingRate = 0 } = useQuery({
+    queryKey: ["making-rate-today", today],
+    enabled: open,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("making_charges_rates")
+        .select("price_per_gram")
+        .eq("rate_date", today)
+        .maybeSingle();
+      if (error) throw error;
+      return Number((data as any)?.price_per_gram) || 0;
+    },
+  });
+
   const unitPriceOf = (product: any): { price: number; source: "gold" | "fallback" } => {
     if (product?.karat && product.netWt > 0 && goldRates[product.karat] > 0) {
       return { price: goldRates[product.karat] * product.netWt, source: "gold" };
@@ -342,7 +356,21 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   const title = isView ? "View Order" : isEdit ? "Edit Order" : "New Order";
 
   const updateLineItem = (index: number, patch: Partial<LineItem>) => {
-    setLineItems((current) => current.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+    setLineItems((current) => current.map((item, i) => {
+      if (i !== index) return item;
+      const next = { ...item, ...patch };
+      // Auto-fill Making = today's rate × Net Wt when product is (re)selected,
+      // unless the user has already entered a custom Making value on this line.
+      if (patch.productId && patch.productId !== item.productId) {
+        const product = products.find((p: any) => p.id === patch.productId);
+        const netWt = Number(product?.netWt) || 0;
+        const currentMaking = Number(item.makingCharges) || 0;
+        if (makingRate > 0 && netWt > 0 && currentMaking === 0) {
+          next.makingCharges = String(Math.round(makingRate * netWt * 100) / 100);
+        }
+      }
+      return next;
+    }));
   };
 
   const addLineItem = () => setLineItems((current) => [...current, emptyLine()]);
