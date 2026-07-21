@@ -1214,6 +1214,30 @@ export type Database = {
           },
         ]
       }
+      cs_rates: {
+        Row: {
+          created_at: string
+          id: string
+          price_per_gram: number
+          rate_date: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          price_per_gram?: number
+          rate_date: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          price_per_gram?: number
+          rate_date?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           anniversary_date: string | null
@@ -1364,6 +1388,39 @@ export type Database = {
           id?: string
           name?: string
           status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      diamond_rates: {
+        Row: {
+          created_at: string
+          effective_date: string
+          id: string
+          particulars: string
+          price_per_ct: number
+          size_label: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          effective_date?: string
+          id?: string
+          particulars: string
+          price_per_ct?: number
+          size_label: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          effective_date?: string
+          id?: string
+          particulars?: string
+          price_per_ct?: number
+          size_label?: string
+          sort_order?: number
           updated_at?: string
         }
         Relationships: []

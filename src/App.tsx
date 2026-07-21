@@ -83,6 +83,7 @@ const Planograms = lazyWithRetry(() => import("./pages/vm/Planograms"), "Planogr
 const ComplianceTasks = lazyWithRetry(() => import("./pages/vm/ComplianceTasks"), "ComplianceTasks");
 const ReviewSubmissions = lazyWithRetry(() => import("./pages/vm/ReviewSubmissions"), "ReviewSubmissions");
 const InventoryItems = lazyWithRetry(() => import("./pages/inventory/InventoryItems"), "InventoryItems");
+const PriceConfiguration = lazyWithRetry(() => import("./pages/inventory/PriceConfiguration"), "PriceConfiguration");
 const Requisitions = lazyWithRetry(() => import("./pages/inventory/Requisitions"), "Requisitions");
 const ShipmentTracking = lazyWithRetry(() => import("./pages/inventory/ShipmentTracking"), "ShipmentTracking");
 const GoodsReceipt = lazyWithRetry(() => import("./pages/inventory/GoodsReceipt"), "GoodsReceipt");
@@ -284,6 +285,7 @@ const App = () => (
                 <Route path="/vm/photos" element={<PhotoSubmission />} />
                 <Route path="/vm/review" element={<ReviewSubmissions />} />
                 <Route path="/inventory/items" element={<InventoryItems />} />
+                <Route path="/inventory/price-configuration" element={<PriceConfiguration />} />
                 <Route path="/inventory/requisitions" element={<Requisitions />} />
                 <Route path="/inventory/shipments" element={<ShipmentTracking />} />
                 <Route path="/inventory/grn" element={<GoodsReceipt />} />

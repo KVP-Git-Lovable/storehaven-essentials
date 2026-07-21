@@ -53,7 +53,8 @@ import { cn } from "@/lib/utils";
 import { useInventoryStockMap } from "@/hooks/useInventoryStock";
 import { EditStockDialog } from "@/components/inventory/EditStockDialog";
 import { MemoImportDialog } from "@/components/inventory/MemoImportDialog";
-import { GoldRateDialog } from "@/components/inventory/GoldRateDialog";
+import { Link } from "react-router-dom";
+import { Coins } from "lucide-react";
 
 const itemSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -375,7 +376,11 @@ export default function InventoryItems() {
           }
         }}>
           <div className="flex gap-2">
-            <GoldRateDialog />
+            <Button asChild variant="outline">
+              <Link to="/inventory/price-configuration">
+                <Coins className="mr-2 h-4 w-4" /> Price Configuration
+              </Link>
+            </Button>
             <MemoImportDialog onImported={fetchItems} />
             <DialogTrigger asChild>
               <Button>
