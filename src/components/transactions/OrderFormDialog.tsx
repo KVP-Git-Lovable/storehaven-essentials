@@ -58,6 +58,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   const [status, setStatus] = useState("completed");
   const [lineItems, setLineItems] = useState<LineItem[]>([emptyLine()]);
   const [discount, setDiscount] = useState("0");
+  const [discountPct, setDiscountPct] = useState("");
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const isView = mode === "view";
   const isEdit = mode === "edit";
