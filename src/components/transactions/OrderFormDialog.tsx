@@ -154,11 +154,13 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       setStatus("completed");
       setLineItems([emptyLine()]);
       setDiscount("0");
+      setDiscountPct("");
       return;
     }
     setCustomerId(order.customer_id || "");
     setStatus(order.status || "completed");
     setDiscount(String((order as any).discount_amount ?? 0));
+    setDiscountPct("");
   }, [open, order]);
 
   useEffect(() => {
@@ -317,6 +319,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       setStatus("completed");
       setLineItems([emptyLine()]);
       setDiscount("0");
+      setDiscountPct("");
     },
     onError: (e: any) => toast.error(e.message),
   });
