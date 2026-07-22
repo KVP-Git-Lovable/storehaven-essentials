@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { Plus, Search, Package, Barcode, AlertTriangle, CalendarIcon, Eye, Edit, Trash2, ScanLine } from "lucide-react";
 import { Upload, X, Image as ImageIcon } from "lucide-react";
 import { BarcodeScanner } from "@/components/inventory/BarcodeScanner";
+import { TopScrollbar } from "@/components/inventory/TopScrollbar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -136,6 +137,7 @@ interface Vendor {
 
 export default function InventoryItems() {
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -824,7 +826,8 @@ export default function InventoryItems() {
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto w-full">
+          <TopScrollbar targetRef={tableScrollRef} />
+          <div className="overflow-x-auto w-full" ref={tableScrollRef}>
           <Table className="min-w-max">
             <TableHeader>
               <TableRow>
