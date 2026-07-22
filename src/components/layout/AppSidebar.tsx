@@ -128,6 +128,7 @@ const navigation: NavItem[] = [
     title: "Maintenance Tasks",
     icon: Wrench,
     moduleKey: "operations",
+    iconColor: "bg-orange-500/15 text-orange-400",
     children: [
       { title: "Store Maintenance Tasks", href: "/operations/adherence", moduleKey: "operations.adherence" },
       { title: "Store Heatmap", href: "/operations/heatmap", moduleKey: "operations.heatmap" },
@@ -137,6 +138,7 @@ const navigation: NavItem[] = [
     title: "Visual Merch (VM)",
     icon: BarChart3,
     moduleKey: "vm",
+    iconColor: "bg-pink-500/15 text-pink-400",
     children: [
       { title: "Planograms", href: "/vm/planograms", moduleKey: "vm.planograms" },
       { title: "Compliance Tasks", href: "/vm/tasks", moduleKey: "vm.tasks" },
@@ -147,6 +149,7 @@ const navigation: NavItem[] = [
     title: "Assets & Service",
     icon: Package,
     moduleKey: "assets",
+    iconColor: "bg-cyan-500/15 text-cyan-400",
     children: [
       { title: "Asset Master", href: "/assets/master", moduleKey: "assets.master" },
       { title: "Asset Register", href: "/assets/inventory", moduleKey: "assets.register" },
@@ -157,11 +160,12 @@ const navigation: NavItem[] = [
       { title: "Knowledge Base", href: "/services/knowledge-base", moduleKey: "assets.knowledge" },
     ],
   },
-  { title: "Vendors", href: "/vendors", icon: Building2, moduleKey: "vendors" },
+  { title: "Vendors", href: "/vendors", icon: Building2, moduleKey: "vendors", iconColor: "bg-yellow-500/15 text-yellow-400" },
   {
     title: "Employee",
     icon: CalendarCheck,
     moduleKey: "staff",
+    iconColor: "bg-fuchsia-500/15 text-fuchsia-400",
     children: [
       { title: "Employees", href: "/staff/employees", moduleKey: "staff.employees" },
       { title: "Recruitment", href: "/staff/recruitment", moduleKey: "staff.recruitment" },
@@ -183,6 +187,7 @@ const navigation: NavItem[] = [
     title: "Security",
     icon: ShieldCheck,
     moduleKey: "security",
+    iconColor: "bg-red-500/15 text-red-400",
     children: [
       { title: "Dashboard", href: "/security", moduleKey: "security.dashboard" },
       { title: "Guards", href: "/security/guards", moduleKey: "security.guards" },
@@ -197,6 +202,7 @@ const navigation: NavItem[] = [
     title: "Communication Center",
     icon: MessageSquare,
     moduleKey: "communication",
+    iconColor: "bg-lime-500/15 text-lime-400",
     children: [
       { title: "WhatsApp", href: "/communication/whatsapp", moduleKey: "communication.whatsapp" },
       { title: "Voice", href: "/communication/voice", moduleKey: "communication.voice" },
@@ -209,6 +215,7 @@ const navigation: NavItem[] = [
     title: "Inventory",
     icon: Boxes,
     moduleKey: "inventory",
+    iconColor: "bg-green-500/15 text-green-400",
     children: [
       { title: "Inventory Items", href: "/inventory/items", moduleKey: "inventory.items" },
       { title: "Requisitions", href: "/inventory/requisitions", moduleKey: "inventory.requisitions" },
