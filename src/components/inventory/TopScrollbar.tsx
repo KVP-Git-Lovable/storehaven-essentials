@@ -15,13 +15,15 @@ export function TopScrollbar({ targetRef }: { targetRef: React.RefObject<HTMLEle
     const top = topRef.current;
     if (!target || !top) return;
 
+    const table = target.querySelector("table") as HTMLElement | null;
+    const scrollTarget = table?.parentElement instanceof HTMLElement ? table.parentElement : target;
+
     const getContentWidth = () => {
-      const table = target.querySelector("table") as HTMLElement | null;
       const contentWidth = table
         ? Math.max(table.scrollWidth, table.offsetWidth, table.getBoundingClientRect().width)
-        : target.scrollWidth;
+        : scrollTarget.scrollWidth;
 
-      return Math.max(contentWidth, target.scrollWidth, target.clientWidth + 1);
+      return Math.max(contentWidth, scrollTarget.scrollWidth, scrollTarget.clientWidth + 1);
     };
 
     const update = () => {
@@ -42,6 +44,8 @@ export function TopScrollbar({ targetRef }: { targetRef: React.RefObject<HTMLEle
 
     const ro = new ResizeObserver(update);
     ro.observe(target);
+    ro.observe(scrollTarget);
+    if (table) ro.observe(table);
     // Observe all descendants so late-rendered tables update the width
     target.querySelectorAll("*").forEach((el) => ro.observe(el as Element));
 
@@ -62,23 +66,23 @@ export function TopScrollbar({ targetRef }: { targetRef: React.RefObject<HTMLEle
     const onTopScroll = () => {
       if (syncing.current === "bottom") { syncing.current = null; return; }
       syncing.current = "top";
-      setScrollByRatio(target, getScrollRatio(top));
+      setScrollByRatio(scrollTarget, getScrollRatio(top));
     };
     const onBottomScroll = () => {
       if (syncing.current === "top") { syncing.current = null; return; }
       syncing.current = "bottom";
       update();
-      setScrollByRatio(top, getScrollRatio(target));
+      setScrollByRatio(top, getScrollRatio(scrollTarget));
     };
     top.addEventListener("scroll", onTopScroll);
-    target.addEventListener("scroll", onBottomScroll);
+    scrollTarget.addEventListener("scroll", onBottomScroll);
 
     return () => {
       ro.disconnect();
       mo.disconnect();
       window.clearInterval(interval);
       top.removeEventListener("scroll", onTopScroll);
-      target.removeEventListener("scroll", onBottomScroll);
+      scrollTarget.removeEventListener("scroll", onBottomScroll);
     };
   }, [targetRef]);
 
