@@ -1,0 +1,2 @@
+ALTER TABLE public.gold_rates DROP CONSTRAINT IF EXISTS gold_rates_karat_check;
+ALTER TABLE public.gold_rates ADD CONSTRAINT gold_rates_karat_check CHECK (karat = ANY (ARRAY['14K'::text, '18K'::text, '22K'::text]));

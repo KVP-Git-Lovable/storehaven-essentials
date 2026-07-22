@@ -23,12 +23,13 @@ export default function PriceConfiguration() {
   const [savingMaking, setSavingMaking] = useState(false);
 
   const { data: makingRow } = useQuery({
-    queryKey: ["making-rate-today", today],
+    queryKey: ["making-rate-latest"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("making_charges_rates")
-        .select("price_per_gram")
-        .eq("rate_date", today)
+        .select("price_per_gram, rate_date")
+        .order("rate_date", { ascending: false })
+        .limit(1)
         .maybeSingle();
       if (error) throw error;
       return data as { price_per_gram: number } | null;
@@ -52,6 +53,7 @@ export default function PriceConfiguration() {
         .upsert([{ rate_date: today, price_per_gram: v }], { onConflict: "rate_date" });
       if (error) throw error;
       toast.success("Making Charges rate saved for today");
+      qc.invalidateQueries({ queryKey: ["making-rate-latest"] });
       qc.invalidateQueries({ queryKey: ["making-rate-today"] });
     } catch (e: any) {
       toast.error(e.message || "Failed to save Making Charges rate");
@@ -161,12 +163,13 @@ export default function PriceConfiguration() {
   const [savingCs, setSavingCs] = useState(false);
 
   const { data: csRow } = useQuery({
-    queryKey: ["cs-rate-today", today],
+    queryKey: ["cs-rate-latest"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("cs_rates")
-        .select("price_per_gram")
-        .eq("rate_date", today)
+        .select("price_per_gram, rate_date")
+        .order("rate_date", { ascending: false })
+        .limit(1)
         .maybeSingle();
       if (error) throw error;
       return data as { price_per_gram: number } | null;
@@ -190,6 +193,7 @@ export default function PriceConfiguration() {
         .upsert([{ rate_date: today, price_per_gram: v }], { onConflict: "rate_date" });
       if (error) throw error;
       toast.success("CS rate saved for today");
+      qc.invalidateQueries({ queryKey: ["cs-rate-latest"] });
       qc.invalidateQueries({ queryKey: ["cs-rate-today"] });
     } catch (e: any) {
       toast.error(e.message || "Failed to save CS rate");
