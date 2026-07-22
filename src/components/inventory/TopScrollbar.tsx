@@ -15,8 +15,30 @@ export function TopScrollbar({ targetRef }: { targetRef: React.RefObject<HTMLEle
     const top = topRef.current;
     if (!target || !top) return;
 
-    const update = () => setWidth((prev) => (prev === target.scrollWidth ? prev : target.scrollWidth));
+    const getContentWidth = () => {
+      const table = target.querySelector("table") as HTMLElement | null;
+      const contentWidth = table
+        ? Math.max(table.scrollWidth, table.offsetWidth, table.getBoundingClientRect().width)
+        : target.scrollWidth;
+
+      return Math.max(contentWidth, target.scrollWidth, target.clientWidth + 1);
+    };
+
+    const update = () => {
+      const nextWidth = Math.ceil(getContentWidth());
+      setWidth((prev) => (prev === nextWidth ? prev : nextWidth));
+    };
     update();
+
+    const getScrollRatio = (el: HTMLElement) => {
+      const max = el.scrollWidth - el.clientWidth;
+      return max > 0 ? el.scrollLeft / max : 0;
+    };
+
+    const setScrollByRatio = (el: HTMLElement, ratio: number) => {
+      const max = el.scrollWidth - el.clientWidth;
+      el.scrollLeft = max > 0 ? ratio * max : 0;
+    };
 
     const ro = new ResizeObserver(update);
     ro.observe(target);
@@ -40,13 +62,13 @@ export function TopScrollbar({ targetRef }: { targetRef: React.RefObject<HTMLEle
     const onTopScroll = () => {
       if (syncing.current === "bottom") { syncing.current = null; return; }
       syncing.current = "top";
-      target.scrollLeft = top.scrollLeft;
+      setScrollByRatio(target, getScrollRatio(top));
     };
     const onBottomScroll = () => {
       if (syncing.current === "top") { syncing.current = null; return; }
       syncing.current = "bottom";
-      top.scrollLeft = target.scrollLeft;
       update();
+      setScrollByRatio(top, getScrollRatio(target));
     };
     top.addEventListener("scroll", onTopScroll);
     target.addEventListener("scroll", onBottomScroll);
