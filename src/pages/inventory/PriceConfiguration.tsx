@@ -9,9 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const KARATS = ["14K", "18K", "22K"] as const;
 type Karat = (typeof KARATS)[number];
+
+const DIAMOND_QUALITIES = ["VS-EF", "SOLITAIRE VS1-G"] as const;
+type DiamondQuality = (typeof DIAMOND_QUALITIES)[number];
 
 export default function PriceConfiguration() {
   const qc = useQueryClient();
@@ -116,16 +120,17 @@ export default function PriceConfiguration() {
   };
 
   // ---------- Diamond ----------
-  type DiamondRow = { id: string; particulars: string; size_label: string; price_per_ct: number; sort_order: number };
+  type DiamondRow = { id: string; particulars: string; size_label: string; price_per_ct: number; sort_order: number; quality: string };
   const [diamonds, setDiamonds] = useState<DiamondRow[]>([]);
   const [savingDia, setSavingDia] = useState(false);
+  const [diaQuality, setDiaQuality] = useState<DiamondQuality>("VS-EF");
 
   const { data: diaRows } = useQuery({
     queryKey: ["diamond-rates"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("diamond_rates")
-        .select("id, particulars, size_label, price_per_ct, sort_order")
+        .select("id, particulars, size_label, price_per_ct, sort_order, quality")
         .order("sort_order", { ascending: true });
       if (error) throw error;
       return (data || []) as DiamondRow[];
@@ -143,9 +148,11 @@ export default function PriceConfiguration() {
   const saveDiamonds = async () => {
     setSavingDia(true);
     try {
-      const updates = diamonds.map((r) =>
-        (supabase as any).from("diamond_rates").update({ price_per_ct: r.price_per_ct }).eq("id", r.id)
-      );
+      const updates = diamonds
+        .filter((r) => r.quality === diaQuality)
+        .map((r) =>
+          (supabase as any).from("diamond_rates").update({ price_per_ct: r.price_per_ct }).eq("id", r.id)
+        );
       const results = await Promise.all(updates);
       const firstErr = results.find((r: any) => r.error)?.error;
       if (firstErr) throw firstErr;
@@ -157,6 +164,8 @@ export default function PriceConfiguration() {
       setSavingDia(false);
     }
   };
+
+  const visibleDiamonds = diamonds.filter((r) => r.quality === diaQuality);
 
   // ---------- CS ----------
   const [cs, setCs] = useState("");
@@ -287,6 +296,13 @@ export default function PriceConfiguration() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <Tabs value={diaQuality} onValueChange={(v) => setDiaQuality(v as DiamondQuality)}>
+            <TabsList>
+              {DIAMOND_QUALITIES.map((q) => (
+                <TabsTrigger key={q} value={q}>{q}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
           <div className="rounded-md border overflow-hidden">
             <Table>
               <TableHeader>
@@ -298,7 +314,7 @@ export default function PriceConfiguration() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {diamonds.map((row, i) => (
+                {visibleDiamonds.map((row, i) => (
                   <TableRow key={row.id}>
                     <TableCell className="text-center">{i + 1}</TableCell>
                     <TableCell>{row.particulars}</TableCell>
@@ -315,10 +331,10 @@ export default function PriceConfiguration() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {diamonds.length === 0 && (
+                {visibleDiamonds.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
-                      Loading...
+                      {diamonds.length === 0 ? "Loading..." : "No rates for this quality"}
                     </TableCell>
                   </TableRow>
                 )}
@@ -326,7 +342,7 @@ export default function PriceConfiguration() {
             </Table>
           </div>
           <div className="flex justify-end">
-            <Button onClick={saveDiamonds} disabled={savingDia || diamonds.length === 0}>
+            <Button onClick={saveDiamonds} disabled={savingDia || visibleDiamonds.length === 0}>
               {savingDia ? "Saving..." : "Save Diamond Rates"}
             </Button>
           </div>
