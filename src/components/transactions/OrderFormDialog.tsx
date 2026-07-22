@@ -77,7 +77,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     queryFn: async () => {
       const { data } = await supabase
         .from("inventory_items")
-        .select("id, name, sku, selling_price, status, net_wt, gross_wt, main_metal, tax_master_id")
+        .select("id, name, sku, selling_price, status, net_wt, gross_wt, main_metal, tax_master_id, total_diamond_wt, total_colour_stone_wt, material_quality, material_inter_quality")
         .eq("status", "active")
         .order("name")
         .limit(1000);
@@ -90,6 +90,10 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
         grossWt: Number(row.gross_wt) || 0,
         karat: karatOf(row.main_metal),
         taxMasterId: row.tax_master_id || null,
+        diaWt: Number(row.total_diamond_wt) || 0,
+        csWt: Number(row.total_colour_stone_wt) || 0,
+        materialQuality: (row.material_quality || "").toString().trim(),
+        materialInterQuality: (row.material_inter_quality || "").toString().trim(),
       }));
     },
   });
@@ -125,6 +129,41 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
         .maybeSingle();
       if (error) throw error;
       return Number((data as any)?.price_per_gram) || 0;
+    },
+  });
+
+  // Latest Colour Stone rate (persists until manually changed)
+  const { data: csRate = 0 } = useQuery({
+    queryKey: ["cs-rate-latest"],
+    enabled: open,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("cs_rates")
+        .select("price_per_gram")
+        .order("rate_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return Number((data as any)?.price_per_gram) || 0;
+    },
+  });
+
+  // Diamond rates keyed by quality → per-carat rate of the first (SR NO 1) row.
+  const { data: diamondRateByQuality = {} } = useQuery<Record<string, number>>({
+    queryKey: ["diamond-rate-first-by-quality"],
+    enabled: open,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("diamond_rates")
+        .select("quality, price_per_ct, sort_order")
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      (data || []).forEach((r: any) => {
+        const q = (r.quality || "").toString().trim().toUpperCase();
+        if (!(q in map)) map[q] = Number(r.price_per_ct) || 0;
+      });
+      return map;
     },
   });
 
@@ -441,14 +480,30 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     setLineItems((current) => current.map((item, i) => {
       if (i !== index) return item;
       const next = { ...item, ...patch };
-      // Auto-fill Making = today's rate × Net Wt when product is (re)selected,
-      // unless the user has already entered a custom Making value on this line.
       if (patch.productId && patch.productId !== item.productId) {
         const product = products.find((p: any) => p.id === patch.productId);
         const netWt = Number(product?.netWt) || 0;
+        // Auto-fill Making = today's rate × Net Wt when product is (re)selected,
+        // unless the user has already entered a custom Making value.
         const currentMaking = Number(item.makingCharges) || 0;
         if (makingRate > 0 && netWt > 0 && currentMaking === 0) {
           next.makingCharges = String(Math.round(makingRate * netWt * 100) / 100);
+        }
+        // Auto-fill CS Price = CS rate × Colour Stone Wt.
+        const csWt = Number(product?.csWt) || 0;
+        const currentCs = Number(item.csPrice) || 0;
+        if (csRate > 0 && csWt > 0 && currentCs === 0) {
+          next.csPrice = String(Math.round(csRate * csWt * 100) / 100);
+        }
+        // Auto-fill Dia Price = SR NO 1 rate of matching quality tab × Dia Wt.
+        const diaWt = Number(product?.diaWt) || 0;
+        const currentDia = Number(item.diaPrice) || 0;
+        const q1 = (product?.materialQuality || "").toString().trim().toUpperCase();
+        const q2 = (product?.materialInterQuality || "").toString().trim().toUpperCase();
+        const matchedQuality = [q1, q2].find((q) => q && (diamondRateByQuality as any)[q] > 0);
+        const diaRate = matchedQuality ? (diamondRateByQuality as any)[matchedQuality] : 0;
+        if (diaRate > 0 && diaWt > 0 && currentDia === 0) {
+          next.diaPrice = String(Math.round(diaRate * diaWt * 100) / 100);
         }
       }
       return next;
