@@ -50,15 +50,17 @@ interface NavItem {
   icon: React.ElementType;
   moduleKey?: string;
   children?: NavChild[];
+  iconColor?: string;
 }
 
 const navigation: NavItem[] = [
-  { title: "Home", href: "/dashboard", icon: LayoutDashboard, moduleKey: "dashboard" },
-  { title: "AI Insights", href: "/ai-insights", icon: Brain, moduleKey: "dashboard" },
+  { title: "Home", href: "/dashboard", icon: LayoutDashboard, moduleKey: "dashboard", iconColor: "bg-indigo-500/15 text-indigo-400" },
+  { title: "AI Insights", href: "/ai-insights", icon: Brain, moduleKey: "dashboard", iconColor: "bg-violet-500/15 text-violet-400" },
   {
     title: "Dashboards",
     icon: BarChart3,
     moduleKey: "dashboards",
+    iconColor: "bg-sky-500/15 text-sky-400",
     children: [
       { title: "Asset Management", href: "/dashboards/assets", moduleKey: "dashboards.assets" },
       { title: "Inventory", href: "/dashboards/inventory", moduleKey: "dashboards.inventory" },
@@ -73,6 +75,7 @@ const navigation: NavItem[] = [
     title: "Point of Sale",
     icon: ShoppingCart,
     moduleKey: "pos",
+    iconColor: "bg-emerald-500/15 text-emerald-400",
     children: [
       { title: "POS Dashboard", href: "/pos/dashboard", moduleKey: "pos.quicksale" },
       { title: "Billing", href: "/pos", moduleKey: "pos.quicksale" },
@@ -87,6 +90,7 @@ const navigation: NavItem[] = [
     title: "Transactions",
     icon: Receipt,
     moduleKey: "transactions",
+    iconColor: "bg-amber-500/15 text-amber-400",
     children: [
       { title: "Leads", href: "/transactions/leads", moduleKey: "transactions.leads" },
       { title: "Customers", href: "/transactions/customers", moduleKey: "transactions.customers" },
@@ -99,6 +103,7 @@ const navigation: NavItem[] = [
     title: "New Store Plan",
     icon: Rocket,
     moduleKey: "expansion",
+    iconColor: "bg-rose-500/15 text-rose-400",
     children: [
       { title: "Store Plans", href: "/expansion/plans", moduleKey: "expansion.plans" },
       { title: "New Store Opening", href: "/stores/new-opening", moduleKey: "stores.nso" },
@@ -109,6 +114,7 @@ const navigation: NavItem[] = [
     title: "Store Management",
     icon: Store,
     moduleKey: "stores",
+    iconColor: "bg-teal-500/15 text-teal-300",
     children: [
       { title: "Stores", href: "/stores", moduleKey: "stores.all" },
       { title: "Rentals & Leases", href: "/stores/rentals", moduleKey: "stores.rentals" },
