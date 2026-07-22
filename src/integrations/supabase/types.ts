@@ -1399,6 +1399,7 @@ export type Database = {
           id: string
           particulars: string
           price_per_ct: number
+          quality: string
           size_label: string
           sort_order: number
           updated_at: string
@@ -1409,6 +1410,7 @@ export type Database = {
           id?: string
           particulars: string
           price_per_ct?: number
+          quality?: string
           size_label: string
           sort_order?: number
           updated_at?: string
@@ -1419,6 +1421,7 @@ export type Database = {
           id?: string
           particulars?: string
           price_per_ct?: number
+          quality?: string
           size_label?: string
           sort_order?: number
           updated_at?: string
