@@ -78,7 +78,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     queryFn: async () => {
       const { data } = await supabase
         .from("inventory_items")
-        .select("id, name, sku, selling_price, status, net_wt, gross_wt, main_metal")
+        .select("id, name, sku, selling_price, status, net_wt, gross_wt, main_metal, tax_master_id")
         .eq("status", "active")
         .order("name")
         .limit(1000);
@@ -90,6 +90,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
         netWt: Number(row.net_wt) || 0,
         grossWt: Number(row.gross_wt) || 0,
         karat: karatOf(row.main_metal),
+        taxMasterId: row.tax_master_id || null,
       }));
     },
   });
@@ -126,6 +127,48 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       return Number((data as any)?.price_per_gram) || 0;
     },
   });
+
+  // Fetch active tax slabs and components for per-line tax calculation
+  const { data: taxSlabs = [] } = useQuery({
+    queryKey: ["order-form-tax-slabs"],
+    enabled: open,
+    queryFn: async () => {
+      const { data: masters, error } = await (supabase as any)
+        .from("tax_masters")
+        .select("id, name, is_default, is_active, hsn_code, total_rate")
+        .eq("is_active", true);
+      if (error) throw error;
+      const ids = (masters || []).map((m: any) => m.id);
+      const { data: comps } = ids.length
+        ? await (supabase as any).from("tax_components").select("*").in("tax_master_id", ids)
+        : { data: [] as any[] };
+      return (masters || []).map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        is_default: m.is_default,
+        hsn_code: m.hsn_code,
+        total_rate: Number(m.total_rate) || 0,
+        components: (comps || [])
+          .filter((c: any) => c.tax_master_id === m.id && c.is_enabled)
+          .map((c: any) => ({
+            component_type: c.component_type as "CGST" | "SGST" | "IGST" | "CESS",
+            percentage: Number(c.percentage) || 0,
+          })),
+      }));
+    },
+  });
+
+  const defaultSlab = useMemo(
+    () => (taxSlabs as any[]).find((s) => s.is_default) || (taxSlabs as any[])[0] || null,
+    [taxSlabs]
+  );
+  const resolveSlab = (product: any) => {
+    if (!product) return defaultSlab;
+    if (product.taxMasterId) {
+      return (taxSlabs as any[]).find((s) => s.id === product.taxMasterId) || defaultSlab;
+    }
+    return defaultSlab;
+  };
 
   const unitPriceOf = (product: any): { price: number; source: "gold" | "fallback" } => {
     if (product?.karat && product.netWt > 0 && goldRates[product.karat] > 0) {
