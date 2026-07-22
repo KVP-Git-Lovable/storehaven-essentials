@@ -105,7 +105,7 @@ export const modules: ModuleDefinition[] = [
   { key: "usermanagement.hierarchy", name: "User Hierarchy", parent: "usermanagement" },
   { key: "usermanagement.permissions", name: "Permission Set", parent: "usermanagement" },
   { key: "admin.company", name: "Company Information", parent: "admin" },
-  { key: "admin.tax-master", name: "Tax Master", parent: "master" },
+  { key: "master.tax-master", name: "Tax Master", parent: "master" },
 ];
 
 // Get parent modules only
@@ -194,7 +194,7 @@ export const routeToModuleKey: Record<string, string> = {
   "/admin/hierarchy": "usermanagement.hierarchy",
   "/admin/permissions": "usermanagement.permissions",
   "/admin/company": "admin.company",
-  "/admin/tax-master": "admin.tax-master",
+  "/admin/tax-master": "master.tax-master",
   "/list-views": "communication.listviews",
   "/transactions/leads": "transactions.leads",
   "/transactions/customers": "transactions.customers",
