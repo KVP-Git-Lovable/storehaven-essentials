@@ -274,9 +274,15 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
         ? (subtotal * pct) / 100
         : Math.max(0, Number(discount) || 0);
       const taxableBase = Math.max(0, subtotal - discountAmount);
-      const sRate = Number(invoiceTemplate?.sgst_rate) || 0;
-      const cRate = Number(invoiceTemplate?.cgst_rate) || 0;
-      const taxAmount = (taxableBase * (sRate + cRate)) / 100;
+      // Resolve tax per line via the slab attached to each product
+      const discountRatio = subtotal > 0 ? discountAmount / subtotal : 0;
+      const taxAmount = validItems.reduce((sum, item) => {
+        const product = products.find((p: any) => p.id === item.productId);
+        const slab = resolveSlab(product);
+        const rate = slab?.total_rate || 0;
+        const lineTaxable = item.lineTotal * (1 - discountRatio);
+        return sum + (lineTaxable * rate) / 100;
+      }, 0);
       const total = taxableBase + taxAmount;
       const paymentStatus = status === "completed" ? "paid" : status === "cancelled" ? "cancelled" : "pending";
 
@@ -400,11 +406,28 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     : Math.max(0, Number(discount) || 0);
   const { data: invoiceTemplate } = useInvoiceTemplate();
   const taxable = Math.max(0, subtotal - discountAmount);
-  const sgstRate = Number(invoiceTemplate?.sgst_rate) || 0;
-  const cgstRate = Number(invoiceTemplate?.cgst_rate) || 0;
-  const sgstAmt = (taxable * sgstRate) / 100;
-  const cgstAmt = (taxable * cgstRate) / 100;
-  const taxAmount = sgstAmt + cgstAmt;
+  const discountRatioDisplay = subtotal > 0 ? discountAmount / subtotal : 0;
+  const componentTotals: Record<string, { amount: number; rate: number }> = {};
+  enrichedItems.forEach((line) => {
+    const slab = resolveSlab(line.product);
+    if (!slab) return;
+    const lineTaxable = line.lineTotal * (1 - discountRatioDisplay);
+    slab.components.forEach((c: any) => {
+      const key = c.component_type;
+      const amt = (lineTaxable * c.percentage) / 100;
+      if (!componentTotals[key]) componentTotals[key] = { amount: 0, rate: c.percentage };
+      componentTotals[key].amount += amt;
+    });
+  });
+  const sgstAmt = componentTotals.SGST?.amount || 0;
+  const sgstRate = componentTotals.SGST?.rate || 0;
+  const cgstAmt = componentTotals.CGST?.amount || 0;
+  const cgstRate = componentTotals.CGST?.rate || 0;
+  const igstAmt = componentTotals.IGST?.amount || 0;
+  const igstRate = componentTotals.IGST?.rate || 0;
+  const cessAmt = componentTotals.CESS?.amount || 0;
+  const cessRate = componentTotals.CESS?.rate || 0;
+  const taxAmount = sgstAmt + cgstAmt + igstAmt + cessAmt;
   const total = taxable + taxAmount;
   const title = isView ? "View Order" : isEdit ? "Edit Order" : "New Order";
 
