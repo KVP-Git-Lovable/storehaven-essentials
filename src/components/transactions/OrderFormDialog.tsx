@@ -98,7 +98,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   const { data: stockMap = {} } = useInventoryStockMap(productIds, open);
 
   const today = format(new Date(), "yyyy-MM-dd");
-  const { data: goldRates = { "18K": 0, "22K": 0 } } = useQuery({
+  const { data: goldRates = { "14K": 0, "18K": 0, "22K": 0 } } = useQuery({
     queryKey: ["gold-rate-today", today],
     enabled: open,
     queryFn: async () => {
@@ -107,20 +107,21 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
         .select("karat, price_per_gram")
         .eq("rate_date", today);
       if (error) throw error;
-      const map: Record<string, number> = { "18K": 0, "22K": 0 };
+      const map: Record<string, number> = { "14K": 0, "18K": 0, "22K": 0 };
       (data || []).forEach((r: any) => { map[r.karat] = Number(r.price_per_gram) || 0; });
       return map;
     },
   });
 
   const { data: makingRate = 0 } = useQuery({
-    queryKey: ["making-rate-today", today],
+    queryKey: ["making-rate-latest"],
     enabled: open,
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("making_charges_rates")
         .select("price_per_gram")
-        .eq("rate_date", today)
+        .order("rate_date", { ascending: false })
+        .limit(1)
         .maybeSingle();
       if (error) throw error;
       return Number((data as any)?.price_per_gram) || 0;
