@@ -1,63 +1,51 @@
-# Themes Switcher
+## Goal
 
-Add a Themes picker next to the notification bell on every page. Three themes, each user's choice persisted so it follows them across sessions and devices. No operational changes.
+Introduce a **Tax Master** module under Admin → Master Data, mirroring the Quickapp reference. Seed a default **3% GST (1.5% CGST + 1.5% SGST, HSN 71131930)** slab that is marked default, auto-attached to every existing inventory item and every newly created item, and used to compute taxes in the New Order modal (replacing the current invoice-template SGST/CGST fallback).
 
-## 1. Theme definitions (design tokens in `src/index.css`)
+## Database (migration)
 
-All theme colors live as HSL CSS variables under theme selectors on `<html>`. Components already consume semantic tokens (`--primary`, `--sidebar-background`, etc.), so switching a class on `<html>` re-skins the whole app — including every button currently rendered in blue.
+New tables in `public`, all with GRANTs + RLS (authenticated read/write, service_role all):
 
-- `html.theme-amber` (**Default**)
-  - Sidebar background: warm neutral grey (`220 8% 22%`) instead of near-black
-  - Sidebar logo strip: gradient `linear-gradient(90deg, hsl(28 95% 55%), hsl(20 15% 15%))` set via a new `--sidebar-logo-gradient` token; the logo/company-name container uses `bg-[image:var(--sidebar-logo-gradient)]`
-  - `--primary`: amber `28 95% 55%` (all blue CTAs become orange)
-  - `--ring`, `--sidebar-primary`: match primary
-  - Sidebar icon accent tokens (see §3) → colorful palette
-- `html.theme-blue` (current look, no visual change)
-  - Keeps today's `:root` values verbatim
-  - Only sidebar icon accent tokens are added so icons match the colorful reference
-- `html.theme-pink`
-  - Sidebar background: warm neutral grey (`320 8% 24%`)
-  - Sidebar logo strip: gradient `linear-gradient(90deg, hsl(330 85% 78%), hsl(280 55% 55%))`
-  - `--primary`: strawberry pink `338 82% 58%`
-  - `--ring`, `--sidebar-primary`: match primary
-  - Sidebar icon accent tokens → colorful palette
+- `tax_masters` — `id`, `name`, `tax_type` (default `GST`), `description`, `hsn_code`, `is_active`, `is_default` (bool, only one true), `apply_to_primary_orders`, `apply_to_secondary_orders`, `effective_from`, `effective_to`, `version`, `cloned_from_id`, `total_rate` (generated/maintained), timestamps.
+- `tax_components` — `id`, `tax_master_id` FK, `component_type` enum (`CGST|SGST|IGST|CESS`), `percentage`, `is_enabled`, timestamps. Unique(tax_master_id, component_type).
+- Add column `tax_master_id uuid` on `public.inventory_items` (FK to tax_masters, nullable).
+- Partial unique index to enforce a single default: `CREATE UNIQUE INDEX ... ON tax_masters (is_default) WHERE is_default`.
 
-The default (before any user preference loads) is `theme-amber` to match the stated default.
+Seed migration:
+- Insert **"3% GST"** row with `hsn_code = 71131930`, description "Articles of jewelry and parts, gold set with diamonds", `is_active=true`, `is_default=true`, primary+secondary true, components CGST 1.5% + SGST 1.5% enabled (IGST/CESS disabled).
+- Backfill: `UPDATE inventory_items SET tax_master_id = <3% GST id> WHERE tax_master_id IS NULL`.
 
-## 2. Colorful sidebar icons (all themes)
+Trigger on `inventory_items` BEFORE INSERT: if `tax_master_id` is null, set it to the current default tax master.
 
-Reference screenshot shows each nav icon in its own tile color. Introduce a stable per-nav-item accent (defined once in `AppSidebar.tsx`) and render the icon inside a small rounded tile using that color. Colors are hard-coded utility classes on the tile only (they are decorative brand accents, not text/background surfaces), applied identically in all three themes as requested.
+## Frontend
 
-Mapping (examples): Home = indigo, AI Insights = violet, Dashboards = sky, POS = emerald, Transactions = amber, New Store Plan = rose, Store Management = teal, Employee = fuchsia, Communication Center = blue, Inventory = orange, Admin = slate.
+### Routing / navigation
+- Add `src/pages/admin/TaxMaster.tsx` and route `/admin/tax-master`.
+- Add module keys `admin.tax-master` in `src/lib/modules.ts` and `routeToModuleKey`.
+- Insert **Tax Master** entry in the Admin → Master Data subsection in `AppSidebar.tsx`.
 
-## 3. Header control
+### Tax Master page (adapted from Quickapp reference UI)
+- Header: "Tax Master" + subtitle "Configure GST/IGST tax rates and map to products" + **Create Tax** button.
+- List of slab cards showing: name, Active/Default badges, tax type chip, HSN code chip, component breakdown (CGST/SGST/IGST/CESS %), Total %, Primary/Secondary applicability ticks, and count of linked items.
+- Row actions: expand (inline products panel with search + bulk move to another slab), edit (pencil), clone (copy).
+- **Create/Edit dialog** matching the uploaded screenshot: Tax Name, Tax Type (GST/IGST/Other), Description, HSN Code, Effective From/To, Tax Components (CGST/SGST/IGST/CESS with enable toggle + %), Active toggle, Applies to Primary/Secondary orders, "Set as default" toggle (setting one clears others via migration trigger or update logic).
+- Expanded panel per slab: searchable, paginated list of `inventory_items` currently in that slab with a checkbox column (tick already shown for members), plus bulk-move dropdown to reassign.
 
-In `src/components/layout/AppHeader.tsx`, add a `Palette` (lucide) icon button immediately left of the notification bell:
+### New Order integration (`OrderFormDialog.tsx`)
+- Fetch each cart item's `tax_master_id` → resolve to components.
+- Use the assigned slab's enabled components to compute SGST/CGST/IGST per line, then aggregate. Fall back to the default slab if an item has no slab.
+- Replace the current `invoice_template.sgst_rate/cgst_rate` calculation. Keep invoice template rates only as legacy display fallback when no slab resolves.
+- Line-level breakdown remains; totals show each component with its resolved rate (e.g. "CGST (1.5%)", "SGST (1.5%)").
 
-- `DropdownMenu` with three items: "Amber" (default), "Blue & Black", "Light Pink"
-- Each item shows a small color swatch + label; the active theme has a check
-- The trigger is wrapped in a `Tooltip` ("Themes"); each dropdown item is also wrapped in a `Tooltip` so hovering shows the theme name
+### Inventory Items
+- Show tax slab as a compact chip on each row (read-only for now). Editing the assignment happens from the Tax Master page's expand panel.
 
-## 4. Persistence per user
+## Out of scope for this iteration
+- No changes to invoice PDF layout — it already reads `sgst_rate`/`cgst_rate`; we'll pass resolved slab rates into the same fields for the printed invoice so no template edits are needed.
+- Reports page tax columns keep pulling from stored `tax_amount` on orders.
 
-- Add a `theme_preference TEXT` column to `profiles` (allowed values: `amber` | `blue` | `pink`, default `amber`). Migration includes GRANTs already present for `profiles`; no policy changes needed since users can already update their own row.
-- New `ThemeProvider` (`src/components/theme/ThemeProvider.tsx`) mounted inside `App.tsx` above the router:
-  - On mount: read `localStorage.theme` for instant paint, then when `useAuth().profile` is available overwrite from `profile.theme_preference`
-  - Applies theme by toggling `theme-amber` / `theme-blue` / `theme-pink` classes on `document.documentElement`
-  - Exposes `useTheme()` hook with `{ theme, setTheme }`. `setTheme` writes to `localStorage` immediately, updates the class, and (if logged in) upserts `profiles.theme_preference` for the current `user.id`
-- Extend the `Profile` type in `AuthProvider.tsx` and its `select(...)` to include `theme_preference` so it hydrates on login.
-
-## 5. Files touched
-
-- `src/index.css` — add `.theme-amber`, `.theme-blue`, `.theme-pink` blocks + `--sidebar-logo-gradient` token
-- `src/components/theme/ThemeProvider.tsx` — new
-- `src/hooks/useTheme.ts` — new
-- `src/App.tsx` — wrap with `ThemeProvider`
-- `src/components/auth/AuthProvider.tsx` — add `theme_preference` to profile select/type
-- `src/components/layout/AppHeader.tsx` — Themes dropdown before the bell
-- `src/components/layout/AppSidebar.tsx` — use `bg-sidebar` (already token-based), swap logo strip background to `var(--sidebar-logo-gradient)`, render each nav icon inside a colored tile
-- Supabase migration — `ALTER TABLE public.profiles ADD COLUMN theme_preference TEXT NOT NULL DEFAULT 'amber' CHECK (theme_preference IN ('amber','blue','pink'));`
-
-## Out of scope
-
-No changes to any business logic, permissions, routing, or data flows.
+## Acceptance
+- `/admin/tax-master` renders with the 3% GST slab active + default, HSN 71131930, showing all inventory items ticked under it.
+- Creating a new inventory item auto-assigns it to the default slab.
+- New Order totals use 1.5% CGST + 1.5% SGST resolved from the slab, not from the invoice template.
+- Additional slabs can be created; moving items across slabs updates linkage and future orders use the new rates.
