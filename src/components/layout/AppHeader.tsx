@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, Menu, Search, LogOut, Settings, User } from "lucide-react";
+import { Bell, Menu, Search, LogOut, Settings, User, Palette, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,8 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 import { format } from "date-fns";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useTheme, THEME_META, type ThemeName } from "@/components/theme/ThemeProvider";
 
 interface AppHeaderProps {
   onMenuClick: () => void;
@@ -43,6 +45,7 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
   const { profile, signOut, isAdmin } = useAuth();
   const [notifications, setNotifications] = useState(mockNotifications);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -105,6 +108,42 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
       </div>
 
       <div className="flex items-center gap-1 md:gap-2">
+        {/* Themes Switcher */}
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-9 w-9 md:h-10 md:w-10">
+                  <Palette className="h-4 w-4 md:h-5 md:w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Themes</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuLabel>Theme</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {(Object.keys(THEME_META) as ThemeName[]).map((key) => (
+              <Tooltip key={key}>
+                <TooltipTrigger asChild>
+                  <DropdownMenuItem
+                    onClick={() => setTheme(key)}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <span
+                      className="inline-block h-4 w-4 rounded-full border border-border"
+                      style={{ background: THEME_META[key].swatch }}
+                    />
+                    <span className="flex-1">{THEME_META[key].label}</span>
+                    {theme === key && <Check className="h-4 w-4 text-primary" />}
+                  </DropdownMenuItem>
+                </TooltipTrigger>
+                <TooltipContent side="left">{THEME_META[key].label}</TooltipContent>
+              </Tooltip>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         {/* Notification Bell */}
         <Popover open={notificationOpen} onOpenChange={setNotificationOpen}>
           <PopoverTrigger asChild>

@@ -50,15 +50,17 @@ interface NavItem {
   icon: React.ElementType;
   moduleKey?: string;
   children?: NavChild[];
+  iconColor?: string;
 }
 
 const navigation: NavItem[] = [
-  { title: "Home", href: "/dashboard", icon: LayoutDashboard, moduleKey: "dashboard" },
-  { title: "AI Insights", href: "/ai-insights", icon: Brain, moduleKey: "dashboard" },
+  { title: "Home", href: "/dashboard", icon: LayoutDashboard, moduleKey: "dashboard", iconColor: "bg-indigo-500/15 text-indigo-400" },
+  { title: "AI Insights", href: "/ai-insights", icon: Brain, moduleKey: "dashboard", iconColor: "bg-violet-500/15 text-violet-400" },
   {
     title: "Dashboards",
     icon: BarChart3,
     moduleKey: "dashboards",
+    iconColor: "bg-sky-500/15 text-sky-400",
     children: [
       { title: "Asset Management", href: "/dashboards/assets", moduleKey: "dashboards.assets" },
       { title: "Inventory", href: "/dashboards/inventory", moduleKey: "dashboards.inventory" },
@@ -73,6 +75,7 @@ const navigation: NavItem[] = [
     title: "Point of Sale",
     icon: ShoppingCart,
     moduleKey: "pos",
+    iconColor: "bg-emerald-500/15 text-emerald-400",
     children: [
       { title: "POS Dashboard", href: "/pos/dashboard", moduleKey: "pos.quicksale" },
       { title: "Billing", href: "/pos", moduleKey: "pos.quicksale" },
@@ -87,6 +90,7 @@ const navigation: NavItem[] = [
     title: "Transactions",
     icon: Receipt,
     moduleKey: "transactions",
+    iconColor: "bg-amber-500/15 text-amber-400",
     children: [
       { title: "Leads", href: "/transactions/leads", moduleKey: "transactions.leads" },
       { title: "Customers", href: "/transactions/customers", moduleKey: "transactions.customers" },
@@ -99,6 +103,7 @@ const navigation: NavItem[] = [
     title: "New Store Plan",
     icon: Rocket,
     moduleKey: "expansion",
+    iconColor: "bg-rose-500/15 text-rose-400",
     children: [
       { title: "Store Plans", href: "/expansion/plans", moduleKey: "expansion.plans" },
       { title: "New Store Opening", href: "/stores/new-opening", moduleKey: "stores.nso" },
@@ -109,6 +114,7 @@ const navigation: NavItem[] = [
     title: "Store Management",
     icon: Store,
     moduleKey: "stores",
+    iconColor: "bg-teal-500/15 text-teal-300",
     children: [
       { title: "Stores", href: "/stores", moduleKey: "stores.all" },
       { title: "Rentals & Leases", href: "/stores/rentals", moduleKey: "stores.rentals" },
@@ -122,6 +128,7 @@ const navigation: NavItem[] = [
     title: "Maintenance Tasks",
     icon: Wrench,
     moduleKey: "operations",
+    iconColor: "bg-orange-500/15 text-orange-400",
     children: [
       { title: "Store Maintenance Tasks", href: "/operations/adherence", moduleKey: "operations.adherence" },
       { title: "Store Heatmap", href: "/operations/heatmap", moduleKey: "operations.heatmap" },
@@ -131,6 +138,7 @@ const navigation: NavItem[] = [
     title: "Visual Merch (VM)",
     icon: BarChart3,
     moduleKey: "vm",
+    iconColor: "bg-pink-500/15 text-pink-400",
     children: [
       { title: "Planograms", href: "/vm/planograms", moduleKey: "vm.planograms" },
       { title: "Compliance Tasks", href: "/vm/tasks", moduleKey: "vm.tasks" },
@@ -141,6 +149,7 @@ const navigation: NavItem[] = [
     title: "Assets & Service",
     icon: Package,
     moduleKey: "assets",
+    iconColor: "bg-cyan-500/15 text-cyan-400",
     children: [
       { title: "Asset Master", href: "/assets/master", moduleKey: "assets.master" },
       { title: "Asset Register", href: "/assets/inventory", moduleKey: "assets.register" },
@@ -151,11 +160,12 @@ const navigation: NavItem[] = [
       { title: "Knowledge Base", href: "/services/knowledge-base", moduleKey: "assets.knowledge" },
     ],
   },
-  { title: "Vendors", href: "/vendors", icon: Building2, moduleKey: "vendors" },
+  { title: "Vendors", href: "/vendors", icon: Building2, moduleKey: "vendors", iconColor: "bg-yellow-500/15 text-yellow-400" },
   {
     title: "Employee",
     icon: CalendarCheck,
     moduleKey: "staff",
+    iconColor: "bg-fuchsia-500/15 text-fuchsia-400",
     children: [
       { title: "Employees", href: "/staff/employees", moduleKey: "staff.employees" },
       { title: "Recruitment", href: "/staff/recruitment", moduleKey: "staff.recruitment" },
@@ -177,6 +187,7 @@ const navigation: NavItem[] = [
     title: "Security",
     icon: ShieldCheck,
     moduleKey: "security",
+    iconColor: "bg-red-500/15 text-red-400",
     children: [
       { title: "Dashboard", href: "/security", moduleKey: "security.dashboard" },
       { title: "Guards", href: "/security/guards", moduleKey: "security.guards" },
@@ -191,6 +202,7 @@ const navigation: NavItem[] = [
     title: "Communication Center",
     icon: MessageSquare,
     moduleKey: "communication",
+    iconColor: "bg-lime-500/15 text-lime-400",
     children: [
       { title: "WhatsApp", href: "/communication/whatsapp", moduleKey: "communication.whatsapp" },
       { title: "Voice", href: "/communication/voice", moduleKey: "communication.voice" },
@@ -203,6 +215,7 @@ const navigation: NavItem[] = [
     title: "Inventory",
     icon: Boxes,
     moduleKey: "inventory",
+    iconColor: "bg-green-500/15 text-green-400",
     children: [
       { title: "Inventory Items", href: "/inventory/items", moduleKey: "inventory.items" },
       { title: "Requisitions", href: "/inventory/requisitions", moduleKey: "inventory.requisitions" },
@@ -370,15 +383,17 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
       <div className={cn(
         "flex h-14 md:h-16 items-center justify-between gap-2 border-b border-sidebar-border",
         collapsed ? "px-2" : "px-4 md:px-6"
-      )}>
+      )}
+      style={{ backgroundImage: "var(--sidebar-logo-gradient)" }}
+      >
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-background overflow-hidden">
             <img src={companyInfo?.logo_url || trayiLogo} alt={companyInfo?.company_name || "Trayi"} className="h-8 w-8 object-contain" />
           </div>
-          {!collapsed && <span className="font-display text-sm font-semibold tracking-wide whitespace-nowrap">{(companyInfo?.company_name || "TRAYI JEWELLERS").toUpperCase()}</span>}
+          {!collapsed && <span className="font-display text-sm font-semibold tracking-wide whitespace-nowrap text-white drop-shadow">{(companyInfo?.company_name || "TRAYI JEWELLERS").toUpperCase()}</span>}
         </div>
         {isMobile && (
-          <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8">
+          <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8 text-white hover:bg-white/10">
             <X className="h-4 w-4" />
           </Button>
         )}
@@ -402,7 +417,9 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                             : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                         )}
                       >
-                        <item.icon className="h-5 w-5" />
+                        <span className={cn("flex h-8 w-8 items-center justify-center rounded-md", item.iconColor || "bg-sidebar-accent text-sidebar-accent-foreground")}>
+                          <item.icon className="h-4 w-4" />
+                        </span>
                       </NavLink>
                     </TooltipTrigger>
                     <TooltipContent side="right">{item.title}</TooltipContent>
@@ -418,7 +435,9 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                         : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     )}
                   >
-                    <item.icon className="h-4 w-4" />
+                    <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-md", item.iconColor || "bg-sidebar-accent/60 text-sidebar-accent-foreground")}>
+                      <item.icon className="h-4 w-4" />
+                    </span>
                     {item.title}
                   </NavLink>
                 )
@@ -435,7 +454,9 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                           : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       )}
                     >
-                      <item.icon className="h-5 w-5" />
+                      <span className={cn("flex h-8 w-8 items-center justify-center rounded-md", item.iconColor || "bg-sidebar-accent text-sidebar-accent-foreground")}>
+                        <item.icon className="h-4 w-4" />
+                      </span>
                     </NavLink>
                   </TooltipTrigger>
                   <TooltipContent side="right">{item.title}</TooltipContent>
@@ -452,7 +473,9 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                     )}
                   >
                     <div className="flex items-center gap-3">
-                      <item.icon className="h-4 w-4" />
+                      <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-md", item.iconColor || "bg-sidebar-accent/60 text-sidebar-accent-foreground")}>
+                        <item.icon className="h-4 w-4" />
+                      </span>
                       {item.title}
                     </div>
                     <ChevronDown

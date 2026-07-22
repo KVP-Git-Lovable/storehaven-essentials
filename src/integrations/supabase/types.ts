@@ -7500,6 +7500,7 @@ export type Database = {
           reports_to: string | null
           role_id: string | null
           status: string
+          theme_preference: string
           updated_at: string
           username: string
         }
@@ -7513,6 +7514,7 @@ export type Database = {
           reports_to?: string | null
           role_id?: string | null
           status?: string
+          theme_preference?: string
           updated_at?: string
           username: string
         }
@@ -7526,6 +7528,7 @@ export type Database = {
           reports_to?: string | null
           role_id?: string | null
           status?: string
+          theme_preference?: string
           updated_at?: string
           username?: string
         }
