@@ -246,6 +246,7 @@ const navigation: NavItem[] = [
           { title: "NSO Checklist Master", href: "/master/nso-checklist", moduleKey: "master.nso" },
           { title: "PM Checklist Master", href: "/master/pm-checklist", moduleKey: "master.pm" },
           { title: "Store Budget Master", href: "/master/store-budget", moduleKey: "master.budget" },
+          { title: "Tax Master", href: "/admin/tax-master", moduleKey: "admin.tax-master" },
         ]
       },
       { 

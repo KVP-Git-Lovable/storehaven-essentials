@@ -15,7 +15,6 @@ import { assertStockAvailable, recordSaleLedger } from "@/lib/inventoryStock";
 import { useInventoryStockMap } from "@/hooks/useInventoryStock";
 import { format } from "date-fns";
 import { InvoiceViewerDialog } from "@/components/invoice/InvoiceViewerDialog";
-import { useInvoiceTemplate } from "@/hooks/useInvoiceTemplate";
 
 type LineItem = {
   productId: string;
@@ -78,7 +77,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     queryFn: async () => {
       const { data } = await supabase
         .from("inventory_items")
-        .select("id, name, sku, selling_price, status, net_wt, gross_wt, main_metal")
+        .select("id, name, sku, selling_price, status, net_wt, gross_wt, main_metal, tax_master_id")
         .eq("status", "active")
         .order("name")
         .limit(1000);
@@ -90,6 +89,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
         netWt: Number(row.net_wt) || 0,
         grossWt: Number(row.gross_wt) || 0,
         karat: karatOf(row.main_metal),
+        taxMasterId: row.tax_master_id || null,
       }));
     },
   });
@@ -126,6 +126,48 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       return Number((data as any)?.price_per_gram) || 0;
     },
   });
+
+  // Fetch active tax slabs and components for per-line tax calculation
+  const { data: taxSlabs = [] } = useQuery({
+    queryKey: ["order-form-tax-slabs"],
+    enabled: open,
+    queryFn: async () => {
+      const { data: masters, error } = await (supabase as any)
+        .from("tax_masters")
+        .select("id, name, is_default, is_active, hsn_code, total_rate")
+        .eq("is_active", true);
+      if (error) throw error;
+      const ids = (masters || []).map((m: any) => m.id);
+      const { data: comps } = ids.length
+        ? await (supabase as any).from("tax_components").select("*").in("tax_master_id", ids)
+        : { data: [] as any[] };
+      return (masters || []).map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        is_default: m.is_default,
+        hsn_code: m.hsn_code,
+        total_rate: Number(m.total_rate) || 0,
+        components: (comps || [])
+          .filter((c: any) => c.tax_master_id === m.id && c.is_enabled)
+          .map((c: any) => ({
+            component_type: c.component_type as "CGST" | "SGST" | "IGST" | "CESS",
+            percentage: Number(c.percentage) || 0,
+          })),
+      }));
+    },
+  });
+
+  const defaultSlab = useMemo(
+    () => (taxSlabs as any[]).find((s) => s.is_default) || (taxSlabs as any[])[0] || null,
+    [taxSlabs]
+  );
+  const resolveSlab = (product: any) => {
+    if (!product) return defaultSlab;
+    if (product.taxMasterId) {
+      return (taxSlabs as any[]).find((s) => s.id === product.taxMasterId) || defaultSlab;
+    }
+    return defaultSlab;
+  };
 
   const unitPriceOf = (product: any): { price: number; source: "gold" | "fallback" } => {
     if (product?.karat && product.netWt > 0 && goldRates[product.karat] > 0) {
@@ -231,9 +273,15 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
         ? (subtotal * pct) / 100
         : Math.max(0, Number(discount) || 0);
       const taxableBase = Math.max(0, subtotal - discountAmount);
-      const sRate = Number(invoiceTemplate?.sgst_rate) || 0;
-      const cRate = Number(invoiceTemplate?.cgst_rate) || 0;
-      const taxAmount = (taxableBase * (sRate + cRate)) / 100;
+      // Resolve tax per line via the slab attached to each product
+      const discountRatio = subtotal > 0 ? discountAmount / subtotal : 0;
+      const taxAmount = validItems.reduce((sum, item) => {
+        const product = products.find((p: any) => p.id === item.productId);
+        const slab = resolveSlab(product);
+        const rate = slab?.total_rate || 0;
+        const lineTaxable = item.lineTotal * (1 - discountRatio);
+        return sum + (lineTaxable * rate) / 100;
+      }, 0);
       const total = taxableBase + taxAmount;
       const paymentStatus = status === "completed" ? "paid" : status === "cancelled" ? "cancelled" : "pending";
 
@@ -355,13 +403,29 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   const discountAmount = pctNum > 0
     ? (subtotal * pctNum) / 100
     : Math.max(0, Number(discount) || 0);
-  const { data: invoiceTemplate } = useInvoiceTemplate();
   const taxable = Math.max(0, subtotal - discountAmount);
-  const sgstRate = Number(invoiceTemplate?.sgst_rate) || 0;
-  const cgstRate = Number(invoiceTemplate?.cgst_rate) || 0;
-  const sgstAmt = (taxable * sgstRate) / 100;
-  const cgstAmt = (taxable * cgstRate) / 100;
-  const taxAmount = sgstAmt + cgstAmt;
+  const discountRatioDisplay = subtotal > 0 ? discountAmount / subtotal : 0;
+  const componentTotals: Record<string, { amount: number; rate: number }> = {};
+  enrichedItems.forEach((line) => {
+    const slab = resolveSlab(line.product);
+    if (!slab) return;
+    const lineTaxable = line.lineTotal * (1 - discountRatioDisplay);
+    slab.components.forEach((c: any) => {
+      const key = c.component_type;
+      const amt = (lineTaxable * c.percentage) / 100;
+      if (!componentTotals[key]) componentTotals[key] = { amount: 0, rate: c.percentage };
+      componentTotals[key].amount += amt;
+    });
+  });
+  const sgstAmt = componentTotals.SGST?.amount || 0;
+  const sgstRate = componentTotals.SGST?.rate || 0;
+  const cgstAmt = componentTotals.CGST?.amount || 0;
+  const cgstRate = componentTotals.CGST?.rate || 0;
+  const igstAmt = componentTotals.IGST?.amount || 0;
+  const igstRate = componentTotals.IGST?.rate || 0;
+  const cessAmt = componentTotals.CESS?.amount || 0;
+  const cessRate = componentTotals.CESS?.rate || 0;
+  const taxAmount = sgstAmt + cgstAmt + igstAmt + cessAmt;
   const total = taxable + taxAmount;
   const title = isView ? "View Order" : isEdit ? "Edit Order" : "New Order";
 
@@ -598,7 +662,19 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                   <span className="font-medium">₹{cgstAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               )}
-              {sgstRate === 0 && cgstRate === 0 && (
+              {igstRate > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">IGST ({igstRate.toFixed(1)}%)</span>
+                  <span className="font-medium">₹{igstAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {cessRate > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">CESS ({cessRate.toFixed(1)}%)</span>
+                  <span className="font-medium">₹{cessAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {sgstRate === 0 && cgstRate === 0 && igstRate === 0 && cessRate === 0 && (
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Tax</span>
                   <span className="font-medium">₹0</span>
