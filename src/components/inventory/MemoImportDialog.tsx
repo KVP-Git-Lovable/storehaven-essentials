@@ -124,9 +124,29 @@ export function MemoImportDialog({ onImported }: Props) {
           if (error) { skipped++; reasons.push(`${itemNo}: ${error.message}`); }
           else updated++;
         } else {
-          const { error } = await supabase.from("inventory_items").insert([{ ...payload, unit_cost: 0, min_stock: 0 }]);
+          const { data: inserted, error } = await supabase
+            .from("inventory_items")
+            .insert([{ ...payload, unit_cost: 0, min_stock: 0 }])
+            .select("id")
+            .single();
           if (error) { skipped++; reasons.push(`${itemNo}: ${error.message}`); }
-          else imported++;
+          else {
+            imported++;
+            if (inserted?.id) {
+              await supabase.from("stock_ledger").insert([{
+                item_id: inserted.id,
+                location_type: "global",
+                location_id: null,
+                transaction_type: "opening_balance",
+                quantity_change: 1,
+                unit_cost: 0,
+                reference_type: "memo_import",
+                reference_id: null,
+                notes: "Memo Inward import default stock",
+                created_by: "memo-import",
+              }] as any);
+            }
+          }
         }
       }
 
