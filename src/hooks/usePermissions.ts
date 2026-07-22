@@ -33,23 +33,6 @@ export function usePermissions() {
     // Find permission for this module
     const permission = permissions.find((p) => p.module_key === moduleKey);
     if (!permission) {
-      // Check parent module permission
-      const parentKey = moduleKey.split(".")[0];
-      if (parentKey !== moduleKey) {
-        const parentPermission = permissions.find((p) => p.module_key === parentKey);
-        if (parentPermission) {
-          switch (action) {
-            case "view":
-              return parentPermission.can_view;
-            case "create":
-              return parentPermission.can_create;
-            case "edit":
-              return parentPermission.can_edit;
-            case "delete":
-              return parentPermission.can_delete;
-          }
-        }
-      }
       return false;
     }
 
