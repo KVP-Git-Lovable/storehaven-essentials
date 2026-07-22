@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS theme_preference TEXT NOT NULL DEFAULT 'amber' CHECK (theme_preference IN ('amber','blue','pink'));
