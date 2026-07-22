@@ -383,15 +383,17 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
       <div className={cn(
         "flex h-14 md:h-16 items-center justify-between gap-2 border-b border-sidebar-border",
         collapsed ? "px-2" : "px-4 md:px-6"
-      )}>
+      )}
+      style={{ backgroundImage: "var(--sidebar-logo-gradient)" }}
+      >
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-background overflow-hidden">
             <img src={companyInfo?.logo_url || trayiLogo} alt={companyInfo?.company_name || "Trayi"} className="h-8 w-8 object-contain" />
           </div>
-          {!collapsed && <span className="font-display text-sm font-semibold tracking-wide whitespace-nowrap">{(companyInfo?.company_name || "TRAYI JEWELLERS").toUpperCase()}</span>}
+          {!collapsed && <span className="font-display text-sm font-semibold tracking-wide whitespace-nowrap text-white drop-shadow">{(companyInfo?.company_name || "TRAYI JEWELLERS").toUpperCase()}</span>}
         </div>
         {isMobile && (
-          <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8">
+          <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8 text-white hover:bg-white/10">
             <X className="h-4 w-4" />
           </Button>
         )}
@@ -415,7 +417,9 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                             : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                         )}
                       >
-                        <item.icon className="h-5 w-5" />
+                        <span className={cn("flex h-8 w-8 items-center justify-center rounded-md", item.iconColor || "bg-sidebar-accent text-sidebar-accent-foreground")}>
+                          <item.icon className="h-4 w-4" />
+                        </span>
                       </NavLink>
                     </TooltipTrigger>
                     <TooltipContent side="right">{item.title}</TooltipContent>
@@ -431,7 +435,9 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                         : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     )}
                   >
-                    <item.icon className="h-4 w-4" />
+                    <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-md", item.iconColor || "bg-sidebar-accent/60 text-sidebar-accent-foreground")}>
+                      <item.icon className="h-4 w-4" />
+                    </span>
                     {item.title}
                   </NavLink>
                 )
@@ -448,7 +454,9 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                           : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       )}
                     >
-                      <item.icon className="h-5 w-5" />
+                      <span className={cn("flex h-8 w-8 items-center justify-center rounded-md", item.iconColor || "bg-sidebar-accent text-sidebar-accent-foreground")}>
+                        <item.icon className="h-4 w-4" />
+                      </span>
                     </NavLink>
                   </TooltipTrigger>
                   <TooltipContent side="right">{item.title}</TooltipContent>
@@ -465,7 +473,9 @@ export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedC
                     )}
                   >
                     <div className="flex items-center gap-3">
-                      <item.icon className="h-4 w-4" />
+                      <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-md", item.iconColor || "bg-sidebar-accent/60 text-sidebar-accent-foreground")}>
+                        <item.icon className="h-4 w-4" />
+                      </span>
                       {item.title}
                     </div>
                     <ChevronDown
