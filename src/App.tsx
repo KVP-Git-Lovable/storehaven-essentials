@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./components/auth/AuthProvider";
+import { ThemeProvider } from "./components/theme/ThemeProvider";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { AppLayout } from "./components/layout/AppLayout";
 import { PWAInstallPrompt } from "./components/pwa/PWAInstallPrompt";
@@ -160,8 +161,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <PWAInstallPrompt />
-          <Suspense fallback={<PageLoader />}>
+          <ThemeProvider>
+            <PWAInstallPrompt />
+            <Suspense fallback={<PageLoader />}>
             <Routes>
               {/* Public routes */}
               <Route path="/" element={<LandingPage />} />
