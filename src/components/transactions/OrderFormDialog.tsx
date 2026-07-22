@@ -664,7 +664,19 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                   <span className="font-medium">₹{cgstAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               )}
-              {sgstRate === 0 && cgstRate === 0 && (
+              {igstRate > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">IGST ({igstRate.toFixed(1)}%)</span>
+                  <span className="font-medium">₹{igstAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {cessRate > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">CESS ({cessRate.toFixed(1)}%)</span>
+                  <span className="font-medium">₹{cessAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {sgstRate === 0 && cgstRate === 0 && igstRate === 0 && cessRate === 0 && (
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Tax</span>
                   <span className="font-medium">₹0</span>
