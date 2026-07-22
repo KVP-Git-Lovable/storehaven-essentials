@@ -15,7 +15,6 @@ import { assertStockAvailable, recordSaleLedger } from "@/lib/inventoryStock";
 import { useInventoryStockMap } from "@/hooks/useInventoryStock";
 import { format } from "date-fns";
 import { InvoiceViewerDialog } from "@/components/invoice/InvoiceViewerDialog";
-import { useInvoiceTemplate } from "@/hooks/useInvoiceTemplate";
 
 type LineItem = {
   productId: string;
@@ -404,7 +403,6 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   const discountAmount = pctNum > 0
     ? (subtotal * pctNum) / 100
     : Math.max(0, Number(discount) || 0);
-  const { data: invoiceTemplate } = useInvoiceTemplate();
   const taxable = Math.max(0, subtotal - discountAmount);
   const discountRatioDisplay = subtotal > 0 ? discountAmount / subtotal : 0;
   const componentTotals: Record<string, { amount: number; rate: number }> = {};
