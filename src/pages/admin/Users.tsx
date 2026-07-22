@@ -51,6 +51,32 @@ export default function Users() {
   const canEdit = hasPermission("usermanagement.users", "edit");
   const canDelete = hasPermission("usermanagement.users", "delete");
 
+  const handleLoginAs = async (user: UserData) => {
+    if (user.id === authUser?.id) {
+      toast({ title: "Already signed in", description: "You are already logged in as this user." });
+      return;
+    }
+    toast({ title: "Generating login session...", description: `Logging in as ${user.username}` });
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-login-as-user", {
+        body: { targetUserId: user.id },
+      });
+      if (error) throw new Error(error.message || "Failed to login as user");
+      if (!data?.session) throw new Error(data?.error || "No session returned");
+
+      const { error: setErr } = await supabase.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      });
+      if (setErr) throw new Error(setErr.message);
+
+      toast({ title: "Logged in", description: `Now signed in as ${data.user?.email || user.email}` });
+      window.location.href = "/dashboard";
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message || "Failed to login as user", variant: "destructive" });
+    }
+  };
+
   const fetchUsers = async () => {
     setIsLoading(true);
     if (!authUser?.id) {
@@ -295,6 +321,8 @@ export default function Users() {
             onStatusToggle={handleStatusToggle}
             canEdit={canEdit}
             canDelete={canDelete}
+            canLoginAs={isAdmin}
+            onLoginAs={handleLoginAs}
           />
         </CardContent>
       </Card>
