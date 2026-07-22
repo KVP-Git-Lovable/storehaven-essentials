@@ -194,6 +194,7 @@ export const routeToModuleKey: Record<string, string> = {
   "/admin/hierarchy": "usermanagement.hierarchy",
   "/admin/permissions": "usermanagement.permissions",
   "/admin/company": "admin.company",
+  "/admin/tax-master": "admin.tax-master",
   "/list-views": "communication.listviews",
   "/transactions/leads": "transactions.leads",
   "/transactions/customers": "transactions.customers",
