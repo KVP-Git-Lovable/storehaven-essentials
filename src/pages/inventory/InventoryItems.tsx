@@ -136,6 +136,7 @@ interface Vendor {
 
 export default function InventoryItems() {
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
