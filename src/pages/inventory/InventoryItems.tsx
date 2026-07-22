@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { Plus, Search, Package, Barcode, AlertTriangle, CalendarIcon, Eye, Edit, Trash2, ScanLine } from "lucide-react";
 import { Upload, X, Image as ImageIcon } from "lucide-react";
 import { BarcodeScanner } from "@/components/inventory/BarcodeScanner";
+import { TopScrollbar } from "@/components/inventory/TopScrollbar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
