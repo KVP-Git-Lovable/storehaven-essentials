@@ -824,7 +824,8 @@ export default function InventoryItems() {
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto w-full">
+          <TopScrollbar targetRef={tableScrollRef} />
+          <div className="overflow-x-auto w-full" ref={tableScrollRef}>
           <Table className="min-w-max">
             <TableHeader>
               <TableRow>
