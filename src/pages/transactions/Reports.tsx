@@ -427,6 +427,7 @@ export default function Reports() {
                       <tr className="text-muted-foreground">
                         <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide whitespace-nowrap">Invoice Date</th>
                         <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide whitespace-nowrap">Invoice #</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide whitespace-nowrap">Customer</th>
                         <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide whitespace-nowrap">Category</th>
                         <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide whitespace-nowrap">Item #</th>
                         <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide whitespace-nowrap">Gross Wt</th>
@@ -442,59 +443,33 @@ export default function Reports() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {Array.from(groups.entries()).map(([cust, list]) => {
-                        const tot = list.reduce((a, r) => ({
-                          gw: a.gw + r.gross_wt, mw: a.mw + r.metal_wt, dw: a.dw + r.dia_wt, dp: a.dp + r.dia_pcs,
-                          qt: a.qt + r.quantity, am: a.am + r.amount, dc: a.dc + r.discount, na: a.na + r.net_amount,
-                          tx: a.tx + r.tax, ga: a.ga + r.gross_amount,
-                        }), { gw:0, mw:0, dw:0, dp:0, qt:0, am:0, dc:0, na:0, tx:0, ga:0 });
-                        return (
-                          <Fragment key={`s-${cust}`}>
-                            <tr className="bg-muted/20">
-                              <td colSpan={14} className="px-4 py-2 font-semibold text-sm uppercase tracking-wide">{cust}</td>
-                            </tr>
-                            {list.map((r, i) => (
-                              <tr key={`s-${cust}-${i}`} className="hover:bg-muted/10 transition-colors">
-                                <td className="px-4 py-3 whitespace-nowrap">
-                                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                                    {format(new Date(r.invoice_date), "dd MMM, HH:mm")}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">{r.invoice_no}</td>
-                                <td className="px-4 py-3 whitespace-nowrap">{r.category}</td>
-                                <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">{r.item_no}</td>
-                                <td className="px-4 py-3 text-right tabular-nums">{num(r.gross_wt, 3)}</td>
-                                <td className="px-4 py-3 text-right tabular-nums">{num(r.metal_wt, 3)}</td>
-                                <td className="px-4 py-3 text-right tabular-nums">{num(r.dia_wt, 3)}</td>
-                                <td className="px-4 py-3 text-right tabular-nums">{r.dia_pcs}</td>
-                                <td className="px-4 py-3 text-right tabular-nums">{r.quantity}</td>
-                                <td className="px-4 py-3 text-right tabular-nums">₹{num(r.amount)}</td>
-                                <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{num(r.discount)}</td>
-                                <td className="px-4 py-3 text-right tabular-nums">₹{num(r.net_amount)}</td>
-                                <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{num(r.tax)}</td>
-                                <td className="px-4 py-3 text-right tabular-nums font-semibold">₹{num(r.gross_amount)}</td>
-                              </tr>
-                            ))}
-                            <tr className="bg-muted/30 font-semibold">
-                              <td className="px-4 py-2" colSpan={4}>Total for {cust}</td>
-                              <td className="px-4 py-2 text-right tabular-nums">{num(tot.gw, 3)}</td>
-                              <td className="px-4 py-2 text-right tabular-nums">{num(tot.mw, 3)}</td>
-                              <td className="px-4 py-2 text-right tabular-nums">{num(tot.dw, 3)}</td>
-                              <td className="px-4 py-2 text-right tabular-nums">{tot.dp}</td>
-                              <td className="px-4 py-2 text-right tabular-nums">{tot.qt}</td>
-                              <td className="px-4 py-2 text-right tabular-nums">₹{num(tot.am)}</td>
-                              <td className="px-4 py-2 text-right tabular-nums">{num(tot.dc)}</td>
-                              <td className="px-4 py-2 text-right tabular-nums">₹{num(tot.na)}</td>
-                              <td className="px-4 py-2 text-right tabular-nums">{num(tot.tx)}</td>
-                              <td className="px-4 py-2 text-right tabular-nums">₹{num(tot.ga)}</td>
-                            </tr>
-                          </Fragment>
-                        );
-                      })}
+                      {rows.map((r, i) => (
+                        <tr key={`s-${i}`} className="hover:bg-muted/10 transition-colors">
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                              {format(new Date(r.invoice_date), "dd MMM, HH:mm")}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">{r.invoice_no}</td>
+                          <td className="px-4 py-3 whitespace-nowrap font-medium">{r.customer}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">{r.category}</td>
+                          <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">{r.item_no}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{num(r.gross_wt, 3)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{num(r.metal_wt, 3)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{num(r.dia_wt, 3)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{r.dia_pcs}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{r.quantity}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">₹{num(r.amount)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{num(r.discount)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">₹{num(r.net_amount)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{num(r.tax)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums font-semibold">₹{num(r.gross_amount)}</td>
+                        </tr>
+                      ))}
                     </tbody>
                     <tfoot>
                       <tr className="bg-primary/5 border-t-2 font-bold">
-                        <td className="px-4 py-3" colSpan={4}>Grand Total</td>
+                        <td className="px-4 py-3" colSpan={5}>Grand Total</td>
                         <td className="px-4 py-3 text-right tabular-nums">{num(grand.gross_wt, 3)}</td>
                         <td className="px-4 py-3 text-right tabular-nums">{num(grand.metal_wt, 3)}</td>
                         <td className="px-4 py-3 text-right tabular-nums">{num(grand.dia_wt, 3)}</td>
