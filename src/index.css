@@ -65,13 +65,13 @@
     --accent: 25 90% 42%;
     --accent-foreground: 0 0% 100%;
 
-    --sidebar-background: 220 8% 22%;
-    --sidebar-foreground: 30 20% 96%;
+    --sidebar-background: 30 25% 96%;
+    --sidebar-foreground: 20 15% 18%;
     --sidebar-primary: 28 95% 45%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 8% 30%;
-    --sidebar-accent-foreground: 30 20% 96%;
-    --sidebar-border: 220 8% 32%;
+    --sidebar-accent: 28 40% 90%;
+    --sidebar-accent-foreground: 20 15% 18%;
+    --sidebar-border: 30 20% 86%;
     --sidebar-ring: 28 95% 45%;
 
     --sidebar-logo-gradient: linear-gradient(90deg, hsl(20 15% 15%), hsl(28 95% 42%));
