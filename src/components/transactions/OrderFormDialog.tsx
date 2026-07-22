@@ -261,6 +261,13 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       if (!customerId) throw new Error("Customer is required");
       if (validItems.length === 0) throw new Error("Add at least one product");
 
+      if (!isEdit) {
+        const missingRate = Object.values(goldRates).some((v) => !(Number(v) > 0));
+        if (missingRate) {
+          throw new Error("Please set today's gold rates in Price Configuration under Inventory menu");
+        }
+      }
+
       // Stock guard — only enforce on new orders to avoid double-counting on edits
       if (!isEdit) {
         await assertStockAvailable(
