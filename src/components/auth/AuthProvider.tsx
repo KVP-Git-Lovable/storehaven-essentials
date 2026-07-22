@@ -12,6 +12,7 @@ export interface UserProfile {
   role_name?: string;
   must_reset_password?: boolean;
   profile_photo_url?: string | null;
+  theme_preference?: string | null;
 }
 
 export interface Permission {
@@ -62,6 +63,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         status,
         must_reset_password,
         profile_photo_url,
+        theme_preference,
         user_roles_master (name)
       `)
       .eq("id", userId)
@@ -79,6 +81,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         role_name: roleName,
         must_reset_password: profileData.must_reset_password || false,
         profile_photo_url: profileData.profile_photo_url,
+        theme_preference: (profileData as { theme_preference?: string | null }).theme_preference ?? null,
       });
       setIsAdmin(roleName?.toLowerCase() === "admin" || roleName?.toLowerCase() === "super admin");
     }
