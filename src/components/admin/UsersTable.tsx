@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pencil, Filter, ArrowUpDown, X, Trash2 } from "lucide-react";
+import { Pencil, Filter, ArrowUpDown, X, Trash2, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -48,6 +48,8 @@ interface UsersTableProps {
   onStatusToggle: (user: UserData) => void;
   canEdit: boolean;
   canDelete: boolean;
+  canLoginAs?: boolean;
+  onLoginAs?: (user: UserData) => void;
 }
 
 export function UsersTable({
@@ -60,6 +62,8 @@ export function UsersTable({
   onStatusToggle,
   canEdit,
   canDelete,
+  canLoginAs,
+  onLoginAs,
 }: UsersTableProps) {
   const [columnFilters, setColumnFilters] = useState<ColumnFilter>({
     username: "",
@@ -373,6 +377,16 @@ export function UsersTable({
                           onClick={() => onEdit(user)}
                         >
                           <Pencil className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {canLoginAs && onLoginAs && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={`Login as ${user.username}`}
+                          onClick={() => onLoginAs(user)}
+                        >
+                          <LogIn className="h-4 w-4" />
                         </Button>
                       )}
                       {canDelete && (
