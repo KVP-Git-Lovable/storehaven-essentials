@@ -1,27 +1,54 @@
 ## Goal
-Create a Deno/TypeScript edge function `export-trayi-tables` that reads six `trayi_*` tables from the external backup project (ylvhhlykyojudldcmzou), builds CSVs, zips them in-memory, and emails the ZIP to Abhishek.S@kvpcorp.com via Resend. No scheduler, no invocation UI (per your instruction).
+Schedule the existing `export-trayi-tables` edge function to run every Mon/Wed/Fri at 6:00 PM Asia/Kolkata, with duplicate-send prevention and logging.
 
-## Where it lives
-Deployed in **this** Lovable project (edge functions can't be pushed into the external project). It reaches the external project over HTTPS using a service-role key stored as a secret here.
+## Approach
+The edge function already handles fetch → CSV → ZIP → Resend email. We only need to add the scheduler + a de-dupe guard.
 
-## Steps
+### 1. Duplicate-send guard (new table)
+Create `public.trayi_export_runs`:
+- `run_key text primary key` (e.g. `2026-07-27` — one row per scheduled IST date)
+- `started_at`, `finished_at timestamptz`
+- `status text` ('running' | 'success' | 'failed')
+- `rows_exported jsonb` (per-table counts)
+- `failed_tables jsonb`
+- `email_status text`, `email_error text`
 
-1. **Connect Resend** via the standard connector so `RESEND_API_KEY` is injected as an env var. (You'll pick the connection when prompted.)
-2. **Request a new secret** `EXTERNAL_BACKUP_SERVICE_KEY` — the service-role key of project `ylvhhlykyojudldcmzou`. Required to read `trayi_*` rows past RLS.
-3. **Create** `supabase/functions/export-trayi-tables/index.ts` with these helpers:
-   - `fetchTable(name)` — paginated read (1000 rows/page) from `https://ylvhhlykyojudldcmzou.supabase.co/rest/v1/{name}` using `EXTERNAL_BACKUP_SERVICE_KEY`.
-   - `convertToCSV(rows)` — RFC-4180 CSV with header row from union of keys; escapes `"`, commas, newlines; JSON-stringifies objects/arrays; ISO for dates; empty string for null/undefined.
-   - `createZip(files)` — in-memory ZIP via `jsr:@zip-js/zip-js` (Deno-native, no filesystem), returns `Uint8Array`.
-   - `sendEmail(zipBytes, filename)` — Resend `POST /emails` through the connector gateway; attaches the ZIP (base64) to `Abhishek.S@kvpcorp.com`; from address configurable via `EXPORT_FROM_EMAIL` env (default `onboarding@resend.dev` for initial test).
-   - `Deno.serve` handler: CORS preflight, run all six tables in parallel, zip as `trayi_export_YYYY-MM-DD.zip`, call `sendEmail`, and return the raw ZIP bytes (`application/zip`) in the HTTP response body so the same call both emails and returns it.
-4. **Tables**: `trayi_customers`, `trayi_inventory_items`, `trayi_order_items`, `trayi_orders`, `trayi_profiles`, `trayi_user_roles_master`.
-5. **No changes** to order flow or any other project code.
+Grants: `service_role` only. RLS enabled, no policies (edge function uses service role).
 
-## Technical notes
-- Env vars used: `EXTERNAL_BACKUP_SERVICE_KEY`, `LOVABLE_API_KEY`, `RESEND_API_KEY`, optional `EXPORT_FROM_EMAIL`. All read via `Deno.env.get`; nothing hardcoded.
-- Resend attachment size limit is ~40 MB base64-encoded; current row counts (≤ ~400 rows total across the six tables today) are far under this, so a single email is fine.
-- Function will be deployable/testable via `supabase.functions.invoke('export-trayi-tables')` or curl once you're ready (you said you'll wire invocation later).
-- `verify_jwt` stays at Lovable default; no config.toml edits needed.
+### 2. Update `export-trayi-tables`
+- Accept optional `{ run_key?: string, source: 'cron'|'manual' }` body.
+- Compute `run_key` as today's date in Asia/Kolkata if not provided.
+- Insert row with `ON CONFLICT (run_key) DO NOTHING`; if no row inserted → return `{ skipped: true, reason: 'already_ran' }` (prevents duplicate sends).
+- After processing, update the row with per-table row counts, failed tables, and email delivery status.
+- Keep existing per-table try/catch so one failure doesn't stop others (already implemented) — just make sure counts + errors are logged into the run row and console.
 
-## Deliverable
-One new file: `supabase/functions/export-trayi-tables/index.ts`. Plus two prerequisite actions (Resend connect + `EXTERNAL_BACKUP_SERVICE_KEY` secret) that I'll trigger in the same build turn.
+### 3. Scheduler (pg_cron + pg_net)
+Enable `pg_cron` and `pg_net`, then:
+
+```sql
+select cron.schedule(
+  'trayi-export-mwf-1800-ist',
+  '30 12 * * 1,3,5',  -- 12:30 UTC = 18:00 Asia/Kolkata, Mon/Wed/Fri
+  $$
+  select net.http_post(
+    url := 'https://pdtasnfsdnfttayxibqy.supabase.co/functions/v1/export-trayi-tables',
+    headers := '{"Content-Type":"application/json","Authorization":"Bearer <anon>","apikey":"<anon>"}'::jsonb,
+    body := jsonb_build_object('source','cron')
+  );
+  $$
+);
+```
+
+Run via `supabase--insert` (not migration) since it carries the anon key.
+
+Asia/Kolkata is UTC+5:30 with no DST, so a fixed UTC cron is correct year-round.
+
+## Deliverables reported back to user
+- **Scheduler name:** `trayi-export-mwf-1800-ist`
+- **Schedule:** `30 12 * * 1,3,5` UTC = 18:00 Asia/Kolkata, Mon/Wed/Fri
+- **Execution logs:** Cloud → Functions → `export-trayi-tables` logs; run history in `public.trayi_export_runs`; cron dispatch in `cron.job_run_details`
+- **Manual test:** Cloud → Functions → `export-trayi-tables` → Invoke with `{"source":"manual","run_key":"manual-<timestamp>"}` (unique key bypasses the daily guard)
+- **Disable/modify:** `select cron.unschedule('trayi-export-mwf-1800-ist');` or re-run `cron.schedule` with same name and a new expression
+
+## Out of scope
+No changes to order flow, existing mirror, CSV/ZIP/email logic, or recipient address (stays `Abhishek.S@kvpcorp.com`).
