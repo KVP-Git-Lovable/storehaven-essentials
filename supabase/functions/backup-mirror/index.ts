@@ -1,14 +1,13 @@
+import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+
 // Backup mirror: forwards row upserts from this project to the external
 // backup Supabase project. Called by Postgres triggers via pg_net.
-// Write-only — never reads back. Failures are logged, never thrown to the caller.
+// Write-only for production traffic. Admin-only diagnostics return row counts.
 
 const EXTERNAL_URL = "https://ylvhhlykyojudldcmzou.supabase.co";
 const SERVICE_KEY = Deno.env.get("BACKUP_MIRROR_SERVICE_KEY") ?? "";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const SOURCE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SOURCE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 // Allowlist of columns to mirror per table. Extras are stripped so the
 // external table only needs these columns.
@@ -56,10 +55,106 @@ function pick(row: Record<string, unknown>, cols: string[]) {
   return out;
 }
 
-async function forward(table: string, rows: Record<string, unknown>[]) {
+async function writeAudit(entry: {
+  traceId?: string;
+  sourceTable: string;
+  destinationTable: string;
+  rowCount: number;
+  status: "success" | "failure";
+  httpStatus?: number;
+  errorMessage?: string;
+}) {
+  if (!SOURCE_URL || !SOURCE_SERVICE_KEY) return;
+
+  try {
+    await fetch(`${SOURCE_URL}/rest/v1/backup_mirror_audit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SOURCE_SERVICE_KEY,
+        Authorization: `Bearer ${SOURCE_SERVICE_KEY}`,
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        trace_id: entry.traceId ?? null,
+        source_table: entry.sourceTable,
+        destination_table: entry.destinationTable,
+        row_count: entry.rowCount,
+        status: entry.status,
+        http_status: entry.httpStatus ?? null,
+        error_message: entry.errorMessage ?? null,
+      }),
+    });
+  } catch (auditErr) {
+    console.error("backup-mirror audit write failed:", auditErr instanceof Error ? auditErr.message : String(auditErr));
+  }
+}
+
+async function requireAdmin(req: Request) {
+  if (!SOURCE_URL || !SOURCE_SERVICE_KEY) throw new Error("source auth not configured");
+
+  const authorization = req.headers.get("authorization") ?? "";
+  if (!authorization.toLowerCase().startsWith("bearer ")) throw new Error("admin authorization required");
+
+  const userRes = await fetch(`${SOURCE_URL}/auth/v1/user`, {
+    headers: {
+      apikey: SOURCE_SERVICE_KEY,
+      Authorization: authorization,
+    },
+  });
+  if (!userRes.ok) throw new Error("invalid admin authorization");
+
+  const user = await userRes.json();
+  const userId = String(user?.id ?? "");
+  if (!userId) throw new Error("invalid admin authorization");
+
+  const adminRes = await fetch(`${SOURCE_URL}/rest/v1/rpc/is_admin`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SOURCE_SERVICE_KEY,
+      Authorization: `Bearer ${SOURCE_SERVICE_KEY}`,
+    },
+    body: JSON.stringify({ _user_id: userId }),
+  });
+  if (!adminRes.ok) throw new Error("admin check failed");
+
+  const isAdmin = await adminRes.json();
+  if (isAdmin !== true) throw new Error("admin authorization required");
+}
+
+async function externalCount(table: string) {
+  const res = await fetch(`${EXTERNAL_URL}/rest/v1/trayi_${table}?select=id`, {
+    method: "HEAD",
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      Prefer: "count=exact",
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`external count ${table} ${res.status}: ${text.slice(0, 500)}`);
+  }
+
+  const range = res.headers.get("content-range") ?? "0-0/0";
+  const total = Number(range.split("/").pop() ?? 0);
+  return Number.isFinite(total) ? total : 0;
+}
+
+async function getExternalCounts(req: Request) {
+  await requireAdmin(req);
+  const counts: Record<string, number> = {};
+  for (const table of Object.keys(ALLOWED)) counts[`trayi_${table}`] = await externalCount(table);
+  return counts;
+}
+
+async function forward(table: string, rows: Record<string, unknown>[], traceId?: string) {
   const cols = ALLOWED[table];
   if (!cols) throw new Error(`table not allowlisted: ${table}`);
   const body = rows.map((r) => pick(r, cols));
+  const destinationTable = `trayi_${table}`;
   const res = await fetch(`${EXTERNAL_URL}/rest/v1/trayi_${table}`, {
     method: "POST",
     headers: {
@@ -72,8 +167,28 @@ async function forward(table: string, rows: Record<string, unknown>[]) {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`external ${res.status}: ${text.slice(0, 500)}`);
+    const errorMessage = `external ${res.status}: ${text.slice(0, 500)}`;
+    await writeAudit({
+      traceId,
+      sourceTable: table,
+      destinationTable,
+      rowCount: rows.length,
+      status: "failure",
+      httpStatus: res.status,
+      errorMessage,
+    });
+    throw new Error(errorMessage);
   }
+
+  await res.text();
+  await writeAudit({
+    traceId,
+    sourceTable: table,
+    destinationTable,
+    rowCount: rows.length,
+    status: "success",
+    httpStatus: res.status,
+  });
 }
 
 Deno.serve(async (req) => {
@@ -88,7 +203,17 @@ Deno.serve(async (req) => {
 
   try {
     const payload = await req.json();
+
+    if (payload?.action === "external_counts") {
+      const counts = await getExternalCounts(req);
+      return new Response(JSON.stringify({ ok: true, counts }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const table = String(payload?.table ?? "");
+    const traceId = String(payload?.trace_id ?? req.headers.get("x-backup-trace-id") ?? "") || undefined;
     const rows: Record<string, unknown>[] = payload?.rows
       ? payload.rows
       : payload?.row
@@ -101,7 +226,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    await forward(table, rows);
+    await forward(table, rows, traceId);
     return new Response(JSON.stringify({ ok: true, mirrored: rows.length }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
