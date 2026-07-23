@@ -1,0 +1,1 @@
+TRUNCATE TABLE public.backup_mirror_failures; SELECT public.backfill_backup_mirror();
