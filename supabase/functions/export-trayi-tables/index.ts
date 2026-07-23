@@ -25,7 +25,7 @@ const TABLES = [
 ];
 
 const PAGE_SIZE = 1000;
-const RECIPIENT = "Abhishek.S@kvpcorp.com";
+const RECIPIENT = "abhishek.s@kvpcorp.com";
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
