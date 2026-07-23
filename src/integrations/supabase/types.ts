@@ -11352,6 +11352,42 @@ export type Database = {
           },
         ]
       }
+      trayi_export_runs: {
+        Row: {
+          email_error: string | null
+          email_status: string | null
+          failed_tables: Json
+          finished_at: string | null
+          rows_exported: Json
+          run_key: string
+          source: string
+          started_at: string
+          status: string
+        }
+        Insert: {
+          email_error?: string | null
+          email_status?: string | null
+          failed_tables?: Json
+          finished_at?: string | null
+          rows_exported?: Json
+          run_key: string
+          source?: string
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          email_error?: string | null
+          email_status?: string | null
+          failed_tables?: Json
+          finished_at?: string | null
+          rows_exported?: Json
+          run_key?: string
+          source?: string
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
       user_permission_set_groups: {
         Row: {
           created_at: string
