@@ -15,6 +15,7 @@ import { assertStockAvailable, recordSaleLedger } from "@/lib/inventoryStock";
 import { useInventoryStockMap } from "@/hooks/useInventoryStock";
 import { format } from "date-fns";
 import { InvoiceViewerDialog } from "@/components/invoice/InvoiceViewerDialog";
+import { CustomerFormDialog } from "@/components/transactions/CustomerFormDialog";
 
 type LineItem = {
   productId: string;
@@ -54,6 +55,7 @@ interface Props {
 export function OrderFormDialog({ open, onOpenChange, order = null, mode = "create" }: Props) {
   const qc = useQueryClient();
   const [customerId, setCustomerId] = useState("");
+  const [createCustomerOpen, setCreateCustomerOpen] = useState(false);
   const [status, setStatus] = useState("completed");
   const [lineItems, setLineItems] = useState<LineItem[]>([emptyLine()]);
   const [discount, setDiscount] = useState("0");
@@ -544,13 +546,27 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
           )}
           <div>
             <Label>Customer *</Label>
-            <SearchableSelect
-              value={customerId}
-              onValueChange={setCustomerId}
-              options={customers.map((c: any) => ({ value: c.id, label: `${c.name || "—"} (${c.phone})` }))}
-              placeholder="Select customer..."
-              disabled={isView}
-            />
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <SearchableSelect
+                  value={customerId}
+                  onValueChange={setCustomerId}
+                  options={customers.map((c: any) => ({ value: c.id, label: `${c.name || "—"} (${c.phone})` }))}
+                  placeholder="Select customer..."
+                  disabled={isView}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCreateCustomerOpen(true)}
+                disabled={isView}
+                className="whitespace-nowrap"
+              >
+                <Plus className="mr-1 h-4 w-4" /> Create customer
+              </Button>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
