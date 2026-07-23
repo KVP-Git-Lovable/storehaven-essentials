@@ -60,7 +60,7 @@ async function forward(table: string, rows: Record<string, unknown>[]) {
   const cols = ALLOWED[table];
   if (!cols) throw new Error(`table not allowlisted: ${table}`);
   const body = rows.map((r) => pick(r, cols));
-  const res = await fetch(`${EXTERNAL_URL}/rest/v1/${table}`, {
+  const res = await fetch(`${EXTERNAL_URL}/rest/v1/trayi_${table}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
