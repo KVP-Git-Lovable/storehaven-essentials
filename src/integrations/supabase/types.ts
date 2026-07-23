@@ -589,6 +589,42 @@ export type Database = {
           },
         ]
       }
+      backup_mirror_audit: {
+        Row: {
+          created_at: string
+          destination_table: string
+          error_message: string | null
+          http_status: number | null
+          id: string
+          row_count: number
+          source_table: string
+          status: string
+          trace_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          destination_table: string
+          error_message?: string | null
+          http_status?: number | null
+          id?: string
+          row_count?: number
+          source_table: string
+          status: string
+          trace_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          destination_table?: string
+          error_message?: string | null
+          http_status?: number | null
+          id?: string
+          row_count?: number
+          source_table?: string
+          status?: string
+          trace_id?: string | null
+        }
+        Relationships: []
+      }
       backup_mirror_failures: {
         Row: {
           created_at: string
