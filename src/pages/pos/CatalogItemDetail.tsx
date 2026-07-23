@@ -30,15 +30,18 @@ const COLOR_SWATCH: Record<string, string> = {
 export default function CatalogItemDetail() {
   const { handle } = useParams<{ handle: string }>();
 
-  const { data: product, isLoading } = useQuery({
+  const { data: product, isLoading, error } = useQuery({
     queryKey: ["catalog_product", handle],
     enabled: !!handle,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("catalog_products")
-        .select("*")
-        .or(`handle.eq.${handle},id.eq.${handle}`)
-        .maybeSingle();
+      const isUuid =
+        !!handle &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(handle);
+      const query = supabase.from("catalog_products").select("*");
+      const { data, error } = await (isUuid
+        ? query.eq("id", handle!)
+        : query.eq("handle", handle!)
+      ).maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -77,6 +80,7 @@ export default function CatalogItemDetail() {
   const currentPrice = matchedVariant?.price ?? product?.base_price ?? null;
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
+  if (error) return <div className="p-8 text-destructive">Error loading product: {(error as Error).message}</div>;
   if (!product) return <div className="p-8">Product not found.</div>;
 
   return (
