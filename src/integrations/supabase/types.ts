@@ -954,6 +954,72 @@ export type Database = {
           },
         ]
       }
+      catalog_products: {
+        Row: {
+          base_price: number | null
+          compare_at_price: number | null
+          created_at: string
+          description: string | null
+          display_price: string | null
+          handle: string | null
+          id: string
+          image_url: string | null
+          options: Json | null
+          product_type: string | null
+          published_at: string | null
+          shopify_id: string | null
+          sort_order: number
+          status: string
+          tags: string[] | null
+          title: string
+          updated_at: string
+          variants: Json | null
+          vendor: string | null
+        }
+        Insert: {
+          base_price?: number | null
+          compare_at_price?: number | null
+          created_at?: string
+          description?: string | null
+          display_price?: string | null
+          handle?: string | null
+          id?: string
+          image_url?: string | null
+          options?: Json | null
+          product_type?: string | null
+          published_at?: string | null
+          shopify_id?: string | null
+          sort_order?: number
+          status?: string
+          tags?: string[] | null
+          title: string
+          updated_at?: string
+          variants?: Json | null
+          vendor?: string | null
+        }
+        Update: {
+          base_price?: number | null
+          compare_at_price?: number | null
+          created_at?: string
+          description?: string | null
+          display_price?: string | null
+          handle?: string | null
+          id?: string
+          image_url?: string | null
+          options?: Json | null
+          product_type?: string | null
+          published_at?: string | null
+          shopify_id?: string | null
+          sort_order?: number
+          status?: string
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          variants?: Json | null
+          vendor?: string | null
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           created_at: string
