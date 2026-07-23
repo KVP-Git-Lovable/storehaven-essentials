@@ -149,7 +149,7 @@ async function sendEmail(zipBytes: Uint8Array, filename: string): Promise<void> 
   if (!resendKey) throw new Error("RESEND_API_KEY is not configured");
 
   const from = Deno.env.get("EXPORT_FROM_EMAIL") || "Trayi Backup <onboarding@resend.dev>";
-  const today = new Date().toISOString().slice(0, 10);
+  const today = istDateKey();
 
   const res = await fetch("https://connector-gateway.lovable.dev/resend/emails", {
     method: "POST",
@@ -161,8 +161,8 @@ async function sendEmail(zipBytes: Uint8Array, filename: string): Promise<void> 
     body: JSON.stringify({
       from,
       to: [RECIPIENT],
-      subject: `Trayi backup export — ${today}`,
-      text: `Attached is the Trayi backup export for ${today}. Contains ${TABLES.length} CSVs.`,
+      subject: `Trayi Database Export - ${today}`,
+      text: `Attached is the scheduled export of the Trayi database tables.`,
       attachments: [
         {
           filename,
