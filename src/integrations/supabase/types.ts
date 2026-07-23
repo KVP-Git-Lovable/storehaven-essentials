@@ -589,6 +589,30 @@ export type Database = {
           },
         ]
       }
+      backup_mirror_failures: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: number
+          row_id: string | null
+          table_name: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: number
+          row_id?: string | null
+          table_name: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: number
+          row_id?: string | null
+          table_name?: string
+        }
+        Relationships: []
+      }
       budget_approval_history: {
         Row: {
           action: string
@@ -12183,6 +12207,10 @@ export type Database = {
     }
     Functions: {
       allocate_invoice_number: { Args: never; Returns: string }
+      backfill_backup_mirror: {
+        Args: { batch_size?: number }
+        Returns: undefined
+      }
       get_hierarchy_accessible_users: {
         Args: { _user_id: string }
         Returns: string[]
