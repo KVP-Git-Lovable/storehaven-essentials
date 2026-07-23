@@ -780,6 +780,15 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     {isView && order && (
       <InvoiceViewerDialog open={invoiceOpen} onOpenChange={setInvoiceOpen} orderId={order.id} />
     )}
+    <CustomerFormDialog
+      open={createCustomerOpen}
+      onOpenChange={(o) => {
+        setCreateCustomerOpen(o);
+        if (!o) qc.invalidateQueries({ queryKey: ["order-form-customers"] });
+      }}
+      customer={null}
+      mode="create"
+    />
   </>
   );
 }
