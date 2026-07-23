@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -15,7 +15,9 @@ import { assertStockAvailable, recordSaleLedger } from "@/lib/inventoryStock";
 import { useInventoryStockMap } from "@/hooks/useInventoryStock";
 import { format } from "date-fns";
 import { InvoiceViewerDialog } from "@/components/invoice/InvoiceViewerDialog";
-import { CustomerFormDialog } from "@/components/transactions/CustomerFormDialog";
+const CustomerFormDialog = lazy(() =>
+  import("@/components/transactions/CustomerFormDialog").then((m) => ({ default: m.CustomerFormDialog }))
+);
 
 type LineItem = {
   productId: string;
@@ -780,15 +782,19 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     {isView && order && (
       <InvoiceViewerDialog open={invoiceOpen} onOpenChange={setInvoiceOpen} orderId={order.id} />
     )}
-    <CustomerFormDialog
-      open={createCustomerOpen}
-      onOpenChange={(o) => {
-        setCreateCustomerOpen(o);
-        if (!o) qc.invalidateQueries({ queryKey: ["order-form-customers"] });
-      }}
-      customer={null}
-      mode="create"
-    />
+    {createCustomerOpen && (
+      <Suspense fallback={null}>
+        <CustomerFormDialog
+          open={createCustomerOpen}
+          onOpenChange={(o) => {
+            setCreateCustomerOpen(o);
+            if (!o) qc.invalidateQueries({ queryKey: ["order-form-customers"] });
+          }}
+          customer={null}
+          mode="create"
+        />
+      </Suspense>
+    )}
   </>
   );
 }
