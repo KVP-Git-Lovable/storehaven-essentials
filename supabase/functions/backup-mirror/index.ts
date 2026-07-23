@@ -143,6 +143,28 @@ async function externalCount(table: string) {
   return Number.isFinite(total) ? total : 0;
 }
 
+async function checkExternalSchema(req: Request) {
+  await requireAdmin(req);
+  const result: Record<string, { expected: number; missing: string[] }> = {};
+
+  for (const [table, cols] of Object.entries(ALLOWED)) {
+    const missing: string[] = [];
+    for (const col of cols) {
+      const res = await fetch(`${EXTERNAL_URL}/rest/v1/trayi_${table}?select=${encodeURIComponent(col)}&limit=0`, {
+        headers: {
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+        },
+      });
+      await res.text();
+      if (!res.ok) missing.push(col);
+    }
+    result[`trayi_${table}`] = { expected: cols.length, missing };
+  }
+
+  return result;
+}
+
 async function getExternalCounts(req: Request) {
   await requireAdmin(req);
   const counts: Record<string, number> = {};
@@ -207,6 +229,14 @@ Deno.serve(async (req) => {
     if (payload?.action === "external_counts") {
       const counts = await getExternalCounts(req);
       return new Response(JSON.stringify({ ok: true, counts }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (payload?.action === "schema_check") {
+      const schema = await checkExternalSchema(req);
+      return new Response(JSON.stringify({ ok: true, schema }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
