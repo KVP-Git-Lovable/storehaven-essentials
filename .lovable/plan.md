@@ -1,63 +1,70 @@
-# External Backup Mirror (Write-Only)
+## Verified findings so far
 
-Mirror rows from this project to the external Supabase project `ylvhhlykyojudldcmzou` for six objects:
-`customers`, `orders`, `order_items`, `inventory_items`, `profiles` (Users), `user_roles_master` (User Roles).
+- Source row counts currently are:
+  - `customers`: 310
+  - `inventory_items`: 12
+  - `order_items`: 4
+  - `orders`: 3
+  - `profiles`: 3
+  - `user_roles_master`: 2
+- The source-side mirror triggers are present and enabled on all 6 source tables.
+- The source-side backfill function is present and queues calls to the `backup-mirror` function.
+- The latest source-side async HTTP responses show the backfill did run, but several table writes failed at the external destination:
+  - `trayi_customers`: missing `city`
+  - `trayi_orders`: missing `created_by`
+  - `trayi_order_items`: missing `discount_percent`
+  - `trayi_profiles`: missing `reports_to`
+- `backup_mirror_failures` being empty is not enough proof of success because the current trigger uses async HTTP; external function failures are recorded in the async HTTP response table / function logs, not in `backup_mirror_failures`.
+- The external destination URL and `trayi_` prefix are being reached, because the errors are coming from `trayi_*` destination tables.
 
-Zero changes to existing app logic — replication runs at the database layer via triggers, so every insert/update from the UI, edge functions, imports, or admin tools is captured automatically.
+## Plan
 
-## Approach
+1. **Make the mirror auditable from this project**
+   - Add a dedicated source-side audit table for backup mirror attempts.
+   - Record per-table and per-batch results: source table, destination table, row count attempted, success/failure, HTTP status, and error message.
+   - Update the `backup-mirror` function to write audit results back to this project using the existing secure backend key.
+   - This fixes the current blind spot where async failures only appear in low-level HTTP logs.
 
-Use Postgres `AFTER INSERT OR UPDATE` triggers on the 6 tables in this project. Each trigger uses the `pg_net` extension to fire an async HTTPS `POST` to the external project's PostgREST endpoint (`/rest/v1/<table>`) with header `Prefer: resolution=merge-duplicates` so it acts as an idempotent upsert on the primary key.
+2. **Add count-only external verification**
+   - Add a protected audit action to the `backup-mirror` function that reads only row counts from the external `trayi_*` tables.
+   - It will not read or return customer/order/user data values — only counts by table.
+   - This is needed because the current design is write-only, so we cannot verify external population from this side without a count-only diagnostic path.
 
-- Fire-and-forget (async) — never blocks or fails the original write.
-- Write-only — no reads back, no FK enforcement on the external side (mirror tables have no FKs).
-- Failures are logged in `net._http_response`; a lightweight `backup_mirror_failures` table captures errors for visibility. No auto-retry logic in v1 (kept minimal per "purely additive").
-- Deletes are NOT mirrored (matches "backup copy" intent — external retains historical rows). Can be added later if you want.
+3. **Generate a complete external schema catch-up script**
+   - Produce a new idempotent SQL script for the external backup project covering all mirrored columns for:
+     - `trayi_customers`
+     - `trayi_orders`
+     - `trayi_order_items`
+     - `trayi_inventory_items`
+     - `trayi_profiles`
+     - `trayi_user_roles_master`
+   - Include the columns already confirmed missing and any other mirrored columns, so we do not hit one-missing-column-at-a-time failures.
+   - You will need to run this in the external backup project because this app only has REST/service-key access there, not schema-change access.
 
-## What's needed from you
+4. **Make backfill execution safer and verifiable**
+   - Update the backfill function so each table/batch gets a trace identifier.
+   - After the external schema is fixed, re-run backfill table-by-table.
+   - After each table backfill, verify:
+     - source-side audit says success,
+     - async HTTP responses are clean,
+     - external count-only audit matches expected source count.
 
-The external project's **service role key** (from its Supabase dashboard → Project Settings → API). I'll store it as a secret named `BACKUP_MIRROR_SERVICE_KEY`. The external URL is public and hardcoded.
+5. **Verify ongoing mirroring without changing business logic**
+   - Confirm triggers remain enabled on all 6 source tables.
+   - Confirm future inserts/updates will call the same audited mirror function.
+   - If you approve a production-safe smoke test, perform one minimal update on a non-sensitive existing row and verify the audit trail and external count/status. If not, limit verification to trigger definitions plus backfill/audit proof.
 
-## Steps in this project
+6. **Final production report**
+   - Provide a table-by-table report with:
+     - source count,
+     - external count,
+     - latest successful mirror timestamp,
+     - latest failure, if any,
+     - trigger status.
 
-1. Enable `pg_net` extension (if not already).
-2. Create a small `public.backup_mirror_config` table holding the external URL and (a reference to) the service key, plus a `backup_mirror_failures` log table.
-3. Create a `SECURITY DEFINER` function `public.mirror_row(table_name text, row jsonb)` that:
-   - Reads config, builds URL `https://ylvhhlykyojudldcmzou.supabase.co/rest/v1/<table>`.
-   - Calls `net.http_post` with headers `apikey`, `Authorization: Bearer <key>`, `Content-Type: application/json`, `Prefer: resolution=merge-duplicates,return=minimal`, body = the row JSON (filtered to columns that exist on the mirror side).
-4. Create 6 `AFTER INSERT OR UPDATE` triggers, one per table, that call `mirror_row` with `to_jsonb(NEW)` reduced to the mirrored column set.
-5. One-time backfill: call `mirror_row` for every existing row in the 6 tables (batched, throttled) so the external project starts in sync.
+## Technical notes
 
-## Steps in the external project
-
-You (or I, if you paste the service key) run one migration on `ylvhhlykyojudldcmzou` that creates six standalone tables mirroring the columns below. Each has the same primary key (`id`) so upserts are idempotent. No RLS needed since only the service role writes; enable RLS with no policies to block anon reads if you prefer.
-
-Mirrored columns (business fields only — skip volatile stats like `total_orders`, `total_spent` recalculated by triggers; keep them if you want an exact snapshot):
-
-- **customers**: id, customer_code, phone, name, email, date_of_birth, anniversary_date, gender, city, state, country, tier, customer_segment, loyalty_points, store_credit, total_orders, total_spent, preferences, created_at, updated_at
-- **orders**: id, order_number, store_id, customer_id, subtotal, discount_amount, tax_amount, total_amount, payment_method, payment_status, payment_reference, status, order_type, invoice_number, invoice_generated_at, coupon_id, coupon_discount, scheme_ids, loyalty_points_earned, loyalty_points_redeemed, gift_card_id, gift_card_amount, notes, created_by, created_at, updated_at
-- **order_items**: id, order_id, item_id, quantity, unit_price, discount_percent, discount_amount, tax_percent, tax_amount, dia_price, cs_price, making_charges, total_amount, created_at
-- **inventory_items**: all 48 columns (full mirror — this is the master catalog)
-- **profiles** (Users): id, username, email, role_id, reports_to, status, must_reset_password, created_at, updated_at (excludes any theme/preference JSON unless you want it)
-- **user_roles_master**: id, name, description, status, created_at, updated_at
-
-Each mirror table has PK on `id` and no FKs (so parent/child arrival order doesn't matter).
-
-## Failure handling
-
-- pg_net responses land in `net._http_response`. A scheduled function (optional, v2) can scan for non-2xx and copy failed row IDs into `backup_mirror_failures` for reprocessing.
-- v1 keeps it minimal: manual re-run of the backfill function will re-upsert everything.
-
-## Not included (per your constraint)
-
-- No changes to any existing table, RLS policy, edge function, or UI.
-- No delete mirroring.
-- No two-way sync — external is strictly a write target.
-
-## Open questions
-
-1. Do you want `profiles` theme/preference columns mirrored too, or just identity fields?
-2. Should deletes be mirrored (soft-delete flag on external side), or keep external as append-only history?
-3. OK to run the one-time backfill immediately after the triggers are in place?
-
-Once you confirm and share the external service role key (I'll request it via the secure secret form), I'll run the migrations on both projects.
+- The current root issue is confirmed as external destination schema mismatch plus insufficient async failure visibility.
+- I will not change existing app flows or business logic.
+- The backup remains additive: source tables continue working even if the external mirror fails.
+- I will not expose or print any secret keys.
