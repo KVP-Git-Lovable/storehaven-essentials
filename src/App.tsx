@@ -106,6 +106,7 @@ const ProductMaster = lazyWithRetry(() => import("./pages/pos/ProductMaster"), "
 const POSDashboard = lazyWithRetry(() => import("./pages/pos/POSDashboard"), "POSDashboard");
 const ReturnsProcessing = lazyWithRetry(() => import("./pages/pos/ReturnsProcessing"), "ReturnsProcessing");
 const CashierSessions = lazyWithRetry(() => import("./pages/pos/CashierSessions"), "CashierSessions");
+const CatalogMaster = lazyWithRetry(() => import("./pages/pos/CatalogMaster"), "CatalogMaster");
 const Users = lazyWithRetry(() => import("./pages/admin/Users"), "Users");
 const UserRoles = lazyWithRetry(() => import("./pages/admin/UserRoles"), "UserRoles");
 const UserHierarchy = lazyWithRetry(() => import("./pages/admin/UserHierarchy"), "UserHierarchy");
@@ -193,6 +194,7 @@ const App = () => (
                 <Route path="/pos" element={<PointOfSale />} />
                 <Route path="/pos/dashboard" element={<POSDashboard />} />
                 <Route path="/pos/products" element={<ProductMaster />} />
+                <Route path="/pos/catalog" element={<CatalogMaster />} />
                 <Route path="/pos/orders" element={<OrderHistory />} />
                 <Route path="/pos/returns" element={<ReturnsProcessing />} />
                 <Route path="/pos/schemes" element={<Schemes />} />

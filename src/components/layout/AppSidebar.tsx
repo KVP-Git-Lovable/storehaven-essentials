@@ -84,6 +84,7 @@ const navigation: NavItem[] = [
       { title: "Schemes", href: "/pos/schemes", moduleKey: "pos.schemes" },
       { title: "Cashier Sessions", href: "/pos/sessions", moduleKey: "pos.quicksale" },
       { title: "Product Master", href: "/pos/products", moduleKey: "pos.products" },
+      { title: "Catalog Master", href: "/pos/catalog", moduleKey: "pos.catalog" },
     ],
   },
   {
