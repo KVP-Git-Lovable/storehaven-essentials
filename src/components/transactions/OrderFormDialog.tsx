@@ -713,7 +713,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                 <span className="font-medium">₹{subtotal.toLocaleString("en-IN")}</span>
               </div>
               <div className="flex items-center justify-between gap-4">
-                <span className="text-muted-foreground">Discount</span>
+                <span className="text-muted-foreground">Dia Discount</span>
                 <div className="flex items-center gap-2">
                   <div className="relative">
                     <Input
@@ -721,9 +721,9 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                       min="0"
                       max="100"
                       step="0.01"
-                      value={discountPct}
-                      disabled={isView || (Number(discount) > 0)}
-                      onChange={(e) => { setDiscountPct(e.target.value); if (e.target.value) setDiscount("0"); }}
+                      value={diaDiscountPct}
+                      disabled={isView || (Number(diaDiscount) > 0)}
+                      onChange={(e) => { setDiaDiscountPct(e.target.value); if (e.target.value) setDiaDiscount("0"); }}
                       placeholder="%"
                       className="w-24 text-right pr-6"
                     />
@@ -733,18 +733,53 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                     type="number"
                     min="0"
                     step="0.01"
-                    value={discount}
-                    disabled={isView || (Number(discountPct) > 0)}
-                    onChange={(e) => { setDiscount(e.target.value); if (e.target.value && Number(e.target.value) > 0) setDiscountPct(""); }}
+                    value={diaDiscount}
+                    disabled={isView || (Number(diaDiscountPct) > 0)}
+                    onChange={(e) => { setDiaDiscount(e.target.value); if (e.target.value && Number(e.target.value) > 0) setDiaDiscountPct(""); }}
                     placeholder="Amount"
                     className="w-32 text-right"
                   />
                 </div>
               </div>
-              {pctNum > 0 && (
+              {diaDiscAmtDisplay > 0 && (
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Discount ({pctNum}%)</span>
-                  <span>-₹{discountAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span>Dia Discount{diaPctNum > 0 ? ` (${diaPctNum}%)` : ""}</span>
+                  <span>-₹{diaDiscAmtDisplay.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground">Making Discount</span>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={makingDiscountPct}
+                      disabled={isView || (Number(makingDiscount) > 0)}
+                      onChange={(e) => { setMakingDiscountPct(e.target.value); if (e.target.value) setMakingDiscount("0"); }}
+                      placeholder="%"
+                      className="w-24 text-right pr-6"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                  </div>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={makingDiscount}
+                    disabled={isView || (Number(makingDiscountPct) > 0)}
+                    onChange={(e) => { setMakingDiscount(e.target.value); if (e.target.value && Number(e.target.value) > 0) setMakingDiscountPct(""); }}
+                    placeholder="Amount"
+                    className="w-32 text-right"
+                  />
+                </div>
+              </div>
+              {makingDiscAmtDisplay > 0 && (
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Making Discount{makingPctNum > 0 ? ` (${makingPctNum}%)` : ""}</span>
+                  <span>-₹{makingDiscAmtDisplay.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               )}
               {sgstRate > 0 && (
