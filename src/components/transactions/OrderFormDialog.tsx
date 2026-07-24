@@ -241,14 +241,20 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       setCustomerId("");
       setStatus("completed");
       setLineItems([emptyLine()]);
-      setDiscount("0");
-      setDiscountPct("");
+      setDiaDiscount("0");
+      setDiaDiscountPct("");
+      setMakingDiscount("0");
+      setMakingDiscountPct("");
       return;
     }
     setCustomerId(order.customer_id || "");
     setStatus(order.status || "completed");
-    setDiscount(String((order as any).discount_amount ?? 0));
-    setDiscountPct("");
+    // Legacy orders stored a single combined discount; load it into Making by
+    // default so totals stay the same. User can re-split as needed.
+    setDiaDiscount("0");
+    setDiaDiscountPct("");
+    setMakingDiscount(String((order as any).discount_amount ?? 0));
+    setMakingDiscountPct("");
   }, [open, order]);
 
   useEffect(() => {
