@@ -327,10 +327,13 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       }
 
       const subtotal = validItems.reduce((sum, item) => sum + item.lineTotal, 0);
-      const pct = Math.max(0, Math.min(100, Number(discountPct) || 0));
-      const discountAmount = pct > 0
-        ? (subtotal * pct) / 100
-        : Math.max(0, Number(discount) || 0);
+      const diaBase = validItems.reduce((s, i) => s + (Number(i.diaPrice) || 0) * i.quantity, 0);
+      const makingBase = validItems.reduce((s, i) => s + (Number(i.makingCharges) || 0) * i.quantity, 0);
+      const diaPct = Math.max(0, Math.min(100, Number(diaDiscountPct) || 0));
+      const makingPct = Math.max(0, Math.min(100, Number(makingDiscountPct) || 0));
+      const diaDiscAmt = diaPct > 0 ? (diaBase * diaPct) / 100 : Math.max(0, Number(diaDiscount) || 0);
+      const makingDiscAmt = makingPct > 0 ? (makingBase * makingPct) / 100 : Math.max(0, Number(makingDiscount) || 0);
+      const discountAmount = Math.min(subtotal, diaDiscAmt + makingDiscAmt);
       const taxableBase = Math.max(0, subtotal - discountAmount);
       // Resolve tax per line via the slab attached to each product
       const discountRatio = subtotal > 0 ? discountAmount / subtotal : 0;
