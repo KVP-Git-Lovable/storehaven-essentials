@@ -431,8 +431,10 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       setCustomerId("");
       setStatus("completed");
       setLineItems([emptyLine()]);
-      setDiscount("0");
-      setDiscountPct("");
+      setDiaDiscount("0");
+      setDiaDiscountPct("");
+      setMakingDiscount("0");
+      setMakingDiscountPct("");
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -461,10 +463,13 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   );
 
   const subtotal = enrichedItems.reduce((sum, item) => sum + item.lineTotal, 0);
-  const pctNum = Math.max(0, Math.min(100, Number(discountPct) || 0));
-  const discountAmount = pctNum > 0
-    ? (subtotal * pctNum) / 100
-    : Math.max(0, Number(discount) || 0);
+  const diaBaseDisplay = lineItems.reduce((s, i) => s + (Number(i.diaPrice) || 0) * Math.max(1, Number(i.quantity) || 1), 0);
+  const makingBaseDisplay = lineItems.reduce((s, i) => s + (Number(i.makingCharges) || 0) * Math.max(1, Number(i.quantity) || 1), 0);
+  const diaPctNum = Math.max(0, Math.min(100, Number(diaDiscountPct) || 0));
+  const makingPctNum = Math.max(0, Math.min(100, Number(makingDiscountPct) || 0));
+  const diaDiscAmtDisplay = diaPctNum > 0 ? (diaBaseDisplay * diaPctNum) / 100 : Math.max(0, Number(diaDiscount) || 0);
+  const makingDiscAmtDisplay = makingPctNum > 0 ? (makingBaseDisplay * makingPctNum) / 100 : Math.max(0, Number(makingDiscount) || 0);
+  const discountAmount = Math.min(subtotal, diaDiscAmtDisplay + makingDiscAmtDisplay);
   const taxable = Math.max(0, subtotal - discountAmount);
   const discountRatioDisplay = subtotal > 0 ? discountAmount / subtotal : 0;
   const componentTotals: Record<string, { amount: number; rate: number }> = {};
