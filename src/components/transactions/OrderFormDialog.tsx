@@ -60,8 +60,10 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   const [createCustomerOpen, setCreateCustomerOpen] = useState(false);
   const [status, setStatus] = useState("completed");
   const [lineItems, setLineItems] = useState<LineItem[]>([emptyLine()]);
-  const [discount, setDiscount] = useState("0");
-  const [discountPct, setDiscountPct] = useState("");
+  const [diaDiscount, setDiaDiscount] = useState("0");
+  const [diaDiscountPct, setDiaDiscountPct] = useState("");
+  const [makingDiscount, setMakingDiscount] = useState("0");
+  const [makingDiscountPct, setMakingDiscountPct] = useState("");
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const isView = mode === "view";
   const isEdit = mode === "edit";
@@ -239,14 +241,20 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       setCustomerId("");
       setStatus("completed");
       setLineItems([emptyLine()]);
-      setDiscount("0");
-      setDiscountPct("");
+      setDiaDiscount("0");
+      setDiaDiscountPct("");
+      setMakingDiscount("0");
+      setMakingDiscountPct("");
       return;
     }
     setCustomerId(order.customer_id || "");
     setStatus(order.status || "completed");
-    setDiscount(String((order as any).discount_amount ?? 0));
-    setDiscountPct("");
+    // Legacy orders stored a single combined discount; load it into Making by
+    // default so totals stay the same. User can re-split as needed.
+    setDiaDiscount("0");
+    setDiaDiscountPct("");
+    setMakingDiscount(String((order as any).discount_amount ?? 0));
+    setMakingDiscountPct("");
   }, [open, order]);
 
   useEffect(() => {
@@ -319,10 +327,13 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       }
 
       const subtotal = validItems.reduce((sum, item) => sum + item.lineTotal, 0);
-      const pct = Math.max(0, Math.min(100, Number(discountPct) || 0));
-      const discountAmount = pct > 0
-        ? (subtotal * pct) / 100
-        : Math.max(0, Number(discount) || 0);
+      const diaBase = validItems.reduce((s, i) => s + (Number(i.diaPrice) || 0) * i.quantity, 0);
+      const makingBase = validItems.reduce((s, i) => s + (Number(i.makingCharges) || 0) * i.quantity, 0);
+      const diaPct = Math.max(0, Math.min(100, Number(diaDiscountPct) || 0));
+      const makingPct = Math.max(0, Math.min(100, Number(makingDiscountPct) || 0));
+      const diaDiscAmt = diaPct > 0 ? (diaBase * diaPct) / 100 : Math.max(0, Number(diaDiscount) || 0);
+      const makingDiscAmt = makingPct > 0 ? (makingBase * makingPct) / 100 : Math.max(0, Number(makingDiscount) || 0);
+      const discountAmount = Math.min(subtotal, diaDiscAmt + makingDiscAmt);
       const taxableBase = Math.max(0, subtotal - discountAmount);
       // Resolve tax per line via the slab attached to each product
       const discountRatio = subtotal > 0 ? discountAmount / subtotal : 0;
@@ -420,8 +431,10 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       setCustomerId("");
       setStatus("completed");
       setLineItems([emptyLine()]);
-      setDiscount("0");
-      setDiscountPct("");
+      setDiaDiscount("0");
+      setDiaDiscountPct("");
+      setMakingDiscount("0");
+      setMakingDiscountPct("");
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -450,10 +463,13 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   );
 
   const subtotal = enrichedItems.reduce((sum, item) => sum + item.lineTotal, 0);
-  const pctNum = Math.max(0, Math.min(100, Number(discountPct) || 0));
-  const discountAmount = pctNum > 0
-    ? (subtotal * pctNum) / 100
-    : Math.max(0, Number(discount) || 0);
+  const diaBaseDisplay = lineItems.reduce((s, i) => s + (Number(i.diaPrice) || 0) * Math.max(1, Number(i.quantity) || 1), 0);
+  const makingBaseDisplay = lineItems.reduce((s, i) => s + (Number(i.makingCharges) || 0) * Math.max(1, Number(i.quantity) || 1), 0);
+  const diaPctNum = Math.max(0, Math.min(100, Number(diaDiscountPct) || 0));
+  const makingPctNum = Math.max(0, Math.min(100, Number(makingDiscountPct) || 0));
+  const diaDiscAmtDisplay = diaPctNum > 0 ? (diaBaseDisplay * diaPctNum) / 100 : Math.max(0, Number(diaDiscount) || 0);
+  const makingDiscAmtDisplay = makingPctNum > 0 ? (makingBaseDisplay * makingPctNum) / 100 : Math.max(0, Number(makingDiscount) || 0);
+  const discountAmount = Math.min(subtotal, diaDiscAmtDisplay + makingDiscAmtDisplay);
   const taxable = Math.max(0, subtotal - discountAmount);
   const discountRatioDisplay = subtotal > 0 ? discountAmount / subtotal : 0;
   const componentTotals: Record<string, { amount: number; rate: number }> = {};
@@ -697,7 +713,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                 <span className="font-medium">₹{subtotal.toLocaleString("en-IN")}</span>
               </div>
               <div className="flex items-center justify-between gap-4">
-                <span className="text-muted-foreground">Discount</span>
+                <span className="text-muted-foreground">Dia Discount</span>
                 <div className="flex items-center gap-2">
                   <div className="relative">
                     <Input
@@ -705,9 +721,9 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                       min="0"
                       max="100"
                       step="0.01"
-                      value={discountPct}
-                      disabled={isView || (Number(discount) > 0)}
-                      onChange={(e) => { setDiscountPct(e.target.value); if (e.target.value) setDiscount("0"); }}
+                      value={diaDiscountPct}
+                      disabled={isView || (Number(diaDiscount) > 0)}
+                      onChange={(e) => { setDiaDiscountPct(e.target.value); if (e.target.value) setDiaDiscount("0"); }}
                       placeholder="%"
                       className="w-24 text-right pr-6"
                     />
@@ -717,18 +733,53 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                     type="number"
                     min="0"
                     step="0.01"
-                    value={discount}
-                    disabled={isView || (Number(discountPct) > 0)}
-                    onChange={(e) => { setDiscount(e.target.value); if (e.target.value && Number(e.target.value) > 0) setDiscountPct(""); }}
+                    value={diaDiscount}
+                    disabled={isView || (Number(diaDiscountPct) > 0)}
+                    onChange={(e) => { setDiaDiscount(e.target.value); if (e.target.value && Number(e.target.value) > 0) setDiaDiscountPct(""); }}
                     placeholder="Amount"
                     className="w-32 text-right"
                   />
                 </div>
               </div>
-              {pctNum > 0 && (
+              {diaDiscAmtDisplay > 0 && (
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Discount ({pctNum}%)</span>
-                  <span>-₹{discountAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span>Dia Discount{diaPctNum > 0 ? ` (${diaPctNum}%)` : ""}</span>
+                  <span>-₹{diaDiscAmtDisplay.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground">Making Discount</span>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={makingDiscountPct}
+                      disabled={isView || (Number(makingDiscount) > 0)}
+                      onChange={(e) => { setMakingDiscountPct(e.target.value); if (e.target.value) setMakingDiscount("0"); }}
+                      placeholder="%"
+                      className="w-24 text-right pr-6"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                  </div>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={makingDiscount}
+                    disabled={isView || (Number(makingDiscountPct) > 0)}
+                    onChange={(e) => { setMakingDiscount(e.target.value); if (e.target.value && Number(e.target.value) > 0) setMakingDiscountPct(""); }}
+                    placeholder="Amount"
+                    className="w-32 text-right"
+                  />
+                </div>
+              </div>
+              {makingDiscAmtDisplay > 0 && (
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Making Discount{makingPctNum > 0 ? ` (${makingPctNum}%)` : ""}</span>
+                  <span>-₹{makingDiscAmtDisplay.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               )}
               {sgstRate > 0 && (
