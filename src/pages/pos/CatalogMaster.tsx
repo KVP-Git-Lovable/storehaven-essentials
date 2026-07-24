@@ -9,6 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Upload, Search, Package } from "lucide-react";
 import CatalogImportDialog from "@/components/pos/CatalogImportDialog";
+import tr1Asset from "@/assets/tr1.webp.asset.json";
+import tr2Asset from "@/assets/tr2.webp.asset.json";
+import { useEffect } from "react";
 
 type CatalogProduct = {
   id: string;
@@ -31,6 +34,12 @@ export default function CatalogMaster() {
   const [search, setSearch] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [tab, setTab] = useState<string>("ALL");
+  const banners = [tr1Asset.url, tr2Asset.url];
+  const [bannerIdx, setBannerIdx] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setBannerIdx((i) => (i + 1) % banners.length), 2000);
+    return () => clearInterval(id);
+  }, []);
 
   const { data: products = [], isLoading, refetch } = useQuery({
     queryKey: ["catalog_products"],
@@ -80,6 +89,18 @@ export default function CatalogMaster() {
             Import catalog
           </Button>
         </div>
+      </div>
+
+      <div className="relative w-full h-32 sm:h-40 md:h-48 rounded-xl overflow-hidden border border-border bg-muted">
+        {banners.map((src, i) => (
+          <img
+            key={src}
+            src={src}
+            alt="Trayi Jewellers storefront"
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${i === bannerIdx ? "opacity-100" : "opacity-0"}`}
+            loading="lazy"
+          />
+        ))}
       </div>
 
       <Card className="p-4">
