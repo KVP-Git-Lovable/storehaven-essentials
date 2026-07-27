@@ -99,22 +99,22 @@
 
   /* ============ Theme: Light Pink ============ */
   html.theme-pink {
-    --primary: 338 82% 58%;
+    --primary: 336 76% 22%;
     --primary-foreground: 0 0% 100%;
-    --ring: 338 82% 58%;
-    --accent: 320 65% 55%;
+    --ring: 336 76% 22%;
+    --accent: 336 70% 30%;
     --accent-foreground: 0 0% 100%;
 
     --sidebar-background: 30 25% 96%;
     --sidebar-foreground: 320 12% 22%;
-    --sidebar-primary: 338 82% 58%;
+    --sidebar-primary: 336 76% 22%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 320 30% 92%;
     --sidebar-accent-foreground: 320 15% 20%;
     --sidebar-border: 320 20% 88%;
-    --sidebar-ring: 338 82% 58%;
+    --sidebar-ring: 336 76% 22%;
 
-    --sidebar-logo-gradient: linear-gradient(90deg, hsl(280 55% 55%), hsl(330 85% 78%));
+    --sidebar-logo-gradient: linear-gradient(90deg, hsl(336 78% 14%), hsl(336 74% 28%));
   }
 
   .dark {
