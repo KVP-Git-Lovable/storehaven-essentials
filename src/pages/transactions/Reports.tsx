@@ -113,7 +113,7 @@ export default function Reports() {
   // Intra-state orders use SGST + CGST (IGST is inter-state and not applied here — matches Invoice/View Order).
   const taxRate = (Number(template?.sgst_rate) || 0) + (Number(template?.cgst_rate) || 0);
 
-  const { data: rows = [], isLoading, refetch, isFetching } = useQuery({
+  const { data: allRows = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: ["report-orders", activeRange.from?.toISOString(), activeRange.to?.toISOString(), taxRate],
     enabled: reportType === "orders",
     queryFn: async () => {
@@ -192,6 +192,14 @@ export default function Reports() {
       return out;
     },
   });
+
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return allRows;
+    return allRows.filter((r) =>
+      Object.values(r).some((v) => String(v ?? "").toLowerCase().includes(q))
+    );
+  }, [allRows, search]);
 
   // Group by customer
   const groups = useMemo(() => {
