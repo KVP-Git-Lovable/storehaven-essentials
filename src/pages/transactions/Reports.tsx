@@ -112,6 +112,7 @@ export default function Reports() {
 
   // Intra-state orders use SGST + CGST (IGST is inter-state and not applied here — matches Invoice/View Order).
   const taxRate = (Number(template?.sgst_rate) || 0) + (Number(template?.cgst_rate) || 0);
+  const [search, setSearch] = useState("");
 
   const { data: allRows = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: ["report-orders", activeRange.from?.toISOString(), activeRange.to?.toISOString(), taxRate],
@@ -391,6 +392,16 @@ export default function Reports() {
           <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isFetching}>
             <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
           </Button>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Search</label>
+            <Input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search all columns..."
+              className="w-[220px]"
+            />
+          </div>
           <div className="ml-auto">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
