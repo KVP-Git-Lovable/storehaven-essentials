@@ -7,7 +7,7 @@ export type ThemeName = "amber" | "blue" | "pink";
 export const THEME_META: Record<ThemeName, { label: string; swatch: string }> = {
   amber: { label: "Amber", swatch: "hsl(28 95% 55%)" },
   blue: { label: "Blue & Black", swatch: "hsl(220 70% 50%)" },
-  pink: { label: "Light Pink", swatch: "hsl(338 82% 58%)" },
+  pink: { label: "Light Pink", swatch: "hsl(336 76% 22%)" },
 };
 
 const STORAGE_KEY = "app.theme";
