@@ -494,7 +494,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   const cessRate = componentTotals.CESS?.rate || 0;
   const taxAmount = sgstAmt + cgstAmt + igstAmt + cessAmt;
   const total = taxable + taxAmount;
-  const title = isView ? "View Order" : isEdit ? "Edit Order" : "New Order";
+  const title = isView ? "View Order" : isEdit ? "Edit Order" : "New Sale";
 
   const updateLineItem = (index: number, patch: Partial<LineItem>) => {
     setLineItems((current) => current.map((item, i) => {

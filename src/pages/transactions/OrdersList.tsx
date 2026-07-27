@@ -191,15 +191,15 @@ export default function OrdersList() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
-          <p className="text-muted-foreground">All customer orders, most recent first.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Sales Invoice (Order)</h1>
+          <p className="text-muted-foreground">Create and view Sales orders for customers. Sorted by recent first</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <Upload className="mr-2 h-4 w-4" /> Import Orders
           </Button>
           <Button onClick={() => { setSelectedOrder(null); setDialogMode("create"); setCreateOpen(true); }}>
-            <Plus className="mr-2 h-4 w-4" /> New Order
+            <Plus className="mr-2 h-4 w-4" /> New Sale
           </Button>
         </div>
       </div>
