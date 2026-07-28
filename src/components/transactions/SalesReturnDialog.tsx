@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, lazy, Suspense } from "react";
+import { Fragment, useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -385,8 +385,8 @@ export function SalesReturnDialog({ open, onOpenChange }: Props) {
                           ? invalidByItemId.get(r.itemId)
                           : undefined;
                         return (
-                        <>
-                        <TableRow key={r.orderItemId} className={invalidReason ? "bg-destructive/10" : undefined}>
+                        <Fragment key={r.orderItemId}>
+                        <TableRow className={invalidReason ? "bg-destructive/10" : undefined}>
                           <TableCell>
                             <Checkbox
                               checked={selectedItemIds.includes(r.orderItemId)}
@@ -406,7 +406,7 @@ export function SalesReturnDialog({ open, onOpenChange }: Props) {
                           <TableCell className="text-right font-medium">{inr(r.lineTotal)}</TableCell>
                         </TableRow>
                         {invalidReason && (
-                          <TableRow key={`${r.orderItemId}-err`} className="bg-destructive/10">
+                          <TableRow className="bg-destructive/10">
                             <TableCell colSpan={12} className="py-2 text-xs text-destructive">
                               <span className="inline-flex items-start gap-2">
                                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -415,7 +415,7 @@ export function SalesReturnDialog({ open, onOpenChange }: Props) {
                             </TableCell>
                           </TableRow>
                         )}
-                        </>
+                        </Fragment>
                         );
                       })
                     )}
@@ -631,6 +631,8 @@ export function SalesReturnDialog({ open, onOpenChange }: Props) {
                 selectedRows.length === 0 ||
                 !hasPurchase ||
                 shortfall ||
+                hasInvalidItems ||
+                validating ||
                 saveMut.isPending
               }
             >
