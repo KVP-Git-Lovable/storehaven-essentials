@@ -2847,6 +2847,30 @@ export type Database = {
           },
         ]
       }
+      gold_buy_rates: {
+        Row: {
+          created_at: string
+          id: string
+          price_per_gram_24k: number
+          rate_date: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          price_per_gram_24k?: number
+          rate_date: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          price_per_gram_24k?: number
+          rate_date?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       gold_rates: {
         Row: {
           created_at: string

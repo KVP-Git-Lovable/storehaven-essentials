@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const KARATS = ["14K", "18K", "22K"] as const;
 type Karat = (typeof KARATS)[number];
@@ -116,6 +116,56 @@ export default function PriceConfiguration() {
       toast.error(e.message || "Failed to save gold rates");
     } finally {
       setSavingGold(false);
+    }
+  };
+
+  // ---------- Gold Buy (24K purchase price) ----------
+  const [goldTab, setGoldTab] = useState<"SELL" | "BUY">("SELL");
+  const [buy24k, setBuy24k] = useState("");
+  const [savingBuy, setSavingBuy] = useState(false);
+
+  const { data: buyRow } = useQuery({
+    queryKey: ["gold-buy-rate-today", today],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("gold_buy_rates")
+        .select("price_per_gram_24k")
+        .eq("rate_date", today)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { price_per_gram_24k: number } | null;
+    },
+  });
+
+  useEffect(() => {
+    if (buyRow) setBuy24k(String(buyRow.price_per_gram_24k));
+  }, [buyRow]);
+
+  const buyBase = Number(buy24k) || 0;
+  const derivedBuy = [
+    { label: "22K Buy price (91.6%)", value: buyBase * 0.916 },
+    { label: "18K Buy price (75%)", value: buyBase * 0.75 },
+    { label: "14K Buy price (58.5%)", value: buyBase * 0.585 },
+  ];
+
+  const saveBuyGold = async () => {
+    const v = Number(buy24k);
+    if (!(v > 0)) {
+      toast.error("Enter a valid 24K buy price");
+      return;
+    }
+    setSavingBuy(true);
+    try {
+      const { error } = await (supabase as any)
+        .from("gold_buy_rates")
+        .upsert([{ rate_date: today, price_per_gram_24k: v }], { onConflict: "rate_date" });
+      if (error) throw error;
+      toast.success("Gold buy rate saved for today");
+      qc.invalidateQueries({ queryKey: ["gold-buy-rate-today"] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to save gold buy rate");
+    } finally {
+      setSavingBuy(false);
     }
   };
 
@@ -261,6 +311,13 @@ export default function PriceConfiguration() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <Tabs value={goldTab} onValueChange={(v) => setGoldTab(v as "SELL" | "BUY")} className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="SELL">SELL</TabsTrigger>
+              <TabsTrigger value="BUY">BUY</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="SELL" className="space-y-4 mt-0">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <Label>Date</Label>
@@ -285,6 +342,47 @@ export default function PriceConfiguration() {
               {savingGold ? "Saving..." : "Save Gold Rates"}
             </Button>
           </div>
+            </TabsContent>
+
+            <TabsContent value="BUY" className="space-y-4 mt-0">
+              <p className="rounded-md border border-amber-800/30 bg-amber-800/5 px-3 py-2 text-sm text-amber-900 dark:text-amber-500">
+                This section is to update prices for Gold purchased from the customer. This is not Sales Invoice price
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <Label>Date</Label>
+                  <Input value={todayLabel} disabled />
+                </div>
+                <div>
+                  <Label>24K – Buy price for 1g (₹)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={buy24k}
+                    onChange={(e) => setBuy24k(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {derivedBuy.map((d) => (
+                  <div key={d.label}>
+                    <Label>{d.label}</Label>
+                    <Input
+                      value={buyBase > 0 ? d.value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+                      disabled
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={saveBuyGold} disabled={savingBuy}>
+                  {savingBuy ? "Saving..." : "Save Buy Rate"}
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
