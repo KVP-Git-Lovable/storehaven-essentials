@@ -15,6 +15,7 @@ import { assertStockAvailable, recordSaleLedger } from "@/lib/inventoryStock";
 import { useInventoryStockMap } from "@/hooks/useInventoryStock";
 import { format } from "date-fns";
 import { InvoiceViewerDialog } from "@/components/invoice/InvoiceViewerDialog";
+import { ManualPriceOverrideDialog, type ManualPriceRow } from "@/components/transactions/ManualPriceOverrideDialog";
 const CustomerFormDialog = lazy(() =>
   import("@/components/transactions/CustomerFormDialog").then((m) => ({ default: m.CustomerFormDialog }))
 );
@@ -25,6 +26,7 @@ type LineItem = {
   diaPrice: string;
   csPrice: string;
   makingCharges: string;
+  unitPriceOverride?: string;
 };
 
 const emptyLine = (): LineItem => ({ productId: "", quantity: "1", diaPrice: "0", csPrice: "0", makingCharges: "0" });
@@ -64,6 +66,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   const [diaDiscountPct, setDiaDiscountPct] = useState("");
   const [makingDiscount, setMakingDiscount] = useState("0");
   const [makingDiscountPct, setMakingDiscountPct] = useState("");
+  const [manualPriceOpen, setManualPriceOpen] = useState(false);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const isView = mode === "view";
   const isEdit = mode === "edit";
@@ -291,7 +294,8 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
         .map((item) => {
           const product = products.find((p: any) => p.id === item.productId);
           const quantity = Math.max(1, Number(item.quantity) || 1);
-          const base = unitPriceOf(product).price;
+          const hasOverride = !!item.unitPriceOverride;
+          const base = hasOverride ? Number(item.unitPriceOverride) || 0 : unitPriceOf(product).price;
           const dia = Number(item.diaPrice) || 0;
           const cs = Number(item.csPrice) || 0;
           const making = Number(item.makingCharges) || 0;
@@ -444,10 +448,11 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       const product = products.find((p: any) => p.id === item.productId);
       const quantity = Math.max(1, Number(item.quantity) || 1);
       const up = unitPriceOf(product);
+      const hasOverride = !!item.unitPriceOverride;
       const dia = Number(item.diaPrice) || 0;
       const cs = Number(item.csPrice) || 0;
       const making = Number(item.makingCharges) || 0;
-      const unitPrice = up.price;
+      const unitPrice = hasOverride ? Number(item.unitPriceOverride) || 0 : up.price;
       const lineTotal = quantity * (unitPrice + dia + cs + making);
       return {
         key: `${index}-${item.productId}`,
@@ -455,7 +460,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
         quantity,
         unitPrice,
         lineTotal,
-        priceSource: up.source,
+        priceSource: hasOverride ? ("manual" as const) : up.source,
         product,
       };
     }),
@@ -501,6 +506,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
       if (i !== index) return item;
       const next = { ...item, ...patch };
       if (patch.productId && patch.productId !== item.productId) {
+        next.unitPriceOverride = undefined;
         const product = products.find((p: any) => p.id === patch.productId);
         const netWt = Number(product?.netWt) || 0;
         // Auto-fill Making = today's rate × Net Wt when product is (re)selected,
@@ -531,6 +537,19 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   };
 
   const addLineItem = () => setLineItems((current) => [...current, emptyLine()]);
+
+  const manualPriceRows: ManualPriceRow[] = enrichedItems
+    .filter((e) => !!e.product)
+    .map((e) => ({
+      index: e.index,
+      productName: e.product?.name || "",
+      sku: e.product?.sku,
+      quantity: e.quantity,
+      unitPrice: e.unitPrice,
+      diaPrice: Number(lineItems[e.index]?.diaPrice) || 0,
+      csPrice: Number(lineItems[e.index]?.csPrice) || 0,
+      makingCharges: Number(lineItems[e.index]?.makingCharges) || 0,
+    }));
 
   const removeLineItem = (index: number) => {
     setLineItems((current) => (current.length === 1 ? current : current.filter((_, i) => i !== index)));
