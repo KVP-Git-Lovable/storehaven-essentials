@@ -6,9 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Search, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Plus, Receipt } from "lucide-react";
 import { format } from "date-fns";
 import { SalesReturnDialog } from "@/components/transactions/SalesReturnDialog";
+import { ExchangeReceiptDialog } from "@/components/transactions/ExchangeReceiptDialog";
 
 const PAGE_SIZE = 50;
 const inr = (n: number) =>
@@ -18,6 +19,7 @@ export default function SalesReturnsList() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
+  const [receiptReturnId, setReceiptReturnId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["sales-returns", search, page],
@@ -106,18 +108,19 @@ export default function SalesReturnsList() {
               <TableHead className="text-right">Additional Paid</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Date</TableHead>
+              <TableHead className="text-right">Receipt</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                   Loading...
                 </TableCell>
               </TableRow>
             ) : (data?.rows || []).length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                   No sales returns found.
                 </TableCell>
               </TableRow>
@@ -142,6 +145,17 @@ export default function SalesReturnsList() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-xs">{format(new Date(r.created_at), "dd MMM yyyy, HH:mm")}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Exchange receipt"
+                      aria-label="Exchange receipt"
+                      onClick={() => setReceiptReturnId(r.id)}
+                    >
+                      <Receipt className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -162,6 +176,13 @@ export default function SalesReturnsList() {
       </div>
 
       <SalesReturnDialog open={createOpen} onOpenChange={setCreateOpen} />
+      {receiptReturnId && (
+        <ExchangeReceiptDialog
+          open={!!receiptReturnId}
+          onOpenChange={(o) => !o && setReceiptReturnId(null)}
+          returnId={receiptReturnId}
+        />
+      )}
     </div>
   );
 }
