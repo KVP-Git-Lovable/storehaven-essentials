@@ -692,6 +692,9 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
                     <div className="min-w-0">
                       <Label>Unit Price</Label>
                       <Input value={`₹${Math.round(calculated.unitPrice).toLocaleString("en-IN")}`} disabled />
+                      {calculated.priceSource === "manual" && (
+                        <p className="text-[11px] text-muted-foreground mt-1">Manually edited</p>
+                      )}
                       {calculated.product && calculated.priceSource === "gold" && calculated.product.karat && (
                         <p className="text-[11px] text-muted-foreground mt-1">
                           {calculated.product.netWt}g × ₹{Math.round(goldRates[calculated.product.karat!] || 0).toLocaleString("en-IN")}/g ({calculated.product.karat})
@@ -840,6 +843,11 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
           </Card>
         </div>
         <DialogFooter>
+          {!isView && !!customerId && lineItems.some((l) => l.productId) && (
+            <Button variant="secondary" size="sm" className="mr-auto" onClick={() => setManualPriceOpen(true)}>
+              Edit price manually
+            </Button>
+          )}
           <Button variant="outline" onClick={() => onOpenChange(false)}>{isView ? "Close" : "Cancel"}</Button>
           {!isView && (
             <Button onClick={() => createMut.mutate()} disabled={!customerId || createMut.isPending || subtotal <= 0}>
@@ -852,6 +860,26 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
     {isView && order && (
       <InvoiceViewerDialog open={invoiceOpen} onOpenChange={setInvoiceOpen} orderId={order.id} />
     )}
+    <ManualPriceOverrideDialog
+      open={manualPriceOpen}
+      onOpenChange={setManualPriceOpen}
+      rows={manualPriceRows}
+      onConfirm={(values) => {
+        setLineItems((current) =>
+          current.map((item, i) => {
+            const v = values.find((x) => x.index === i);
+            if (!v) return item;
+            return {
+              ...item,
+              unitPriceOverride: v.unitPrice,
+              diaPrice: v.diaPrice,
+              csPrice: v.csPrice,
+              makingCharges: v.makingCharges,
+            };
+          })
+        );
+      }}
+    />
     {createCustomerOpen && (
       <Suspense fallback={null}>
         <CustomerFormDialog
