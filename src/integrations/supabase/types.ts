@@ -6407,6 +6407,128 @@ export type Database = {
           },
         ]
       }
+      old_gold_exchange_items: {
+        Row: {
+          calculated_value: number
+          created_at: string
+          deductions: number
+          description: string
+          exchange_id: string
+          fine_gold_wt: number
+          gross_wt: number
+          id: string
+          karat: string | null
+          measured_purity: number
+          ornament_type: string | null
+          purchase_rate: number
+          remarks: string | null
+        }
+        Insert: {
+          calculated_value?: number
+          created_at?: string
+          deductions?: number
+          description: string
+          exchange_id: string
+          fine_gold_wt?: number
+          gross_wt?: number
+          id?: string
+          karat?: string | null
+          measured_purity?: number
+          ornament_type?: string | null
+          purchase_rate?: number
+          remarks?: string | null
+        }
+        Update: {
+          calculated_value?: number
+          created_at?: string
+          deductions?: number
+          description?: string
+          exchange_id?: string
+          fine_gold_wt?: number
+          gross_wt?: number
+          id?: string
+          karat?: string | null
+          measured_purity?: number
+          ornament_type?: string | null
+          purchase_rate?: number
+          remarks?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "old_gold_exchange_items_exchange_id_fkey"
+            columns: ["exchange_id"]
+            isOneToOne: false
+            referencedRelation: "old_gold_exchanges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      old_gold_exchanges: {
+        Row: {
+          additional_amount: number
+          created_at: string
+          customer_id: string
+          exchange_date: string
+          exchange_number: string
+          id: string
+          notes: string | null
+          order_id: string | null
+          payment_method: string
+          processed_by: string | null
+          status: string
+          total_old_gold_value: number
+          total_purchase_value: number
+          updated_at: string
+        }
+        Insert: {
+          additional_amount?: number
+          created_at?: string
+          customer_id: string
+          exchange_date?: string
+          exchange_number: string
+          id?: string
+          notes?: string | null
+          order_id?: string | null
+          payment_method?: string
+          processed_by?: string | null
+          status?: string
+          total_old_gold_value?: number
+          total_purchase_value?: number
+          updated_at?: string
+        }
+        Update: {
+          additional_amount?: number
+          created_at?: string
+          customer_id?: string
+          exchange_date?: string
+          exchange_number?: string
+          id?: string
+          notes?: string | null
+          order_id?: string | null
+          payment_method?: string
+          processed_by?: string | null
+          status?: string
+          total_old_gold_value?: number
+          total_purchase_value?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "old_gold_exchanges_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "old_gold_exchanges_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_import_logs: {
         Row: {
           created_at: string
@@ -12581,6 +12703,20 @@ export type Database = {
         Returns: boolean
       }
       mark_overdue_compliance_tasks: { Args: never; Returns: undefined }
+      process_old_gold_exchange: {
+        Args: {
+          p_customer_id: string
+          p_notes?: string
+          p_old_gold_items: Json
+          p_payment_method?: string
+          p_purchase_discount: number
+          p_purchase_items: Json
+          p_purchase_subtotal: number
+          p_purchase_tax: number
+          p_purchase_total: number
+        }
+        Returns: Json
+      }
       process_sales_return: {
         Args: {
           p_customer_id: string

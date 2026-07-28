@@ -98,6 +98,7 @@ const navigation: NavItem[] = [
       { title: "Products", href: "/transactions/products", moduleKey: "transactions.products" },
       { title: "Orders", href: "/transactions/orders", moduleKey: "transactions.orders" },
       { title: "Sales Return", href: "/transactions/returns", moduleKey: "transactions.orders" },
+      { title: "Old Gold Exchange", href: "/transactions/old-gold-exchange", moduleKey: "transactions.orders" },
       { title: "Reports", href: "/transactions/reports", moduleKey: "transactions.orders" },
     ],
   },
