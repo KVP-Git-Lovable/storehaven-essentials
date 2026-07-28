@@ -3385,6 +3385,7 @@ export type Database = {
           gross_wt: number | null
           id: string
           image_url: string | null
+          inventory_status: string
           is_favorite: boolean
           item_price: number | null
           length: number | null
@@ -3435,6 +3436,7 @@ export type Database = {
           gross_wt?: number | null
           id?: string
           image_url?: string | null
+          inventory_status?: string
           is_favorite?: boolean
           item_price?: number | null
           length?: number | null
@@ -3485,6 +3487,7 @@ export type Database = {
           gross_wt?: number | null
           id?: string
           image_url?: string | null
+          inventory_status?: string
           is_favorite?: boolean
           item_price?: number | null
           length?: number | null
@@ -3542,6 +3545,47 @@ export type Database = {
             columns: ["vendor_id"]
             isOneToOne: false
             referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_status_history: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          from_status: string | null
+          id: string
+          item_id: string
+          reference_id: string | null
+          reference_type: string | null
+          to_status: string
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          item_id: string
+          reference_id?: string | null
+          reference_type?: string | null
+          to_status: string
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          item_id?: string
+          reference_id?: string | null
+          reference_type?: string | null
+          to_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_status_history_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
             referencedColumns: ["id"]
           },
         ]
@@ -7959,45 +8003,91 @@ export type Database = {
       }
       return_items: {
         Row: {
+          category: string | null
           condition: string | null
           created_at: string
+          cs_price: number
+          dia_price: number
+          gross_wt: number | null
           id: string
+          item_id: string | null
+          making_charges: number
+          metal_rate: number | null
+          net_wt: number | null
           notes: string | null
           order_item_id: string
+          original_selling_price: number
           product_id: string | null
           product_name: string
+          purity: string | null
           quantity: number
           refund_amount: number
           return_id: string
+          sku: string | null
+          stone_wt: number | null
+          tax_amount: number
           unit_price: number
         }
         Insert: {
+          category?: string | null
           condition?: string | null
           created_at?: string
+          cs_price?: number
+          dia_price?: number
+          gross_wt?: number | null
           id?: string
+          item_id?: string | null
+          making_charges?: number
+          metal_rate?: number | null
+          net_wt?: number | null
           notes?: string | null
           order_item_id: string
+          original_selling_price?: number
           product_id?: string | null
           product_name: string
+          purity?: string | null
           quantity: number
-          refund_amount: number
+          refund_amount?: number
           return_id: string
+          sku?: string | null
+          stone_wt?: number | null
+          tax_amount?: number
           unit_price: number
         }
         Update: {
+          category?: string | null
           condition?: string | null
           created_at?: string
+          cs_price?: number
+          dia_price?: number
+          gross_wt?: number | null
           id?: string
+          item_id?: string | null
+          making_charges?: number
+          metal_rate?: number | null
+          net_wt?: number | null
           notes?: string | null
           order_item_id?: string
+          original_selling_price?: number
           product_id?: string | null
           product_name?: string
+          purity?: string | null
           quantity?: number
           refund_amount?: number
           return_id?: string
+          sku?: string | null
+          stone_wt?: number | null
+          tax_amount?: number
           unit_price?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "return_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "return_items_order_item_id_fkey"
             columns: ["order_item_id"]
@@ -8023,9 +8113,13 @@ export type Database = {
       }
       returns: {
         Row: {
+          additional_amount: number
           created_at: string
+          created_by_user: string | null
           customer_id: string | null
+          exchange_order_id: string | null
           id: string
+          new_purchase_value: number
           order_id: string
           processed_by: string | null
           reason_code: string
@@ -8034,32 +8128,44 @@ export type Database = {
           refund_method: string
           return_date: string
           return_number: string
+          return_type: string
+          return_value: number
           status: string
           store_id: string | null
           subtotal: number
           updated_at: string
         }
         Insert: {
+          additional_amount?: number
           created_at?: string
+          created_by_user?: string | null
           customer_id?: string | null
+          exchange_order_id?: string | null
           id?: string
+          new_purchase_value?: number
           order_id: string
           processed_by?: string | null
-          reason_code: string
+          reason_code?: string
           reason_notes?: string | null
-          refund_amount: number
-          refund_method: string
+          refund_amount?: number
+          refund_method?: string
           return_date?: string
           return_number: string
+          return_type?: string
+          return_value?: number
           status?: string
           store_id?: string | null
           subtotal?: number
           updated_at?: string
         }
         Update: {
+          additional_amount?: number
           created_at?: string
+          created_by_user?: string | null
           customer_id?: string | null
+          exchange_order_id?: string | null
           id?: string
+          new_purchase_value?: number
           order_id?: string
           processed_by?: string | null
           reason_code?: string
@@ -8068,6 +8174,8 @@ export type Database = {
           refund_method?: string
           return_date?: string
           return_number?: string
+          return_type?: string
+          return_value?: number
           status?: string
           store_id?: string | null
           subtotal?: number
@@ -8079,6 +8187,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "returns_exchange_order_id_fkey"
+            columns: ["exchange_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
           {
@@ -12412,6 +12527,21 @@ export type Database = {
         Returns: boolean
       }
       mark_overdue_compliance_tasks: { Args: never; Returns: undefined }
+      process_sales_return: {
+        Args: {
+          p_customer_id: string
+          p_notes?: string
+          p_order_id: string
+          p_payment_method?: string
+          p_purchase_discount: number
+          p_purchase_items: Json
+          p_purchase_subtotal: number
+          p_purchase_tax: number
+          p_purchase_total: number
+          p_return_items: Json
+        }
+        Returns: Json
+      }
       search_knowledge_base: {
         Args: { search_query: string }
         Returns: {
