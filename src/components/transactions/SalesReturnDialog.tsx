@@ -380,8 +380,13 @@ export function SalesReturnDialog({ open, onOpenChange }: Props) {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      returnRows.map((r: any) => (
-                        <TableRow key={r.orderItemId}>
+                      returnRows.map((r: any) => {
+                        const invalidReason = selectedItemIds.includes(r.orderItemId)
+                          ? invalidByItemId.get(r.itemId)
+                          : undefined;
+                        return (
+                        <>
+                        <TableRow key={r.orderItemId} className={invalidReason ? "bg-destructive/10" : undefined}>
                           <TableCell>
                             <Checkbox
                               checked={selectedItemIds.includes(r.orderItemId)}
@@ -400,7 +405,19 @@ export function SalesReturnDialog({ open, onOpenChange }: Props) {
                           <TableCell className="text-right">{inr(r.taxAmount)}</TableCell>
                           <TableCell className="text-right font-medium">{inr(r.lineTotal)}</TableCell>
                         </TableRow>
-                      ))
+                        {invalidReason && (
+                          <TableRow key={`${r.orderItemId}-err`} className="bg-destructive/10">
+                            <TableCell colSpan={12} className="py-2 text-xs text-destructive">
+                              <span className="inline-flex items-start gap-2">
+                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                {invalidReason}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        </>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
