@@ -120,7 +120,7 @@ export default function PriceConfiguration() {
   };
 
   // ---------- Diamond ----------
-  // (see gold buy section below)
+  // ---------- Gold Buy (24K purchase price) ----------
   type DiamondRow = { id: string; particulars: string; size_label: string; price_per_ct: number; sort_order: number; quality: string };
   const [diamonds, setDiamonds] = useState<DiamondRow[]>([]);
   const [savingDia, setSavingDia] = useState(false);
