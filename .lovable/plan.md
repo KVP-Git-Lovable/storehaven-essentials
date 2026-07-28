@@ -1,79 +1,46 @@
-## Goal
+## Sales Return (with Exchange Purchase)
 
-Have the Trayi Lumina `/collections` page display live products from **this** project's `catalog_products` table (the same data shown at `/pos/catalog`), while keeping Lumina's existing luxury look and feel.
+A new transaction type mirroring the Sales Invoice page, where returned jewellery is received back into stock and must be exchanged for equal or higher value.
 
-## Important: cross-project direction
+### 1. Database
 
-Lovable's cross-project tools are read-only from *other → current*. I cannot edit the Trayi Lumina project from this project. So the plan splits into:
+New/extended tables (single migration):
 
-- **Part A — done here** (I can implement): expose the catalog as a public, read-only endpoint.
-- **Part B — you (or I, from inside Trayi Lumina) do there**: swap Lumina's hardcoded `src/lib/catalog.ts` for a fetch against this project.
+- Extend `returns` with: `return_type` ('exchange'), `exchange_order_id` (new sales order), `return_value`, `new_purchase_value`, `additional_amount`, `created_by_user`. Relax `refund_method`/`refund_amount` defaults so cash-refund columns stay zero.
+- Extend `return_items` with the frozen snapshot from the original invoice: `item_id` (inventory item), `sku` (LL Code), `category`, `gross_wt`, `net_wt`, `stone_wt`, `purity`, `metal_rate`, `making_charges`, `dia_price`, `cs_price`, `tax_amount`, `original_selling_price`.
+- Add `inventory_status` to `inventory_items` (`available` | `sold` | `returned`), defaulting to `available`, and add `inventory_status_history` (item_id, from_status, to_status, reference_type, reference_id, changed_by, changed_at) so each SKU keeps the Created → Sold → Returned → Available → Sold Again trail.
+- Triggers to append history rows automatically on status change; existing sale flow sets `sold`, return flow sets `available`.
+- GRANTs + RLS on every new table for `authenticated` (and `service_role`), matching existing transaction tables.
+- A `process_sales_return(...)` Postgres function (SECURITY DEFINER) performing everything atomically: create return record, return items, +1 `stock_ledger` rows (`transaction_type = 'sales_return'`), flip inventory status to available, create the exchange sales order + order items (via existing order flow shape) with `-1` ledger rows for the newly purchased pieces, record payment for the difference, and re-validate the business rule server-side.
 
-Nothing in `/pos/catalog`, its import flow, RLS for authenticated users, or any existing Lumina page/route is modified.
+### 2. New page `/transactions/returns`
 
----
+Same layout, header, search/list-view bar, table styling and pagination as `OrdersList.tsx`: a list of past sales returns (Return #, Customer, Original Invoice, Return Value, Purchase Value, Additional Paid, Date, actions) plus a **New Sales Return** button.
 
-## Part A — In this project (StoreHaven)
+### 3. Sales Return dialog (sectioned, like the New Sale modal)
 
-1. **Add public read access to `catalog_products`.**
-   Today only `authenticated` has SELECT. Add one anon-read policy + grant, scoped to active rows only:
-   ```sql
-   GRANT SELECT ON public.catalog_products TO anon;
-   CREATE POLICY "Public can view active catalog"
-     ON public.catalog_products FOR SELECT TO anon
-     USING (status = 'active');
-   ```
-   No change to insert/update/delete policies. Import, edit, delete continue to require auth exactly as today.
+1. **Customer** — same searchable customer select plus the existing "Create customer" button.
+2. **Original Invoice** — lists that customer's completed orders; selecting one loads its line items.
+3. **Returned Items** — checkbox table, read-only columns: LL Code (SKU), Product, Category, Gross Wt, Net Wt, Stone Wt, Purity, Metal Rate, Making Charges, GST, Original Selling Price. All values read from the saved `order_items` snapshot (falling back to the linked inventory item for weights/purity).
+4. **New Purchase** — the exact product-picker/line-item grid from the Sales Order form (auto price calculation from gold/diamond/CS/making rates, manual price override, discounts, per-item tax master) reused as a shared component rather than duplicated.
+5. **Payment Difference** — payable = New Purchase Value − Return Value. Existing payment method controls appear only when payable > 0.
+6. **Transaction Summary** — Return Value, New Purchase Value, Additional Amount Payable, with a red inline error and disabled Save when purchase < return: "The purchase value must be greater than or equal to the return value. Cash refunds and store credit are not supported."
 
-2. **Give Lumina the connection values** (safe to share — publishable anon key):
-   - `SUPABASE_URL`: `https://pdtasnfsdnfttayxibqy.supabase.co`
-   - `SUPABASE_ANON_KEY`: the publishable key already in this project's `.env`
-   - Table: `catalog_products`, active-only, columns: `id, title, handle, vendor, product_type, image_url, display_price, base_price, compare_at_price, options, variants, description`.
+### 4. Reuse strategy
 
-3. **Category mapping reference** (Lumina slugs ← this project's `product_type`):
-   `rings ← Rings`, `earrings ← Earrings`, `pendants ← Pendants / Necklaces`, `bracelets ← Bracelets`, `bridal ← Bridal`. Anything not mapped falls under "All".
+`OrderFormDialog.tsx`'s line-item logic is extracted into a shared hook/component (`useOrderLineItems` + `OrderLineItemsSection`) used by both the New Sale modal and the return's New Purchase section, so pricing, tax and override behaviour stay identical and single-sourced. Existing Sales Order behaviour is unchanged.
 
----
+### 5. Inventory behaviour
 
-## Part B — In the Trayi Lumina project (applied there, not here)
+No new inventory rows are ever created. The returned SKU's existing record flips to `available` and gets a `+1` ledger entry, immediately making it selectable in the normal Sales Order product dropdown. All ledger and status-history rows are additive.
 
-Structure mirrors the existing `/collections` index + `/collections/$category` + `/product/$productId` pages. Look-and-feel stays Lumina's: `font-display`, `eyebrow`, hairline dividers, black/accent button pattern, `formatINR`, `ProductCard`, `SiteHeader`/`SiteFooter`, breadcrumb + spec table layout — none of that CSS or typography changes.
+### 6. Reporting & permissions
 
-1. **New client** `src/lib/supabase.ts` — thin `@supabase/supabase-js` client using the two env values above (added as Vite env vars in Lumina).
+- New module key `transactions.returns` in `src/lib/modules.ts` + route map, exposed in the Permission Set screen and sidebar under Transactions, with the same permission semantics as Orders.
+- Returns are stored separately from orders (`returns` table) so they never mix into the existing Sales Order report; the exchange order carries `order_type = 'exchange'`. Data shape supports later reports on Sales Returns, Exchange Transactions, Returned Item Value, Additional Amount Collected and Returned Inventory.
 
-2. **New data module** `src/lib/remoteCatalog.ts`:
-   - `fetchCategories()` — `select distinct product_type` → maps to Lumina's `Category` shape (slug, name, tagline default, image = first product image in that type, or a placeholder).
-   - `fetchProducts(category?)` — returns rows mapped to Lumina's `Product` shape:
-     - `id ← handle ?? id`
-     - `name ← title`
-     - `sku ← first variant.variant_id`
-     - `price ← base_price`, `mrp ← compare_at_price`
-     - `metalOptions ← options.Color ?? []`
-     - `purityOptions ← options.Purity ?? ["14 KT","18 KT"]`
-     - `sizes ← options.Size` (with `sizeLabel` inferred from category)
-     - `image ← image_url`, `gallery ← [image_url]`
-     - `description ← description` (HTML stripped for card blurb)
-     - `carats / weightGm / diamondCt` ← `null` when not present; UI already tolerates missing extras (only shown on PDP).
-   - `fetchProduct(handle)` — single row lookup by `handle`, falls back to `id`.
+### Technical notes
 
-3. **Rewire the three existing routes only** (no visual redesign):
-   - `src/routes/collections.index.tsx` — replace `categories` import with a TanStack Router `loader` calling `fetchCategories()`. Same JSX, same eyebrow/hero/grid.
-   - `src/routes/collections.$category.tsx` — loader now calls `fetchProducts(params.category)` and looks the category up remotely. Same hero + `ProductCard` grid.
-   - `src/routes/product.$productId.tsx` — loader calls `fetchProduct(params.productId)`. Same gallery, purity/metal/size chips, price block, spec table, related-products section (related = `fetchProducts(product.category)` minus self, sliced to 4).
-
-4. **Delete nothing.** `src/lib/catalog.ts` can stay untouched as a fallback or be removed later; the three routes stop importing from it.
-
-5. **Cart, checkout, wishlist, header/footer, education, about, order-confirmation** — untouched. `useCart` keeps working because the mapped `Product` shape is identical to today.
-
-## Technical notes
-
-- Anon key is a publishable JWT; safe in Lumina's client bundle. RLS + the `status='active'` policy are what actually gate access.
-- No edge function needed — direct PostgREST from Lumina.
-- If Lumina later needs images cached/optimised, we can add a Supabase Storage or CDN step; not required for this plan.
-- Once Part A ships, I can execute Part B for you if you switch me into the Trayi Lumina project (I can't edit it from here).
-
-## Out of scope
-
-- No changes to `/pos/catalog` UI or import.
-- No changes to Lumina's design tokens, fonts, header/footer, cart, or checkout.
-- No new admin surface — Lumina is read-only against the catalog.
+- Route registered in `src/App.tsx` with `lazyWithRetry`, wrapped in the same protected layout.
+- All writes go through the single `process_sales_return` RPC so a failure at any step rolls back inventory, return, order and payment together.
+- Client-side validation mirrors the server rule; the server remains the enforcement point.
