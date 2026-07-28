@@ -153,6 +153,7 @@ const TxnLeadsList = lazyWithRetry(() => import("./pages/transactions/LeadsList"
 const TxnCustomersList = lazyWithRetry(() => import("./pages/transactions/CustomersList"), "TxnCustomersList");
 const TxnProductsList = lazyWithRetry(() => import("./pages/transactions/ProductsList"), "TxnProductsList");
 const TxnOrdersList = lazyWithRetry(() => import("./pages/transactions/OrdersList"), "TxnOrdersList");
+const TxnSalesReturnsList = lazyWithRetry(() => import("./pages/transactions/SalesReturnsList"), "TxnSalesReturnsList");
 const TxnReports = lazyWithRetry(() => import("./pages/transactions/Reports"), "TxnReports");
 
 const queryClient = new QueryClient();
@@ -276,6 +277,7 @@ const App = () => (
                 <Route path="/transactions/customers" element={<TxnCustomersList />} />
                 <Route path="/transactions/products" element={<TxnProductsList />} />
                 <Route path="/transactions/orders" element={<TxnOrdersList />} />
+                <Route path="/transactions/returns" element={<TxnSalesReturnsList />} />
                 <Route path="/transactions/reports" element={<TxnReports />} />
                 <Route path="/footfall" element={<Footfall />} />
                 <Route path="/master/meter" element={<MeterMaster />} />
