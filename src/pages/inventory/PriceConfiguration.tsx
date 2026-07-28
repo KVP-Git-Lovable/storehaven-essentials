@@ -311,6 +311,13 @@ export default function PriceConfiguration() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <Tabs value={goldTab} onValueChange={(v) => setGoldTab(v as "SELL" | "BUY")} className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="SELL">SELL</TabsTrigger>
+              <TabsTrigger value="BUY">BUY</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="SELL" className="space-y-4 mt-0">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <Label>Date</Label>
@@ -335,6 +342,47 @@ export default function PriceConfiguration() {
               {savingGold ? "Saving..." : "Save Gold Rates"}
             </Button>
           </div>
+            </TabsContent>
+
+            <TabsContent value="BUY" className="space-y-4 mt-0">
+              <p className="rounded-md border border-amber-800/30 bg-amber-800/5 px-3 py-2 text-sm text-amber-900 dark:text-amber-500">
+                This section is to update prices for Gold purchased from the customer. This is not Sales Invoice price
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <Label>Date</Label>
+                  <Input value={todayLabel} disabled />
+                </div>
+                <div>
+                  <Label>24K – Buy price for 1g (₹)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={buy24k}
+                    onChange={(e) => setBuy24k(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {derivedBuy.map((d) => (
+                  <div key={d.label}>
+                    <Label>{d.label}</Label>
+                    <Input
+                      value={buyBase > 0 ? d.value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+                      disabled
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={saveBuyGold} disabled={savingBuy}>
+                  {savingBuy ? "Saving..." : "Save Buy Rate"}
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
