@@ -583,6 +583,16 @@ export function SalesReturnDialog({ open, onOpenChange }: Props) {
                   </div>
                 )}
 
+                {hasInvalidItems && (
+                  <div className="mt-3 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                      One or more selected items failed inventory validation. Resolve the highlighted items before
+                      completing this sales return.
+                    </span>
+                  </div>
+                )}
+
                 {additional > 0.01 && (
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <div>
