@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const KARATS = ["14K", "18K", "22K"] as const;
 type Karat = (typeof KARATS)[number];
@@ -120,6 +120,7 @@ export default function PriceConfiguration() {
   };
 
   // ---------- Diamond ----------
+  // (see gold buy section below)
   type DiamondRow = { id: string; particulars: string; size_label: string; price_per_ct: number; sort_order: number; quality: string };
   const [diamonds, setDiamonds] = useState<DiamondRow[]>([]);
   const [savingDia, setSavingDia] = useState(false);
