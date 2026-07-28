@@ -41,7 +41,12 @@ export type OldGoldRow = {
   deductions: string;
   remarks: string;
   rateTouched?: boolean;
+  purityTouched?: boolean;
 };
+
+/** Default measured purity (%) presets derived from the karat ratios. */
+export const defaultPurityFor = (karat: string) =>
+  String(Math.round((KARAT_RATIO[karat] ?? 1) * 100 * 10) / 10);
 
 const emptyOldGold = (): OldGoldRow => ({
   key: Math.random().toString(36).slice(2),
@@ -146,7 +151,11 @@ export function OldGoldExchangeDialog({ open, onOpenChange }: Props) {
         if (patch.karat && patch.karat !== r.karat && !r.rateTouched) {
           next.purchaseRate = String(defaultRateFor(patch.karat));
         }
+        if (patch.karat && patch.karat !== r.karat && !r.purityTouched) {
+          next.measuredPurity = defaultPurityFor(patch.karat);
+        }
         if (patch.purchaseRate !== undefined) next.rateTouched = true;
+        if (patch.measuredPurity !== undefined) next.purityTouched = true;
         return next;
       })
     );
