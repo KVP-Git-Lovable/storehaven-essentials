@@ -156,6 +156,37 @@ export function SalesReturnDialog({ open, onOpenChange }: Props) {
   );
 
   const selectedRows = returnRows.filter((r: any) => selectedItemIds.includes(r.orderItemId));
+
+  const selectedInventoryIds = useMemo(
+    () => Array.from(new Set(selectedRows.map((r: any) => r.itemId).filter(Boolean))) as string[],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedItemIds, returnRows]
+  );
+
+  const { data: validationRows = [], isFetching: validating } = useQuery({
+    queryKey: ["sales-return-validate", selectedInventoryIds],
+    enabled: open && selectedInventoryIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc("validate_sales_return_items", {
+        _item_ids: selectedInventoryIds,
+        _log: false,
+        _order_id: orderId || null,
+      });
+      if (error) throw error;
+      return (data || []) as { item_id: string; sku: string | null; is_valid: boolean; reason: string | null }[];
+    },
+  });
+
+  const invalidByItemId = useMemo(() => {
+    const m = new Map<string, string>();
+    validationRows.forEach((r) => {
+      if (!r.is_valid && r.reason) m.set(r.item_id, r.reason);
+    });
+    return m;
+  }, [validationRows]);
+
+  const hasInvalidItems = selectedRows.some((r: any) => invalidByItemId.has(r.itemId));
+
   const returnValue = selectedRows.reduce((s: number, r: any) => s + r.lineTotal, 0);
   const purchaseValue = purchase.total;
   const additional = purchaseValue - returnValue;
