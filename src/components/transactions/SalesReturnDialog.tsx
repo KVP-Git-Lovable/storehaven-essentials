@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, lazy, Suspense } from "react";
+import { Fragment, useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -156,6 +156,37 @@ export function SalesReturnDialog({ open, onOpenChange }: Props) {
   );
 
   const selectedRows = returnRows.filter((r: any) => selectedItemIds.includes(r.orderItemId));
+
+  const selectedInventoryIds = useMemo(
+    () => Array.from(new Set(selectedRows.map((r: any) => r.itemId).filter(Boolean))) as string[],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedItemIds, returnRows]
+  );
+
+  const { data: validationRows = [], isFetching: validating } = useQuery({
+    queryKey: ["sales-return-validate", selectedInventoryIds],
+    enabled: open && selectedInventoryIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc("validate_sales_return_items", {
+        _item_ids: selectedInventoryIds,
+        _log: false,
+        _order_id: orderId || null,
+      });
+      if (error) throw error;
+      return (data || []) as { item_id: string; sku: string | null; is_valid: boolean; reason: string | null }[];
+    },
+  });
+
+  const invalidByItemId = useMemo(() => {
+    const m = new Map<string, string>();
+    validationRows.forEach((r) => {
+      if (!r.is_valid && r.reason) m.set(r.item_id, r.reason);
+    });
+    return m;
+  }, [validationRows]);
+
+  const hasInvalidItems = selectedRows.some((r: any) => invalidByItemId.has(r.itemId));
+
   const returnValue = selectedRows.reduce((s: number, r: any) => s + r.lineTotal, 0);
   const purchaseValue = purchase.total;
   const additional = purchaseValue - returnValue;
@@ -349,8 +380,13 @@ export function SalesReturnDialog({ open, onOpenChange }: Props) {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      returnRows.map((r: any) => (
-                        <TableRow key={r.orderItemId}>
+                      returnRows.map((r: any) => {
+                        const invalidReason = selectedItemIds.includes(r.orderItemId)
+                          ? invalidByItemId.get(r.itemId)
+                          : undefined;
+                        return (
+                        <Fragment key={r.orderItemId}>
+                        <TableRow className={invalidReason ? "bg-destructive/10" : undefined}>
                           <TableCell>
                             <Checkbox
                               checked={selectedItemIds.includes(r.orderItemId)}
@@ -369,7 +405,19 @@ export function SalesReturnDialog({ open, onOpenChange }: Props) {
                           <TableCell className="text-right">{inr(r.taxAmount)}</TableCell>
                           <TableCell className="text-right font-medium">{inr(r.lineTotal)}</TableCell>
                         </TableRow>
-                      ))
+                        {invalidReason && (
+                          <TableRow className="bg-destructive/10">
+                            <TableCell colSpan={12} className="py-2 text-xs text-destructive">
+                              <span className="inline-flex items-start gap-2">
+                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                {invalidReason}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        </Fragment>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -535,6 +583,16 @@ export function SalesReturnDialog({ open, onOpenChange }: Props) {
                   </div>
                 )}
 
+                {hasInvalidItems && (
+                  <div className="mt-3 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                      One or more selected items failed inventory validation. Resolve the highlighted items before
+                      completing this sales return.
+                    </span>
+                  </div>
+                )}
+
                 {additional > 0.01 && (
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <div>
@@ -583,6 +641,8 @@ export function SalesReturnDialog({ open, onOpenChange }: Props) {
                 selectedRows.length === 0 ||
                 !hasPurchase ||
                 shortfall ||
+                hasInvalidItems ||
+                validating ||
                 saveMut.isPending
               }
             >

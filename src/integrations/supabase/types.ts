@@ -8407,6 +8407,36 @@ export type Database = {
           },
         ]
       }
+      sales_return_validation_log: {
+        Row: {
+          created_at: string
+          id: string
+          item_id: string | null
+          order_id: string | null
+          reason: string
+          sku: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_id?: string | null
+          order_id?: string | null
+          reason: string
+          sku?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_id?: string | null
+          order_id?: string | null
+          reason?: string
+          sku?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       schemes: {
         Row: {
           applicable_categories: string[] | null
@@ -12573,6 +12603,15 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      validate_sales_return_items: {
+        Args: { _item_ids: string[]; _log?: boolean; _order_id?: string }
+        Returns: {
+          is_valid: boolean
+          item_id: string
+          reason: string
+          sku: string
+        }[]
       }
     }
     Enums: {
