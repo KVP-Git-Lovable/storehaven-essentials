@@ -202,4 +202,5 @@ export const routeToModuleKey: Record<string, string> = {
   "/transactions/customers": "transactions.customers",
   "/transactions/products": "transactions.products",
   "/transactions/orders": "transactions.orders",
+  "/transactions/returns": "transactions.orders",
 };
