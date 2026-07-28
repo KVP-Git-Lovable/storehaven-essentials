@@ -119,8 +119,57 @@ export default function PriceConfiguration() {
     }
   };
 
-  // ---------- Diamond ----------
   // ---------- Gold Buy (24K purchase price) ----------
+  const [goldTab, setGoldTab] = useState<"SELL" | "BUY">("SELL");
+  const [buy24k, setBuy24k] = useState("");
+  const [savingBuy, setSavingBuy] = useState(false);
+
+  const { data: buyRow } = useQuery({
+    queryKey: ["gold-buy-rate-today", today],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("gold_buy_rates")
+        .select("price_per_gram_24k")
+        .eq("rate_date", today)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { price_per_gram_24k: number } | null;
+    },
+  });
+
+  useEffect(() => {
+    if (buyRow) setBuy24k(String(buyRow.price_per_gram_24k));
+  }, [buyRow]);
+
+  const buyBase = Number(buy24k) || 0;
+  const derivedBuy = [
+    { label: "22K Buy price (91.6%)", value: buyBase * 0.916 },
+    { label: "18K Buy price (75%)", value: buyBase * 0.75 },
+    { label: "14K Buy price (58.5%)", value: buyBase * 0.585 },
+  ];
+
+  const saveBuyGold = async () => {
+    const v = Number(buy24k);
+    if (!(v > 0)) {
+      toast.error("Enter a valid 24K buy price");
+      return;
+    }
+    setSavingBuy(true);
+    try {
+      const { error } = await (supabase as any)
+        .from("gold_buy_rates")
+        .upsert([{ rate_date: today, price_per_gram_24k: v }], { onConflict: "rate_date" });
+      if (error) throw error;
+      toast.success("Gold buy rate saved for today");
+      qc.invalidateQueries({ queryKey: ["gold-buy-rate-today"] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to save gold buy rate");
+    } finally {
+      setSavingBuy(false);
+    }
+  };
+
+  // ---------- Diamond ----------
   type DiamondRow = { id: string; particulars: string; size_label: string; price_per_ct: number; sort_order: number; quality: string };
   const [diamonds, setDiamonds] = useState<DiamondRow[]>([]);
   const [savingDia, setSavingDia] = useState(false);
