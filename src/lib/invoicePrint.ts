@@ -56,14 +56,14 @@ export function printElement(el: HTMLElement, title = "Invoice") {
 
   const done = () => {
     const ready = (iframe.contentDocument as any)?.fonts?.ready ?? Promise.resolve();
-    Promise.resolve(ready).then(() => {
+    Promise.resolve(ready).then(() => setTimeout(() => {
       try {
         iframe.contentWindow?.focus();
         iframe.contentWindow?.print();
       } finally {
         setTimeout(() => iframe.remove(), 2000);
       }
-    });
+    }, 400));
   };
 
   if (doc.readyState === "complete") done();
