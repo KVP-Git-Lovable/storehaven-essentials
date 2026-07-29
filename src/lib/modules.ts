@@ -26,6 +26,9 @@ export const modules: ModuleDefinition[] = [
   { key: "transactions.customers", name: "Customers", parent: "transactions" },
   { key: "transactions.products", name: "Products", parent: "transactions" },
   { key: "transactions.orders", name: "Orders", parent: "transactions" },
+  { key: "transactions.returns", name: "Sales Return", parent: "transactions" },
+  { key: "transactions.oldgold", name: "Old Gold Exchange", parent: "transactions" },
+  { key: "transactions.reports", name: "Reports", parent: "transactions" },
   { key: "stores", name: "Store Management" },
   { key: "stores.all", name: "All Stores", parent: "stores" },
   { key: "stores.rentals", name: "Rentals & Leases", parent: "stores" },
@@ -202,6 +205,27 @@ export const routeToModuleKey: Record<string, string> = {
   "/transactions/customers": "transactions.customers",
   "/transactions/products": "transactions.products",
   "/transactions/orders": "transactions.orders",
-  "/transactions/returns": "transactions.orders",
-  "/transactions/old-gold-exchange": "transactions.orders",
+  "/transactions/returns": "transactions.returns",
+  "/transactions/old-gold-exchange": "transactions.oldgold",
+  "/transactions/reports": "transactions.reports",
 };
+
+/**
+ * IMPORTANT (convention): every new page/section MUST be registered here as a
+ * module (with its parent) AND mapped in `routeToModuleKey`, otherwise it will
+ * not appear in the Permission Set screen and cannot be allowed/denied per role.
+ * In development, `validateModuleKeys` warns about sidebar entries that are not
+ * registered above.
+ */
+export const moduleKeySet = new Set(modules.map((m) => m.key));
+
+export function validateModuleKeys(keys: string[]) {
+  if (!import.meta.env.DEV) return;
+  const missing = Array.from(new Set(keys.filter((k) => k && !moduleKeySet.has(k))));
+  if (missing.length) {
+    console.warn(
+      "[modules] These module keys are used in navigation but are NOT registered in src/lib/modules.ts, so they will be missing from the Permission Set:",
+      missing
+    );
+  }
+}

@@ -29,6 +29,7 @@ const trayiLogo = trayiLogoAsset.url;
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePermissions } from "@/hooks/usePermissions";
+import { validateModuleKeys } from "@/lib/modules";
 import { useAuth } from "@/hooks/useAuth";
 import { useAttendanceRole } from "@/hooks/useAttendanceRole";
 import { useCompanyInfo } from "@/hooks/useCompanyInfo";
@@ -97,9 +98,9 @@ const navigation: NavItem[] = [
       { title: "Customers", href: "/transactions/customers", moduleKey: "transactions.customers" },
       { title: "Products", href: "/transactions/products", moduleKey: "transactions.products" },
       { title: "Orders", href: "/transactions/orders", moduleKey: "transactions.orders" },
-      { title: "Sales Return", href: "/transactions/returns", moduleKey: "transactions.orders" },
-      { title: "Old Gold Exchange", href: "/transactions/old-gold-exchange", moduleKey: "transactions.orders" },
-      { title: "Reports", href: "/transactions/reports", moduleKey: "transactions.orders" },
+      { title: "Sales Return", href: "/transactions/returns", moduleKey: "transactions.returns" },
+      { title: "Old Gold Exchange", href: "/transactions/old-gold-exchange", moduleKey: "transactions.oldgold" },
+      { title: "Reports", href: "/transactions/reports", moduleKey: "transactions.reports" },
     ],
   },
   {
@@ -289,6 +290,12 @@ interface AppSidebarProps {
   collapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
 }
+
+// Dev guard: any nav entry whose moduleKey is missing from src/lib/modules.ts
+// would be invisible in the Permission Set screen.
+validateModuleKeys(
+  navigation.flatMap((item) => [item.moduleKey, ...(item.children?.map((c) => c.moduleKey) ?? [])])
+);
 
 export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedChange }: AppSidebarProps) {
   const location = useLocation();
