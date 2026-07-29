@@ -93,7 +93,7 @@ export function InvoiceViewerDialog({ open, onOpenChange, orderId }: Props) {
   const handlePrint = () => {
     const node = printRef.current?.firstElementChild as HTMLElement | null;
     if (!node) return;
-    printElement(node, order?.invoice_number || "Invoice");
+    printElement(node, `Trayi-${order?.invoice_number || "Invoice"}`);
   };
 
   const loading = isLoading || tplLoading || allocating;
