@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
  * artefacts caused by printing a scrollable modal in-place.
  */
 export function printElement(el: HTMLElement, title = "Invoice") {
+  const prevTitle = document.title;
+  document.title = safeInvoiceFileName(title);
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
   iframe.style.position = "fixed";
@@ -25,6 +27,7 @@ export function printElement(el: HTMLElement, title = "Invoice") {
   if (!doc) {
     document.body.removeChild(iframe);
     window.print();
+    document.title = prevTitle;
     return;
   }
 
@@ -62,12 +65,33 @@ export function printElement(el: HTMLElement, title = "Invoice") {
         iframe.contentWindow?.print();
       } finally {
         setTimeout(() => iframe.remove(), 2000);
+        setTimeout(() => { document.title = prevTitle; }, 2500);
       }
     }, 400));
   };
 
   if (doc.readyState === "complete") done();
   else iframe.onload = done;
+}
+
+/** Sanitises a name so it is a legal file name on all platforms. */
+export function safeInvoiceFileName(name: string) {
+  return (name || "Invoice").replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
+}
+
+/** Generates the invoice PDF and downloads it as `Trayi-<Invoice No>.pdf`. */
+export async function downloadInvoicePdf(el: HTMLElement, invoiceNumber: string) {
+  const blob = await elementToPdfBlob(el);
+  const fileName = `${safeInvoiceFileName(`Trayi-${invoiceNumber || "Invoice"}`)}.pdf`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return fileName;
 }
 
 /** Renders the element to an A4 PDF blob. */

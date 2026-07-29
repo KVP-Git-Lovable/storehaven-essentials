@@ -3,12 +3,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, Printer } from "lucide-react";
+import { Loader2, Printer, Download } from "lucide-react";
 import { toast } from "sonner";
 import { useCompanyInfo } from "@/hooks/useCompanyInfo";
 import { useInvoiceTemplate } from "@/hooks/useInvoiceTemplate";
 import { InvoiceDocument, type InvoiceLineItem } from "./InvoiceDocument";
-import { printElement, archiveInvoicePdf } from "@/lib/invoicePrint";
+import { printElement, archiveInvoicePdf, downloadInvoicePdf } from "@/lib/invoicePrint";
 
 interface Props {
   open: boolean;
@@ -21,6 +21,7 @@ export function InvoiceViewerDialog({ open, onOpenChange, orderId }: Props) {
   const { data: template, isLoading: tplLoading } = useInvoiceTemplate();
   const { data: company } = useCompanyInfo();
   const [allocating, setAllocating] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
   const archivedRef = useRef<string | null>(null);
 
@@ -94,6 +95,20 @@ export function InvoiceViewerDialog({ open, onOpenChange, orderId }: Props) {
     const node = printRef.current?.firstElementChild as HTMLElement | null;
     if (!node) return;
     printElement(node, `Trayi-${order?.invoice_number || "Invoice"}`);
+  };
+
+  const handleDownload = async () => {
+    const node = printRef.current?.firstElementChild as HTMLElement | null;
+    if (!node) return;
+    setDownloading(true);
+    try {
+      const name = await downloadInvoicePdf(node, order?.invoice_number || "");
+      toast.success(`Saved ${name}`);
+    } catch (e: any) {
+      toast.error("Failed to generate PDF: " + (e?.message || e));
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const loading = isLoading || tplLoading || allocating;
@@ -179,8 +194,12 @@ export function InvoiceViewerDialog({ open, onOpenChange, orderId }: Props) {
         )}
         <DialogFooter className="no-print">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
-          <Button onClick={handlePrint} disabled={loading}>
-            <Printer className="mr-2 h-4 w-4" /> Print / Save as PDF
+          <Button variant="outline" onClick={handlePrint} disabled={loading}>
+            <Printer className="mr-2 h-4 w-4" /> Print
+          </Button>
+          <Button onClick={handleDownload} disabled={loading || downloading}>
+            {downloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            Download PDF
           </Button>
         </DialogFooter>
       </DialogContent>
