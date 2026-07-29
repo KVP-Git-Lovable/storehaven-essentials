@@ -285,6 +285,9 @@ const navigation: NavItem[] = [
 
 interface AppSidebarProps {
   open: boolean;
+  onOpenChange: (open: boolean) => void;
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
 }
 
 // Dev guard: any nav entry whose moduleKey is missing from src/lib/modules.ts
@@ -292,13 +295,6 @@ interface AppSidebarProps {
 validateModuleKeys(
   navigation.flatMap((item) => [item.moduleKey, ...(item.children?.map((c) => c.moduleKey) ?? [])])
 );
-
-interface AppSidebarPropsUnused {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  collapsed?: boolean;
-  onCollapsedChange?: (collapsed: boolean) => void;
-}
 
 export function AppSidebar({ open, onOpenChange, collapsed = false, onCollapsedChange }: AppSidebarProps) {
   const location = useLocation();
