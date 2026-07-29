@@ -29,6 +29,7 @@ const trayiLogo = trayiLogoAsset.url;
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePermissions } from "@/hooks/usePermissions";
+import { validateModuleKeys } from "@/lib/modules";
 import { useAuth } from "@/hooks/useAuth";
 import { useAttendanceRole } from "@/hooks/useAttendanceRole";
 import { useCompanyInfo } from "@/hooks/useCompanyInfo";
