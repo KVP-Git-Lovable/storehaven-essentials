@@ -11,10 +11,14 @@ export function printElement(el: HTMLElement, title = "Invoice") {
   iframe.style.position = "fixed";
   iframe.style.right = "0";
   iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
+  iframe.style.right = "auto";
+  iframe.style.bottom = "auto";
+  iframe.style.left = "-10000px";
+  iframe.style.top = "0";
+  iframe.style.width = "210mm";
+  iframe.style.height = "297mm";
   iframe.style.border = "0";
-  iframe.style.visibility = "hidden";
+  iframe.style.opacity = "0";
   document.body.appendChild(iframe);
 
   const doc = iframe.contentDocument;
@@ -40,19 +44,26 @@ export function printElement(el: HTMLElement, title = "Invoice") {
       html, body { margin: 0; padding: 0; background: #fff; }
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .print-shell { width: 210mm; margin: 0 auto; }
+      /* Neutralise the app's @media print rules that hide everything outside
+         the invoice dialog — inside this iframe the invoice IS the document. */
+      @media print {
+        html, body, .print-shell, .print-shell * { visibility: visible !important; }
+        .print-shell { position: static !important; transform: none !important; }
+      }
     </style>
   </head><body><div class="print-shell">${el.outerHTML}</div></body></html>`);
   doc.close();
 
   const done = () => {
-    setTimeout(() => {
+    const ready = (iframe.contentDocument as any)?.fonts?.ready ?? Promise.resolve();
+    Promise.resolve(ready).then(() => {
       try {
         iframe.contentWindow?.focus();
         iframe.contentWindow?.print();
       } finally {
-        setTimeout(() => iframe.remove(), 1000);
+        setTimeout(() => iframe.remove(), 2000);
       }
-    }, 350);
+    });
   };
 
   if (doc.readyState === "complete") done();
