@@ -1,36 +1,24 @@
-## Goal
-Add a third transaction type — **Old Gold Exchange** — at `/transactions/old-gold-exchange`, mirroring the existing Sales Return page/dialog/receipt patterns, where a customer's old/melted gold is valued by weight and purity and set off against a new jewellery purchase.
+## Why the filename is wrong
 
-## Navigation
-- Sidebar under **Transactions**: Orders → Sales Return → **Old Gold Exchange** (`/transactions/old-gold-exchange`), same module key `transactions.orders` so permissions match Sales Order / Sales Return.
-- Route registered in `App.tsx` alongside `/transactions/returns`.
+The print path writes `<title>Trayi-TJ-26/27-0009</title>` into the hidden iframe, but the browser's native "Save as PDF" dialog derives the suggested filename from the **top-level document's title** (which is the app's `index.html` title, "StoreOps"), not the printed iframe's title. Also, `/` in an invoice number like `TJ-26/27-0009` is not a legal filename character, so even when a title is honoured the OS rewrites it.
 
-## Database (single migration)
-Two new tables, kept separate from jewellery inventory so bullion/refining can build on them later:
+So the print route can never reliably control the filename. The fix is to stop relying on it for saving.
 
-- `old_gold_exchanges` — customer, exchange datetime, created-by user, total old gold value, total purchase value, additional amount paid, payment method, linked sales order (`order_id`), exchange number, status, notes, timestamps.
-- `old_gold_exchange_items` — one row per old gold item: description, ornament type, gross weight, karat, measured purity %, fine gold weight, purchase rate, deductions, calculated value, remarks.
+## Changes
 
-Both get GRANTs for `authenticated`/`service_role`, RLS enabled, and policies matching the existing `returns` / `return_items` access pattern.
+### 1. Split the footer button into two (`src/components/invoice/InvoiceViewerDialog.tsx`)
+- **Print** — keeps the current iframe print behaviour unchanged (for physical printing).
+- **Download PDF** — generates the PDF in-browser and triggers a direct download with a controlled filename. No OS print dialog, no random name.
 
-A `process_old_gold_exchange(...)` SECURITY DEFINER function performs everything in one transaction: validates `new purchase value >= total old gold value`, creates the sales `order` + `order_items` (same shape as the Sales Return exchange order), writes `stock_ledger` sale rows for the purchased LL Codes, inserts the exchange header and its items, and returns the new ids/numbers. Any failure rolls the whole thing back. No LL Codes or inventory rows are created for old gold.
+### 2. Add a direct download helper (`src/lib/invoicePrint.ts`)
+- New `downloadInvoicePdf(el, invoiceNumber)`:
+  - reuses the existing `elementToPdfBlob(el)` (html2canvas + jsPDF at A4) already used for archiving, so the downloaded file matches the archived copy and the on-screen invoice exactly;
+  - builds the filename as `Trayi-<Invoice No>.pdf`, sanitising path-illegal characters (`/` → `-`), e.g. `TJ-26/27-0009` → `Trayi-TJ-26-27-0009.pdf`;
+  - saves via an object-URL anchor with the `download` attribute, then revokes the URL.
 
-## New Old Gold Exchange dialog
-Reuses `useOrderPricing` / `useOrderLineItems` / `OrderLineItemsSection` / `ManualPriceOverrideDialog` / `CustomerFormDialog` exactly as `SalesReturnDialog` does, so the jewellery-selection half is identical to a Sales Order (inventory search, LL Code, GST, making, diamond/CS pricing, discounts).
+### 3. Title hardening for the Print route (small, optional safety)
+- While printing, temporarily set the parent `document.title` to the invoice name and restore it afterwards, so if a user still uses Print → Save as PDF the suggested name is close to correct rather than "StoreOps".
 
-Sections top to bottom:
-1. **Customer** — same searchable select + "Create customer" button.
-2. **Old Gold Received** — repeatable rows: Description, Ornament Type (optional), Gross Wt (g), Karat, Measured Purity %, Purchase Rate (₹/g), Deductions (₹, optional), Remarks. Each row shows live `Fine Gold Wt = Gross × Purity/100` and `Value = Fine × Rate − Deductions`. Purchase Rate pre-fills from the configured daily old gold buy rate (the 24K buy price from Price Configuration, scaled by karat: 22K 91.6%, 18K 75%, 14K 58.5%) and stays editable.
-3. **New Jewellery Purchase** — the existing Sales Order line items section, unchanged.
-4. **Summary** — Total Old Gold Value, New Purchase Value, Additional Amount Payable (`purchase − old gold`), plus payment method shown only when the difference is above zero.
-
-Save is disabled and a red inline message appears when purchase < old gold value: "The purchase value must be greater than or equal to the value of the old gold. Cash refunds, wallet balance and store credit are not supported." The same rule is re-checked server-side in the RPC.
-
-## List page
-`/transactions/old-gold-exchange` copies the `SalesReturnsList` layout: header + New button, search by exchange number, paginated table (Exchange #, Customer, Linked Order, Old Gold Value, Purchase Value, Additional Paid, Status, Date), and a Receipt icon per row.
-
-## Receipt
-New `OldGoldReceiptDialog`, built on the same 320px thermal print framework as `ExchangeReceiptDialog`: store details, receipt number, exchange date/time, customer, operator, an "Old Gold Received" block with each item's full valuation breakdown, a "New Jewellery Purchased" block (LL Code, product, qty, amount), then Total Old Gold Value / New Purchase Value / Additional Amount Paid / Payment Method and a thank-you line.
-
-## Reporting readiness
-Field names and the item-level split (gross wt, fine wt, purchase value, additional amount, linked order id) are chosen so future reports on exchanges, gold purchased, total gross/fine weight and collected amounts are plain aggregations — no schema change needed later.
+## Notes
+- No changes to invoice layout, numbering, tax logic, or the existing auto-archive to the private `invoices` bucket.
+- If you'd prefer the slash preserved as `Trayi-TJ-26/27-0012.pdf`, that isn't possible — browsers and macOS/Windows both reject `/` in filenames; `-` substitution is the standard fallback.
