@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useCompanyInfo } from "@/hooks/useCompanyInfo";
 import { useInvoiceTemplate } from "@/hooks/useInvoiceTemplate";
 import { InvoiceDocument, type InvoiceLineItem } from "./InvoiceDocument";
+import { printElement, archiveInvoicePdf } from "@/lib/invoicePrint";
 
 interface Props {
   open: boolean;
@@ -20,6 +21,8 @@ export function InvoiceViewerDialog({ open, onOpenChange, orderId }: Props) {
   const { data: template, isLoading: tplLoading } = useInvoiceTemplate();
   const { data: company } = useCompanyInfo();
   const [allocating, setAllocating] = useState(false);
+  const printRef = useRef<HTMLDivElement>(null);
+  const archivedRef = useRef<string | null>(null);
 
   const { data: bundle, isLoading, refetch } = useQuery({
     queryKey: ["invoice-order-bundle", orderId],
@@ -88,7 +91,9 @@ export function InvoiceViewerDialog({ open, onOpenChange, orderId }: Props) {
   }, [open, bundle, allocating, orderId, qc, refetch]);
 
   const handlePrint = () => {
-    window.print();
+    const node = printRef.current?.firstElementChild as HTMLElement | null;
+    if (!node) return;
+    printElement(node, order?.invoice_number || "Invoice");
   };
 
   const loading = isLoading || tplLoading || allocating;
@@ -96,6 +101,19 @@ export function InvoiceViewerDialog({ open, onOpenChange, orderId }: Props) {
   const items = bundle?.items || [];
   const invMap = bundle?.inventoryMap || {};
   const customer = bundle?.customer;
+
+  // Archive a PDF copy of every generated invoice into the private bucket
+  useEffect(() => {
+    if (!open || loading || !order?.invoice_number) return;
+    if (archivedRef.current === order.invoice_number) return;
+    const node = printRef.current?.firstElementChild as HTMLElement | null;
+    if (!node) return;
+    archivedRef.current = order.invoice_number;
+    const t = setTimeout(() => {
+      archiveInvoicePdf(node, order.invoice_number, orderId);
+    }, 600);
+    return () => clearTimeout(t);
+  }, [open, loading, order?.invoice_number, orderId]);
 
   const lineItems: InvoiceLineItem[] = items.map((it: any, idx: number) => {
     const inv = invMap[it.item_id] || {};
@@ -132,7 +150,7 @@ export function InvoiceViewerDialog({ open, onOpenChange, orderId }: Props) {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="bg-muted/40 p-4">
+          <div className="bg-muted/40 p-4 overflow-x-auto" ref={printRef}>
             <InvoiceDocument
               template={template}
               company={company || null}
