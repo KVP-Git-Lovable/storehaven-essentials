@@ -285,6 +285,16 @@ const navigation: NavItem[] = [
 
 interface AppSidebarProps {
   open: boolean;
+}
+
+// Dev guard: any nav entry whose moduleKey is missing from src/lib/modules.ts
+// would be invisible in the Permission Set screen.
+validateModuleKeys(
+  navigation.flatMap((item) => [item.moduleKey, ...(item.children?.map((c) => c.moduleKey) ?? [])])
+);
+
+interface AppSidebarPropsUnused {
+  open: boolean;
   onOpenChange: (open: boolean) => void;
   collapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
