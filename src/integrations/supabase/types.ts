@@ -9969,6 +9969,522 @@ export type Database = {
           },
         ]
       }
+      social_ad_accounts: {
+        Row: {
+          account_status: string | null
+          ad_account_id: string
+          connection_id: string
+          created_at: string
+          currency: string | null
+          id: string
+          name: string | null
+          platform: string
+          timezone_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_status?: string | null
+          ad_account_id: string
+          connection_id: string
+          created_at?: string
+          currency?: string | null
+          id?: string
+          name?: string | null
+          platform?: string
+          timezone_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_status?: string | null
+          ad_account_id?: string
+          connection_id?: string
+          created_at?: string
+          currency?: string | null
+          id?: string
+          name?: string | null
+          platform?: string
+          timezone_name?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_ad_accounts_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "social_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_ad_sets: {
+        Row: {
+          bid_strategy: string | null
+          billing_event: string | null
+          budget_amount: number
+          budget_type: string
+          campaign_id: string
+          created_at: string
+          end_at: string | null
+          external_id: string | null
+          id: string
+          instagram_id: string | null
+          name: string
+          optimization_goal: string | null
+          page_id: string | null
+          placements: Json
+          platform: string
+          start_at: string | null
+          status: string
+          targeting: Json
+          timezone_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          bid_strategy?: string | null
+          billing_event?: string | null
+          budget_amount?: number
+          budget_type?: string
+          campaign_id: string
+          created_at?: string
+          end_at?: string | null
+          external_id?: string | null
+          id?: string
+          instagram_id?: string | null
+          name: string
+          optimization_goal?: string | null
+          page_id?: string | null
+          placements?: Json
+          platform?: string
+          start_at?: string | null
+          status?: string
+          targeting?: Json
+          timezone_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bid_strategy?: string | null
+          billing_event?: string | null
+          budget_amount?: number
+          budget_type?: string
+          campaign_id?: string
+          created_at?: string
+          end_at?: string | null
+          external_id?: string | null
+          id?: string
+          instagram_id?: string | null
+          name?: string
+          optimization_goal?: string | null
+          page_id?: string | null
+          placements?: Json
+          platform?: string
+          start_at?: string | null
+          status?: string
+          targeting?: Json
+          timezone_name?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_ad_sets_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "social_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_ads: {
+        Row: {
+          ad_set_id: string
+          call_to_action: string | null
+          created_at: string
+          creative_external_id: string | null
+          creative_type: string
+          description: string | null
+          destination_url: string | null
+          display_link: string | null
+          external_id: string | null
+          headline: string | null
+          id: string
+          lead_form_id: string | null
+          media: Json
+          name: string
+          platform: string
+          primary_text: string | null
+          status: string
+          updated_at: string
+          utm_parameters: string | null
+        }
+        Insert: {
+          ad_set_id: string
+          call_to_action?: string | null
+          created_at?: string
+          creative_external_id?: string | null
+          creative_type?: string
+          description?: string | null
+          destination_url?: string | null
+          display_link?: string | null
+          external_id?: string | null
+          headline?: string | null
+          id?: string
+          lead_form_id?: string | null
+          media?: Json
+          name: string
+          platform?: string
+          primary_text?: string | null
+          status?: string
+          updated_at?: string
+          utm_parameters?: string | null
+        }
+        Update: {
+          ad_set_id?: string
+          call_to_action?: string | null
+          created_at?: string
+          creative_external_id?: string | null
+          creative_type?: string
+          description?: string | null
+          destination_url?: string | null
+          display_link?: string | null
+          external_id?: string | null
+          headline?: string | null
+          id?: string
+          lead_form_id?: string | null
+          media?: Json
+          name?: string
+          platform?: string
+          primary_text?: string | null
+          status?: string
+          updated_at?: string
+          utm_parameters?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_ads_ad_set_id_fkey"
+            columns: ["ad_set_id"]
+            isOneToOne: false
+            referencedRelation: "social_ad_sets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_campaigns: {
+        Row: {
+          ad_account_id: string | null
+          budget_amount: number
+          budget_type: string
+          buying_type: string
+          connection_id: string | null
+          created_at: string
+          created_by: string | null
+          end_date: string | null
+          external_id: string | null
+          id: string
+          last_synced_at: string | null
+          name: string
+          objective: string
+          platform: string
+          published_at: string | null
+          special_ad_categories: string[]
+          start_date: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          ad_account_id?: string | null
+          budget_amount?: number
+          budget_type?: string
+          buying_type?: string
+          connection_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          end_date?: string | null
+          external_id?: string | null
+          id?: string
+          last_synced_at?: string | null
+          name: string
+          objective?: string
+          platform?: string
+          published_at?: string | null
+          special_ad_categories?: string[]
+          start_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          ad_account_id?: string | null
+          budget_amount?: number
+          budget_type?: string
+          buying_type?: string
+          connection_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          end_date?: string | null
+          external_id?: string | null
+          id?: string
+          last_synced_at?: string | null
+          name?: string
+          objective?: string
+          platform?: string
+          published_at?: string | null
+          special_ad_categories?: string[]
+          start_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_campaigns_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "social_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_connections: {
+        Row: {
+          access_token_enc: string | null
+          business_id: string | null
+          business_name: string | null
+          connected_by: string | null
+          created_at: string
+          default_ad_account_id: string | null
+          default_instagram_id: string | null
+          default_page_id: string | null
+          external_user_id: string | null
+          external_user_name: string | null
+          id: string
+          last_synced_at: string | null
+          platform: string
+          scopes: string[] | null
+          status: string
+          token_expires_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          access_token_enc?: string | null
+          business_id?: string | null
+          business_name?: string | null
+          connected_by?: string | null
+          created_at?: string
+          default_ad_account_id?: string | null
+          default_instagram_id?: string | null
+          default_page_id?: string | null
+          external_user_id?: string | null
+          external_user_name?: string | null
+          id?: string
+          last_synced_at?: string | null
+          platform?: string
+          scopes?: string[] | null
+          status?: string
+          token_expires_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          access_token_enc?: string | null
+          business_id?: string | null
+          business_name?: string | null
+          connected_by?: string | null
+          created_at?: string
+          default_ad_account_id?: string | null
+          default_instagram_id?: string | null
+          default_page_id?: string | null
+          external_user_id?: string | null
+          external_user_name?: string | null
+          id?: string
+          last_synced_at?: string | null
+          platform?: string
+          scopes?: string[] | null
+          status?: string
+          token_expires_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      social_insights: {
+        Row: {
+          clicks: number
+          conversions: number
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          external_id: string | null
+          id: string
+          impressions: number
+          leads: number
+          platform: string
+          purchases: number
+          raw: Json | null
+          reach: number
+          revenue: number
+          spend: number
+          stat_date: string
+          updated_at: string
+        }
+        Insert: {
+          clicks?: number
+          conversions?: number
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          external_id?: string | null
+          id?: string
+          impressions?: number
+          leads?: number
+          platform?: string
+          purchases?: number
+          raw?: Json | null
+          reach?: number
+          revenue?: number
+          spend?: number
+          stat_date: string
+          updated_at?: string
+        }
+        Update: {
+          clicks?: number
+          conversions?: number
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          external_id?: string | null
+          id?: string
+          impressions?: number
+          leads?: number
+          platform?: string
+          purchases?: number
+          raw?: Json | null
+          reach?: number
+          revenue?: number
+          spend?: number
+          stat_date?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      social_pages: {
+        Row: {
+          category: string | null
+          connection_id: string
+          created_at: string
+          id: string
+          instagram_id: string | null
+          instagram_username: string | null
+          page_id: string
+          page_name: string | null
+          page_token_enc: string | null
+          picture_url: string | null
+          platform: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          connection_id: string
+          created_at?: string
+          id?: string
+          instagram_id?: string | null
+          instagram_username?: string | null
+          page_id: string
+          page_name?: string | null
+          page_token_enc?: string | null
+          picture_url?: string | null
+          platform?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          connection_id?: string
+          created_at?: string
+          id?: string
+          instagram_id?: string | null
+          instagram_username?: string | null
+          page_id?: string
+          page_name?: string | null
+          page_token_enc?: string | null
+          picture_url?: string | null
+          platform?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_pages_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "social_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_posts: {
+        Row: {
+          connection_id: string | null
+          created_at: string
+          created_by: string | null
+          destination: string
+          error_message: string | null
+          facebook_post_id: string | null
+          id: string
+          instagram_id: string | null
+          instagram_post_id: string | null
+          media_url: string | null
+          message: string | null
+          page_id: string | null
+          platform: string
+          post_type: string
+          published_at: string | null
+          scheduled_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          connection_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          destination?: string
+          error_message?: string | null
+          facebook_post_id?: string | null
+          id?: string
+          instagram_id?: string | null
+          instagram_post_id?: string | null
+          media_url?: string | null
+          message?: string | null
+          page_id?: string | null
+          platform?: string
+          post_type?: string
+          published_at?: string | null
+          scheduled_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          connection_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          destination?: string
+          error_message?: string | null
+          facebook_post_id?: string | null
+          id?: string
+          instagram_id?: string | null
+          instagram_post_id?: string | null
+          media_url?: string | null
+          message?: string | null
+          page_id?: string | null
+          platform?: string
+          post_type?: string
+          published_at?: string | null
+          scheduled_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_posts_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "social_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       spares: {
         Row: {
           category: string
