@@ -1,0 +1,40 @@
+export const GRAPH_VERSION = "v21.0";
+export const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
+
+export const META_SCOPES = [
+  "public_profile",
+  "email",
+  "pages_show_list",
+  "pages_manage_posts",
+  "pages_read_engagement",
+  "instagram_basic",
+  "instagram_content_publish",
+  "ads_management",
+  "ads_read",
+  "business_management",
+];
+
+export async function graph(
+  path: string,
+  opts: { token: string; method?: string; params?: Record<string, string>; body?: Record<string, unknown> } ,
+) {
+  const url = new URL(`${GRAPH_BASE}${path}`);
+  for (const [k, v] of Object.entries(opts.params || {})) url.searchParams.set(k, v);
+  url.searchParams.set("access_token", opts.token);
+
+  const init: RequestInit = { method: opts.method || "GET" };
+  if (opts.body) {
+    init.headers = { "Content-Type": "application/json" };
+    init.body = JSON.stringify(opts.body);
+  }
+
+  const res = await fetch(url.toString(), init);
+  const text = await res.text();
+  let json: any;
+  try { json = JSON.parse(text); } catch { json = { raw: text }; }
+  if (!res.ok || json?.error) {
+    const msg = json?.error?.message || text;
+    throw new Error(`[Meta ${res.status}] ${msg}`);
+  }
+  return json;
+}
