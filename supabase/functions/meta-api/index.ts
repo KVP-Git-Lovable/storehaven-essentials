@@ -1,0 +1,261 @@
+import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { graph } from "../_shared/meta-graph.ts";
+import { decryptSecret } from "../_shared/meta-crypto.ts";
+
+const OBJECTIVE_MAP: Record<string, string> = {
+  awareness: "OUTCOME_AWARENESS",
+  traffic: "OUTCOME_TRAFFIC",
+  engagement: "OUTCOME_ENGAGEMENT",
+  leads: "OUTCOME_LEADS",
+  sales: "OUTCOME_SALES",
+  conversions: "OUTCOME_SALES",
+  app_promotion: "OUTCOME_APP_PROMOTION",
+};
+
+const SPECIAL_CATEGORY_MAP: Record<string, string> = {
+  housing: "HOUSING",
+  employment: "EMPLOYMENT",
+  credit: "CREDIT",
+};
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
+
+    const authClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: claims, error: claimsErr } = await authClient.auth.getClaims(
+      authHeader.replace("Bearer ", ""),
+    );
+    if (claimsErr || !claims?.claims) return json({ error: "Unauthorized" }, 401);
+
+    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { action, payload = {} } = await req.json();
+    if (!action) return json({ error: "action is required" }, 400);
+
+    const { data: conn } = await db
+      .from("social_connections")
+      .select("*")
+      .eq("platform", "meta")
+      .maybeSingle();
+    if (!conn) return json({ error: "No Meta account is connected" }, 400);
+    const userToken = await decryptSecret(conn.access_token_enc);
+
+    const pageToken = async (pageId: string) => {
+      const { data: page } = await db
+        .from("social_pages")
+        .select("page_token_enc")
+        .eq("connection_id", conn.id)
+        .eq("page_id", pageId)
+        .maybeSingle();
+      if (!page?.page_token_enc) throw new Error("Page access token is unavailable — reconnect Meta");
+      return await decryptSecret(page.page_token_enc);
+    };
+
+    switch (action) {
+      /* ------------------------------ campaigns ----------------------------- */
+      case "publish_campaign": {
+        const { data: c } = await db.from("social_campaigns").select("*").eq("id", payload.campaign_id).maybeSingle();
+        if (!c) throw new Error("Campaign not found");
+        const adAccount = c.ad_account_id || conn.default_ad_account_id;
+        if (!adAccount) throw new Error("Select a default Ad Account first");
+
+        const specials = (c.special_ad_categories || [])
+          .map((s: string) => SPECIAL_CATEGORY_MAP[s])
+          .filter(Boolean);
+
+        const body: Record<string, unknown> = {
+          name: c.name,
+          objective: OBJECTIVE_MAP[c.objective] || "OUTCOME_TRAFFIC",
+          status: c.status === "active" ? "ACTIVE" : "PAUSED",
+          buying_type: c.buying_type === "reach_and_frequency" ? "RESERVED" : "AUCTION",
+          special_ad_categories: specials.length ? specials : ["NONE"],
+        };
+        if (c.budget_type === "daily") body.daily_budget = Math.round(Number(c.budget_amount) * 100);
+        else body.lifetime_budget = Math.round(Number(c.budget_amount) * 100);
+        if (c.start_date) body.start_time = c.start_date;
+        if (c.end_date) body.stop_time = c.end_date;
+
+        const created = await graph(`/${adAccount}/campaigns`, { token: userToken, method: "POST", body });
+        await db.from("social_campaigns").update({
+          external_id: created.id,
+          published_at: new Date().toISOString(),
+          status: c.status === "active" ? "active" : "paused",
+          last_synced_at: new Date().toISOString(),
+        }).eq("id", c.id);
+        return json({ success: true, campaign_id: created.id, published_at: new Date().toISOString() });
+      }
+
+      case "pause_campaign":
+      case "resume_campaign": {
+        const { data: c } = await db.from("social_campaigns").select("*").eq("id", payload.campaign_id).maybeSingle();
+        if (!c) throw new Error("Campaign not found");
+        const next = action === "pause_campaign" ? "PAUSED" : "ACTIVE";
+        if (c.external_id) await graph(`/${c.external_id}`, { token: userToken, method: "POST", body: { status: next } });
+        await db.from("social_campaigns").update({ status: next.toLowerCase() }).eq("id", c.id);
+        return json({ success: true, status: next.toLowerCase() });
+      }
+
+      case "delete_campaign": {
+        const { data: c } = await db.from("social_campaigns").select("*").eq("id", payload.campaign_id).maybeSingle();
+        if (c?.external_id) {
+          try { await graph(`/${c.external_id}`, { token: userToken, method: "DELETE" }); } catch (e) {
+            console.error("Meta delete failed, removing locally:", (e as Error).message);
+          }
+        }
+        await db.from("social_campaigns").delete().eq("id", payload.campaign_id);
+        return json({ success: true });
+      }
+
+      case "sync_campaign_status": {
+        const { data: rows } = await db
+          .from("social_campaigns")
+          .select("id,external_id")
+          .not("external_id", "is", null);
+        for (const r of rows || []) {
+          try {
+            const res = await graph(`/${r.external_id}`, { token: userToken, params: { fields: "status,effective_status" } });
+            await db.from("social_campaigns").update({
+              status: String(res.effective_status || res.status || "").toLowerCase() || "paused",
+              last_synced_at: new Date().toISOString(),
+            }).eq("id", r.id);
+          } catch (e) {
+            console.error("sync failed for", r.external_id, (e as Error).message);
+          }
+        }
+        return json({ success: true, synced: rows?.length || 0 });
+      }
+
+      /* --------------------------- organic posting -------------------------- */
+      case "publish_post": {
+        const { data: p } = await db.from("social_posts").select("*").eq("id", payload.post_id).maybeSingle();
+        if (!p) throw new Error("Post not found");
+
+        const pageId = p.page_id || conn.default_page_id;
+        const igId = p.instagram_id || conn.default_instagram_id;
+        let fbPostId: string | null = null;
+        let igPostId: string | null = null;
+
+        try {
+          if (p.destination === "facebook" || p.destination === "both") {
+            if (!pageId) throw new Error("No Facebook Page selected");
+            const token = await pageToken(pageId);
+            if (p.post_type === "image" && p.media_url) {
+              const r = await graph(`/${pageId}/photos`, {
+                token, method: "POST", body: { url: p.media_url, caption: p.message ?? "" },
+              });
+              fbPostId = r.post_id || r.id;
+            } else if (p.post_type === "video" && p.media_url) {
+              const r = await graph(`/${pageId}/videos`, {
+                token, method: "POST", body: { file_url: p.media_url, description: p.message ?? "" },
+              });
+              fbPostId = r.id;
+            } else {
+              const r = await graph(`/${pageId}/feed`, { token, method: "POST", body: { message: p.message ?? "" } });
+              fbPostId = r.id;
+            }
+          }
+
+          if (p.destination === "instagram" || p.destination === "both") {
+            if (!igId) throw new Error("No Instagram account selected");
+            if (!p.media_url) throw new Error("Instagram posts require an image or video");
+            const token = await pageToken(pageId!);
+            const container = await graph(`/${igId}/media`, {
+              token,
+              method: "POST",
+              body: p.post_type === "video"
+                ? { media_type: "REELS", video_url: p.media_url, caption: p.message ?? "" }
+                : { image_url: p.media_url, caption: p.message ?? "" },
+            });
+            const published = await graph(`/${igId}/media_publish`, {
+              token, method: "POST", body: { creation_id: container.id },
+            });
+            igPostId = published.id;
+          }
+        } catch (e) {
+          await db.from("social_posts").update({
+            status: "failed", error_message: (e as Error).message,
+          }).eq("id", p.id);
+          throw e;
+        }
+
+        await db.from("social_posts").update({
+          status: "published",
+          facebook_post_id: fbPostId,
+          instagram_post_id: igPostId,
+          published_at: new Date().toISOString(),
+          error_message: null,
+        }).eq("id", p.id);
+
+        return json({ success: true, facebook_post_id: fbPostId, instagram_post_id: igPostId });
+      }
+
+      /* ------------------------------ insights ------------------------------ */
+      case "fetch_campaign_insights": {
+        const { data: rows } = await db
+          .from("social_campaigns")
+          .select("id,external_id")
+          .not("external_id", "is", null);
+        const today = new Date().toISOString().slice(0, 10);
+        for (const r of rows || []) {
+          try {
+            const res = await graph(`/${r.external_id}/insights`, {
+              token: userToken,
+              params: { fields: "reach,impressions,clicks,spend,actions,action_values", date_preset: "maximum" },
+            });
+            const d = res?.data?.[0];
+            if (!d) continue;
+            const actionCount = (t: string) =>
+              Number((d.actions || []).find((a: any) => a.action_type === t)?.value || 0);
+            const revenue = Number(
+              (d.action_values || []).find((a: any) => a.action_type === "purchase")?.value || 0,
+            );
+            await db.from("social_insights").upsert({
+              platform: "meta",
+              entity_type: "campaign",
+              entity_id: r.id,
+              external_id: r.external_id,
+              stat_date: today,
+              reach: Number(d.reach || 0),
+              impressions: Number(d.impressions || 0),
+              clicks: Number(d.clicks || 0),
+              spend: Number(d.spend || 0),
+              leads: actionCount("lead"),
+              purchases: actionCount("purchase"),
+              conversions: actionCount("offsite_conversion"),
+              revenue,
+              raw: d,
+            }, { onConflict: "entity_type,entity_id,stat_date" });
+          } catch (e) {
+            console.error("insights failed for", r.external_id, (e as Error).message);
+          }
+        }
+        return json({ success: true });
+      }
+
+      case "resync_accounts": {
+        return json({ success: true, note: "Reconnect via Facebook to refresh pages and ad accounts" });
+      }
+
+      default:
+        return json({ error: `Unknown action: ${action}` }, 400);
+    }
+  } catch (err) {
+    console.error("meta-api error:", (err as Error).message);
+    return json({ error: (err as Error).message }, 500);
+  }
+});
