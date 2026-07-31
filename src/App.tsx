@@ -147,6 +147,9 @@ const WhatsAppConversations = lazyWithRetry(() => import("./pages/communication/
 const WhatsAppConfig = lazyWithRetry(() => import("./pages/communication/WhatsAppConfig"), "WhatsAppConfig");
 const VoiceCenter = lazyWithRetry(() => import("./pages/communication/VoiceCenter"), "VoiceCenter");
 const EmailCenter = lazyWithRetry(() => import("./pages/communication/EmailCenter"), "EmailCenter");
+const MetaConnection = lazyWithRetry(() => import("./pages/communication/meta/MetaConnection"), "MetaConnection");
+const MetaCampaigns = lazyWithRetry(() => import("./pages/communication/meta/MetaCampaigns"), "MetaCampaigns");
+const MetaOrganicPosts = lazyWithRetry(() => import("./pages/communication/meta/MetaOrganicPosts"), "MetaOrganicPosts");
 const ListViewsList = lazyWithRetry(() => import("./pages/listviews/ListViewsList"), "ListViewsList");
 const ListViewBuilder = lazyWithRetry(() => import("./pages/listviews/ListViewBuilder"), "ListViewBuilder");
 const TxnLeadsList = lazyWithRetry(() => import("./pages/transactions/LeadsList"), "TxnLeadsList");
@@ -275,6 +278,9 @@ const App = () => (
                 <Route path="/communication/whatsapp/config" element={<WhatsAppConfig />} />
                 <Route path="/communication/voice" element={<VoiceCenter />} />
                 <Route path="/communication/email" element={<EmailCenter />} />
+                <Route path="/communication/meta" element={<MetaConnection />} />
+                <Route path="/communication/meta/campaigns" element={<MetaCampaigns />} />
+                <Route path="/communication/meta/organic" element={<MetaOrganicPosts />} />
                 <Route path="/list-views" element={<ListViewsList />} />
                 <Route path="/list-views/:id" element={<ListViewBuilder />} />
                 <Route path="/transactions/leads" element={<TxnLeadsList />} />
