@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
     const pages = await graph("/me/accounts", {
       token: userToken,
       params: {
-        fields: "id,name,category,access_token,picture{url},instagram_business_account{id,username}",
+        fields: "id,name,category,access_token,picture{url}",
         limit: "100",
       },
     });
@@ -99,6 +99,18 @@ Deno.serve(async (req) => {
 
     const pageRows = [] as Record<string, unknown>[];
     for (const p of pages?.data || []) {
+      // Instagram Business Account is resolved per-Page (not via Facebook Login scopes)
+      let igId: string | null = null;
+      let igUsername: string | null = null;
+      try {
+        const igRes = await graph(`/${p.id}`, {
+          token: p.access_token || userToken,
+          params: { fields: "instagram_business_account{id,username}" },
+        });
+        igId = igRes?.instagram_business_account?.id ?? null;
+        igUsername = igRes?.instagram_business_account?.username ?? null;
+      } catch (_) { /* page may have no linked IG business account */ }
+
       pageRows.push({
         connection_id: conn.id,
         page_id: p.id,
@@ -106,8 +118,8 @@ Deno.serve(async (req) => {
         category: p.category ?? null,
         picture_url: p.picture?.data?.url ?? null,
         page_token_enc: p.access_token ? await encryptSecret(p.access_token) : null,
-        instagram_id: p.instagram_business_account?.id ?? null,
-        instagram_username: p.instagram_business_account?.username ?? null,
+        instagram_id: igId,
+        instagram_username: igUsername,
       });
     }
     if (pageRows.length) await supabase.from("social_pages").insert(pageRows);
