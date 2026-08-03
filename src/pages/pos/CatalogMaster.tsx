@@ -225,16 +225,9 @@ export default function CatalogMaster() {
   );
 }
 
-const COLOR_SWATCH: Record<string, string> = {
-  "Rose Gold": "#e0b4a0",
-  "Yellow Gold": "#e5c04b",
-  "White Gold": "#e8e8ee",
-  "Gold": "#e5c04b",
-  "Silver": "#c0c0c0",
-};
-
 function ProductCard({ p }: { p: CatalogProduct }) {
-  const colors: string[] = (p.options as any)?.Color ?? [];
+  const colors: string[] = getOptionValues(p.options, "Color");
+  const karats: string[] = getOptionValues(p.options, "Karat");
   return (
     <Link to={`/pos/catalog/${p.handle ?? p.id}`} className="group">
       <Card className="overflow-hidden transition-shadow hover:shadow-lg h-full flex flex-col">
@@ -260,11 +253,22 @@ function ProductCard({ p }: { p: CatalogProduct }) {
         <div className="p-4 flex flex-col gap-2 flex-1">
           <h3 className="font-medium leading-tight line-clamp-2">{p.title}</h3>
           <div className="flex items-baseline gap-2">
-            <span className="text-base font-semibold">{fmt(p.base_price)}</span>
+            <span className="text-base font-semibold">
+              {p.base_price == null ? "Price on request" : fmt(p.base_price)}
+            </span>
             {p.compare_at_price && p.base_price && p.compare_at_price > p.base_price ? (
               <span className="text-xs text-muted-foreground line-through">{fmt(p.compare_at_price)}</span>
             ) : null}
           </div>
+          {karats.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {karats.map((k) => (
+                <Badge key={k} variant="secondary" className="text-[10px] px-1.5 py-0">
+                  {k}
+                </Badge>
+              ))}
+            </div>
+          )}
           {colors.length > 0 && (
             <div className="flex gap-1.5 mt-auto pt-1">
               {colors.slice(0, 5).map((c) => (
