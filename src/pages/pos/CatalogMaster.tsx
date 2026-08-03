@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Upload, Search, Package } from "lucide-react";
 import CatalogImportDialog from "@/components/pos/CatalogImportDialog";
+import CatalogFilters from "@/components/pos/CatalogFilters";
+import { getOptionValues, COLOR_SWATCH } from "@/lib/catalogOptions";
 import tr1Asset from "@/assets/tr1.webp.asset.json";
 import tr2Asset from "@/assets/tr2.webp.asset.json";
 import { useEffect } from "react";
@@ -34,6 +36,9 @@ export default function CatalogMaster() {
   const [search, setSearch] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [tab, setTab] = useState<string>("ALL");
+  const [selectedKarats, setSelectedKarats] = useState<string[]>([]);
+  const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
   const banners = [tr1Asset.url, tr2Asset.url];
   const [bannerIdx, setBannerIdx] = useState(0);
   useEffect(() => {
@@ -61,10 +66,58 @@ export default function CatalogMaster() {
     return Array.from(set).sort();
   }, [products]);
 
+  const priceBounds = useMemo<[number, number]>(() => {
+    const prices = products.map((p) => p.base_price).filter((n): n is number => n != null);
+    if (!prices.length) return [0, 0];
+    return [Math.floor(Math.min(...prices)), Math.ceil(Math.max(...prices))];
+  }, [products]);
+
+  useEffect(() => {
+    setPriceRange(priceBounds[1] > priceBounds[0] ? priceBounds : null);
+  }, [priceBounds[0], priceBounds[1]]);
+
+  const karatOptions = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach((p) => getOptionValues(p.options, "Karat").forEach((v) => set.add(v)));
+    return Array.from(set).sort((a, b) => parseInt(a) - parseInt(b));
+  }, [products]);
+
+  const colorOptions = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach((p) => getOptionValues(p.options, "Color").forEach((v) => set.add(v)));
+    return Array.from(set).sort();
+  }, [products]);
+
+  const toggle = (setter: (fn: (s: string[]) => string[]) => void, val: string) =>
+    setter((s) => (s.includes(val) ? s.filter((x) => x !== val) : [...s, val]));
+
+  const hasActiveFilters =
+    selectedKarats.length > 0 ||
+    selectedColors.length > 0 ||
+    (!!priceRange &&
+      (priceRange[0] !== priceBounds[0] || priceRange[1] !== priceBounds[1]));
+
+  const clearFilters = () => {
+    setSelectedKarats([]);
+    setSelectedColors([]);
+    setPriceRange(priceBounds[1] > priceBounds[0] ? priceBounds : null);
+  };
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return products.filter((p) => {
       if (tab !== "ALL" && p.product_type !== tab) return false;
+      if (priceRange && p.base_price != null) {
+        if (p.base_price < priceRange[0] || p.base_price > priceRange[1]) return false;
+      }
+      if (selectedKarats.length) {
+        const ks = getOptionValues(p.options, "Karat");
+        if (!ks.some((k) => selectedKarats.includes(k))) return false;
+      }
+      if (selectedColors.length) {
+        const cs = getOptionValues(p.options, "Color");
+        if (!cs.some((c) => selectedColors.includes(c))) return false;
+      }
       if (!q) return true;
       return (
         p.title.toLowerCase().includes(q) ||
@@ -72,7 +125,7 @@ export default function CatalogMaster() {
         (p.handle ?? "").toLowerCase().includes(q)
       );
     });
-  }, [products, search, tab]);
+  }, [products, search, tab, priceRange, selectedKarats, selectedColors]);
 
   return (
     <div className="space-y-6">
@@ -114,6 +167,21 @@ export default function CatalogMaster() {
           />
         </div>
       </Card>
+
+      <CatalogFilters
+        priceBounds={priceBounds}
+        priceRange={priceRange ?? priceBounds}
+        onPriceChange={setPriceRange}
+        karats={karatOptions}
+        selectedKarats={selectedKarats}
+        onToggleKarat={(k) => toggle(setSelectedKarats, k)}
+        colors={colorOptions}
+        selectedColors={selectedColors}
+        onToggleColor={(c) => toggle(setSelectedColors, c)}
+        resultCount={filtered.length}
+        onClear={clearFilters}
+        hasActiveFilters={hasActiveFilters}
+      />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex-wrap h-auto">
