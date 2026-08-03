@@ -341,7 +341,7 @@ export function parseWorkbookRows(rows: any[]): ParseSummary {
     const vcompare = toNumber(get(r, ALIASES.compareAt)) ?? parsedPrice.compareAt;
     const sku = get(r, ALIASES.sku) || null;
 
-    if (vprice != null || rowOptions.length) {
+    if (packedVars.length === 0 && (vprice != null || rowOptions.length)) {
       const v: any = { variant_id: sku };
       if (vprice != null) v.price = vprice;
       if (vcompare != null) v.compare_at_price = vcompare;
