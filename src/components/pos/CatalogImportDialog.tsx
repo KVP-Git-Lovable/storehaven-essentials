@@ -61,7 +61,12 @@ const ALIASES = {
     "originalprice",
   ],
   sku: ["variantsku", "sku", "variantid", "itemcode", "styleno", "stylenumber"],
+  packedOptions: ["options", "optionlist", "productoptions"],
+  packedVariants: ["variants", "variantlist", "variantprices"],
 } as const;
+
+/** Headers we knowingly ignore — kept out of the "unmapped" warning. */
+const IGNORED_HEADERS = ["variantids", "publisheddate", "productimagealt"];
 
 /** Standalone attribute columns that behave like product options. */
 const IMPLICIT_OPTION_COLUMNS = [
@@ -114,9 +119,90 @@ function makeGetter(hm: HeaderMap) {
 
 const toNumber = (s: string): number | null => {
   if (!s) return null;
-  const n = Number(String(s).replace(/[^0-9.\-]/g, ""));
+  // Only the FIRST numeric token — cells like "34827.00 (Was 44839.00)" must not concatenate.
+  const m = String(s).replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  if (!m) return null;
+  const n = Number(m[0]);
   return Number.isFinite(n) && n !== 0 ? n : null;
 };
+
+/** Parse "34827.00 (Was 44839.00)" / "₹44,839" into base + compare-at. */
+function parsePriceCell(s: string): { price: number | null; compareAt: number | null } {
+  if (!s) return { price: null, compareAt: null };
+  const cleaned = String(s).replace(/,/g, "");
+  const nums = cleaned.match(/-?\d+(?:\.\d+)?/g) || [];
+  const price = nums.length ? Number(nums[0]) : null;
+  let compareAt: number | null = null;
+  const was = cleaned.match(/(?:was|mrp|compare(?:\s*at)?)\D{0,6}(-?\d+(?:\.\d+)?)/i);
+  if (was) compareAt = Number(was[1]);
+  else if (nums.length > 1) compareAt = Number(nums[1]);
+  return {
+    price: price && Number.isFinite(price) && price !== 0 ? price : null,
+    compareAt: compareAt && Number.isFinite(compareAt) && compareAt !== 0 ? compareAt : null,
+  };
+}
+
+/** Parse "Purity: 18 KT/14 KT; Color: Rose Gold/White Gold; Size: 8/9" */
+function parsePackedOptions(s: string): { name: string; values: string[] }[] {
+  if (!s) return [];
+  const out: { name: string; values: string[] }[] = [];
+  for (const part of String(s).split(";")) {
+    const idx = part.indexOf(":");
+    if (idx === -1) continue;
+    const rawName = part.slice(0, idx).trim();
+    const rawVals = part.slice(idx + 1).trim();
+    if (!rawName || !rawVals) continue;
+    const canonical = canonicalOptionName(rawName);
+    const values: string[] = [];
+    for (const v of rawVals.split("/")) {
+      const val = normalizeOptionValue(canonical, v.trim());
+      if (val && !values.includes(val)) values.push(val);
+    }
+    if (values.length) out.push({ name: canonical, values });
+  }
+  return out;
+}
+
+/** Guess an option name from a raw value when the Options cell is absent. */
+function inferOptionName(raw: string): string {
+  const v = raw.trim();
+  if (/^\d{1,2}\s*(k|kt|karat|carat)\b/i.test(v)) return "Karat";
+  if (/gold|silver|platinum|rose|white|yellow/i.test(v)) return "Color";
+  if (/^\d+(\.\d+)?$/.test(v)) return "Size";
+  return "Option";
+}
+
+/**
+ * Parse "18 KT / Rose Gold / 8: 34827.00; 18 KT / White Gold / 9: 44839.00"
+ * Values are positionally mapped to `optionNames` when available.
+ */
+function parsePackedVariants(
+  s: string,
+  optionNames: string[]
+): { values: { name: string; value: string }[]; price: number | null }[] {
+  if (!s) return [];
+  const out: { values: { name: string; value: string }[]; price: number | null }[] = [];
+  for (const part of String(s).split(";")) {
+    const seg = part.trim();
+    if (!seg) continue;
+    const idx = seg.lastIndexOf(":");
+    if (idx === -1) continue;
+    const label = seg.slice(0, idx).trim();
+    const price = toNumber(seg.slice(idx + 1));
+    if (!label) continue;
+    const values = label
+      .split("/")
+      .map((v) => v.trim())
+      .filter(Boolean)
+      .map((v, i) => {
+        const name = optionNames[i] ?? inferOptionName(v);
+        return { name, value: normalizeOptionValue(name, v) };
+      });
+    if (!values.length && price == null) continue;
+    out.push({ values, price });
+  }
+  return out;
+}
 
 export type ParsedProduct = Record<string, any>;
 
@@ -138,6 +224,7 @@ export function parseWorkbookRows(rows: any[]): ParseSummary {
   Object.values(ALIASES).forEach((aliases) =>
     aliases.forEach((a) => hm.has(a) && usedNormHeaders.add(a))
   );
+  IGNORED_HEADERS.forEach((h) => hm.has(h) && usedNormHeaders.add(h));
 
   const optionPairs: { nameKey: string; valueKey: string }[] = [];
   for (let i = 1; i <= 5; i++) {
@@ -219,21 +306,52 @@ export function parseWorkbookRows(rows: any[]): ParseSummary {
       if (!prod.options[name].includes(value)) prod.options[name].push(value);
     }
 
-    const vprice = toNumber(get(r, ALIASES.price));
-    const vcompare = toNumber(get(r, ALIASES.compareAt));
+    /* --- packed Options / Variants columns (one row per product) --- */
+    const packedOpts = parsePackedOptions(get(r, ALIASES.packedOptions));
+    for (const { name, values } of packedOpts) {
+      optionNames.add(name);
+      prod.options[name] = prod.options[name] ?? [];
+      for (const v of values) if (!prod.options[name].includes(v)) prod.options[name].push(v);
+    }
+
+    const packedVars = parsePackedVariants(
+      get(r, ALIASES.packedVariants),
+      packedOpts.map((o) => o.name)
+    );
+    for (const pv of packedVars) {
+      const v: any = {};
+      for (const { name, value } of pv.values) {
+        v[name.toLowerCase()] = value;
+        optionNames.add(name);
+        prod.options[name] = prod.options[name] ?? [];
+        if (!prod.options[name].includes(value)) prod.options[name].push(value);
+      }
+      if (pv.price != null) v.price = pv.price;
+      prod.variants.push(v);
+      if (pv.price != null && (prod.base_price == null || pv.price < prod.base_price)) {
+        prod.base_price = pv.price;
+      }
+      if (pv.price != null && (prod.compare_at_price == null || pv.price > prod.compare_at_price)) {
+        prod.compare_at_price = pv.price;
+      }
+    }
+
+    const parsedPrice = parsePriceCell(get(r, ALIASES.price));
+    const vprice = parsedPrice.price;
+    const vcompare = toNumber(get(r, ALIASES.compareAt)) ?? parsedPrice.compareAt;
     const sku = get(r, ALIASES.sku) || null;
 
-    if (vprice != null || rowOptions.length) {
+    if (packedVars.length === 0 && (vprice != null || rowOptions.length)) {
       const v: any = { variant_id: sku };
       if (vprice != null) v.price = vprice;
       if (vcompare != null) v.compare_at_price = vcompare;
       for (const { name, value } of rowOptions) v[name.toLowerCase()] = value;
       prod.variants.push(v);
     }
-    if (vprice != null && (prod.base_price == null || vprice < prod.base_price)) {
+    if (vprice != null && (prod.base_price == null || packedVars.length > 0 || vprice < prod.base_price)) {
       prod.base_price = vprice;
     }
-    if (vcompare != null && (prod.compare_at_price == null || vcompare > prod.compare_at_price)) {
+    if (vcompare != null && (prod.compare_at_price == null || packedVars.length > 0 || vcompare > prod.compare_at_price)) {
       prod.compare_at_price = vcompare;
     }
   }
