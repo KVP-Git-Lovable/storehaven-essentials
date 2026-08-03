@@ -6,6 +6,11 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Package, ShoppingCart } from "lucide-react";
+import {
+  canonicalOptionName,
+  normalizeOptionValue,
+  COLOR_SWATCH,
+} from "@/lib/catalogOptions";
 
 type Variant = {
   variant_id?: string;
@@ -18,14 +23,6 @@ type Variant = {
 
 const fmt = (n?: number | null) =>
   n == null ? "—" : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
-
-const COLOR_SWATCH: Record<string, string> = {
-  "Rose Gold": "#e0b4a0",
-  "Yellow Gold": "#e5c04b",
-  "White Gold": "#e8e8ee",
-  "Gold": "#e5c04b",
-  "Silver": "#c0c0c0",
-};
 
 export default function CatalogItemDetail() {
   const { handle } = useParams<{ handle: string }>();
@@ -47,8 +44,36 @@ export default function CatalogItemDetail() {
     },
   });
 
-  const options = (product?.options ?? {}) as Record<string, string[]>;
-  const variants = ((product?.variants ?? []) as Variant[]) || [];
+  // Canonicalise option names/values so legacy and freshly imported rows behave the same.
+  const options = useMemo(() => {
+    const raw = (product?.options ?? {}) as Record<string, string[]>;
+    const out: Record<string, string[]> = {};
+    for (const [k, vals] of Object.entries(raw)) {
+      if (!Array.isArray(vals) || !vals.length) continue;
+      const canonical = canonicalOptionName(k);
+      const list = out[canonical] ?? [];
+      for (const v of vals) {
+        const nv = normalizeOptionValue(canonical, String(v));
+        if (nv && !list.includes(nv)) list.push(nv);
+      }
+      out[canonical] = list;
+    }
+    return out;
+  }, [product]);
+
+  const variants = useMemo(() => {
+    const raw = ((product?.variants ?? []) as Variant[]) || [];
+    return raw.map((v) => {
+      const nv: Variant = { ...v };
+      for (const [k, val] of Object.entries(v)) {
+        if (k === "price" || k === "variant_id" || k === "compare_at_price") continue;
+        const canonical = canonicalOptionName(k);
+        nv[canonical.toLowerCase()] = normalizeOptionValue(canonical, String(val ?? ""));
+      }
+      return nv;
+    });
+  }, [product]);
+
   const optionKeys = Object.keys(options);
 
   const [selected, setSelected] = useState<Record<string, string>>({});
@@ -78,6 +103,7 @@ export default function CatalogItemDetail() {
   }, [variants, selected, optionKeys]);
 
   const currentPrice = matchedVariant?.price ?? product?.base_price ?? null;
+  const compareAt = matchedVariant?.compare_at_price ?? product?.compare_at_price ?? null;
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
   if (error) return <div className="p-8 text-destructive">Error loading product: {(error as Error).message}</div>;
@@ -112,11 +138,11 @@ export default function CatalogItemDetail() {
           )}
 
           <div className="flex items-baseline gap-3">
-            <span className="text-3xl font-bold">{fmt(currentPrice)}</span>
-            {product.compare_at_price && currentPrice && product.compare_at_price > currentPrice ? (
-              <span className="text-base text-muted-foreground line-through">
-                {fmt(product.compare_at_price)}
-              </span>
+            <span className="text-3xl font-bold">
+              {currentPrice == null ? "Price on request" : fmt(currentPrice)}
+            </span>
+            {compareAt && currentPrice && compareAt > currentPrice ? (
+              <span className="text-base text-muted-foreground line-through">{fmt(compareAt)}</span>
             ) : null}
           </div>
 
