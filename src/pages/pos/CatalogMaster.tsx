@@ -262,23 +262,37 @@ function ProductCard({ p, schemes = [] }: { p: CatalogProduct; schemes?: Scheme[
         {/* Zig-zag Banner for Scheme */}
         {hasSchemeDiscount && pricing?.applicableScheme && (
           <div className="absolute top-0 left-0 right-0 z-20">
-            <svg className="w-full h-auto" viewBox="0 0 400 50" preserveAspectRatio="none" style={{ height: "auto" }}>
+            <svg
+              className="w-full"
+              viewBox="0 0 1200 60"
+              preserveAspectRatio="none"
+              style={{ height: "50px", display: "block" }}
+            >
               <defs>
                 <linearGradient id="bannerGradient" x1="0%" y1="0%" x2="100%" y2="0%">
                   <stop offset="0%" style={{ stopColor: "#dc2626", stopOpacity: 1 }} />
-                  <stop offset="50%" style={{ stopColor: "#ea580c", stopOpacity: 1 }} />
+                  <stop offset="50%" style={{ stopColor: "#f97316", stopOpacity: 1 }} />
                   <stop offset="100%" style={{ stopColor: "#dc2626", stopOpacity: 1 }} />
                 </linearGradient>
               </defs>
 
-              {/* Zig-zag path */}
-              <path d="M 0,30 L 10,10 L 20,30 L 30,10 L 40,30 L 50,10 L 60,30 L 70,10 L 80,30 L 90,10 L 100,30 L 110,10 L 120,30 L 130,10 L 140,30 L 150,10 L 160,30 L 170,10 L 180,30 L 190,10 L 200,30 L 210,10 L 220,30 L 230,10 L 240,30 L 250,10 L 260,30 L 270,10 L 280,30 L 290,10 L 300,30 L 310,10 L 320,30 L 330,10 L 340,30 L 350,10 L 360,30 L 370,10 L 380,30 L 390,10 L 400,30 L 400,50 L 0,50 Z"
-                    fill="url(#bannerGradient)" />
+              {/* Smooth curved zig-zag edges using quadratic curves */}
+              <path
+                d="M 0,35 Q 20,20 40,35 T 80,35 T 120,35 T 160,35 T 200,35 T 240,35 T 280,35 T 320,35 T 360,35 T 400,35 T 440,35 T 480,35 T 520,35 T 560,35 T 600,35 T 640,35 T 680,35 T 720,35 T 760,35 T 800,35 T 840,35 T 880,35 T 920,35 T 960,35 T 1000,35 T 1040,35 T 1080,35 T 1120,35 T 1160,35 T 1200,35 L 1200,60 L 0,60 Z"
+                fill="url(#bannerGradient)"
+              />
             </svg>
-            <div className="absolute top-0 left-0 right-0 flex items-center justify-center pointer-events-none" style={{ height: "40px" }}>
-              <span className="text-white text-sm font-bold drop-shadow-lg">
-                {pricing.applicableScheme.name}
-              </span>
+            <div
+              className="absolute left-0 right-0 flex items-center justify-center pointer-events-none font-bold text-white drop-shadow-md"
+              style={{
+                top: "0",
+                height: "50px",
+                textShadow: "0 2px 4px rgba(0,0,0,0.3)",
+                fontSize: "14px",
+                letterSpacing: "0.5px"
+              }}
+            >
+              {pricing.applicableScheme.name}
             </div>
           </div>
         )}
