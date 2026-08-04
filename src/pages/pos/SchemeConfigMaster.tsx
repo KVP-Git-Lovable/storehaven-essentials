@@ -99,16 +99,53 @@ function SchemeDialog({
 
   const queryClient = useQueryClient();
 
+  const [error, setError] = useState<string | null>(null);
+
   const mutation = useMutation({
     mutationFn: async (data: Partial<Scheme>) => {
+      setError(null);
+
+      // Validate required fields
+      if (!data.name?.trim()) {
+        throw new Error("Scheme name is required");
+      }
+      if (!data.start_date) {
+        throw new Error("Start date is required");
+      }
+      if (!data.end_date) {
+        throw new Error("End date is required");
+      }
+      if (data.discount_type === "percentage" && !data.discount_value) {
+        throw new Error("Discount value is required");
+      }
+
+      // Ensure dates are in ISO format (YYYY-MM-DD)
+      const normalizeDate = (dateStr: string): string => {
+        if (!dateStr) return dateStr;
+        // If already in YYYY-MM-DD format, return as-is
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+        // If in DD/MM/YYYY format, convert to YYYY-MM-DD
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+          const [day, month, year] = dateStr.split("/");
+          return `${year}-${month}-${day}`;
+        }
+        return dateStr;
+      };
+
+      const preparedData = {
+        ...data,
+        start_date: normalizeDate(data.start_date || ""),
+        end_date: normalizeDate(data.end_date || ""),
+      };
+
       if (scheme?.id) {
         const { error } = await supabase
           .from("schemes")
-          .update(data)
+          .update(preparedData)
           .eq("id", scheme.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("schemes").insert([data]);
+        const { error } = await supabase.from("schemes").insert([preparedData]);
         if (error) throw error;
       }
     },
@@ -123,6 +160,12 @@ function SchemeDialog({
         priority: 0,
         is_auto_apply: true,
       });
+      setError(null);
+    },
+    onError: (err: any) => {
+      const errorMessage = err.message || "Failed to save scheme. Please try again.";
+      setError(errorMessage);
+      console.error("Scheme creation error:", err);
     },
   });
 
@@ -139,6 +182,13 @@ function SchemeDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Error Display */}
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded text-red-800 text-sm">
+              {error}
+            </div>
+          )}
+
           {/* Basic Info */}
           <div className="grid gap-4">
             <div>
@@ -397,8 +447,8 @@ function SchemeDialog({
               <Input
                 id="priority"
                 type="number"
-                value={formData.priority || ""}
-                onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) })}
+                value={formData.priority ?? 0}
+                onChange={(e) => setFormData({ ...formData, priority: e.target.value ? parseInt(e.target.value) : 0 })}
                 placeholder="Higher = higher priority"
               />
             </div>
