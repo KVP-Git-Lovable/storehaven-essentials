@@ -102,6 +102,7 @@ const StoreHeatmap = lazyWithRetry(() => import("./pages/operations/StoreHeatmap
 const PointOfSale = lazyWithRetry(() => import("./pages/pos/PointOfSale"), "PointOfSale");
 const OrderHistory = lazyWithRetry(() => import("./pages/pos/OrderHistory"), "OrderHistory");
 const Schemes = lazyWithRetry(() => import("./pages/pos/Schemes"), "Schemes");
+const SchemeConfigMaster = lazyWithRetry(() => import("./pages/pos/SchemeConfigMaster"), "SchemeConfigMaster");
 const ProductMaster = lazyWithRetry(() => import("./pages/pos/ProductMaster"), "ProductMaster");
 const POSDashboard = lazyWithRetry(() => import("./pages/pos/POSDashboard"), "POSDashboard");
 const ReturnsProcessing = lazyWithRetry(() => import("./pages/pos/ReturnsProcessing"), "ReturnsProcessing");
@@ -208,6 +209,7 @@ const App = () => (
                 <Route path="/pos/orders" element={<OrderHistory />} />
                 <Route path="/pos/returns" element={<ReturnsProcessing />} />
                 <Route path="/pos/schemes" element={<Schemes />} />
+                <Route path="/pos/scheme-config" element={<SchemeConfigMaster />} />
                 <Route path="/pos/sessions" element={<CashierSessions />} />
                 <Route path="/stores" element={<StoresList />} />
                 <Route path="/stores/:id" element={<StoreDetails />} />
