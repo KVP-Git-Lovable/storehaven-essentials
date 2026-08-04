@@ -275,29 +275,57 @@ function SchemeDialog({
           {(ruleType === "category" || ruleType === "category_dia" || ruleType === "category_making" || ruleType === "category_price") && (
             <div>
               <Label>Categories</Label>
-              <div className="space-y-2">
-                {categories.map((cat) => (
-                  <div key={cat} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id={`cat-${cat}`}
-                      checked={(formData.target_categories || []).includes(cat)}
-                      onChange={(e) => {
-                        const current = formData.target_categories || [];
-                        setFormData({
-                          ...formData,
-                          target_categories: e.target.checked
-                            ? [...current, cat]
-                            : current.filter((c) => c !== cat),
-                        });
-                      }}
-                    />
-                    <Label htmlFor={`cat-${cat}`} className="font-normal cursor-pointer">
-                      {cat}
-                    </Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between font-normal">
+                    <span className="truncate">
+                      {(formData.target_categories || []).length > 0
+                        ? `${formData.target_categories!.length} selected`
+                        : "Select categories"}
+                    </span>
+                    <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-2 pointer-events-auto" align="start">
+                  <div className="max-h-56 overflow-y-auto space-y-1">
+                    {categories.length === 0 && (
+                      <p className="text-sm text-muted-foreground px-2 py-1">No categories</p>
+                    )}
+                    {categories.map((cat) => {
+                      const selected = (formData.target_categories || []).includes(cat);
+                      return (
+                        <label
+                          key={cat}
+                          className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent cursor-pointer"
+                        >
+                          <Checkbox
+                            checked={selected}
+                            onCheckedChange={(checked) => {
+                              const current = formData.target_categories || [];
+                              setFormData({
+                                ...formData,
+                                target_categories: checked
+                                  ? [...current, cat]
+                                  : current.filter((c) => c !== cat),
+                              });
+                            }}
+                          />
+                          <span className="truncate">{cat}</span>
+                        </label>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
+                </PopoverContent>
+              </Popover>
+              {(formData.target_categories || []).length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {formData.target_categories!.map((c) => (
+                    <Badge key={c} variant="secondary" className="text-xs">
+                      {c}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
