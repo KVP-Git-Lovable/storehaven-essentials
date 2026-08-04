@@ -34,6 +34,23 @@ import {
 import { Search, Plus, Edit2, Trash2, AlertCircle } from "lucide-react";
 import { BackButton } from "@/components/shared/BackButton";
 import { Scheme, SchemeRuleType } from "@/types/schemes";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ChevronsUpDown } from "lucide-react";
+
+/** Flat editable shape covering every scheme variant's fields. */
+type SchemeForm = {
+  [key: string]: any;
+  rule_type?: SchemeRuleType;
+  target_categories?: string[];
+  target_products?: string[];
+  price_min?: number | null;
+  price_max?: number | null;
+  dia_charge_min?: number | null;
+  dia_charge_max?: number | null;
+  making_charge_min?: number | null;
+  making_charge_max?: number | null;
+};
 
 type CatalogProduct = {
   id: string;
@@ -80,8 +97,8 @@ function SchemeDialog({
   products?: CatalogProduct[];
   categories?: string[];
 }) {
-  const [formData, setFormData] = useState<Partial<Scheme>>(
-    scheme || {
+  const [formData, setFormData] = useState<SchemeForm>(
+    (scheme as SchemeForm) || {
       rule_type: "generic",
       discount_type: "percentage",
       discount_basis: "product_price",
@@ -93,7 +110,7 @@ function SchemeDialog({
 
   useEffect(() => {
     if (scheme) {
-      setFormData(scheme);
+      setFormData(scheme as SchemeForm);
     }
   }, [scheme]);
 
@@ -102,7 +119,7 @@ function SchemeDialog({
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: async (data: Partial<Scheme>) => {
+    mutationFn: async (data: SchemeForm) => {
       setError(null);
 
       // Validate required fields
@@ -141,11 +158,11 @@ function SchemeDialog({
       if (scheme?.id) {
         const { error } = await supabase
           .from("schemes")
-          .update(preparedData)
+          .update(preparedData as any)
           .eq("id", scheme.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("schemes").insert([preparedData]);
+        const { error } = await supabase.from("schemes").insert([preparedData as any]);
         if (error) throw error;
       }
     },
@@ -258,29 +275,57 @@ function SchemeDialog({
           {(ruleType === "category" || ruleType === "category_dia" || ruleType === "category_making" || ruleType === "category_price") && (
             <div>
               <Label>Categories</Label>
-              <div className="space-y-2">
-                {categories.map((cat) => (
-                  <div key={cat} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id={`cat-${cat}`}
-                      checked={(formData.target_categories || []).includes(cat)}
-                      onChange={(e) => {
-                        const current = formData.target_categories || [];
-                        setFormData({
-                          ...formData,
-                          target_categories: e.target.checked
-                            ? [...current, cat]
-                            : current.filter((c) => c !== cat),
-                        });
-                      }}
-                    />
-                    <Label htmlFor={`cat-${cat}`} className="font-normal cursor-pointer">
-                      {cat}
-                    </Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between font-normal">
+                    <span className="truncate">
+                      {(formData.target_categories || []).length > 0
+                        ? `${formData.target_categories!.length} selected`
+                        : "Select categories"}
+                    </span>
+                    <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-2 pointer-events-auto" align="start">
+                  <div className="max-h-56 overflow-y-auto space-y-1">
+                    {categories.length === 0 && (
+                      <p className="text-sm text-muted-foreground px-2 py-1">No categories</p>
+                    )}
+                    {categories.map((cat) => {
+                      const selected = (formData.target_categories || []).includes(cat);
+                      return (
+                        <label
+                          key={cat}
+                          className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent cursor-pointer"
+                        >
+                          <Checkbox
+                            checked={selected}
+                            onCheckedChange={(checked) => {
+                              const current = formData.target_categories || [];
+                              setFormData({
+                                ...formData,
+                                target_categories: checked
+                                  ? [...current, cat]
+                                  : current.filter((c) => c !== cat),
+                              });
+                            }}
+                          />
+                          <span className="truncate">{cat}</span>
+                        </label>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
+                </PopoverContent>
+              </Popover>
+              {(formData.target_categories || []).length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {formData.target_categories!.map((c) => (
+                    <Badge key={c} variant="secondary" className="text-xs">
+                      {c}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
