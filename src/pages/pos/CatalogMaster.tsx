@@ -262,42 +262,30 @@ function ProductCard({ p, schemes = [] }: { p: CatalogProduct; schemes?: Scheme[
         {/* Zig-zag Banner for Scheme */}
         {hasSchemeDiscount && pricing?.applicableScheme && (
           <div className="absolute top-0 left-0 right-0 z-20">
+            <div
+              className="flex h-8 items-center justify-center px-3"
+              style={{ background: "linear-gradient(90deg,#dc2626,#f97316,#dc2626)" }}
+            >
+              <span className="truncate text-[12px] font-semibold uppercase tracking-wide text-white">
+                {pricing.applicableScheme.name}
+              </span>
+            </div>
             <svg
               className="w-full"
-              viewBox="0 0 1200 60"
+              viewBox="0 0 1200 16"
               preserveAspectRatio="none"
-              style={{ height: "50px", display: "block" }}
+              style={{ height: "10px", display: "block", marginTop: "-1px" }}
+              aria-hidden="true"
             >
-              <defs>
-                <linearGradient id="bannerGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" style={{ stopColor: "#dc2626", stopOpacity: 1 }} />
-                  <stop offset="50%" style={{ stopColor: "#f97316", stopOpacity: 1 }} />
-                  <stop offset="100%" style={{ stopColor: "#dc2626", stopOpacity: 1 }} />
-                </linearGradient>
-              </defs>
-
-              {/* Smooth curved zig-zag edges using quadratic curves */}
               <path
-                d="M 0,35 Q 20,20 40,35 T 80,35 T 120,35 T 160,35 T 200,35 T 240,35 T 280,35 T 320,35 T 360,35 T 400,35 T 440,35 T 480,35 T 520,35 T 560,35 T 600,35 T 640,35 T 680,35 T 720,35 T 760,35 T 800,35 T 840,35 T 880,35 T 920,35 T 960,35 T 1000,35 T 1040,35 T 1080,35 T 1120,35 T 1160,35 T 1200,35 L 1200,60 L 0,60 Z"
-                fill="url(#bannerGradient)"
+                d="M0,0 L1200,0 L1200,0 Q1180,16 1160,0 T1120,0 T1080,0 T1040,0 T1000,0 T960,0 T920,0 T880,0 T840,0 T800,0 T760,0 T720,0 T680,0 T640,0 T600,0 T560,0 T520,0 T480,0 T440,0 T400,0 T360,0 T320,0 T280,0 T240,0 T200,0 T160,0 T120,0 T80,0 T40,0 T0,0 Z"
+                fill="#dc2626"
               />
             </svg>
-            <div
-              className="absolute left-0 right-0 flex items-center justify-center pointer-events-none font-bold text-white drop-shadow-md"
-              style={{
-                top: "0",
-                height: "50px",
-                textShadow: "0 2px 4px rgba(0,0,0,0.3)",
-                fontSize: "14px",
-                letterSpacing: "0.5px"
-              }}
-            >
-              {pricing.applicableScheme.name}
-            </div>
           </div>
         )}
 
-        <div className="relative aspect-square bg-muted overflow-hidden" style={{ marginTop: hasSchemeDiscount ? "45px" : "0" }}>
+        <div className="relative aspect-square bg-muted overflow-hidden" style={{ marginTop: hasSchemeDiscount ? "42px" : "0" }}>
           {showOffer ? (
             <Badge className="absolute left-2 top-2 z-10 bg-primary text-primary-foreground">
               OFFER VALID
