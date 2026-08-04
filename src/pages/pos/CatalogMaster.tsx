@@ -262,18 +262,28 @@ function ProductCard({ p, schemes = [] }: { p: CatalogProduct; schemes?: Scheme[
         {/* Zig-zag Banner for Scheme */}
         {hasSchemeDiscount && pricing?.applicableScheme && (
           <div className="absolute top-0 left-0 right-0 z-20">
-            <div className="relative bg-red-600 text-white text-xs font-bold py-1 px-3 text-center"
-              style={{
-                backgroundImage: `linear-gradient(135deg, #991b1b 25%, transparent 25%), linear-gradient(225deg, #991b1b 25%, transparent 25%), linear-gradient(315deg, #991b1b 25%, transparent 25%), linear-gradient(45deg, #991b1b 25%, transparent 25%)`,
-                backgroundSize: "8px 8px",
-                backgroundPosition: "0 0, 4px 0, 4px -4px, 0 -4px"
-              }}>
-              {pricing.applicableScheme.name}
+            <svg className="w-full h-auto" viewBox="0 0 400 50" preserveAspectRatio="none" style={{ height: "auto" }}>
+              <defs>
+                <linearGradient id="bannerGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" style={{ stopColor: "#dc2626", stopOpacity: 1 }} />
+                  <stop offset="50%" style={{ stopColor: "#ea580c", stopOpacity: 1 }} />
+                  <stop offset="100%" style={{ stopColor: "#dc2626", stopOpacity: 1 }} />
+                </linearGradient>
+              </defs>
+
+              {/* Zig-zag path */}
+              <path d="M 0,30 L 10,10 L 20,30 L 30,10 L 40,30 L 50,10 L 60,30 L 70,10 L 80,30 L 90,10 L 100,30 L 110,10 L 120,30 L 130,10 L 140,30 L 150,10 L 160,30 L 170,10 L 180,30 L 190,10 L 200,30 L 210,10 L 220,30 L 230,10 L 240,30 L 250,10 L 260,30 L 270,10 L 280,30 L 290,10 L 300,30 L 310,10 L 320,30 L 330,10 L 340,30 L 350,10 L 360,30 L 370,10 L 380,30 L 390,10 L 400,30 L 400,50 L 0,50 Z"
+                    fill="url(#bannerGradient)" />
+            </svg>
+            <div className="absolute top-0 left-0 right-0 flex items-center justify-center pointer-events-none" style={{ height: "40px" }}>
+              <span className="text-white text-sm font-bold drop-shadow-lg">
+                {pricing.applicableScheme.name}
+              </span>
             </div>
           </div>
         )}
 
-        <div className="relative aspect-square bg-muted overflow-hidden mt-6">
+        <div className="relative aspect-square bg-muted overflow-hidden" style={{ marginTop: hasSchemeDiscount ? "45px" : "0" }}>
           {showOffer ? (
             <Badge className="absolute left-2 top-2 z-10 bg-primary text-primary-foreground">
               OFFER VALID
@@ -306,7 +316,18 @@ function ProductCard({ p, schemes = [] }: { p: CatalogProduct; schemes?: Scheme[
           </div>
           {hasSchemeDiscount && (
             <div className="text-xs text-green-600 font-semibold">
-              Save {fmt(pricing?.discountAmount)}
+              {pricing?.applicableScheme?.discount_type === "percentage" ? (
+                <>
+                  {pricing.applicableScheme.discount_value}% off
+                  {pricing.applicableScheme.max_discount_amount && pricing.discountAmount >= pricing.applicableScheme.max_discount_amount && (
+                    <span> (capped at {fmt(pricing.applicableScheme.max_discount_amount)})</span>
+                  )}
+                  <br />
+                  Save {fmt(pricing?.discountAmount)}
+                </>
+              ) : (
+                <>Save {fmt(pricing?.discountAmount)}</>
+              )}
             </div>
           )}
           {karats.length > 0 && (
