@@ -8592,20 +8592,30 @@ export type Database = {
           created_at: string
           customer_segments: string[] | null
           description: string | null
+          dia_charge_max: number | null
+          dia_charge_min: number | null
+          discount_basis: string | null
           discount_type: string
           discount_value: number
           end_date: string
           get_quantity: number | null
           id: string
           is_auto_apply: boolean | null
+          making_charge_max: number | null
+          making_charge_min: number | null
           max_discount_amount: number | null
           min_purchase_amount: number | null
           min_quantity: number | null
           name: string
+          price_max: number | null
+          price_min: number | null
           priority: number | null
+          rule_type: string | null
           start_date: string
           status: string
           store_ids: string[] | null
+          target_categories: string[] | null
+          target_products: string[] | null
           updated_at: string
           usage_count: number | null
           usage_limit: number | null
@@ -8618,20 +8628,30 @@ export type Database = {
           created_at?: string
           customer_segments?: string[] | null
           description?: string | null
+          dia_charge_max?: number | null
+          dia_charge_min?: number | null
+          discount_basis?: string | null
           discount_type: string
           discount_value: number
           end_date: string
           get_quantity?: number | null
           id?: string
           is_auto_apply?: boolean | null
+          making_charge_max?: number | null
+          making_charge_min?: number | null
           max_discount_amount?: number | null
           min_purchase_amount?: number | null
           min_quantity?: number | null
           name: string
+          price_max?: number | null
+          price_min?: number | null
           priority?: number | null
+          rule_type?: string | null
           start_date: string
           status?: string
           store_ids?: string[] | null
+          target_categories?: string[] | null
+          target_products?: string[] | null
           updated_at?: string
           usage_count?: number | null
           usage_limit?: number | null
@@ -8644,20 +8664,30 @@ export type Database = {
           created_at?: string
           customer_segments?: string[] | null
           description?: string | null
+          dia_charge_max?: number | null
+          dia_charge_min?: number | null
+          discount_basis?: string | null
           discount_type?: string
           discount_value?: number
           end_date?: string
           get_quantity?: number | null
           id?: string
           is_auto_apply?: boolean | null
+          making_charge_max?: number | null
+          making_charge_min?: number | null
           max_discount_amount?: number | null
           min_purchase_amount?: number | null
           min_quantity?: number | null
           name?: string
+          price_max?: number | null
+          price_min?: number | null
           priority?: number | null
+          rule_type?: string | null
           start_date?: string
           status?: string
           store_ids?: string[] | null
+          target_categories?: string[] | null
+          target_products?: string[] | null
           updated_at?: string
           usage_count?: number | null
           usage_limit?: number | null
