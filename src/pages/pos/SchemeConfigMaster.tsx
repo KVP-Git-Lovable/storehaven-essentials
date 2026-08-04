@@ -34,6 +34,23 @@ import {
 import { Search, Plus, Edit2, Trash2, AlertCircle } from "lucide-react";
 import { BackButton } from "@/components/shared/BackButton";
 import { Scheme, SchemeRuleType } from "@/types/schemes";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ChevronsUpDown } from "lucide-react";
+
+/** Flat editable shape covering every scheme variant's fields. */
+type SchemeForm = {
+  [key: string]: any;
+  rule_type?: SchemeRuleType;
+  target_categories?: string[];
+  target_products?: string[];
+  price_min?: number | null;
+  price_max?: number | null;
+  dia_charge_min?: number | null;
+  dia_charge_max?: number | null;
+  making_charge_min?: number | null;
+  making_charge_max?: number | null;
+};
 
 type CatalogProduct = {
   id: string;
@@ -80,8 +97,8 @@ function SchemeDialog({
   products?: CatalogProduct[];
   categories?: string[];
 }) {
-  const [formData, setFormData] = useState<Partial<Scheme>>(
-    scheme || {
+  const [formData, setFormData] = useState<SchemeForm>(
+    (scheme as SchemeForm) || {
       rule_type: "generic",
       discount_type: "percentage",
       discount_basis: "product_price",
@@ -93,7 +110,7 @@ function SchemeDialog({
 
   useEffect(() => {
     if (scheme) {
-      setFormData(scheme);
+      setFormData(scheme as SchemeForm);
     }
   }, [scheme]);
 
@@ -102,7 +119,7 @@ function SchemeDialog({
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: async (data: Partial<Scheme>) => {
+    mutationFn: async (data: SchemeForm) => {
       setError(null);
 
       // Validate required fields
@@ -141,11 +158,11 @@ function SchemeDialog({
       if (scheme?.id) {
         const { error } = await supabase
           .from("schemes")
-          .update(preparedData)
+          .update(preparedData as any)
           .eq("id", scheme.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("schemes").insert([preparedData]);
+        const { error } = await supabase.from("schemes").insert([preparedData as any]);
         if (error) throw error;
       }
     },
