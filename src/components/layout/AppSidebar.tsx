@@ -83,6 +83,7 @@ const navigation: NavItem[] = [
       { title: "Order History", href: "/pos/orders", moduleKey: "pos.orders" },
       { title: "Returns & Refunds", href: "/pos/returns", moduleKey: "pos.orders" },
       { title: "Schemes", href: "/pos/schemes", moduleKey: "pos.schemes" },
+      { title: "Scheme Config Master", href: "/pos/scheme-config", moduleKey: "pos.scheme_config" },
       { title: "Cashier Sessions", href: "/pos/sessions", moduleKey: "pos.quicksale" },
       { title: "Product Master", href: "/pos/products", moduleKey: "pos.products" },
       { title: "Catalog Master", href: "/pos/catalog", moduleKey: "pos.catalog" },
