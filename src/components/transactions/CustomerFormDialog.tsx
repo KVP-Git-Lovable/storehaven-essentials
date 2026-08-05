@@ -15,7 +15,7 @@ import { INDIAN_STATES } from "@/lib/indianStates";
 import { CUSTOMER_CODE_REGEX, generateCustomerCode } from "@/lib/customerCode";
 import { GenderSelect, formatDOB } from "@/components/shared/GenderSelect";
 import CustomerDocumentUploadModal from "@/components/transactions/CustomerDocumentUploadModal";
-import { Eye, FileText, X } from "lucide-react";
+import { FileText } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -258,44 +258,25 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
             {documents.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-muted-foreground">Uploaded Documents</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-1">
                   {documents.map((doc: any) => (
-                    <div
-                      key={doc.id}
-                      className="flex items-center justify-between p-3 border rounded-md bg-muted/30 hover:bg-muted/50 transition-colors"
-                    >
+                    <div key={doc.id} className="flex items-center justify-between p-2 border rounded-md bg-muted/30 hover:bg-muted/50 transition-colors">
                       <div className="flex items-center gap-2 min-w-0">
-                        {doc.file_type?.startsWith("image/") ? (
-                          <div className="w-8 h-8 rounded flex items-center justify-center bg-blue-100 flex-shrink-0">
-                            <img
-                              src={doc.file_url}
-                              alt="thumbnail"
-                              className="w-8 h-8 object-cover rounded"
-                            />
-                          </div>
-                        ) : (
-                          <FileText className="w-8 h-8 text-orange-500 flex-shrink-0" />
-                        )}
-                        <div className="min-w-0">
-                          <Badge variant="secondary" className="text-[10px] mb-1">
-                            {doc.document_type}
-                          </Badge>
-                          <p className="text-xs text-foreground truncate" title={doc.file_name}>
-                            {doc.file_name}
-                          </p>
-                        </div>
+                        <Badge variant="secondary" className="text-[10px] flex-shrink-0">
+                          {doc.document_type}
+                        </Badge>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPreviewDocument(doc);
+                            setPreviewOpen(true);
+                          }}
+                          className="text-xs text-primary hover:underline truncate text-left"
+                          title={doc.file_name}
+                        >
+                          {doc.file_name}
+                        </button>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setPreviewDocument(doc);
-                          setPreviewOpen(true);
-                        }}
-                        className="flex-shrink-0 ml-2"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
                     </div>
                   ))}
                 </div>
