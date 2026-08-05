@@ -14,6 +14,7 @@ import { OrderFormDialog } from "@/components/transactions/OrderFormDialog";
 import { INDIAN_STATES } from "@/lib/indianStates";
 import { CUSTOMER_CODE_REGEX, generateCustomerCode } from "@/lib/customerCode";
 import { GenderSelect, formatDOB } from "@/components/shared/GenderSelect";
+import CustomerDocumentUploadModal from "@/components/transactions/CustomerDocumentUploadModal";
 
 interface Props {
   open: boolean;
@@ -57,6 +58,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
   const [form, setForm] = useState(emptyForm);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);
+  const [documentUploadOpen, setDocumentUploadOpen] = useState(false);
   const isView = mode === "view";
   const isEdit = mode === "edit";
 
@@ -231,6 +233,14 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
         </div>
 
         {isView && customer && (
+          <div className="py-4 border-t">
+            <Button variant="outline" onClick={() => setDocumentUploadOpen(true)} className="w-full">
+              Upload PAN/Aadhaar
+            </Button>
+          </div>
+        )}
+
+        {isView && customer && (
           <div className="mt-2">
             <h3 className="text-sm font-semibold mb-2">Orders ({orders?.length ?? 0})</h3>
             <div className="border rounded-md max-h-[300px] overflow-y-auto">
@@ -295,6 +305,15 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
         order={selectedOrder}
         mode="view"
       />
+      {customer && (
+        <CustomerDocumentUploadModal
+          open={documentUploadOpen}
+          onOpenChange={setDocumentUploadOpen}
+          customerId={customer.id}
+          customerName={customer.name || "Customer"}
+          onUploadSuccess={() => qc.invalidateQueries({ queryKey: ["customer_documents", customer.id] })}
+        />
+      )}
     </Dialog>
   );
 }
