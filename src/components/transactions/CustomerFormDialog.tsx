@@ -112,7 +112,11 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
         .select("*")
         .eq("customer_id", customer!.id)
         .order("uploaded_at", { ascending: false });
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching documents:", error);
+        throw error;
+      }
+      console.log("Fetched documents:", data);
       return data || [];
     },
   });
