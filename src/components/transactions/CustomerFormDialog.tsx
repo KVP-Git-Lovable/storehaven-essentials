@@ -15,6 +15,7 @@ import { INDIAN_STATES } from "@/lib/indianStates";
 import { CUSTOMER_CODE_REGEX, generateCustomerCode } from "@/lib/customerCode";
 import { GenderSelect, formatDOB } from "@/components/shared/GenderSelect";
 import CustomerDocumentUploadModal from "@/components/transactions/CustomerDocumentUploadModal";
+import { Eye, FileText, X } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -59,6 +60,8 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);
   const [documentUploadOpen, setDocumentUploadOpen] = useState(false);
+  const [previewDocument, setPreviewDocument] = useState<any | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const isView = mode === "view";
   const isEdit = mode === "edit";
 
@@ -95,6 +98,20 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
         .select("id, order_number, created_at, status, total_amount, order_items(quantity)")
         .eq("customer_id", customer!.id)
         .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: documents = [] } = useQuery({
+    queryKey: ["customer_documents", customer?.id],
+    enabled: open && isView && !!customer?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("customer_documents")
+        .select("*")
+        .eq("customer_id", customer!.id)
+        .order("uploaded_at", { ascending: false });
       if (error) throw error;
       return data || [];
     },
@@ -233,10 +250,57 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
         </div>
 
         {isView && customer && (
-          <div className="py-4 border-t">
+          <div className="py-4 border-t space-y-4">
             <Button variant="outline" onClick={() => setDocumentUploadOpen(true)} className="w-full">
               Upload PAN/Aadhaar
             </Button>
+
+            {documents.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground">Uploaded Documents</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {documents.map((doc: any) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between p-3 border rounded-md bg-muted/30 hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {doc.file_type?.startsWith("image/") ? (
+                          <div className="w-8 h-8 rounded flex items-center justify-center bg-blue-100 flex-shrink-0">
+                            <img
+                              src={doc.file_url}
+                              alt="thumbnail"
+                              className="w-8 h-8 object-cover rounded"
+                            />
+                          </div>
+                        ) : (
+                          <FileText className="w-8 h-8 text-orange-500 flex-shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <Badge variant="secondary" className="text-[10px] mb-1">
+                            {doc.document_type}
+                          </Badge>
+                          <p className="text-xs text-foreground truncate" title={doc.file_name}>
+                            {doc.file_name}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setPreviewDocument(doc);
+                          setPreviewOpen(true);
+                        }}
+                        className="flex-shrink-0 ml-2"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -313,6 +377,50 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
           customerName={customer.name || "Customer"}
           onUploadSuccess={() => qc.invalidateQueries({ queryKey: ["customer_documents", customer.id] })}
         />
+      )}
+
+      {previewDocument && (
+        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Badge variant="secondary">{previewDocument.document_type}</Badge>
+                {previewDocument.file_name}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col items-center justify-center py-8">
+              {previewDocument.file_type?.startsWith("image/") ? (
+                <img
+                  src={previewDocument.file_url}
+                  alt={previewDocument.file_name}
+                  className="max-w-full max-h-[500px] object-contain rounded-lg"
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-4">
+                  <FileText className="w-16 h-16 text-orange-500" />
+                  <p className="text-sm text-muted-foreground text-center">{previewDocument.file_name}</p>
+                  <a
+                    href={previewDocument.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline text-sm"
+                  >
+                    Open PDF in new tab
+                  </a>
+                </div>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground space-y-1 border-t pt-4">
+              <p>File size: {(previewDocument.file_size / 1024).toFixed(2)} KB</p>
+              <p>Uploaded: {format(new Date(previewDocument.uploaded_at), "dd MMM yyyy HH:mm")}</p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPreviewOpen(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </Dialog>
   );
