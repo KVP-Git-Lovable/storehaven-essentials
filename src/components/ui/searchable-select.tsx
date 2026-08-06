@@ -57,6 +57,16 @@ export function SearchableSelect({
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const listRef = React.useRef<HTMLDivElement>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null);
+
+  // When rendered inside a Dialog, portal into the dialog content so the
+  // dialog's scroll-lock doesn't swallow wheel events over the list.
+  React.useEffect(() => {
+    if (!open) return;
+    const dialog = triggerRef.current?.closest<HTMLElement>("[role='dialog']");
+    setPortalContainer(dialog ?? null);
+  }, [open]);
 
   const selectedOption = options.find((option) => option.value === value);
   const displayValue = selectedOption?.label ?? (value === "none" && allowNone ? noneLabel : null);
@@ -105,6 +115,7 @@ export function SearchableSelect({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          ref={triggerRef}
           variant="outline"
           role="combobox"
           aria-expanded={open}
@@ -119,7 +130,11 @@ export function SearchableSelect({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0 overflow-visible" align="start">
+      <PopoverContent
+        container={portalContainer}
+        className="w-[--radix-popover-trigger-width] p-0 overflow-visible"
+        align="start"
+      >
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList ref={listRef} className="max-h-[240px] overflow-hidden" style={{ overflowY: "auto" }}>
