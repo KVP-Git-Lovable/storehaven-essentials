@@ -376,24 +376,6 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
               </Button>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Status</Label>
-              <Select value={status} onValueChange={setStatus} disabled={isView}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end justify-end">
-              <Button type="button" variant="outline" onClick={addLineItem} disabled={isView}>
-                <Plus className="mr-2 h-4 w-4" /> Add Product
-              </Button>
-            </div>
-          </div>
 
           <Separator />
 
@@ -407,6 +389,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
             ignoreStock={isEdit}
             onUpdate={updateLineItem}
             onRemove={removeLineItem}
+            onAddLine={addLineItem}
           />
 
           <Card className="p-4">

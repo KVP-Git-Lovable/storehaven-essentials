@@ -16,6 +16,7 @@ interface Props {
   ignoreStock?: boolean;
   onUpdate: (index: number, patch: Partial<LineItem>) => void;
   onRemove: (index: number) => void;
+  onAddLine?: () => void;
 }
 
 /** Shared product line grid used by Sales Order and Sales Return purchase sections. */
@@ -29,6 +30,7 @@ export function OrderLineItemsSection({
   ignoreStock = false,
   onUpdate,
   onRemove,
+  onAddLine,
 }: Props) {
   return (
     <div className="space-y-3">
@@ -174,7 +176,18 @@ export function OrderLineItemsSection({
                 <Label>Line Total</Label>
                 <Input value={`₹${Math.round(calculated.lineTotal).toLocaleString("en-IN")}`} disabled />
               </div>
-              <div className="flex justify-end lg:pt-[26px]">
+              <div className="flex gap-1 justify-end lg:pt-[26px]">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={onAddLine}
+                  disabled={disabled}
+                  title="Add new product line"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
