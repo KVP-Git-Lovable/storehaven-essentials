@@ -11,6 +11,8 @@ export type LineItem = {
   csPrice: string;
   makingCharges: string;
   unitPriceOverride?: string;
+  diaDiscountPercent?: string;
+  makingDiscountPercent?: string;
 };
 
 export const emptyLine = (): LineItem => ({
@@ -19,6 +21,8 @@ export const emptyLine = (): LineItem => ({
   diaPrice: "0",
   csPrice: "0",
   makingCharges: "0",
+  diaDiscountPercent: "0",
+  makingDiscountPercent: "0",
 });
 
 export function karatOf(mainMetal?: string | null): "18K" | "22K" | null {
@@ -258,7 +262,14 @@ export function useOrderLineItems(pricing: OrderPricing, discounts: {
         const cs = Number(item.csPrice) || 0;
         const making = Number(item.makingCharges) || 0;
         const unitPrice = hasOverride ? Number(item.unitPriceOverride) || 0 : up.price;
-        const lineTotal = quantity * (unitPrice + dia + cs + making);
+
+        // Apply line-level discounts
+        const diaDiscount = (dia * (Number(item.diaDiscountPercent) || 0)) / 100;
+        const makingDiscount = (making * (Number(item.makingDiscountPercent) || 0)) / 100;
+        const diaAfterDiscount = Math.max(0, dia - diaDiscount);
+        const makingAfterDiscount = Math.max(0, making - makingDiscount);
+
+        const lineTotal = quantity * (unitPrice + diaAfterDiscount + cs + makingAfterDiscount);
         return {
           key: `${index}-${item.productId}`,
           index,
@@ -267,6 +278,12 @@ export function useOrderLineItems(pricing: OrderPricing, discounts: {
           lineTotal,
           priceSource: hasOverride ? ("manual" as const) : up.source,
           product,
+          diaBeforeDiscount: dia,
+          diaDiscount,
+          diaAfterDiscount,
+          makingBeforeDiscount: making,
+          makingDiscount,
+          makingAfterDiscount,
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -274,8 +291,9 @@ export function useOrderLineItems(pricing: OrderPricing, discounts: {
   );
 
   const subtotal = enrichedItems.reduce((sum, item) => sum + item.lineTotal, 0);
-  const diaBase = lineItems.reduce((s, i) => s + (Number(i.diaPrice) || 0) * Math.max(1, Number(i.quantity) || 1), 0);
-  const makingBase = lineItems.reduce((s, i) => s + (Number(i.makingCharges) || 0) * Math.max(1, Number(i.quantity) || 1), 0);
+  // Calculate dia/making base from line-level discounted amounts for subtotal discounts
+  const diaBase = enrichedItems.reduce((s, i) => s + i.diaAfterDiscount * i.quantity, 0);
+  const makingBase = enrichedItems.reduce((s, i) => s + i.makingAfterDiscount * i.quantity, 0);
   const diaPctNum = Math.max(0, Math.min(100, Number(discounts.diaDiscountPct) || 0));
   const makingPctNum = Math.max(0, Math.min(100, Number(discounts.makingDiscountPct) || 0));
   const diaDiscAmt = diaPctNum > 0 ? (diaBase * diaPctNum) / 100 : Math.max(0, Number(discounts.diaDiscount) || 0);

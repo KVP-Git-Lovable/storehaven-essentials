@@ -5,6 +5,7 @@ import { Check, ChevronsUpDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useIsInsideDialog } from "@/lib/DialogContext";
 import {
   Command,
   CommandEmpty,
@@ -57,6 +58,7 @@ export function SearchableSelect({
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const listRef = React.useRef<HTMLDivElement>(null);
+  const isInsideDialog = useIsInsideDialog();
 
   const selectedOption = options.find((option) => option.value === value);
   const displayValue = selectedOption?.label ?? (value === "none" && allowNone ? noneLabel : null);
@@ -93,7 +95,7 @@ export function SearchableSelect({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" disablePortal={isInsideDialog}>
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList ref={listRef} className="max-h-[240px]">

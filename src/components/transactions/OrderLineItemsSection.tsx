@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Minus, Plus, Trash2 } from "lucide-react";
+import { LineDiscountDrawer } from "@/components/transactions/LineDiscountDrawer";
 import type { LineItem } from "@/hooks/useOrderPricing";
 
 interface Props {
@@ -30,14 +32,18 @@ export function OrderLineItemsSection({
   onUpdate,
   onRemove,
 }: Props) {
+  const [openDiscountIndex, setOpenDiscountIndex] = useState<number | null>(null);
+
   return (
     <div className="space-y-3">
       {lineItems.map((item, index) => {
         const calculated = enrichedItems[index];
         if (!calculated) return null;
+        const isDiscountOpen = openDiscountIndex === index;
         return (
-          <Card key={calculated.key} className="p-4">
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_110px_130px_100px_100px_110px_130px_auto] lg:items-start md:grid-cols-2">
+          <div key={calculated.key}>
+            <Card className="p-4">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_130px_100px_100px_110px_70px_130px_auto] lg:items-start md:grid-cols-2">
               <div className="min-w-0">
                 <Label>Product {index + 1}</Label>
                 <SearchableSelect
@@ -91,39 +97,6 @@ export function OrderLineItemsSection({
                 )}
               </div>
               <div className="min-w-0">
-                <Label>Quantity</Label>
-                <div className="flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 shrink-0"
-                    disabled={disabled}
-                    onClick={() => onUpdate(index, { quantity: String(Math.max(1, (Number(item.quantity) || 1) - 1)) })}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </Button>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={item.quantity}
-                    disabled={disabled}
-                    onChange={(e) => onUpdate(index, { quantity: e.target.value })}
-                    className="text-center"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 shrink-0"
-                    disabled={disabled}
-                    onClick={() => onUpdate(index, { quantity: String((Number(item.quantity) || 1) + 1) })}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-              <div className="min-w-0">
                 <Label>Unit Price</Label>
                 <Input value={`₹${Math.round(calculated.unitPrice).toLocaleString("en-IN")}`} disabled />
                 {calculated.priceSource === "manual" && (
@@ -170,6 +143,17 @@ export function OrderLineItemsSection({
                   onChange={(e) => onUpdate(index, { makingCharges: e.target.value })}
                 />
               </div>
+              <div className="flex justify-center lg:pt-[26px]">
+                <Button
+                  type="button"
+                  variant={isDiscountOpen ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setOpenDiscountIndex(isDiscountOpen ? null : index)}
+                  disabled={disabled || !item.productId}
+                >
+                  Disc
+                </Button>
+              </div>
               <div className="min-w-0">
                 <Label>Line Total</Label>
                 <Input value={`₹${Math.round(calculated.lineTotal).toLocaleString("en-IN")}`} disabled />
@@ -187,7 +171,16 @@ export function OrderLineItemsSection({
                 </Button>
               </div>
             </div>
-          </Card>
+            <LineDiscountDrawer
+              open={isDiscountOpen}
+              diaDiscountPercent={item.diaDiscountPercent || "0"}
+              makingDiscountPercent={item.makingDiscountPercent || "0"}
+              onDiaDiscountChange={(value) => onUpdate(index, { diaDiscountPercent: value })}
+              onMakingDiscountChange={(value) => onUpdate(index, { makingDiscountPercent: value })}
+              onClose={() => setOpenDiscountIndex(null)}
+            />
+            </Card>
+          </div>
         );
       })}
     </div>
