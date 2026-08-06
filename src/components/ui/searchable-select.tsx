@@ -75,6 +75,32 @@ export function SearchableSelect({
     }
   }, [open, value]);
 
+  // Handle wheel scroll properly
+  React.useEffect(() => {
+    if (!listRef.current) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      const element = listRef.current;
+      if (!element) return;
+
+      const { scrollHeight, clientHeight, scrollTop } = element;
+      const isAtTop = scrollTop === 0;
+      const isAtBottom = scrollTop + clientHeight >= scrollHeight;
+
+      if ((e.deltaY < 0 && isAtTop) || (e.deltaY > 0 && isAtBottom)) {
+        return;
+      }
+
+      e.preventDefault();
+      element.scrollTop += e.deltaY;
+    };
+
+    listRef.current.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      listRef.current?.removeEventListener("wheel", handleWheel);
+    };
+  }, [open]);
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -93,10 +119,10 @@ export function SearchableSelect({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0 overflow-visible" align="start">
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
-          <CommandList ref={listRef} className="max-h-[240px] overflow-y-auto">
+          <CommandList ref={listRef} className="max-h-[240px] overflow-hidden" style={{ overflowY: "auto" }}>
             <CommandEmpty>{emptyMessage}</CommandEmpty>
             <CommandGroup>
               {allowNone && (
