@@ -16,6 +16,7 @@ import { CUSTOMER_CODE_REGEX, generateCustomerCode } from "@/lib/customerCode";
 import { GenderSelect, formatDOB } from "@/components/shared/GenderSelect";
 import CustomerDocumentUploadModal from "@/components/transactions/CustomerDocumentUploadModal";
 import { FileText } from "lucide-react";
+import { COUNTRIES } from "@/lib/countries";
 
 interface Props {
   open: boolean;
@@ -189,18 +190,20 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
             <Label>Email</Label>
             <Input type="email" disabled={isView} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </div>
-          <div>
-            <Label>Tier</Label>
-            <Select value={form.tier} onValueChange={(v) => setForm({ ...form, tier: v })} disabled={isView}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="bronze">Bronze</SelectItem>
-                <SelectItem value="silver">Silver</SelectItem>
-                <SelectItem value="gold">Gold</SelectItem>
-                <SelectItem value="platinum">Platinum</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {(isView || isEdit) && (
+            <div>
+              <Label>Tier</Label>
+              <Select value={form.tier} onValueChange={(v) => setForm({ ...form, tier: v })} disabled={isView}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bronze">Bronze</SelectItem>
+                  <SelectItem value="silver">Silver</SelectItem>
+                  <SelectItem value="gold">Gold</SelectItem>
+                  <SelectItem value="platinum">Platinum</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div>
             <Label>Date of Birth</Label>
             {isView ? (
@@ -244,12 +247,14 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
           </div>
           <div className="col-span-2">
             <Label>Country</Label>
-            <Input
-              value={form.country}
-              disabled={isView}
-              onChange={(e) => setForm({ ...form, country: e.target.value })}
-              placeholder="e.g. India"
-            />
+            <Select value={form.country} onValueChange={(v) => setForm({ ...form, country: v })} disabled={isView}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent className="max-h-72">
+                {COUNTRIES.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
