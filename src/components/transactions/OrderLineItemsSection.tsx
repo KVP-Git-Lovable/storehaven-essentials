@@ -145,16 +145,22 @@ export function OrderLineItemsSection({
                   onChange={(e) => onUpdate(index, { makingCharges: e.target.value })}
                 />
               </div>
-              <div className="flex justify-center lg:pt-[26px]">
+              <div className="flex flex-col items-center gap-1 lg:pt-[26px]">
                 <Button
                   type="button"
                   variant={isDiscountOpen ? "default" : "outline"}
                   size="sm"
                   onClick={() => setOpenDiscountIndex(isDiscountOpen ? null : index)}
                   disabled={disabled || !item.productId}
+                  className="w-full"
                 >
                   Disc
                 </Button>
+                {(calculated.diaDiscount > 0 || calculated.makingDiscount > 0) && (
+                  <p className="text-xs text-muted-foreground font-medium">
+                    ₹{Math.round((calculated.diaDiscount + calculated.makingDiscount) * 100) / 100}
+                  </p>
+                )}
               </div>
               <div className="min-w-0">
                 <Label>Line Total</Label>
@@ -186,10 +192,14 @@ export function OrderLineItemsSection({
             </div>
             <LineDiscountDrawer
               open={isDiscountOpen}
-              diaDiscountPercent={item.diaDiscountPercent || "0"}
-              makingDiscountPercent={item.makingDiscountPercent || "0"}
-              onDiaDiscountChange={(value) => onUpdate(index, { diaDiscountPercent: value })}
-              onMakingDiscountChange={(value) => onUpdate(index, { makingDiscountPercent: value })}
+              diaDiscountPercent={item.diaDiscountPercent || ""}
+              diaDiscountAmount={item.diaDiscountAmount || "0"}
+              makingDiscountPercent={item.makingDiscountPercent || ""}
+              makingDiscountAmount={item.makingDiscountAmount || "0"}
+              onDiaDiscountPercentChange={(value) => onUpdate(index, { diaDiscountPercent: value })}
+              onDiaDiscountAmountChange={(value) => onUpdate(index, { diaDiscountAmount: value })}
+              onMakingDiscountPercentChange={(value) => onUpdate(index, { makingDiscountPercent: value })}
+              onMakingDiscountAmountChange={(value) => onUpdate(index, { makingDiscountAmount: value })}
               onClose={() => setOpenDiscountIndex(null)}
             />
             </Card>

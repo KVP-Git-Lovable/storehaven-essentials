@@ -12,7 +12,9 @@ export type LineItem = {
   makingCharges: string;
   unitPriceOverride?: string;
   diaDiscountPercent?: string;
+  diaDiscountAmount?: string;
   makingDiscountPercent?: string;
+  makingDiscountAmount?: string;
 };
 
 export const emptyLine = (): LineItem => ({
@@ -21,8 +23,10 @@ export const emptyLine = (): LineItem => ({
   diaPrice: "0",
   csPrice: "0",
   makingCharges: "0",
-  diaDiscountPercent: "0",
-  makingDiscountPercent: "0",
+  diaDiscountPercent: "",
+  diaDiscountAmount: "0",
+  makingDiscountPercent: "",
+  makingDiscountAmount: "0",
 });
 
 export function karatOf(mainMetal?: string | null): "18K" | "22K" | null {
@@ -263,9 +267,11 @@ export function useOrderLineItems(pricing: OrderPricing, discounts: {
         const making = Number(item.makingCharges) || 0;
         const unitPrice = hasOverride ? Number(item.unitPriceOverride) || 0 : up.price;
 
-        // Apply line-level discounts
-        const diaDiscount = (dia * (Number(item.diaDiscountPercent) || 0)) / 100;
-        const makingDiscount = (making * (Number(item.makingDiscountPercent) || 0)) / 100;
+        // Apply line-level discounts (same logic as subtotal discounts)
+        const diaPctNum = Math.max(0, Math.min(100, Number(item.diaDiscountPercent) || 0));
+        const makingPctNum = Math.max(0, Math.min(100, Number(item.makingDiscountPercent) || 0));
+        const diaDiscount = diaPctNum > 0 ? (dia * diaPctNum) / 100 : Math.max(0, Number(item.diaDiscountAmount) || 0);
+        const makingDiscount = makingPctNum > 0 ? (making * makingPctNum) / 100 : Math.max(0, Number(item.makingDiscountAmount) || 0);
         const diaAfterDiscount = Math.max(0, dia - diaDiscount);
         const makingAfterDiscount = Math.max(0, making - makingDiscount);
 
@@ -281,9 +287,11 @@ export function useOrderLineItems(pricing: OrderPricing, discounts: {
           diaBeforeDiscount: dia,
           diaDiscount,
           diaAfterDiscount,
+          diaDiscountPct: diaPctNum,
           makingBeforeDiscount: making,
           makingDiscount,
           makingAfterDiscount,
+          makingDiscountPct: makingPctNum,
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
