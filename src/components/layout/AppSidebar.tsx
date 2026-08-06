@@ -214,6 +214,7 @@ const navigation: NavItem[] = [
       { title: "E-mail", href: "/communication/email", moduleKey: "communication.email" },
       { title: "Meta", href: "/communication/meta", moduleKey: "communication.meta.connection" },
       { title: "Meta Campaigns", href: "/communication/meta/campaigns", moduleKey: "communication.meta.campaigns" },
+      { title: "Meta Ad Sets", href: "/communication/meta/ad-sets", moduleKey: "communication.meta.adsets" },
       { title: "Meta Organic Posts", href: "/communication/meta/organic", moduleKey: "communication.meta.organic" },
       { title: "Journey Builder", href: "/communication/journeys", moduleKey: "communication.journeys" },
       { title: "Calendar", href: "/communication/calendar", moduleKey: "communication.journeys" },

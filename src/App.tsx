@@ -150,6 +150,7 @@ const VoiceCenter = lazyWithRetry(() => import("./pages/communication/VoiceCente
 const EmailCenter = lazyWithRetry(() => import("./pages/communication/EmailCenter"), "EmailCenter");
 const MetaConnection = lazyWithRetry(() => import("./pages/communication/meta/MetaConnection"), "MetaConnection");
 const MetaCampaigns = lazyWithRetry(() => import("./pages/communication/meta/MetaCampaigns"), "MetaCampaigns");
+const MetaAdSets = lazyWithRetry(() => import("./pages/communication/meta/MetaAdSets"), "MetaAdSets");
 const MetaOrganicPosts = lazyWithRetry(() => import("./pages/communication/meta/MetaOrganicPosts"), "MetaOrganicPosts");
 const ListViewsList = lazyWithRetry(() => import("./pages/listviews/ListViewsList"), "ListViewsList");
 const ListViewBuilder = lazyWithRetry(() => import("./pages/listviews/ListViewBuilder"), "ListViewBuilder");
@@ -282,6 +283,7 @@ const App = () => (
                 <Route path="/communication/email" element={<EmailCenter />} />
                 <Route path="/communication/meta" element={<MetaConnection />} />
                 <Route path="/communication/meta/campaigns" element={<MetaCampaigns />} />
+                <Route path="/communication/meta/ad-sets" element={<MetaAdSets />} />
                 <Route path="/communication/meta/organic" element={<MetaOrganicPosts />} />
                 <Route path="/list-views" element={<ListViewsList />} />
                 <Route path="/list-views/:id" element={<ListViewBuilder />} />
