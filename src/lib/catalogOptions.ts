@@ -62,3 +62,32 @@ export const COLOR_SWATCH: Record<string, string> = {
   Gold: "#e5c04b",
   Silver: "#c0c0c0",
 };
+
+/** Metal colour -> the letter used in Shopify image filenames (e.g. DER001134_W1.jpg). */
+export const COLOR_CODE: Record<string, string> = {
+  "Yellow Gold": "Y",
+  "Rose Gold": "R",
+  "White Gold": "W",
+};
+
+/**
+ * Rewrite the colour token in a product image URL to match the selected metal colour.
+ * `..._W1.jpg?v=1` + "Rose Gold" -> `..._R1.jpg?v=1`.
+ * Returns the URL unchanged when there is no colour token or the colour is unknown.
+ */
+export function imageUrlForColor(url?: string | null, color?: string | null): string {
+  if (!url) return "";
+  const code = color ? COLOR_CODE[normalizeMetalColor(color)] : undefined;
+  if (!code) return url;
+  // Split off the query string so `?v=...` is never touched.
+  const [path, query] = url.split("?");
+  // Replace only the LAST _<Y|R|W><digit> token in the path.
+  const re = /_([YRW])(\d)(?=[^/]*$)/gi;
+  let lastIndex = -1;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(path)) !== null) lastIndex = m.index;
+  if (lastIndex === -1) return url;
+  const digit = path[lastIndex + 2];
+  const newPath = path.slice(0, lastIndex) + `_${code}${digit}` + path.slice(lastIndex + 3);
+  return query ? `${newPath}?${query}` : newPath;
+}

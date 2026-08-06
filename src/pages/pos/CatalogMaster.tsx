@@ -14,6 +14,8 @@ import { getOptionValues, COLOR_SWATCH } from "@/lib/catalogOptions";
 import tr1Asset from "@/assets/tr1.webp.asset.json";
 import tr2Asset from "@/assets/tr2.webp.asset.json";
 import { useEffect } from "react";
+import { calculateEffectivePrice } from "@/services/schemeEvaluationEngine";
+import { Scheme } from "@/types/schemes";
 
 type CatalogProduct = {
   id: string;
@@ -57,6 +59,15 @@ export default function CatalogMaster() {
         .order("title", { ascending: true });
       if (error) throw error;
       return (data ?? []) as CatalogProduct[];
+    },
+  });
+
+  const { data: schemes = [] } = useQuery({
+    queryKey: ["schemes"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("schemes").select("*").eq("status", "active");
+      if (error) throw error;
+      return (data ?? []) as Scheme[];
     },
   });
 
@@ -209,7 +220,7 @@ export default function CatalogMaster() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {filtered.map((p) => (
-                <ProductCard key={p.id} p={p} />
+                <ProductCard key={p.id} p={p} schemes={schemes} />
               ))}
             </div>
           )}
@@ -225,14 +236,57 @@ export default function CatalogMaster() {
   );
 }
 
-function ProductCard({ p }: { p: CatalogProduct }) {
+function ProductCard({ p, schemes = [] }: { p: CatalogProduct; schemes?: Scheme[] }) {
   const colors: string[] = getOptionValues(p.options, "Color");
   const karats: string[] = getOptionValues(p.options, "Karat");
+
+  // Calculate effective price using the evaluation engine
+  const pricing = p.base_price
+    ? calculateEffectivePrice(
+        {
+          productId: p.id,
+          productName: p.title,
+          category: p.product_type || "",
+          basePrice: p.base_price,
+        },
+        schemes
+      )
+    : null;
+
+  const hasSchemeDiscount = pricing && pricing.discountAmount > 0;
+  const showOffer = hasSchemeDiscount || (p.compare_at_price && p.base_price && p.compare_at_price > p.base_price);
+
   return (
     <Link to={`/pos/catalog/${p.handle ?? p.id}`} className="group">
-      <Card className="overflow-hidden transition-shadow hover:shadow-lg h-full flex flex-col">
-        <div className="relative aspect-square bg-muted overflow-hidden">
-          {p.compare_at_price && p.base_price && p.compare_at_price > p.base_price ? (
+      <Card className="overflow-hidden transition-shadow hover:shadow-lg h-full flex flex-col relative">
+        {/* Zig-zag Banner for Scheme */}
+        {hasSchemeDiscount && pricing?.applicableScheme && (
+          <div className="absolute top-0 left-0 right-0 z-20">
+            <div
+              className="flex h-8 items-center justify-center px-3"
+              style={{ background: "linear-gradient(90deg,#dc2626,#f97316,#dc2626)" }}
+            >
+              <span className="truncate text-[12px] font-semibold uppercase tracking-wide text-white">
+                {pricing.applicableScheme.name}
+              </span>
+            </div>
+            <svg
+              className="w-full"
+              viewBox="0 0 1200 16"
+              preserveAspectRatio="none"
+              style={{ height: "10px", display: "block", marginTop: "-1px" }}
+              aria-hidden="true"
+            >
+              <path
+                d="M0,0 L1200,0 L1200,0 Q1180,16 1160,0 T1120,0 T1080,0 T1040,0 T1000,0 T960,0 T920,0 T880,0 T840,0 T800,0 T760,0 T720,0 T680,0 T640,0 T600,0 T560,0 T520,0 T480,0 T440,0 T400,0 T360,0 T320,0 T280,0 T240,0 T200,0 T160,0 T120,0 T80,0 T40,0 T0,0 Z"
+                fill="#dc2626"
+              />
+            </svg>
+          </div>
+        )}
+
+        <div className="relative aspect-square bg-muted overflow-hidden" style={{ marginTop: hasSchemeDiscount ? "42px" : "0" }}>
+          {showOffer ? (
             <Badge className="absolute left-2 top-2 z-10 bg-primary text-primary-foreground">
               OFFER VALID
             </Badge>
@@ -254,12 +308,30 @@ function ProductCard({ p }: { p: CatalogProduct }) {
           <h3 className="font-medium leading-tight line-clamp-2">{p.title}</h3>
           <div className="flex items-baseline gap-2">
             <span className="text-base font-semibold">
-              {p.base_price == null ? "Price on request" : fmt(p.base_price)}
+              {pricing?.effectivePrice ? fmt(pricing.effectivePrice) : p.base_price == null ? "Price on request" : fmt(p.base_price)}
             </span>
-            {p.compare_at_price && p.base_price && p.compare_at_price > p.base_price ? (
+            {hasSchemeDiscount ? (
+              <span className="text-xs text-muted-foreground line-through">{fmt(p.base_price)}</span>
+            ) : p.compare_at_price && p.base_price && p.compare_at_price > p.base_price ? (
               <span className="text-xs text-muted-foreground line-through">{fmt(p.compare_at_price)}</span>
             ) : null}
           </div>
+          {hasSchemeDiscount && (
+            <div className="text-xs text-green-600 font-semibold">
+              {pricing?.applicableScheme?.discount_type === "percentage" ? (
+                <>
+                  {pricing.applicableScheme.discount_value}% off
+                  {pricing.applicableScheme.max_discount_amount && pricing.discountAmount >= pricing.applicableScheme.max_discount_amount && (
+                    <span> (capped at {fmt(pricing.applicableScheme.max_discount_amount)})</span>
+                  )}
+                  <br />
+                  Save {fmt(pricing?.discountAmount)}
+                </>
+              ) : (
+                <>Save {fmt(pricing?.discountAmount)}</>
+              )}
+            </div>
+          )}
           {karats.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {karats.map((k) => (

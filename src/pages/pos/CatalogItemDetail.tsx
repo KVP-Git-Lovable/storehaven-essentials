@@ -10,6 +10,7 @@ import {
   canonicalOptionName,
   normalizeOptionValue,
   COLOR_SWATCH,
+  imageUrlForColor,
 } from "@/lib/catalogOptions";
 
 type Variant = {
@@ -105,6 +106,14 @@ export default function CatalogItemDetail() {
   const currentPrice = matchedVariant?.price ?? product?.base_price ?? null;
   const compareAt = matchedVariant?.compare_at_price ?? product?.compare_at_price ?? null;
 
+  const selectedColor = selected["Color"] ?? "";
+  const displayImage =
+    (matchedVariant?.image_url as string | undefined) ||
+    (matchedVariant?.image as string | undefined) ||
+    imageUrlForColor(product?.image_url, selectedColor) ||
+    product?.image_url ||
+    "";
+
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
   if (error) return <div className="p-8 text-destructive">Error loading product: {(error as Error).message}</div>;
   if (!product) return <div className="p-8">Product not found.</div>;
@@ -120,7 +129,16 @@ export default function CatalogItemDetail() {
         <Card className="overflow-hidden bg-muted">
           <div className="aspect-square flex items-center justify-center">
             {product.image_url ? (
-              <img src={product.image_url} alt={product.title} className="h-full w-full object-cover" />
+              <img
+                key={displayImage}
+                src={displayImage || product.image_url}
+                alt={product.title}
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  const img = e.currentTarget;
+                  if (product.image_url && img.src !== product.image_url) img.src = product.image_url;
+                }}
+              />
             ) : (
               <Package className="h-16 w-16 text-muted-foreground" />
             )}

@@ -15,6 +15,8 @@ import { INDIAN_STATES } from "@/lib/indianStates";
 import { CUSTOMER_CODE_REGEX, generateCustomerCode } from "@/lib/customerCode";
 import { GenderSelect, formatDOB } from "@/components/shared/GenderSelect";
 import CustomerDocumentUploadModal from "@/components/transactions/CustomerDocumentUploadModal";
+import { FileText } from "lucide-react";
+import { COUNTRIES } from "@/lib/countries";
 
 interface Props {
   open: boolean;
@@ -59,6 +61,8 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);
   const [documentUploadOpen, setDocumentUploadOpen] = useState(false);
+  const [previewDocument, setPreviewDocument] = useState<any | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const isView = mode === "view";
   const isEdit = mode === "edit";
 
@@ -96,6 +100,24 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
         .eq("customer_id", customer!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: documents = [] } = useQuery({
+    queryKey: ["customer_documents", customer?.id],
+    enabled: open && isView && !!customer?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("customer_documents")
+        .select("*")
+        .eq("customer_id", customer!.id)
+        .order("uploaded_at", { ascending: false });
+      if (error) {
+        console.error("Error fetching documents:", error);
+        throw error;
+      }
+      console.log("Fetched documents:", data);
       return data || [];
     },
   });
@@ -168,18 +190,20 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
             <Label>Email</Label>
             <Input type="email" disabled={isView} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </div>
-          <div>
-            <Label>Tier</Label>
-            <Select value={form.tier} onValueChange={(v) => setForm({ ...form, tier: v })} disabled={isView}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="bronze">Bronze</SelectItem>
-                <SelectItem value="silver">Silver</SelectItem>
-                <SelectItem value="gold">Gold</SelectItem>
-                <SelectItem value="platinum">Platinum</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {(isView || isEdit) && (
+            <div>
+              <Label>Tier</Label>
+              <Select value={form.tier} onValueChange={(v) => setForm({ ...form, tier: v })} disabled={isView}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bronze">Bronze</SelectItem>
+                  <SelectItem value="silver">Silver</SelectItem>
+                  <SelectItem value="gold">Gold</SelectItem>
+                  <SelectItem value="platinum">Platinum</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div>
             <Label>Date of Birth</Label>
             {isView ? (
@@ -223,20 +247,50 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
           </div>
           <div className="col-span-2">
             <Label>Country</Label>
-            <Input
-              value={form.country}
-              disabled={isView}
-              onChange={(e) => setForm({ ...form, country: e.target.value })}
-              placeholder="e.g. India"
-            />
+            <Select value={form.country} onValueChange={(v) => setForm({ ...form, country: v })} disabled={isView}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent className="max-h-72">
+                {COUNTRIES.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
         {isView && customer && (
-          <div className="py-4 border-t">
+          <div className="py-4 border-t space-y-4">
             <Button variant="outline" onClick={() => setDocumentUploadOpen(true)} className="w-full">
               Upload PAN/Aadhaar
             </Button>
+
+            {documents.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground">Uploaded Documents</p>
+                <div className="space-y-1">
+                  {documents.map((doc: any) => (
+                    <div key={doc.id} className="flex items-center justify-between p-2 border rounded-md bg-muted/30 hover:bg-muted/50 transition-colors">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge variant="secondary" className="text-[10px] flex-shrink-0">
+                          {doc.document_type}
+                        </Badge>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPreviewDocument(doc);
+                            setPreviewOpen(true);
+                          }}
+                          className="text-xs text-primary hover:underline truncate text-left"
+                          title={doc.file_name}
+                        >
+                          {doc.file_name}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -313,6 +367,50 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
           customerName={customer.name || "Customer"}
           onUploadSuccess={() => qc.invalidateQueries({ queryKey: ["customer_documents", customer.id] })}
         />
+      )}
+
+      {previewDocument && (
+        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Badge variant="secondary">{previewDocument.document_type}</Badge>
+                {previewDocument.file_name}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col items-center justify-center py-8">
+              {previewDocument.file_type?.startsWith("image/") ? (
+                <img
+                  src={previewDocument.file_url}
+                  alt={previewDocument.file_name}
+                  className="max-w-full max-h-[500px] object-contain rounded-lg"
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-4">
+                  <FileText className="w-16 h-16 text-orange-500" />
+                  <p className="text-sm text-muted-foreground text-center">{previewDocument.file_name}</p>
+                  <a
+                    href={previewDocument.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline text-sm"
+                  >
+                    Open PDF in new tab
+                  </a>
+                </div>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground space-y-1 border-t pt-4">
+              <p>File size: {(previewDocument.file_size / 1024).toFixed(2)} KB</p>
+              <p>Uploaded: {format(new Date(previewDocument.uploaded_at), "dd MMM yyyy HH:mm")}</p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPreviewOpen(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </Dialog>
   );

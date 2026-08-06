@@ -7,15 +7,14 @@ const Popover = PopoverPrimitive.Root;
 
 const PopoverTrigger = PopoverPrimitive.Trigger;
 
-interface PopoverContentProps extends React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content> {
-  disablePortal?: boolean;
-}
-
 const PopoverContent = React.forwardRef<
   React.ElementRef<typeof PopoverPrimitive.Content>,
-  PopoverContentProps
->(({ className, align = "center", sideOffset = 4, disablePortal = false, ...props }, ref) => {
-  const content = (
+  React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content> & {
+    /** Optional portal container (e.g. the dialog content) so scroll-locks don't block wheel events. */
+    container?: HTMLElement | null;
+  }
+>(({ className, align = "center", sideOffset = 4, container, ...props }, ref) => (
+  <PopoverPrimitive.Portal container={container ?? undefined}>
     <PopoverPrimitive.Content
       ref={ref}
       align={align}
@@ -26,10 +25,8 @@ const PopoverContent = React.forwardRef<
       )}
       {...props}
     />
-  );
-
-  return disablePortal ? content : <PopoverPrimitive.Portal>{content}</PopoverPrimitive.Portal>;
-});
+  </PopoverPrimitive.Portal>
+));
 PopoverContent.displayName = PopoverPrimitive.Content.displayName;
 
 export { Popover, PopoverTrigger, PopoverContent };
