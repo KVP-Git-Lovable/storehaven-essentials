@@ -140,6 +140,127 @@ Deno.serve(async (req) => {
         return json({ success: true, synced: rows?.length || 0 });
       }
 
+      /* ------------------------------ ad sets -------------------------------- */
+      case "publish_adset": {
+        const { data: adset } = await db.from("social_ad_sets").select("*").eq("id", payload.adset_id).maybeSingle();
+        if (!adset) throw new Error("Ad Set not found");
+        const { data: camp } = await db.from("social_campaigns").select("*").eq("id", adset.campaign_id).maybeSingle();
+        if (!camp?.external_id) throw new Error("Campaign must be published first");
+
+        const targeting: Record<string, unknown> = {};
+        if (adset.targeting?.age_min || adset.targeting?.age_max) {
+          const ageMin = parseInt(adset.targeting.age_min || "18");
+          const ageMax = adset.targeting.age_max === "65+" ? 65 : parseInt(adset.targeting.age_max || "65");
+          targeting.age_min = ageMin;
+          targeting.age_max = ageMax;
+        }
+        if (adset.targeting?.genders && adset.targeting.genders.length > 0) {
+          targeting.genders = adset.targeting.genders.map((g: string) => g === "All" ? 0 : g === "Men" ? 1 : 2);
+        }
+        if (adset.targeting?.locations) {
+          targeting.geo_locations = { cities: [{ key: adset.targeting.locations }] };
+        }
+
+        const body: Record<string, unknown> = {
+          name: adset.name,
+          optimization_goal: adset.optimization_goal || "LINK_CLICKS",
+          billing_event: adset.billing_event || "LINK_CLICKS",
+          bid_strategy: adset.bid_strategy || "LOWEST_COST",
+          status: "ACTIVE",
+          targeting,
+        };
+
+        if (adset.budget_type === "daily") {
+          body.daily_budget = Math.round(Number(adset.budget_amount) * 100);
+        } else {
+          body.lifetime_budget = Math.round(Number(adset.budget_amount) * 100);
+        }
+
+        if (adset.start_date) body.start_time = new Date(adset.start_date).toISOString();
+        if (adset.end_date) body.end_time = new Date(adset.end_date).toISOString();
+
+        if (adset.placements && adset.placements.length > 0) {
+          body.promoted_object = { pixel_id: "0" };
+          body.instagram_actor_id = conn.default_instagram_id || "";
+        }
+
+        const created = await graph(`/${camp.external_id}/adsets`, { token: userToken, method: "POST", body });
+        await db.from("social_ad_sets").update({
+          external_id: created.id,
+          published_at: new Date().toISOString(),
+          status: "active",
+          last_synced_at: new Date().toISOString(),
+        }).eq("id", adset.id);
+        return json({ success: true, adset_id: created.id, published_at: new Date().toISOString() });
+      }
+
+      case "pause_adset":
+      case "resume_adset": {
+        const { data: adset } = await db.from("social_ad_sets").select("*").eq("id", payload.adset_id).maybeSingle();
+        if (!adset) throw new Error("Ad Set not found");
+        const next = action === "pause_adset" ? "PAUSED" : "ACTIVE";
+        if (adset.external_id) {
+          await graph(`/${adset.external_id}`, { token: userToken, method: "POST", body: { status: next } });
+        }
+        await db.from("social_ad_sets").update({ status: next.toLowerCase() }).eq("id", adset.id);
+        return json({ success: true, status: next.toLowerCase() });
+      }
+
+      case "delete_adset": {
+        const { data: adset } = await db.from("social_ad_sets").select("*").eq("id", payload.adset_id).maybeSingle();
+        if (adset?.external_id) {
+          try {
+            await graph(`/${adset.external_id}`, { token: userToken, method: "DELETE" });
+          } catch (e) {
+            console.error("Meta delete failed, removing locally:", (e as Error).message);
+          }
+        }
+        await db.from("social_ad_sets").delete().eq("id", payload.adset_id);
+        return json({ success: true });
+      }
+
+      case "fetch_adset_insights": {
+        const { data: rows } = await db
+          .from("social_ad_sets")
+          .select("id,external_id")
+          .not("external_id", "is", null);
+        const today = new Date().toISOString().slice(0, 10);
+        for (const r of rows || []) {
+          try {
+            const res = await graph(`/${r.external_id}/insights`, {
+              token: userToken,
+              params: { fields: "reach,impressions,clicks,spend,actions,action_values", date_preset: "maximum" },
+            });
+            const d = res?.data?.[0];
+            if (!d) continue;
+            const actionCount = (t: string) =>
+              Number((d.actions || []).find((a: any) => a.action_type === t)?.value || 0);
+            const revenue = Number(
+              (d.action_values || []).find((a: any) => a.action_type === "purchase")?.value || 0,
+            );
+            await db.from("social_insights").upsert({
+              platform: "meta",
+              entity_type: "adset",
+              entity_id: r.id,
+              external_id: r.external_id,
+              stat_date: today,
+              reach: Number(d.reach || 0),
+              impressions: Number(d.impressions || 0),
+              clicks: Number(d.clicks || 0),
+              spend: Number(d.spend || 0),
+              leads: actionCount("lead"),
+              purchases: actionCount("purchase"),
+              conversions: actionCount("offsite_conversion"),
+              revenue,
+              raw: d,
+            }, { onConflict: "entity_type,entity_id,stat_date" });
+          } catch (e) {
+            console.error("insights failed for", r.external_id, (e as Error).message);
+          }
+        }
+        return json({ success: true });
+      }
+
       /* --------------------------- organic posting -------------------------- */
       case "publish_post": {
         const { data: p } = await db.from("social_posts").select("*").eq("id", payload.post_id).maybeSingle();
