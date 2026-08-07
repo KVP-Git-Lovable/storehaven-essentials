@@ -212,28 +212,67 @@ Deno.serve(async (req) => {
         if (adset.targeting?.genders && adset.targeting.genders.length > 0) {
           targeting.genders = adset.targeting.genders.map((g: string) => g === "All" ? 0 : g === "Men" ? 1 : 2);
         }
-        if (adset.targeting?.locations) {
-          targeting.geo_locations = { countries: [normalizeCountryCode(adset.targeting.locations)] };
-        }
+        const rawLocations = String(adset.targeting?.locations || "").trim();
+        targeting.geo_locations = {
+          countries: [rawLocations ? normalizeCountryCode(rawLocations) : "IN"],
+        };
+
+        const campaignHasBudget = Number(camp.budget_amount) > 0;
 
         const body: Record<string, unknown> = {
           campaign_id: camp.external_id,
           name: adset.name,
           optimization_goal: optimizationGoal,
           billing_event: billingEvent,
-          bid_strategy: bidStrategy,
           status: "PAUSED",
           targeting: Object.keys(targeting).length > 0 ? targeting : { geo_locations: { countries: ["IN"] } },
         };
-
-        if (adset.budget_type === "daily") {
-          body.daily_budget = Math.round(Number(adset.budget_amount) * 100);
+        // Under Campaign Budget Optimization the bid strategy lives on the campaign.
+        // Cap/ROAS strategies also need a bid_amount we do not capture.
+        if (campaignHasBudget) {
+          // CBO: the bid strategy lives on the campaign. Ensure it is not a
+          // cap/ROAS strategy, since we do not capture a bid amount.
+          try {
+            const campInfo = await graph(`/${camp.external_id}`, {
+              token: userToken,
+              params: { fields: "bid_strategy" },
+            });
+            if (campInfo?.bid_strategy && campInfo.bid_strategy !== "LOWEST_COST_WITHOUT_CAP") {
+              await graph(`/${camp.external_id}`, {
+                token: userToken,
+                method: "POST",
+                body: { bid_strategy: "LOWEST_COST_WITHOUT_CAP" },
+              });
+            }
+          } catch (e) {
+            console.error("campaign bid_strategy check failed:", (e as Error).message);
+          }
         } else {
-          body.lifetime_budget = Math.round(Number(adset.budget_amount) * 100);
+          body.bid_strategy = "LOWEST_COST_WITHOUT_CAP";
         }
 
-        if (adset.start_at) body.start_time = new Date(adset.start_at).toISOString();
-        if (adset.end_at) body.end_time = new Date(adset.end_at).toISOString();
+        // Campaign Budget Optimization: if the campaign carries the budget,
+        // Meta rejects a budget on the ad set ("Invalid parameter").
+        if (!campaignHasBudget) {
+          if (adset.budget_type === "daily") {
+            body.daily_budget = Math.round(Number(adset.budget_amount) * 100);
+          } else {
+            body.lifetime_budget = Math.round(Number(adset.budget_amount) * 100);
+          }
+        }
+
+        // Ad set schedule must sit inside the campaign schedule.
+        const campStart = camp.start_date ? new Date(camp.start_date).getTime() : null;
+        const campEnd = camp.end_date ? new Date(camp.end_date).getTime() : null;
+        let startMs = adset.start_at ? new Date(adset.start_at).getTime() : campStart;
+        let endMs = adset.end_at ? new Date(adset.end_at).getTime() : campEnd;
+        if (campStart && (!startMs || startMs < campStart)) startMs = campStart;
+        if (campEnd && (!endMs || endMs > campEnd)) endMs = campEnd;
+        if (startMs && endMs && endMs <= startMs) endMs = campEnd && campEnd > startMs ? campEnd : null;
+        // A lifetime-budget campaign requires the ad set to be end-dated.
+        if (!endMs && campEnd) endMs = campEnd;
+        if (startMs) body.start_time = new Date(startMs).toISOString();
+        if (endMs) body.end_time = new Date(endMs).toISOString();
 
         if (adset.placements && adset.placements.length > 0 && conn.default_instagram_id) {
           body.instagram_actor_id = conn.default_instagram_id;
