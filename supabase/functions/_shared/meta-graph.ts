@@ -31,8 +31,12 @@ export async function graph(
   let json: any;
   try { json = JSON.parse(text); } catch { json = { raw: text }; }
   if (!res.ok || json?.error) {
-    const msg = json?.error?.message || text;
-    throw new Error(`[Meta ${res.status}] ${msg}`);
+    const e = json?.error || {};
+    const detail = [e.error_user_title, e.error_user_msg, e.error_data && JSON.stringify(e.error_data)]
+      .filter(Boolean)
+      .join(" — ");
+    const msg = e.message || text;
+    throw new Error(`[Meta ${res.status}] ${msg}${detail ? ` — ${detail}` : ""}`);
   }
   return json;
 }
