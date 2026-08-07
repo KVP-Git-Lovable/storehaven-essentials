@@ -305,7 +305,7 @@ Deno.serve(async (req) => {
         await db.from("social_ad_sets").update({
           external_id: externalId,
           status: "paused",
-          last_synced_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         }).eq("id", adset.id);
         return json({ success: true, adset_id: externalId, republished: Boolean(adset.external_id) });
       }
