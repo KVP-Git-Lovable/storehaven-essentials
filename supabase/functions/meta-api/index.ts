@@ -175,7 +175,7 @@ Deno.serve(async (req) => {
           name: adset.name,
           optimization_goal: adset.optimization_goal || "LINK_CLICKS",
           billing_event: adset.billing_event || "LINK_CLICKS",
-          bid_strategy: adset.bid_strategy || "LOWEST_COST",
+          bid_strategy: adset.bid_strategy || "LOWEST_COST_WITHOUT_CAP",
           status: "PAUSED",
           targeting: Object.keys(targeting).length > 0 ? targeting : { geo_locations: { countries: ["IN"] } },
         };
