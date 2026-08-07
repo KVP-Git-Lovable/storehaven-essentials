@@ -22,18 +22,18 @@ const OPTIMIZATION_GOALS = [
   ["REACH", "Reach"],
   ["LINK_CLICKS", "Link Clicks"],
   ["POST_ENGAGEMENT", "Post Engagement"],
-  ["VIDEO_VIEWS", "Video Views"],
-  ["CONVERSIONS", "Conversions"],
-  ["LEADS", "Leads"],
+  ["THRUPLAY", "Video Views (ThruPlay)"],
+  ["OFFSITE_CONVERSIONS", "Conversions"],
+  ["LEAD_GENERATION", "Leads"],
   ["APP_INSTALLS", "App Installs"],
+  ["LANDING_PAGE_VIEWS", "Landing Page Views"],
 ];
 
 const BILLING_EVENTS = [
   ["IMPRESSIONS", "Impressions"],
   ["LINK_CLICKS", "Link Clicks"],
   ["POST_ENGAGEMENT", "Post Engagement"],
-  ["VIDEO_VIEWS", "Video Views"],
-  ["PURCHASE", "Purchase"],
+  ["THRUPLAY", "ThruPlay"],
 ];
 
 const BID_STRATEGIES = [
