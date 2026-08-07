@@ -80,24 +80,35 @@ Deno.serve(async (req) => {
 
         const body: Record<string, unknown> = {
           name: c.name,
-          objective: OBJECTIVE_MAP[c.objective] || "OUTCOME_TRAFFIC",
           status: c.status === "active" ? "ACTIVE" : "PAUSED",
-          buying_type: c.buying_type === "reach_and_frequency" ? "RESERVED" : "AUCTION",
-          special_ad_categories: specials.length ? specials : ["NONE"],
         };
+        // Objective, buying type and special categories are creation-only in Meta.
+        if (!c.external_id) {
+          body.objective = OBJECTIVE_MAP[c.objective] || "OUTCOME_TRAFFIC";
+          body.buying_type = c.buying_type === "reach_and_frequency" ? "RESERVED" : "AUCTION";
+          body.special_ad_categories = specials.length ? specials : ["NONE"];
+        }
         if (c.budget_type === "daily") body.daily_budget = Math.round(Number(c.budget_amount) * 100);
         else body.lifetime_budget = Math.round(Number(c.budget_amount) * 100);
         if (c.start_date) body.start_time = c.start_date;
         if (c.end_date) body.stop_time = c.end_date;
 
-        const created = await graph(`/${adAccount}/campaigns`, { token: userToken, method: "POST", body });
+        const published = c.external_id
+          ? await graph(`/${c.external_id}`, { token: userToken, method: "POST", body })
+          : await graph(`/${adAccount}/campaigns`, { token: userToken, method: "POST", body });
+        const externalId = c.external_id || published.id;
         await db.from("social_campaigns").update({
-          external_id: created.id,
-          published_at: new Date().toISOString(),
+          external_id: externalId,
+          published_at: c.published_at || new Date().toISOString(),
           status: c.status === "active" ? "active" : "paused",
           last_synced_at: new Date().toISOString(),
         }).eq("id", c.id);
-        return json({ success: true, campaign_id: created.id, published_at: new Date().toISOString() });
+        return json({
+          success: true,
+          campaign_id: externalId,
+          republished: Boolean(c.external_id),
+          published_at: new Date().toISOString(),
+        });
       }
 
       case "pause_campaign":
@@ -285,13 +296,18 @@ Deno.serve(async (req) => {
           body.promoted_object = { page_id: leadPage };
         }
 
-        const created = await graph(`/${adAccount}/adsets`, { token: userToken, method: "POST", body });
+        // campaign_id is required when creating, but cannot be changed on an existing ad set.
+        if (adset.external_id) delete body.campaign_id;
+        const published = adset.external_id
+          ? await graph(`/${adset.external_id}`, { token: userToken, method: "POST", body })
+          : await graph(`/${adAccount}/adsets`, { token: userToken, method: "POST", body });
+        const externalId = adset.external_id || published.id;
         await db.from("social_ad_sets").update({
-          external_id: created.id,
+          external_id: externalId,
           status: "paused",
           last_synced_at: new Date().toISOString(),
         }).eq("id", adset.id);
-        return json({ success: true, adset_id: created.id });
+        return json({ success: true, adset_id: externalId, republished: Boolean(adset.external_id) });
       }
 
       case "pause_adset":
