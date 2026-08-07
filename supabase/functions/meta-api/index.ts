@@ -217,19 +217,24 @@ Deno.serve(async (req) => {
           countries: [rawLocations ? normalizeCountryCode(rawLocations) : "IN"],
         };
 
+        const campaignHasBudget = Number(camp.budget_amount) > 0;
+
         const body: Record<string, unknown> = {
           campaign_id: camp.external_id,
           name: adset.name,
           optimization_goal: optimizationGoal,
           billing_event: billingEvent,
-          bid_strategy: bidStrategy,
           status: "PAUSED",
           targeting: Object.keys(targeting).length > 0 ? targeting : { geo_locations: { countries: ["IN"] } },
         };
+        // Under Campaign Budget Optimization the bid strategy lives on the campaign.
+        // Cap/ROAS strategies also need a bid_amount we do not capture.
+        if (!campaignHasBudget && bidStrategy === "LOWEST_COST_WITHOUT_CAP") {
+          body.bid_strategy = bidStrategy;
+        }
 
         // Campaign Budget Optimization: if the campaign carries the budget,
         // Meta rejects a budget on the ad set ("Invalid parameter").
-        const campaignHasBudget = Number(camp.budget_amount) > 0;
         if (!campaignHasBudget) {
           if (adset.budget_type === "daily") {
             body.daily_budget = Math.round(Number(adset.budget_amount) * 100);
