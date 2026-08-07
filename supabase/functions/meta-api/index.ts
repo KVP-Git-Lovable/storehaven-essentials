@@ -157,6 +157,15 @@ Deno.serve(async (req) => {
         };
 
         const targeting: Record<string, unknown> = {};
+        const VALID_BID_STRATEGIES = [
+          "LOWEST_COST_WITHOUT_CAP",
+          "LOWEST_COST_WITH_BID_CAP",
+          "COST_CAP",
+          "LOWEST_COST_WITH_MIN_ROAS",
+        ];
+        const bidStrategy = VALID_BID_STRATEGIES.includes(adset.bid_strategy)
+          ? adset.bid_strategy
+          : "LOWEST_COST_WITHOUT_CAP";
         if (adset.targeting?.age_min || adset.targeting?.age_max) {
           const ageMin = parseInt(adset.targeting.age_min || "18");
           const ageMax = adset.targeting.age_max === "65+" ? 65 : parseInt(adset.targeting.age_max || "65");
@@ -175,7 +184,7 @@ Deno.serve(async (req) => {
           name: adset.name,
           optimization_goal: adset.optimization_goal || "LINK_CLICKS",
           billing_event: adset.billing_event || "LINK_CLICKS",
-          bid_strategy: adset.bid_strategy || "LOWEST_COST_WITHOUT_CAP",
+          bid_strategy: bidStrategy,
           status: "PAUSED",
           targeting: Object.keys(targeting).length > 0 ? targeting : { geo_locations: { countries: ["IN"] } },
         };
