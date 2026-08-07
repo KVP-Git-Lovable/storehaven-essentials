@@ -37,9 +37,10 @@ const BILLING_EVENTS = [
 ];
 
 const BID_STRATEGIES = [
-  ["LOWEST_COST", "Lowest Cost"],
+  ["LOWEST_COST_WITHOUT_CAP", "Lowest Cost"],
+  ["LOWEST_COST_WITH_BID_CAP", "Lowest Cost with Bid Cap"],
   ["COST_CAP", "Cost Cap"],
-  ["BID_CAP", "Bid Cap"],
+  ["LOWEST_COST_WITH_MIN_ROAS", "Lowest Cost with Min ROAS"],
 ];
 
 const PLACEMENTS = [
@@ -64,7 +65,7 @@ const emptyForm = {
   name: "",
   optimization_goal: "LINK_CLICKS",
   billing_event: "LINK_CLICKS",
-  bid_strategy: "LOWEST_COST",
+  bid_strategy: "LOWEST_COST_WITHOUT_CAP",
   budget_type: "daily",
   budget_amount: "",
   start_date: "",
@@ -114,7 +115,7 @@ export default function MetaAdSets() {
       name: r.name,
       optimization_goal: r.optimization_goal || "LINK_CLICKS",
       billing_event: r.billing_event || "LINK_CLICKS",
-      bid_strategy: r.bid_strategy || "LOWEST_COST",
+      bid_strategy: r.bid_strategy || "LOWEST_COST_WITHOUT_CAP",
       budget_type: r.budget_type || "daily",
       budget_amount: String(r.budget_amount ?? ""),
       start_date: r.start_at ? r.start_at.slice(0, 10) : "",
