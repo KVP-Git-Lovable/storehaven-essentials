@@ -229,7 +229,27 @@ Deno.serve(async (req) => {
         };
         // Under Campaign Budget Optimization the bid strategy lives on the campaign.
         // Cap/ROAS strategies also need a bid_amount we do not capture.
-        body.bid_strategy = bidStrategy === "LOWEST_COST_WITHOUT_CAP" ? bidStrategy : "LOWEST_COST_WITHOUT_CAP";
+        if (campaignHasBudget) {
+          // CBO: the bid strategy lives on the campaign. Ensure it is not a
+          // cap/ROAS strategy, since we do not capture a bid amount.
+          try {
+            const campInfo = await graph(`/${camp.external_id}`, {
+              token: userToken,
+              params: { fields: "bid_strategy" },
+            });
+            if (campInfo?.bid_strategy && campInfo.bid_strategy !== "LOWEST_COST_WITHOUT_CAP") {
+              await graph(`/${camp.external_id}`, {
+                token: userToken,
+                method: "POST",
+                body: { bid_strategy: "LOWEST_COST_WITHOUT_CAP" },
+              });
+            }
+          } catch (e) {
+            console.error("campaign bid_strategy check failed:", (e as Error).message);
+          }
+        } else {
+          body.bid_strategy = "LOWEST_COST_WITHOUT_CAP";
+        }
 
         // Campaign Budget Optimization: if the campaign carries the budget,
         // Meta rejects a budget on the ad set ("Invalid parameter").
