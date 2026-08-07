@@ -81,6 +81,7 @@ export const modules: ModuleDefinition[] = [
   { key: "communication.meta.connection", name: "Meta Connection", parent: "communication" },
   { key: "communication.meta.campaigns", name: "Meta Campaigns", parent: "communication" },
   { key: "communication.meta.adsets", name: "Meta Ad Sets", parent: "communication" },
+  { key: "communication.meta.ads", name: "Meta Ads", parent: "communication" },
   { key: "communication.meta.organic", name: "Meta Organic Posts", parent: "communication" },
   { key: "communication.marketing", name: "Email Marketing", parent: "communication" },
   { key: "communication.marketing.campaigns", name: "Marketing Campaigns", parent: "communication" },

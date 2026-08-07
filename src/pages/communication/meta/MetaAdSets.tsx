@@ -252,11 +252,12 @@ export default function MetaAdSets() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => openEdit(r)}>Edit</DropdownMenuItem>
-                            {!r.external_id && (
-                              <DropdownMenuItem onClick={() => callApi("publish_adset", r.id, "Ad Set published")} className="gap-2">
-                                <Rocket className="h-4 w-4" /> Publish
-                              </DropdownMenuItem>
-                            )}
+                            <DropdownMenuItem
+                              onClick={() => callApi("publish_adset", r.id, r.external_id ? "Ad Set republished" : "Ad Set published")}
+                              className="gap-2"
+                            >
+                              <Rocket className="h-4 w-4" /> {r.external_id ? "Republish Changes" : "Publish"}
+                            </DropdownMenuItem>
                             {r.external_id && r.status === "active" && (
                               <DropdownMenuItem onClick={() => callApi("pause_adset", r.id, "Ad Set paused")} className="gap-2">
                                 <Pause className="h-4 w-4" /> Pause

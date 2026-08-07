@@ -80,24 +80,35 @@ Deno.serve(async (req) => {
 
         const body: Record<string, unknown> = {
           name: c.name,
-          objective: OBJECTIVE_MAP[c.objective] || "OUTCOME_TRAFFIC",
           status: c.status === "active" ? "ACTIVE" : "PAUSED",
-          buying_type: c.buying_type === "reach_and_frequency" ? "RESERVED" : "AUCTION",
-          special_ad_categories: specials.length ? specials : ["NONE"],
         };
+        // Objective, buying type and special categories are creation-only in Meta.
+        if (!c.external_id) {
+          body.objective = OBJECTIVE_MAP[c.objective] || "OUTCOME_TRAFFIC";
+          body.buying_type = c.buying_type === "reach_and_frequency" ? "RESERVED" : "AUCTION";
+          body.special_ad_categories = specials.length ? specials : ["NONE"];
+        }
         if (c.budget_type === "daily") body.daily_budget = Math.round(Number(c.budget_amount) * 100);
         else body.lifetime_budget = Math.round(Number(c.budget_amount) * 100);
         if (c.start_date) body.start_time = c.start_date;
         if (c.end_date) body.stop_time = c.end_date;
 
-        const created = await graph(`/${adAccount}/campaigns`, { token: userToken, method: "POST", body });
+        const published = c.external_id
+          ? await graph(`/${c.external_id}`, { token: userToken, method: "POST", body })
+          : await graph(`/${adAccount}/campaigns`, { token: userToken, method: "POST", body });
+        const externalId = c.external_id || published.id;
         await db.from("social_campaigns").update({
-          external_id: created.id,
-          published_at: new Date().toISOString(),
+          external_id: externalId,
+          published_at: c.published_at || new Date().toISOString(),
           status: c.status === "active" ? "active" : "paused",
           last_synced_at: new Date().toISOString(),
         }).eq("id", c.id);
-        return json({ success: true, campaign_id: created.id, published_at: new Date().toISOString() });
+        return json({
+          success: true,
+          campaign_id: externalId,
+          republished: Boolean(c.external_id),
+          published_at: new Date().toISOString(),
+        });
       }
 
       case "pause_campaign":
@@ -285,13 +296,18 @@ Deno.serve(async (req) => {
           body.promoted_object = { page_id: leadPage };
         }
 
-        const created = await graph(`/${adAccount}/adsets`, { token: userToken, method: "POST", body });
+        // campaign_id is required when creating, but cannot be changed on an existing ad set.
+        if (adset.external_id) delete body.campaign_id;
+        const published = adset.external_id
+          ? await graph(`/${adset.external_id}`, { token: userToken, method: "POST", body })
+          : await graph(`/${adAccount}/adsets`, { token: userToken, method: "POST", body });
+        const externalId = adset.external_id || published.id;
         await db.from("social_ad_sets").update({
-          external_id: created.id,
+          external_id: externalId,
           status: "paused",
-          last_synced_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         }).eq("id", adset.id);
-        return json({ success: true, adset_id: created.id });
+        return json({ success: true, adset_id: externalId, republished: Boolean(adset.external_id) });
       }
 
       case "pause_adset":
@@ -358,6 +374,86 @@ Deno.serve(async (req) => {
             console.error("insights failed for", r.external_id, (e as Error).message);
           }
         }
+        return json({ success: true });
+      }
+
+      /* -------------------------------- ads ---------------------------------- */
+      case "publish_ad": {
+        const { data: ad } = await db.from("social_ads").select("*").eq("id", payload.ad_id).maybeSingle();
+        if (!ad) throw new Error("Ad not found");
+        const { data: adset } = await db.from("social_ad_sets").select("*").eq("id", ad.ad_set_id).maybeSingle();
+        if (!adset?.external_id) throw new Error("Ad Set must be published first");
+        const { data: camp } = await db.from("social_campaigns").select("*").eq("id", adset.campaign_id).maybeSingle();
+        const adAccount = camp?.ad_account_id || conn.default_ad_account_id;
+        if (!adAccount) throw new Error("Select a default Ad Account first");
+        const pageId = conn.default_page_id;
+        if (!pageId) throw new Error("Select a default Facebook Page before publishing an ad");
+
+        const media = ad.media && typeof ad.media === "object" ? ad.media : {};
+        const mediaUrl = String(media.url || media.image_url || "").trim();
+        const destinationUrl = String(ad.destination_url || "").trim();
+        if (!destinationUrl) throw new Error("Destination URL is required");
+
+        const linkData: Record<string, unknown> = {
+          link: destinationUrl,
+          message: ad.primary_text || "",
+          name: ad.headline || ad.name,
+          description: ad.description || "",
+          call_to_action: {
+            type: ad.call_to_action || "LEARN_MORE",
+            value: { link: destinationUrl },
+          },
+        };
+        if (mediaUrl) linkData.picture = mediaUrl;
+
+        // Meta creatives are immutable. Republish creates a replacement creative,
+        // then points the existing ad at it instead of creating a duplicate ad.
+        const creative = await graph(`/${adAccount}/adcreatives`, {
+          token: userToken,
+          method: "POST",
+          body: {
+            name: `${ad.name} creative`,
+            object_story_spec: { page_id: pageId, link_data: linkData },
+          },
+        });
+        const adBody: Record<string, unknown> = {
+          name: ad.name,
+          creative: { creative_id: creative.id },
+          status: ad.status === "active" ? "ACTIVE" : "PAUSED",
+        };
+        if (!ad.external_id) adBody.adset_id = adset.external_id;
+
+        const published = ad.external_id
+          ? await graph(`/${ad.external_id}`, { token: userToken, method: "POST", body: adBody })
+          : await graph(`/${adAccount}/ads`, { token: userToken, method: "POST", body: adBody });
+        const externalId = ad.external_id || published.id;
+        await db.from("social_ads").update({
+          external_id: externalId,
+          creative_external_id: creative.id,
+          status: ad.status === "active" ? "active" : "paused",
+          updated_at: new Date().toISOString(),
+        }).eq("id", ad.id);
+        return json({ success: true, ad_id: externalId, republished: Boolean(ad.external_id) });
+      }
+
+      case "pause_ad":
+      case "resume_ad": {
+        const { data: ad } = await db.from("social_ads").select("*").eq("id", payload.ad_id).maybeSingle();
+        if (!ad) throw new Error("Ad not found");
+        const next = action === "pause_ad" ? "PAUSED" : "ACTIVE";
+        if (ad.external_id) await graph(`/${ad.external_id}`, { token: userToken, method: "POST", body: { status: next } });
+        await db.from("social_ads").update({ status: next.toLowerCase() }).eq("id", ad.id);
+        return json({ success: true, status: next.toLowerCase() });
+      }
+
+      case "delete_ad": {
+        const { data: ad } = await db.from("social_ads").select("*").eq("id", payload.ad_id).maybeSingle();
+        if (ad?.external_id) {
+          try { await graph(`/${ad.external_id}`, { token: userToken, method: "DELETE" }); } catch (e) {
+            console.error("Meta delete failed, removing locally:", (e as Error).message);
+          }
+        }
+        await db.from("social_ads").delete().eq("id", payload.ad_id);
         return json({ success: true });
       }
 

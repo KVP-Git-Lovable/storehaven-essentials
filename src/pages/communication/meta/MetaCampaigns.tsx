@@ -160,11 +160,12 @@ export default function MetaCampaigns() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => openEdit(r)}>Edit</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => duplicate(r)} className="gap-2"><Copy className="h-4 w-4" /> Duplicate</DropdownMenuItem>
-                            {!r.external_id && (
-                              <DropdownMenuItem onClick={() => callApi("publish_campaign", r.id, "Campaign published")} className="gap-2">
-                                <Rocket className="h-4 w-4" /> Publish
-                              </DropdownMenuItem>
-                            )}
+                            <DropdownMenuItem
+                              onClick={() => callApi("publish_campaign", r.id, r.external_id ? "Campaign republished" : "Campaign published")}
+                              className="gap-2"
+                            >
+                              <Rocket className="h-4 w-4" /> {r.external_id ? "Republish Changes" : "Publish"}
+                            </DropdownMenuItem>
                             {r.external_id && r.status === "active" && (
                               <DropdownMenuItem onClick={() => callApi("pause_campaign", r.id, "Campaign paused")} className="gap-2">
                                 <Pause className="h-4 w-4" /> Pause
