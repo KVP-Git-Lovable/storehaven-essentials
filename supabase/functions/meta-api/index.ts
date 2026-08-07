@@ -176,8 +176,8 @@ Deno.serve(async (req) => {
           body.lifetime_budget = Math.round(Number(adset.budget_amount) * 100);
         }
 
-        if (adset.start_date) body.start_time = new Date(adset.start_date).toISOString();
-        if (adset.end_date) body.end_time = new Date(adset.end_date).toISOString();
+        if (adset.start_at) body.start_time = new Date(adset.start_at).toISOString();
+        if (adset.end_at) body.end_time = new Date(adset.end_at).toISOString();
 
         if (adset.placements && adset.placements.length > 0) {
           body.promoted_object = { pixel_id: "0" };
@@ -187,11 +187,10 @@ Deno.serve(async (req) => {
         const created = await graph(`/${camp.external_id}/adsets`, { token: userToken, method: "POST", body });
         await db.from("social_ad_sets").update({
           external_id: created.id,
-          published_at: new Date().toISOString(),
           status: "active",
           last_synced_at: new Date().toISOString(),
         }).eq("id", adset.id);
-        return json({ success: true, adset_id: created.id, published_at: new Date().toISOString() });
+        return json({ success: true, adset_id: created.id });
       }
 
       case "pause_adset":
