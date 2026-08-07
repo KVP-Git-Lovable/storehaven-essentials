@@ -229,9 +229,7 @@ Deno.serve(async (req) => {
         };
         // Under Campaign Budget Optimization the bid strategy lives on the campaign.
         // Cap/ROAS strategies also need a bid_amount we do not capture.
-        if (!campaignHasBudget && bidStrategy === "LOWEST_COST_WITHOUT_CAP") {
-          body.bid_strategy = bidStrategy;
-        }
+        body.bid_strategy = bidStrategy === "LOWEST_COST_WITHOUT_CAP" ? bidStrategy : "LOWEST_COST_WITHOUT_CAP";
 
         // Campaign Budget Optimization: if the campaign carries the budget,
         // Meta rejects a budget on the ad set ("Invalid parameter").
