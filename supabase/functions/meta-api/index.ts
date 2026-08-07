@@ -212,9 +212,10 @@ Deno.serve(async (req) => {
         if (adset.targeting?.genders && adset.targeting.genders.length > 0) {
           targeting.genders = adset.targeting.genders.map((g: string) => g === "All" ? 0 : g === "Men" ? 1 : 2);
         }
-        if (adset.targeting?.locations) {
-          targeting.geo_locations = { countries: [normalizeCountryCode(adset.targeting.locations)] };
-        }
+        const rawLocations = String(adset.targeting?.locations || "").trim();
+        targeting.geo_locations = {
+          countries: [rawLocations ? normalizeCountryCode(rawLocations) : "IN"],
+        };
 
         const body: Record<string, unknown> = {
           campaign_id: camp.external_id,
