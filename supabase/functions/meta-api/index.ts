@@ -226,14 +226,29 @@ Deno.serve(async (req) => {
           targeting: Object.keys(targeting).length > 0 ? targeting : { geo_locations: { countries: ["IN"] } },
         };
 
-        if (adset.budget_type === "daily") {
-          body.daily_budget = Math.round(Number(adset.budget_amount) * 100);
-        } else {
-          body.lifetime_budget = Math.round(Number(adset.budget_amount) * 100);
+        // Campaign Budget Optimization: if the campaign carries the budget,
+        // Meta rejects a budget on the ad set ("Invalid parameter").
+        const campaignHasBudget = Number(camp.budget_amount) > 0;
+        if (!campaignHasBudget) {
+          if (adset.budget_type === "daily") {
+            body.daily_budget = Math.round(Number(adset.budget_amount) * 100);
+          } else {
+            body.lifetime_budget = Math.round(Number(adset.budget_amount) * 100);
+          }
         }
 
-        if (adset.start_at) body.start_time = new Date(adset.start_at).toISOString();
-        if (adset.end_at) body.end_time = new Date(adset.end_at).toISOString();
+        // Ad set schedule must sit inside the campaign schedule.
+        const campStart = camp.start_date ? new Date(camp.start_date).getTime() : null;
+        const campEnd = camp.end_date ? new Date(camp.end_date).getTime() : null;
+        let startMs = adset.start_at ? new Date(adset.start_at).getTime() : campStart;
+        let endMs = adset.end_at ? new Date(adset.end_at).getTime() : campEnd;
+        if (campStart && (!startMs || startMs < campStart)) startMs = campStart;
+        if (campEnd && (!endMs || endMs > campEnd)) endMs = campEnd;
+        if (startMs && endMs && endMs <= startMs) endMs = campEnd && campEnd > startMs ? campEnd : null;
+        // A lifetime-budget campaign requires the ad set to be end-dated.
+        if (!endMs && campEnd) endMs = campEnd;
+        if (startMs) body.start_time = new Date(startMs).toISOString();
+        if (endMs) body.end_time = new Date(endMs).toISOString();
 
         if (adset.placements && adset.placements.length > 0 && conn.default_instagram_id) {
           body.instagram_actor_id = conn.default_instagram_id;
