@@ -147,6 +147,15 @@ Deno.serve(async (req) => {
         const { data: camp } = await db.from("social_campaigns").select("*").eq("id", adset.campaign_id).maybeSingle();
         if (!camp?.external_id) throw new Error("Campaign must be published first");
 
+        const adAccount = camp.ad_account_id || conn.default_ad_account_id;
+        if (!adAccount) throw new Error("Select a default Ad Account first");
+
+        const normalizeCountryCode = (location: string): string => {
+          const code = location.toUpperCase().slice(0, 2);
+          const validCodes = ["IN", "US", "GB", "DE", "FR", "AU", "CA", "JP", "IN"];
+          return validCodes.includes(code) ? code : "IN";
+        };
+
         const targeting: Record<string, unknown> = {};
         if (adset.targeting?.age_min || adset.targeting?.age_max) {
           const ageMin = parseInt(adset.targeting.age_min || "18");
@@ -158,16 +167,17 @@ Deno.serve(async (req) => {
           targeting.genders = adset.targeting.genders.map((g: string) => g === "All" ? 0 : g === "Men" ? 1 : 2);
         }
         if (adset.targeting?.locations) {
-          targeting.geo_locations = { countries: [adset.targeting.locations] };
+          targeting.geo_locations = { countries: [normalizeCountryCode(adset.targeting.locations)] };
         }
 
         const body: Record<string, unknown> = {
+          campaign_id: camp.external_id,
           name: adset.name,
           optimization_goal: adset.optimization_goal || "LINK_CLICKS",
           billing_event: adset.billing_event || "LINK_CLICKS",
           bid_strategy: adset.bid_strategy || "LOWEST_COST",
           status: "PAUSED",
-          targeting: Object.keys(targeting).length > 0 ? targeting : { geo_locations: { countries: ["US"] } },
+          targeting: Object.keys(targeting).length > 0 ? targeting : { geo_locations: { countries: ["IN"] } },
         };
 
         if (adset.budget_type === "daily") {
@@ -179,15 +189,14 @@ Deno.serve(async (req) => {
         if (adset.start_at) body.start_time = new Date(adset.start_at).toISOString();
         if (adset.end_at) body.end_time = new Date(adset.end_at).toISOString();
 
-        if (adset.placements && adset.placements.length > 0) {
-          body.promoted_object = { pixel_id: "0" };
-          body.instagram_actor_id = conn.default_instagram_id || "";
+        if (adset.placements && adset.placements.length > 0 && conn.default_instagram_id) {
+          body.instagram_actor_id = conn.default_instagram_id;
         }
 
-        const created = await graph(`/${camp.external_id}/adsets`, { token: userToken, method: "POST", body });
+        const created = await graph(`/${adAccount}/adsets`, { token: userToken, method: "POST", body });
         await db.from("social_ad_sets").update({
           external_id: created.id,
-          status: "active",
+          status: "paused",
           last_synced_at: new Date().toISOString(),
         }).eq("id", adset.id);
         return json({ success: true, adset_id: created.id });
