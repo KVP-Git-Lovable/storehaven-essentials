@@ -196,9 +196,13 @@ Deno.serve(async (req) => {
           "COST_CAP",
           "LOWEST_COST_WITH_MIN_ROAS",
         ];
-        const bidStrategy = VALID_BID_STRATEGIES.includes(adset.bid_strategy)
+        let bidStrategy = VALID_BID_STRATEGIES.includes(adset.bid_strategy)
           ? adset.bid_strategy
           : "LOWEST_COST_WITHOUT_CAP";
+        // Cap/ROAS strategies require a bid amount we do not capture — fall back safely.
+        if (bidStrategy !== "LOWEST_COST_WITHOUT_CAP" && !adset.bid_amount) {
+          bidStrategy = "LOWEST_COST_WITHOUT_CAP";
+        }
         if (adset.targeting?.age_min || adset.targeting?.age_max) {
           const ageMin = parseInt(adset.targeting.age_min || "18");
           const ageMax = adset.targeting.age_max === "65+" ? 65 : parseInt(adset.targeting.age_max || "65");
@@ -233,6 +237,13 @@ Deno.serve(async (req) => {
 
         if (adset.placements && adset.placements.length > 0 && conn.default_instagram_id) {
           body.instagram_actor_id = conn.default_instagram_id;
+        }
+
+        // Lead generation ad sets must declare the Page they collect leads for.
+        if (optimizationGoal === "LEAD_GENERATION") {
+          const leadPage = adset.page_id || conn.default_page_id;
+          if (!leadPage) throw new Error("Select a default Facebook Page before publishing a lead generation ad set");
+          body.promoted_object = { page_id: leadPage };
         }
 
         const created = await graph(`/${adAccount}/adsets`, { token: userToken, method: "POST", body });
