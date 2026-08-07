@@ -597,7 +597,7 @@ export default function JourneyConversations() {
                   </div>
                 ) : thread.length === 0 ? (
                   <div className="text-center text-sm text-muted-foreground py-8">
-                    No WhatsApp messages found for this participant.
+                    No messages exchanged in this journey yet.
                   </div>
                 ) : (
                   groupedThread.map((g) => (
