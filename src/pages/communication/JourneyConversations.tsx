@@ -185,6 +185,52 @@ export default function JourneyConversations() {
     return m;
   }, [contacts]);
 
+  // Earliest journey send per contact — used to scope conversations to THIS journey.
+  const { data: firstSendByContact = new Map<string, string>() } = useQuery({
+    queryKey: ["journey-conv-first-sends", id],
+    enabled: !!id,
+    queryFn: async () => {
+      const PAGE = 1000;
+      const map = new Map<string, string>();
+      for (let i = 0; i < 200; i++) {
+        const from = i * PAGE;
+        const to = from + PAGE - 1;
+        const { data, error } = await supabase
+          .from("journey_message_log")
+          .select("contact_id, sent_at")
+          .eq("journey_id", id!)
+          .order("sent_at", { ascending: true })
+          .range(from, to);
+        if (error) throw error;
+        const rows = (data || []) as { contact_id: string; sent_at: string }[];
+        rows.forEach((r) => {
+          if (!r.contact_id || !r.sent_at) return;
+          const prev = map.get(r.contact_id);
+          if (!prev || new Date(r.sent_at).getTime() < new Date(prev).getTime()) {
+            map.set(r.contact_id, r.sent_at);
+          }
+        });
+        if (rows.length < PAGE) break;
+      }
+      return map;
+    },
+  });
+
+  // phoneL10 -> ISO cutoff. Messages before this belong to earlier journeys.
+  const cutoffByPhone = useMemo(() => {
+    const m = new Map<string, string>();
+    uniqueEnrollments.forEach((e) => {
+      const c = contactMap.get(e.contact_id);
+      const p = last10(c?.phone);
+      if (!p) return;
+      const cutoff = firstSendByContact.get(e.contact_id) || e.enrolled_at;
+      if (!cutoff) return;
+      const prev = m.get(p);
+      if (!prev || new Date(cutoff).getTime() < new Date(prev).getTime()) m.set(p, cutoff);
+    });
+    return m;
+  }, [uniqueEnrollments, contactMap, firstSendByContact]);
+
   // Phones for this journey, last-10
   const phoneL10List = useMemo(() => {
     const set = new Set<string>();
@@ -248,6 +294,9 @@ export default function JourneyConversations() {
     recentMessages.forEach((m) => {
       const p = last10(m.phone);
       if (!p) return;
+      // Ignore messages exchanged before this journey started for this participant.
+      const cutoff = cutoffByPhone.get(p);
+      if (cutoff && new Date(m.created_at).getTime() < new Date(cutoff).getTime()) return;
       let s = map.get(p);
       if (!s) {
         s = {
@@ -266,7 +315,7 @@ export default function JourneyConversations() {
       }
     });
     return map;
-  }, [recentMessages]);
+  }, [recentMessages, cutoffByPhone]);
 
   const participants: Participant[] = useMemo(() => {
     const list: Participant[] = uniqueEnrollments
@@ -330,8 +379,9 @@ export default function JourneyConversations() {
   );
 
   // Thread for selected participant (match by last-10 suffix)
+  const selectedCutoff = selectedPhone ? cutoffByPhone.get(selectedPhone) ?? null : null;
   const { data: thread = [], isLoading: loadingThread } = useQuery({
-    queryKey: ["journey-conv-thread", selectedPhone],
+    queryKey: ["journey-conv-thread", selectedPhone, selectedCutoff],
     enabled: !!selectedPhone,
     queryFn: async () => {
       if (!selectedPhone) return [] as WAMessage[];
@@ -341,10 +391,12 @@ export default function JourneyConversations() {
       for (let p = 0; p < 50; p++) {
         const from = p * PAGE;
         const to = from + PAGE - 1;
-        const { data, error } = await supabase
+        let q = supabase
           .from("whatsapp_messages")
           .select("id, phone, direction, message, message_type, status, is_read, profile_name, created_at")
-          .in("phone", variants)
+          .in("phone", variants);
+        if (selectedCutoff) q = q.gte("created_at", selectedCutoff);
+        const { data, error } = await q
           .order("created_at", { ascending: true })
           .range(from, to);
         if (error) throw error;
