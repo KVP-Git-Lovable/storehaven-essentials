@@ -157,6 +157,39 @@ Deno.serve(async (req) => {
         };
 
         const targeting: Record<string, unknown> = {};
+        const OPT_GOAL_ALIASES: Record<string, string> = {
+          LEADS: "LEAD_GENERATION",
+          CONVERSIONS: "OFFSITE_CONVERSIONS",
+          VIDEO_VIEWS: "THRUPLAY",
+          CLICKS: "LINK_CLICKS",
+          ENGAGEMENT: "POST_ENGAGEMENT",
+        };
+        const VALID_OPT_GOALS = [
+          "NONE","APP_INSTALLS","AD_RECALL_LIFT","ENGAGED_USERS","EVENT_RESPONSES","IMPRESSIONS",
+          "LEAD_GENERATION","QUALITY_LEAD","LINK_CLICKS","OFFSITE_CONVERSIONS","PAGE_LIKES",
+          "POST_ENGAGEMENT","QUALITY_CALL","REACH","LANDING_PAGE_VIEWS","VISIT_INSTAGRAM_PROFILE",
+          "ENGAGED_PAGE_VIEWS","VALUE","THRUPLAY","DERIVED_EVENTS","CONVERSATIONS","IN_APP_VALUE",
+          "SUBSCRIBERS","REMINDERS_SET","PROFILE_VISIT","PROFILE_AND_PAGE_ENGAGEMENT",
+          "AUTOMATIC_OBJECTIVE",
+        ];
+        const rawGoal = String(adset.optimization_goal || "").toUpperCase();
+        const mappedGoal = OPT_GOAL_ALIASES[rawGoal] || rawGoal;
+        const optimizationGoal = VALID_OPT_GOALS.includes(mappedGoal) ? mappedGoal : "LINK_CLICKS";
+
+        const BILLING_ALIASES: Record<string, string> = {
+          VIDEO_VIEWS: "THRUPLAY",
+          CLICKS: "LINK_CLICKS",
+          PURCHASE: "IMPRESSIONS",
+          LEADS: "IMPRESSIONS",
+          LEAD_GENERATION: "IMPRESSIONS",
+          OFFSITE_CONVERSIONS: "IMPRESSIONS",
+          REACH: "IMPRESSIONS",
+        };
+        const VALID_BILLING = ["APP_INSTALLS","CLICKS","IMPRESSIONS","LINK_CLICKS","NONE","OFFER_CLAIMS","PAGE_LIKES","POST_ENGAGEMENT","THRUPLAY","PURCHASE","LISTING_INTERACTION"];
+        const rawBilling = String(adset.billing_event || "").toUpperCase();
+        const mappedBilling = BILLING_ALIASES[rawBilling] || rawBilling;
+        const billingEvent = VALID_BILLING.includes(mappedBilling) ? mappedBilling : "IMPRESSIONS";
+
         const VALID_BID_STRATEGIES = [
           "LOWEST_COST_WITHOUT_CAP",
           "LOWEST_COST_WITH_BID_CAP",
@@ -182,8 +215,8 @@ Deno.serve(async (req) => {
         const body: Record<string, unknown> = {
           campaign_id: camp.external_id,
           name: adset.name,
-          optimization_goal: adset.optimization_goal || "LINK_CLICKS",
-          billing_event: adset.billing_event || "LINK_CLICKS",
+          optimization_goal: optimizationGoal,
+          billing_event: billingEvent,
           bid_strategy: bidStrategy,
           status: "PAUSED",
           targeting: Object.keys(targeting).length > 0 ? targeting : { geo_locations: { countries: ["IN"] } },
