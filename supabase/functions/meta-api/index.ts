@@ -158,7 +158,7 @@ Deno.serve(async (req) => {
           targeting.genders = adset.targeting.genders.map((g: string) => g === "All" ? 0 : g === "Men" ? 1 : 2);
         }
         if (adset.targeting?.locations) {
-          targeting.geo_locations = { cities: [{ key: adset.targeting.locations }] };
+          targeting.geo_locations = { countries: [adset.targeting.locations] };
         }
 
         const body: Record<string, unknown> = {
@@ -166,8 +166,8 @@ Deno.serve(async (req) => {
           optimization_goal: adset.optimization_goal || "LINK_CLICKS",
           billing_event: adset.billing_event || "LINK_CLICKS",
           bid_strategy: adset.bid_strategy || "LOWEST_COST",
-          status: "ACTIVE",
-          targeting,
+          status: "PAUSED",
+          targeting: Object.keys(targeting).length > 0 ? targeting : { geo_locations: { countries: ["US"] } },
         };
 
         if (adset.budget_type === "daily") {
