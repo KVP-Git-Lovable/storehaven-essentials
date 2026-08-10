@@ -329,7 +329,7 @@ export function OrderFormDialog({ open, onOpenChange, order = null, mode = "crea
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!inset-0 !max-h-none !max-w-none !translate-x-0 !translate-y-0 overflow-auto">
+      <DialogContent className="!inset-0 !left-0 !right-0 !max-h-none !max-w-none !translate-x-0 !translate-y-0 !rounded-none overflow-auto">
         <DialogHeader>
           <div className="flex items-center justify-between gap-4 pr-8">
             <DialogTitle>{title}</DialogTitle>
