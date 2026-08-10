@@ -66,12 +66,17 @@ export function OrderLineItemsSection({
                         </span>
                       ),
                       searchValue: `${sku} ${p.name} ${stock}`,
+                      customSearchString: `${sku} ${p.name}`,
                       disabled: !ignoreStock && stock <= 0,
                     };
                   })}
                   placeholder="Select product..."
                   searchPlaceholder="Search by SKU / Barcode or name..."
                   disabled={disabled}
+                  filterFunction={(searchInput, option) => {
+                    const searchStr = option.customSearchString ?? option.searchValue ?? option.label;
+                    return searchStr.toLowerCase().includes(searchInput.toLowerCase());
+                  }}
                 />
                 {calculated.product && calculated.priceSource === "fallback" && calculated.product.karat && (
                   <p className="text-[11px] text-muted-foreground mt-1">

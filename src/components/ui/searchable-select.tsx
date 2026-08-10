@@ -28,6 +28,8 @@ export type SearchableSelectOption = {
   searchValue?: string;
   /** Optional custom node to render inside the item (overrides label rendering). */
   labelNode?: React.ReactNode;
+  /** Optional string for exact substring matching in custom filters. Falls back to searchValue then label. */
+  customSearchString?: string;
 };
 
 interface SearchableSelectProps {
@@ -41,6 +43,8 @@ interface SearchableSelectProps {
   className?: string;
   allowNone?: boolean;
   noneLabel?: string;
+  /** Optional custom filter function for search. If not provided, uses default filter. */
+  filterFunction?: (searchInput: string, option: SearchableSelectOption) => boolean;
 }
 
 export function SearchableSelect({
@@ -54,16 +58,31 @@ export function SearchableSelect({
   className,
   allowNone = false,
   noneLabel = "None",
+  filterFunction,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
+  const [searchInput, setSearchInput] = React.useState("");
   const listRef = React.useRef<HTMLDivElement>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null);
 
+  const defaultFilter = (searchInput: string, option: SearchableSelectOption) => {
+    const searchString = option.customSearchString ?? option.searchValue ?? option.label;
+    return searchString.toLowerCase().includes(searchInput.toLowerCase());
+  };
+
+  const filter = filterFunction || defaultFilter;
+  const filteredOptions = searchInput
+    ? options.filter(opt => filter(searchInput, opt))
+    : options;
+
   // When rendered inside a Dialog, portal into the dialog content so the
   // dialog's scroll-lock doesn't swallow wheel events over the list.
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setSearchInput("");
+      return;
+    }
     const dialog = triggerRef.current?.closest<HTMLElement>("[role='dialog']");
     setPortalContainer(dialog ?? null);
   }, [open]);
@@ -135,8 +154,12 @@ export function SearchableSelect({
         className="w-[--radix-popover-trigger-width] p-0 overflow-visible"
         align="start"
       >
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder={searchPlaceholder}
+            onValueChange={setSearchInput}
+            value={searchInput}
+          />
           <CommandList ref={listRef} className="max-h-[240px] overflow-hidden" style={{ overflowY: "auto" }}>
             <CommandEmpty>{emptyMessage}</CommandEmpty>
             <CommandGroup>
@@ -146,6 +169,7 @@ export function SearchableSelect({
                   onSelect={() => {
                     onValueChange("none");
                     setOpen(false);
+                    setSearchInput("");
                   }}
                   data-value="none"
                 >
@@ -158,7 +182,7 @@ export function SearchableSelect({
                   {noneLabel}
                 </CommandItem>
               )}
-              {options.map((option) => (
+              {filteredOptions.map((option) => (
                 <CommandItem
                   key={option.value}
                   value={option.searchValue ?? option.label}
@@ -167,6 +191,7 @@ export function SearchableSelect({
                     if (option.disabled) return;
                     onValueChange(option.value);
                     setOpen(false);
+                    setSearchInput("");
                   }}
                   data-value={option.value}
                   className={cn(option.disabled && "opacity-50 cursor-not-allowed")}
