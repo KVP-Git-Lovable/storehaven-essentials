@@ -10,6 +10,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
@@ -37,6 +46,7 @@ export default function MetaCampaigns() {
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -177,7 +187,7 @@ export default function MetaCampaigns() {
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem
-                              onClick={() => callApi("delete_campaign", r.id, "Campaign deleted")}
+                              onClick={() => setDeleteTarget(r)}
                               className="gap-2 text-destructive"
                             >
                               <Trash2 className="h-4 w-4" /> Delete
@@ -269,6 +279,29 @@ export default function MetaCampaigns() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to delete this?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the campaign "{deleteTarget?.name}" from your account and Meta Ads Manager.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogAction
+            onClick={() => {
+              if (deleteTarget) {
+                callApi("delete_campaign", deleteTarget.id, "Campaign deleted");
+                setDeleteTarget(null);
+              }
+            }}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            Yes, Delete
+          </AlertDialogAction>
+          <AlertDialogCancel>No, Keep It</AlertDialogCancel>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
