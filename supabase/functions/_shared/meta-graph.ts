@@ -7,6 +7,7 @@ export const META_SCOPES = [
   "pages_show_list",
   "pages_manage_posts",
   "pages_read_engagement",
+  "pages_manage_engagement",
   "ads_management",
   "ads_read",
   "business_management",
