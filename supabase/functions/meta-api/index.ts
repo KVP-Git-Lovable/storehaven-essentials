@@ -568,6 +568,52 @@ Deno.serve(async (req) => {
         return json({ success: true, note: "Reconnect via Facebook to refresh pages and ad accounts" });
       }
 
+      /* --------------------------- engagement test -------------------------- */
+      // Proves pages_manage_engagement works end-to-end: comments on the Page's
+      // latest post as the Page, then deletes the comment (unless keep_comment).
+      case "test_engagement": {
+        const pageId = payload.page_id || conn.default_page_id;
+        if (!pageId) throw new Error("No Facebook Page selected");
+        const token = await pageToken(pageId);
+
+        let permissionStatus = "unknown";
+        try {
+          const perms = await graph(`/me/permissions`, { token: userToken });
+          permissionStatus = (perms?.data || []).find(
+            (p: any) => p.permission === "pages_manage_engagement",
+          )?.status ?? "not_requested";
+        } catch (e) {
+          permissionStatus = `check_failed: ${(e as Error).message}`;
+        }
+
+        const posts = await graph(`/${pageId}/posts`, {
+          token,
+          params: { limit: "1", fields: "id,message,created_time" },
+        });
+        const post = posts?.data?.[0];
+        if (!post) throw new Error("The Page has no posts to comment on — publish a post first");
+
+        const comment = await graph(`/${post.id}/comments`, {
+          token,
+          method: "POST",
+          body: { message: payload.message || "API test — pages_manage_engagement ✔ (auto-deleted)" },
+        });
+
+        let deleted = false;
+        if (!payload.keep_comment && comment?.id) {
+          const del = await graph(`/${comment.id}`, { token, method: "DELETE" });
+          deleted = Boolean(del?.success ?? true);
+        }
+
+        return json({
+          success: true,
+          permission_status: permissionStatus,
+          post: { id: post.id, created_time: post.created_time },
+          comment_id: comment?.id ?? null,
+          deleted,
+        });
+      }
+
       default:
         return json({ error: `Unknown action: ${action}` }, 400);
     }
