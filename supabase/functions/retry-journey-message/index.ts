@@ -221,7 +221,10 @@ serve(async (req) => {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (log.status !== "failed") {
+    const RETRYABLE = new Set(["failed", "undelivered", "error", "canceled", "cancelled"]);
+    const curStatus = String(log.status || "").toLowerCase();
+    const curDelivery = String(log.delivery_status || "").toLowerCase();
+    if (!RETRYABLE.has(curStatus) && !RETRYABLE.has(curDelivery)) {
       return new Response(JSON.stringify({ error: `Cannot retry — current status is '${log.status}'` }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
