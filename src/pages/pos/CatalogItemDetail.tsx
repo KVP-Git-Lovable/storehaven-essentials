@@ -27,7 +27,7 @@ const fmt = (n?: number | null) =>
 
 const extractProductCode = (imageUrl?: string): string | null => {
   if (!imageUrl) return null;
-  const match = imageUrl.match(/\/files\/([^_]+)_/);
+  const match = imageUrl.match(/\/files\/([A-Z0-9]+)/i);
   return match ? match[1] : null;
 };
 
