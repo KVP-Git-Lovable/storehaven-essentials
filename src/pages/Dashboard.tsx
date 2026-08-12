@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { Users, UserPlus, ShoppingCart, IndianRupee, Megaphone, Loader2, Plus } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
+import { Users, UserPlus, ShoppingCart, IndianRupee, Megaphone, Loader2, Plus, AlertCircle, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { RevenueOrdersTrend } from "@/components/dashboard/RevenueOrdersTrend";
@@ -14,10 +17,26 @@ import { OrderFormDialog } from "@/components/transactions/OrderFormDialog";
 import { useDashboardMetrics, formatINR } from "@/hooks/useDashboardMetrics";
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { data, isLoading } = useDashboardMetrics();
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("create");
+
+  const { data: pendingOrders } = useQuery({
+    queryKey: ["pending-online-orders"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("online_orders")
+        .select("id", { count: "exact" })
+        .eq("status", "pending");
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const pendingCount = pendingOrders?.length || 0;
 
   if (isLoading || !data) {
     return (
@@ -38,6 +57,25 @@ export default function Dashboard() {
           <Plus className="mr-2 h-4 w-4" /> New Sale
         </Button>
       </div>
+
+      {/* Online Orders Banner */}
+      {pendingCount > 0 && (
+        <div
+          onClick={() => navigate("/transactions/online-orders")}
+          className="cursor-pointer bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 rounded-lg p-4 flex items-center justify-between hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />
+            <div>
+              <p className="font-medium text-orange-900 dark:text-orange-100">
+                You have new Online Order requests - {pendingCount}
+              </p>
+              <p className="text-sm text-orange-800 dark:text-orange-200">Click here to view details</p>
+            </div>
+          </div>
+          <ChevronRight className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />
+        </div>
+      )}
 
       {/* Section 1: KPI Row */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
