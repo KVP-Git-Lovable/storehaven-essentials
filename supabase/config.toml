@@ -2,3 +2,6 @@ project_id = "pdtasnfsdnfttayxibqy"
 
 [functions.track-engagement-click]
 verify_jwt = false
+
+[functions.create_online_order]
+verify_jwt = false

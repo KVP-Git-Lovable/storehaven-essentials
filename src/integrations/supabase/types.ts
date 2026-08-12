@@ -6579,6 +6579,72 @@ export type Database = {
           },
         ]
       }
+      online_orders: {
+        Row: {
+          created_at: string
+          customer_email: string
+          customer_name: string
+          customer_phone: string
+          fulfillment_method: string
+          id: string
+          items: Json
+          notes: string | null
+          order_number: string
+          preferred_pickup_date: string | null
+          shipping_address_line1: string | null
+          shipping_address_line2: string | null
+          shipping_city: string | null
+          shipping_pincode: string | null
+          shipping_state: string | null
+          status: string
+          subtotal: number
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_email: string
+          customer_name: string
+          customer_phone: string
+          fulfillment_method?: string
+          id?: string
+          items?: Json
+          notes?: string | null
+          order_number: string
+          preferred_pickup_date?: string | null
+          shipping_address_line1?: string | null
+          shipping_address_line2?: string | null
+          shipping_city?: string | null
+          shipping_pincode?: string | null
+          shipping_state?: string | null
+          status?: string
+          subtotal?: number
+          total_amount?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_email?: string
+          customer_name?: string
+          customer_phone?: string
+          fulfillment_method?: string
+          id?: string
+          items?: Json
+          notes?: string | null
+          order_number?: string
+          preferred_pickup_date?: string | null
+          shipping_address_line1?: string | null
+          shipping_address_line2?: string | null
+          shipping_city?: string | null
+          shipping_pincode?: string | null
+          shipping_state?: string | null
+          status?: string
+          subtotal?: number
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       order_import_logs: {
         Row: {
           created_at: string
