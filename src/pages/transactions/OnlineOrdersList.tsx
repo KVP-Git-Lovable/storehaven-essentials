@@ -340,8 +340,9 @@ export default function OnlineOrdersList() {
                       <div className="flex justify-between items-start mb-1">
                         <div>
                           <div className="font-medium">{item.name || item.productName}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {[item.purity, item.metal, item.size].filter(Boolean).join(" · ")}
+                          <div className="text-xs text-muted-foreground space-y-1">
+                            {item.productCode && <div>Code: {item.productCode}</div>}
+                            <div>{[item.purity, item.metal, item.size].filter(Boolean).join(" · ")}</div>
                           </div>
                         </div>
                         <div className="text-right">
