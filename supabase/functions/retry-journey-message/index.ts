@@ -224,10 +224,19 @@ serve(async (req) => {
     const RETRYABLE = new Set(["failed", "undelivered", "error", "canceled", "cancelled"]);
     const curStatus = String(log.status || "").toLowerCase();
     const curDelivery = String(log.delivery_status || "").toLowerCase();
+    const DELIVERED = new Set(["accepted", "queued", "sending", "scheduled", "sent", "delivered", "read"]);
+    if (DELIVERED.has(curStatus) || DELIVERED.has(curDelivery)) {
+      // Already delivered/in-flight — skip gracefully instead of erroring.
+      return new Response(
+        JSON.stringify({ success: false, skipped: true, error: `Already ${log.delivery_status || log.status} — no retry needed` }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
     if (!RETRYABLE.has(curStatus) && !RETRYABLE.has(curDelivery)) {
-      return new Response(JSON.stringify({ error: `Cannot retry — current status is '${log.status}'` }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, skipped: true, error: `Cannot retry — current status is '${log.status}'` }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     // Load contact phone early to honor the per-journey exclusion list.
