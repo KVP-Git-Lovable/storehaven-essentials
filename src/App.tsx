@@ -165,6 +165,7 @@ const TxnOldGoldExchangeList = lazyWithRetry(
   "TxnOldGoldExchangeList"
 );
 const TxnReports = lazyWithRetry(() => import("./pages/transactions/Reports"), "TxnReports");
+const TxnOnlineOrdersList = lazyWithRetry(() => import("./pages/transactions/OnlineOrdersList"), "TxnOnlineOrdersList");
 
 const queryClient = new QueryClient();
 
@@ -295,6 +296,7 @@ const App = () => (
                 <Route path="/transactions/orders" element={<TxnOrdersList />} />
                 <Route path="/transactions/returns" element={<TxnSalesReturnsList />} />
                 <Route path="/transactions/old-gold-exchange" element={<TxnOldGoldExchangeList />} />
+                <Route path="/transactions/online-orders" element={<TxnOnlineOrdersList />} />
                 <Route path="/transactions/reports" element={<TxnReports />} />
                 <Route path="/footfall" element={<Footfall />} />
                 <Route path="/master/meter" element={<MeterMaster />} />
