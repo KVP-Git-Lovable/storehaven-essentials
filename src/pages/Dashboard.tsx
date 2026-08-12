@@ -1,4 +1,6 @@
-import { Users, UserPlus, ShoppingCart, IndianRupee, Megaphone, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { Users, UserPlus, ShoppingCart, IndianRupee, Megaphone, Loader2, AlertCircle } from "lucide-react";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { RevenueOrdersTrend } from "@/components/dashboard/RevenueOrdersTrend";
 import { CommunicationHealth } from "@/components/dashboard/CommunicationHealth";
@@ -8,10 +10,27 @@ import { TopChannelCard } from "@/components/dashboard/TopChannelCard";
 import { TeamSnapshotCard } from "@/components/dashboard/TeamSnapshotCard";
 import { AIInsightsCard } from "@/components/dashboard/AIInsightsCard";
 import { JourneyOverviewSection } from "@/components/dashboard/JourneyOverviewSection";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useDashboardMetrics, formatINR } from "@/hooks/useDashboardMetrics";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Dashboard() {
   const { data, isLoading } = useDashboardMetrics();
+  const [onlineOrderCount, setOnlineOrderCount] = useState(0);
+
+  useEffect(() => {
+    async function fetchOnlineOrdersCount() {
+      try {
+        const { count } = await supabase
+          .from("online_orders")
+          .select("*", { count: "exact", head: true });
+        setOnlineOrderCount(count || 0);
+      } catch (error) {
+        console.error("Failed to fetch online orders count:", error);
+      }
+    }
+    fetchOnlineOrdersCount();
+  }, []);
 
   if (isLoading || !data) {
     return (
@@ -27,6 +46,20 @@ export default function Dashboard() {
         <h1 className="text-xl md:text-2xl font-semibold">Dashboard</h1>
         <p className="text-xs sm:text-sm text-muted-foreground">Business and marketing pulse at a glance.</p>
       </div>
+
+      {/* Online Orders Banner */}
+      {onlineOrderCount > 0 && (
+        <Alert className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
+          <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <AlertDescription className="text-sm text-blue-800 dark:text-blue-200">
+            You have new Online Order requests - <span className="font-semibold">{onlineOrderCount}</span>.{" "}
+            <Link to="/transactions/online-orders" className="font-semibold underline hover:no-underline">
+              Click here
+            </Link>{" "}
+            to view details
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Section 1: KPI Row */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
