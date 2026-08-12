@@ -318,6 +318,7 @@ serve(async (req) => {
     let sendStatus = "failed";
     let sendAccepted = false;
     let errorMessage: string | null = null;
+    let errorCode: string | null = null;
     let twilioSid: string | null = null;
 
     try {
@@ -340,13 +341,15 @@ serve(async (req) => {
       });
       const result = await resp.json();
       if (!resp.ok || !result?.success) {
-        throw new Error(result?.error || `whatsapp-send failed (${resp.status})`);
+        errorMessage = result?.error || `whatsapp-send failed (${resp.status})`;
+        errorCode = result?.errorCode || null;
+        throw new Error(errorMessage);
       }
       sendStatus = result.status || "queued";
       sendAccepted = ["accepted", "queued", "sending", "sent", "scheduled"].includes(sendStatus);
       twilioSid = result.twilio_message_sid || result.message_sid || null;
     } catch (e) {
-      errorMessage = (e as Error).message;
+      if (!errorMessage) errorMessage = (e as Error).message;
       console.error("[retry] send failed:", errorMessage);
     }
 
@@ -356,6 +359,7 @@ serve(async (req) => {
         delivery_status: sendAccepted ? "pending" : "failed",
         twilio_message_sid: twilioSid,
         error_message: errorMessage,
+        error_code: errorCode,
         template_body: JSON.stringify(variables),
         sent_at: sendAccepted ? new Date().toISOString() : log.sent_at,
       })
@@ -366,6 +370,7 @@ serve(async (req) => {
       status: sendStatus,
       twilio_message_sid: twilioSid,
       error: errorMessage,
+      errorCode: errorCode,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error) {
     console.error("[retry-journey-message] error:", error);

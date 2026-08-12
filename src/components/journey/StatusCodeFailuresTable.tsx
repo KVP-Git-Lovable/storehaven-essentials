@@ -256,7 +256,11 @@ export default function StatusCodeFailuresTable({
           setStatuses((s) => ({ ...s, [row.id]: { state: "success" } }));
           sent++;
         } else {
-          setStatuses((s) => ({ ...s, [row.id]: { state: "failed", error: data?.error || "Send not accepted" } }));
+          let displayError = data?.error || "Send not accepted";
+          if (data?.errorCode === "63024") {
+            displayError = "Recipient does not have an active WhatsApp account or hasn't accepted WhatsApp terms. Ask them to: 1) Sign up for WhatsApp if not done, 2) Update to latest version, 3) Accept terms/privacy policy.";
+          }
+          setStatuses((s) => ({ ...s, [row.id]: { state: "failed", error: displayError } }));
           failed++;
         }
       } catch (e: any) {
