@@ -91,3 +91,21 @@ export function imageUrlForColor(url?: string | null, color?: string | null): st
   const newPath = path.slice(0, lastIndex) + `_${code}${digit}` + path.slice(lastIndex + 3);
   return query ? `${newPath}?${query}` : newPath;
 }
+
+/**
+ * Derive the product code from a product image URL.
+ * `.../files/DER000443_R1.jpg?v=1748411747` -> "DER000443"
+ * Handles hyphenated codes (`SIL-MBR938112`), colour tokens (`_Y1`/`_R1`/`_W1`)
+ * and Shopify's extra uuid suffixes (`DER000411_W1_62ca219c-....jpg`).
+ */
+export function extractProductCode(imageUrl?: string | null): string | null {
+  if (!imageUrl) return null;
+  const path = imageUrl.split("?")[0];
+  let base = path.split("/").pop() || "";
+  base = base.replace(/\.[a-z0-9]+$/i, "");
+  if (!base) return null;
+  // Drop trailing uuid suffix, then the colour token.
+  base = base.replace(/_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "");
+  base = base.replace(/_[YRW]\d+$/i, "");
+  return base || null;
+}
