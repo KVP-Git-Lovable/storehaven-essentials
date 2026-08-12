@@ -226,8 +226,15 @@ serve(async (req) => {
     const twilioData = await twilioResponse.json();
 
     if (!twilioResponse.ok) {
-      return new Response(JSON.stringify({ error: `Twilio error [${twilioResponse.status}]: ${JSON.stringify(twilioData)}`, twilio: twilioData }), {
-        status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      const errorCode = String(twilioData?.code || twilioData?.error_code || twilioResponse.status);
+      const errorMessage = twilioData?.message || twilioData?.error || `Twilio error ${twilioResponse.status}`;
+      return new Response(JSON.stringify({
+        success: false,
+        error: errorMessage,
+        errorCode: errorCode,
+        twilio: twilioData
+      }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 

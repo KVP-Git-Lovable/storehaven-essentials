@@ -11,6 +11,7 @@ import {
   normalizeOptionValue,
   COLOR_SWATCH,
   imageUrlForColor,
+  extractProductCode,
 } from "@/lib/catalogOptions";
 
 type Variant = {
@@ -150,6 +151,10 @@ export default function CatalogItemDetail() {
             <Badge variant="outline" className="text-xs">{product.vendor}</Badge>
           )}
           <h1 className="text-2xl font-semibold tracking-tight">{product.title}</h1>
+
+          {extractProductCode(product.image_url) && (
+            <p className="text-sm text-muted-foreground">Product Code: {extractProductCode(product.image_url)}</p>
+          )}
 
           {matchedVariant?.variant_id && (
             <p className="text-xs text-muted-foreground">SKU: {matchedVariant.variant_id}</p>
