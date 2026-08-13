@@ -59,15 +59,20 @@ export function WhatsappMessageTrend() {
           }
         });
 
-        // Convert to array and sort by date, then format display
-        const result = Array.from(monthMap.entries())
-          .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([monthKey, counts]) => {
-            const [year, month] = monthKey.split('-');
-            const displayDate = new Date(parseInt(year), parseInt(month) - 1);
-            const displayMonth = displayDate.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
-            return { month: displayMonth, ...counts };
+        // Build a continuous 4-month axis so gaps render as zero, not a straight line
+        const result: MessageTrendRow[] = [];
+        const cursor = new Date();
+        cursor.setDate(1);
+        cursor.setMonth(cursor.getMonth() - 3);
+        for (let i = 0; i < 4; i++) {
+          const monthKey = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
+          const counts = monthMap.get(monthKey) ?? { sent: 0, delivered: 0 };
+          result.push({
+            month: cursor.toLocaleDateString("en-IN", { month: "short", year: "2-digit" }),
+            ...counts,
           });
+          cursor.setMonth(cursor.getMonth() + 1);
+        }
 
         setData(result);
       } catch (error) {
@@ -132,8 +137,8 @@ export function WhatsappMessageTrend() {
               labelFormatter={(d) => `${d}`}
               formatter={(v: number, name: string) => (name === "delivered" ? [`${v}`, "Delivered"] : [`${v}`, "Sent"])}
             />
-            <Area yAxisId="left" type="monotone" dataKey="delivered" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#deliveredGradient)" />
-            <Line yAxisId="right" type="monotone" dataKey="sent" stroke="hsl(var(--accent))" strokeWidth={2} dot={false} />
+            <Area yAxisId="left" type="monotone" dataKey="delivered" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#deliveredGradient)" dot={{ r: 3 }} />
+            <Line yAxisId="right" type="monotone" dataKey="sent" stroke="hsl(var(--accent))" strokeWidth={2} dot={{ r: 3 }} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
