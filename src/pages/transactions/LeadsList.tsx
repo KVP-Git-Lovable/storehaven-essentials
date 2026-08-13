@@ -74,10 +74,11 @@ export default function LeadsList() {
     queryKey: ["transactions-leads", search, page, activeViewId, activeFilters, activeTab],
     queryFn: async () => {
       if (activeTab === "enquiries") {
-        // Fetch from online_enquiries table
+        // Website appointments live in `leads` with source = 'website_appointment'
         let q: any = supabase
-          .from("online_enquiries")
+          .from("leads")
           .select("*", { count: "exact" })
+          .eq("source", "website_appointment")
           .order("created_at", { ascending: false });
         if (search.trim()) {
           const s = search.trim();
@@ -103,7 +104,7 @@ export default function LeadsList() {
       let q: any = supabase
         .from("leads")
         .select("*", { count: "exact" })
-        .neq("source", "website_appointment")
+        .or("source.is.null,source.neq.website_appointment")
         .order("created_at", { ascending: false });
       if (search.trim()) {
         const s = search.trim();
