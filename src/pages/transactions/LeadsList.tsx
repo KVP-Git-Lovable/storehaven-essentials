@@ -141,6 +141,20 @@ export default function LeadsList() {
 
   const totalPages = Math.ceil((data?.count || 0) / PAGE_SIZE);
 
+  const { data: enquiries, isLoading: enquiriesLoading } = useQuery({
+    queryKey: ["transactions-online-enquiries"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("leads")
+        .select("*")
+        .or("source.ilike.%website%,source.ilike.%online%,source.ilike.%appointment%")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return (data || []) as any[];
+    },
+  });
+
   const openLinkedCustomer = async (customerId: string) => {
     const { data: c } = await supabase.from("customers").select("*").eq("id", customerId).maybeSingle();
     if (!c) {
