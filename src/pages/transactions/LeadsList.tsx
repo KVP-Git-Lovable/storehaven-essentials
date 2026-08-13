@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, ChevronLeft, ChevronRight, Plus, Eye, Pencil, Trash2, ArrowRightLeft, CheckCircle2, Upload } from "lucide-react";
 import {
   AlertDialog,
@@ -47,12 +48,13 @@ export default function LeadsList() {
   const [activeFilters, setActiveFilters] = useState<FilterCondition[]>([]);
   const [activeSelectedFields, setActiveSelectedFields] = useState<string[]>([]);
   const [activeColumnOrder, setActiveColumnOrder] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<"leads" | "enquiries">("leads");
 
   const usingListView = activeViewId !== null;
 
   const leadsEntity = ENTITY_SCHEMAS.leads;
   const fieldLabel = (key: string) => leadsEntity.fields.find((f) => f.key === key)?.label || key;
-  const DEFAULT_COLUMNS = ["name", "email", "phone", "city", "state", "country", "date_of_birth", "gender", "is_converted"];
+  const DEFAULT_COLUMNS = ["name", "email", "phone", "city", "interest", "preferred_date", "source", "date_of_birth", "gender", "is_converted"];
   const viewColumns = (activeColumnOrder.length ? activeColumnOrder : activeSelectedFields).filter((k) => k !== "id");
   const displayColumns = usingListView && viewColumns.length ? viewColumns : DEFAULT_COLUMNS;
 
@@ -63,19 +65,37 @@ export default function LeadsList() {
       (r.name || "").toLowerCase().includes(s) ||
       (r.phone || "").toLowerCase().includes(s) ||
       (r.email || "").toLowerCase().includes(s) ||
-      (r.city || "").toLowerCase().includes(s)
+      (r.city || "").toLowerCase().includes(s) ||
+      (r.interest || "").toLowerCase().includes(s)
     );
   };
 
   const { data, isLoading } = useQuery({
-    queryKey: ["transactions-leads", search, page, activeViewId, activeFilters],
+    queryKey: ["transactions-leads", search, page, activeViewId, activeFilters, activeTab],
     queryFn: async () => {
+      if (activeTab === "enquiries") {
+        // Fetch from online_enquiries table
+        let q: any = supabase
+          .from("online_enquiries")
+          .select("*", { count: "exact" })
+          .order("created_at", { ascending: false });
+        if (search.trim()) {
+          const s = search.trim();
+          q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%,email.ilike.%${s}%,interest.ilike.%${s}%`);
+        }
+        q = q.range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+        const { data, error, count } = await q;
+        if (error) throw error;
+        return { rows: (data || []) as LeadRow[], count: count || 0 };
+      }
+
+      // Fetch leads tab - exclude website appointments
       if (usingListView) {
         const result = await executeListView(
           { entity_type: "leads", filters: activeFilters },
           { limit: 100000 }
         );
-        const rows = applyClientSearch(result.rows);
+        const rows = applyClientSearch(result.rows).filter((r: any) => r.source !== "website_appointment");
         const count = rows.length;
         const paged = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
         return { rows: paged as LeadRow[], count };
@@ -83,6 +103,7 @@ export default function LeadsList() {
       let q: any = supabase
         .from("leads")
         .select("*", { count: "exact" })
+        .neq("source", "website_appointment")
         .order("created_at", { ascending: false });
       if (search.trim()) {
         const s = search.trim();
@@ -102,6 +123,7 @@ export default function LeadsList() {
         return <span className="font-medium">{v || "—"}</span>;
       case "email":
       case "address":
+      case "interest":
         return <span className="text-xs">{v || "—"}</span>;
       case "is_converted":
         return l.is_converted ? (
@@ -111,6 +133,7 @@ export default function LeadsList() {
         );
       case "created_at":
       case "converted_at":
+      case "preferred_date":
         return v ? format(new Date(v), "dd MMM yyyy") : "—";
       case "date_of_birth":
         return formatDOB(v);
@@ -137,6 +160,20 @@ export default function LeadsList() {
 
   const totalPages = Math.ceil((data?.count || 0) / PAGE_SIZE);
 
+  const { data: enquiries, isLoading: enquiriesLoading } = useQuery({
+    queryKey: ["transactions-online-enquiries"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("leads")
+        .select("*")
+        .or("source.ilike.%website%,source.ilike.%online%,source.ilike.%appointment%")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return (data || []) as any[];
+    },
+  });
+
   const openLinkedCustomer = async (customerId: string) => {
     const { data: c } = await supabase.from("customers").select("*").eq("id", customerId).maybeSingle();
     if (!c) {
@@ -151,125 +188,209 @@ export default function LeadsList() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Leads</h1>
-          <p className="text-muted-foreground">Prospect contacts that can be converted into customers.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Leads & Enquiries</h1>
+          <p className="text-muted-foreground">Manage leads and online enquiries.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" /> Import Leads
-          </Button>
-          <Button onClick={() => { setSelected(null); setMode("create"); setFormOpen(true); }}>
-            <Plus className="mr-2 h-4 w-4" /> New Lead
-          </Button>
-        </div>
+        {activeTab === "leads" && (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Upload className="mr-2 h-4 w-4" /> Import Leads
+            </Button>
+            <Button onClick={() => { setSelected(null); setMode("create"); setFormOpen(true); }}>
+              <Plus className="mr-2 h-4 w-4" /> New Lead
+            </Button>
+          </div>
+        )}
       </div>
 
-      <EntityListViewsBar
-        entity="leads"
-        activeViewId={activeViewId}
-        onApply={(id, filters, selectedFields, columnOrder) => {
-          setActiveViewId(id);
-          setActiveFilters(filters);
-          setActiveSelectedFields(selectedFields || []);
-          setActiveColumnOrder(columnOrder || []);
-          setPage(0);
-        }}
-      />
+      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as "leads" | "enquiries"); setPage(0); }} className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="leads">Leads</TabsTrigger>
+          <TabsTrigger value="enquiries">Online Enquiries</TabsTrigger>
+        </TabsList>
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search name, phone, email, city..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-            className="pl-9"
+        <TabsContent value="leads" className="space-y-6">
+          <EntityListViewsBar
+            entity="leads"
+            activeViewId={activeViewId}
+            onApply={(id, filters, selectedFields, columnOrder) => {
+              setActiveViewId(id);
+              setActiveFilters(filters);
+              setActiveSelectedFields(selectedFields || []);
+              setActiveColumnOrder(columnOrder || []);
+              setPage(0);
+            }}
           />
-        </div>
-        <Badge variant="secondary">{data?.count ?? 0} total</Badge>
-      </div>
 
-      <Card className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {displayColumns.map((col) => (
-                <TableHead key={col}>{col === "is_converted" ? "Status" : fieldLabel(col)}</TableHead>
-              ))}
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
-            ) : (data?.rows || []).length === 0 ? (
-              <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">No leads found.</TableCell></TableRow>
-            ) : (
-              data!.rows.map((l) => (
-                <TableRow
-                  key={l.id}
-                  className={cn(
-                    "cursor-pointer hover:bg-muted/50",
-                    l.is_converted && "opacity-60 bg-muted/30"
-                  )}
-                  onClick={() => { setSelected(l); setMode("view"); setFormOpen(true); }}
-                >
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search name, phone, email, city..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+                className="pl-9"
+              />
+            </div>
+            <Badge variant="secondary">{data?.count ?? 0} total</Badge>
+          </div>
+
+          <Card className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
                   {displayColumns.map((col) => (
-                    <TableCell key={col} className={col === "address" ? "max-w-[200px] truncate" : undefined}>
-                      {renderCell(col, l)}
-                    </TableCell>
+                    <TableHead key={col}>{col === "is_converted" ? "Status" : fieldLabel(col)}</TableHead>
                   ))}
-                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-1">
-                      {l.is_converted ? (
-                        l.converted_customer_id && (
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                ) : (data?.rows || []).length === 0 ? (
+                  <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">No leads found.</TableCell></TableRow>
+                ) : (
+                  data!.rows.map((l) => (
+                    <TableRow
+                      key={l.id}
+                      className={cn(
+                        "cursor-pointer hover:bg-muted/50",
+                        l.is_converted && "opacity-60 bg-muted/30"
+                      )}
+                      onClick={() => { setSelected(l); setMode("view"); setFormOpen(true); }}
+                    >
+                      {displayColumns.map((col) => (
+                        <TableCell key={col} className={col === "address" ? "max-w-[200px] truncate" : undefined}>
+                          {renderCell(col, l)}
+                        </TableCell>
+                      ))}
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          {l.is_converted ? (
+                            l.converted_customer_id && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openLinkedCustomer(l.converted_customer_id!)}
+                              >
+                                View Customer
+                              </Button>
+                            )
+                          ) : (
+                            <Button variant="default" size="sm" onClick={() => setConvertLead(l)}>
+                              <ArrowRightLeft className="h-3.5 w-3.5 mr-1" /> Convert
+                            </Button>
+                          )}
+                          <Button variant="outline" size="icon" onClick={() => { setSelected(l); setMode("view"); setFormOpen(true); }}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="outline"
-                            size="sm"
-                            onClick={() => openLinkedCustomer(l.converted_customer_id!)}
+                            size="icon"
+                            disabled={l.is_converted}
+                            onClick={() => { setSelected(l); setMode("edit"); setFormOpen(true); }}
                           >
-                            View Customer
+                            <Pencil className="h-4 w-4" />
                           </Button>
-                        )
-                      ) : (
-                        <Button variant="default" size="sm" onClick={() => setConvertLead(l)}>
-                          <ArrowRightLeft className="h-3.5 w-3.5 mr-1" /> Convert
-                        </Button>
-                      )}
-                      <Button variant="outline" size="icon" onClick={() => { setSelected(l); setMode("view"); setFormOpen(true); }}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        disabled={l.is_converted}
-                        onClick={() => { setSelected(l); setMode("edit"); setFormOpen(true); }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="icon" onClick={() => setDeleteTarget(l)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+                          <Button variant="outline" size="icon" onClick={() => setDeleteTarget(l)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </Card>
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Page {page + 1} of {Math.max(totalPages, 1)}</p>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
-            <ChevronLeft className="h-4 w-4" /> Previous
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page + 1 >= totalPages}>
-            Next <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">Page {page + 1} of {Math.max(totalPages, 1)}</p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
+                <ChevronLeft className="h-4 w-4" /> Previous
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page + 1 >= totalPages}>
+                Next <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="enquiries" className="space-y-6">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search name, phone, email, interest..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+                className="pl-9"
+              />
+            </div>
+            <Badge variant="secondary">{data?.count ?? 0} total</Badge>
+          </div>
+
+          <Card className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Interest</TableHead>
+                  <TableHead>Preferred Date</TableHead>
+                  <TableHead>Submitted</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                ) : (data?.rows || []).length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No enquiries found.</TableCell></TableRow>
+                ) : (
+                  data!.rows.map((e: any) => (
+                    <TableRow key={e.id} className="cursor-pointer hover:bg-muted/50">
+                      <TableCell className="font-medium">{e.name || "—"}</TableCell>
+                      <TableCell className="text-xs">{e.phone || "—"}</TableCell>
+                      <TableCell className="text-xs">{e.email || "—"}</TableCell>
+                      <TableCell className="text-xs max-w-[200px] truncate">{e.interest || "—"}</TableCell>
+                      <TableCell>{e.preferred_date ? format(new Date(e.preferred_date), "dd MMM yyyy") : "—"}</TableCell>
+                      <TableCell className="text-xs">{e.created_at ? format(new Date(e.created_at), "dd MMM yyyy, HH:mm") : "—"}</TableCell>
+                      <TableCell className="text-right" onClick={(ev) => ev.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          {!e.is_converted && (
+                            <Button variant="default" size="sm" onClick={() => setConvertLead(e)}>
+                              <ArrowRightLeft className="h-3.5 w-3.5 mr-1" /> Convert
+                            </Button>
+                          )}
+                          <Button variant="outline" size="icon" onClick={() => { setSelected(e); setMode("view"); setFormOpen(true); }}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </Card>
+
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">Page {page + 1} of {Math.max(Math.ceil((data?.count || 0) / PAGE_SIZE), 1)}</p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
+                <ChevronLeft className="h-4 w-4" /> Previous
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page + 1 >= Math.ceil((data?.count || 0) / PAGE_SIZE)}>
+                Next <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <LeadFormDialog open={formOpen} onOpenChange={setFormOpen} lead={selected} mode={mode} />
       <LeadConvertDialog open={!!convertLead} onOpenChange={(o) => !o && setConvertLead(null)} lead={convertLead} />
