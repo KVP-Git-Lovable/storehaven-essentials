@@ -64,7 +64,8 @@ export default function LeadsList() {
       (r.name || "").toLowerCase().includes(s) ||
       (r.phone || "").toLowerCase().includes(s) ||
       (r.email || "").toLowerCase().includes(s) ||
-      (r.city || "").toLowerCase().includes(s)
+      (r.city || "").toLowerCase().includes(s) ||
+      (r.interest || "").toLowerCase().includes(s)
     );
   };
 
@@ -103,6 +104,7 @@ export default function LeadsList() {
         return <span className="font-medium">{v || "—"}</span>;
       case "email":
       case "address":
+      case "interest":
         return <span className="text-xs">{v || "—"}</span>;
       case "is_converted":
         return l.is_converted ? (
@@ -112,6 +114,7 @@ export default function LeadsList() {
         );
       case "created_at":
       case "converted_at":
+      case "preferred_date":
         return v ? format(new Date(v), "dd MMM yyyy") : "—";
       case "date_of_birth":
         return formatDOB(v);

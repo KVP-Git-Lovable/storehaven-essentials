@@ -26,6 +26,8 @@ export interface LeadRow {
   created_at: string;
   date_of_birth?: string | null;
   gender?: string | null;
+  interest?: string | null;
+  preferred_date?: string | null;
 }
 
 interface Props {
@@ -35,7 +37,7 @@ interface Props {
   mode?: "create" | "edit" | "view";
 }
 
-const empty = { name: "", email: "", phone: "", city: "", state: "", country: "", address: "", date_of_birth: "", gender: "" };
+const empty = { name: "", email: "", phone: "", city: "", state: "", country: "", address: "", date_of_birth: "", gender: "", interest: "", preferred_date: "" };
 
 export function LeadFormDialog({ open, onOpenChange, lead = null, mode = "create" }: Props) {
   const qc = useQueryClient();
@@ -56,6 +58,8 @@ export function LeadFormDialog({ open, onOpenChange, lead = null, mode = "create
         address: lead.address || "",
         date_of_birth: (lead as any).date_of_birth || "",
         gender: (lead as any).gender || "",
+        interest: (lead as any).interest || "",
+        preferred_date: (lead as any).preferred_date || "",
       });
     } else {
       setForm(empty);
@@ -74,6 +78,8 @@ export function LeadFormDialog({ open, onOpenChange, lead = null, mode = "create
         address: form.address || null,
         date_of_birth: form.date_of_birth || null,
         gender: form.gender || null,
+        interest: form.interest || null,
+        preferred_date: form.preferred_date || null,
       };
       const q = isEdit
         ? supabase.from("leads").update(payload).eq("id", lead!.id)
@@ -148,6 +154,14 @@ export function LeadFormDialog({ open, onOpenChange, lead = null, mode = "create
           <div className="col-span-2">
             <Label>Address</Label>
             <Textarea value={form.address} disabled={isView} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+          </div>
+          <div>
+            <Label>Preferred Date</Label>
+            <Input type="date" value={form.preferred_date} disabled={isView} onChange={(e) => setForm({ ...form, preferred_date: e.target.value })} />
+          </div>
+          <div className="col-span-2">
+            <Label>Interest</Label>
+            <Textarea value={form.interest} disabled={isView} placeholder="Describe their interests, preferences, or product inquiries..." onChange={(e) => setForm({ ...form, interest: e.target.value })} />
           </div>
         </div>
 
