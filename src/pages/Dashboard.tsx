@@ -8,11 +8,7 @@ import { KpiCard } from "@/components/dashboard/KpiCard";
 import { RevenueOrdersTrend } from "@/components/dashboard/RevenueOrdersTrend";
 import { CommunicationHealth } from "@/components/dashboard/CommunicationHealth";
 import { MarketingQuickActions } from "@/components/dashboard/MarketingQuickActions";
-import { MarketingRecentActivity } from "@/components/dashboard/MarketingRecentActivity";
-import { TopChannelCard } from "@/components/dashboard/TopChannelCard";
 import { TeamSnapshotCard } from "@/components/dashboard/TeamSnapshotCard";
-import { AIInsightsCard } from "@/components/dashboard/AIInsightsCard";
-import { JourneyOverviewSection } from "@/components/dashboard/JourneyOverviewSection";
 import { OrderFormDialog } from "@/components/transactions/OrderFormDialog";
 import { useDashboardMetrics, formatINR } from "@/hooks/useDashboardMetrics";
 
@@ -131,21 +127,13 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Journey overview + health + WhatsApp wallet */}
-      <JourneyOverviewSection />
-
-      {/* Section 4 + 5 + (6,7,8 stacked) */}
-      <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-3">
+      {/* Section 4 + (6,7,8 stacked) */}
+      <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2">
         <div className="space-y-4 md:space-y-6">
           <MarketingQuickActions />
         </div>
-        <div>
-          <MarketingRecentActivity items={data.recent} />
-        </div>
         <div className="space-y-4 md:space-y-6">
-          <TopChannelCard data={data.channelCompare} />
           <TeamSnapshotCard team={data.team} />
-          <AIInsightsCard insights={data.insights} />
         </div>
       </div>
 
