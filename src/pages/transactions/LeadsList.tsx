@@ -53,7 +53,7 @@ export default function LeadsList() {
 
   const leadsEntity = ENTITY_SCHEMAS.leads;
   const fieldLabel = (key: string) => leadsEntity.fields.find((f) => f.key === key)?.label || key;
-  const DEFAULT_COLUMNS = ["name", "email", "phone", "city", "state", "country", "date_of_birth", "gender", "is_converted"];
+  const DEFAULT_COLUMNS = ["name", "email", "phone", "city", "interest", "preferred_date", "source", "date_of_birth", "gender", "is_converted"];
   const viewColumns = (activeColumnOrder.length ? activeColumnOrder : activeSelectedFields).filter((k) => k !== "id");
   const displayColumns = usingListView && viewColumns.length ? viewColumns : DEFAULT_COLUMNS;
 
