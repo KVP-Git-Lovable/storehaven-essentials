@@ -45,7 +45,8 @@ export function WhatsappMessageTrend() {
 
         messages?.forEach((msg) => {
           const date = new Date(msg.sent_at);
-          const monthKey = date.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+          // Use YYYY-MM format for proper grouping and sorting
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
           if (!monthMap.has(monthKey)) {
             monthMap.set(monthKey, { sent: 0, delivered: 0 });
@@ -58,13 +59,14 @@ export function WhatsappMessageTrend() {
           }
         });
 
-        // Convert to array and sort by date
+        // Convert to array and sort by date, then format display
         const result = Array.from(monthMap.entries())
-          .map(([month, counts]) => ({ month, ...counts }))
-          .sort((a, b) => {
-            const dateA = new Date(a.month);
-            const dateB = new Date(b.month);
-            return dateA.getTime() - dateB.getTime();
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([monthKey, counts]) => {
+            const [year, month] = monthKey.split('-');
+            const displayDate = new Date(parseInt(year), parseInt(month) - 1);
+            const displayMonth = displayDate.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+            return { month: displayMonth, ...counts };
           });
 
         setData(result);
