@@ -1,15 +1,13 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Users, UserPlus, ShoppingCart, IndianRupee, Megaphone, Loader2, AlertCircle } from "lucide-react";
+import { Users, UserPlus, ShoppingCart, IndianRupee, Megaphone, Loader2, AlertCircle, Plus, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { KpiCard } from "@/components/dashboard/KpiCard";
-import { RevenueOrdersTrend } from "@/components/dashboard/RevenueOrdersTrend";
+import { WhatsappMessageTrend } from "@/components/dashboard/WhatsappMessageTrend";
 import { CommunicationHealth } from "@/components/dashboard/CommunicationHealth";
 import { MarketingQuickActions } from "@/components/dashboard/MarketingQuickActions";
-import { MarketingRecentActivity } from "@/components/dashboard/MarketingRecentActivity";
-import { TopChannelCard } from "@/components/dashboard/TopChannelCard";
 import { TeamSnapshotCard } from "@/components/dashboard/TeamSnapshotCard";
-import { AIInsightsCard } from "@/components/dashboard/AIInsightsCard";
-import { JourneyOverviewSection } from "@/components/dashboard/JourneyOverviewSection";
+import { LeadFormDialog } from "@/components/transactions/LeadFormDialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useDashboardMetrics, formatINR } from "@/hooks/useDashboardMetrics";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 export default function Dashboard() {
   const { data, isLoading } = useDashboardMetrics();
   const [onlineOrderCount, setOnlineOrderCount] = useState(0);
+  const [leadFormOpen, setLeadFormOpen] = useState(false);
 
   useEffect(() => {
     async function fetchOnlineOrdersCount() {
@@ -42,9 +41,16 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4 md:space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-xl md:text-2xl font-semibold">Dashboard</h1>
-        <p className="text-xs sm:text-sm text-muted-foreground">Business and marketing pulse at a glance.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl md:text-2xl font-semibold">Dashboard</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">Business and marketing pulse at a glance.</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setLeadFormOpen(true)}>
+            <UserPlus className="mr-2 h-4 w-4" /> New Lead
+          </Button>
+        </div>
       </div>
 
       {/* Online Orders Banner */}
@@ -108,30 +114,24 @@ export default function Dashboard() {
       {/* Section 2 + 3: Trend + Communication Health */}
       <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <RevenueOrdersTrend data={data.trend} />
+          <WhatsappMessageTrend />
         </div>
         <div>
           <CommunicationHealth comm={data.comm} />
         </div>
       </div>
 
-      {/* Journey overview + health + WhatsApp wallet */}
-      <JourneyOverviewSection />
-
-      {/* Section 4 + 5 + (6,7,8 stacked) */}
-      <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-3">
+      {/* Section 4 + (6,7,8 stacked) */}
+      <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2">
         <div className="space-y-4 md:space-y-6">
           <MarketingQuickActions />
         </div>
-        <div>
-          <MarketingRecentActivity items={data.recent} />
-        </div>
         <div className="space-y-4 md:space-y-6">
-          <TopChannelCard data={data.channelCompare} />
           <TeamSnapshotCard team={data.team} />
-          <AIInsightsCard insights={data.insights} />
         </div>
       </div>
+
+      <LeadFormDialog open={leadFormOpen} onOpenChange={setLeadFormOpen} mode="create" />
     </div>
   );
 }
