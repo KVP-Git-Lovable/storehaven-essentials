@@ -99,7 +99,7 @@ export function LeadFormDialog({ open, onOpenChange, lead = null, mode = "create
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="!inset-0 !left-0 !right-0 !w-screen !max-h-none !max-w-none !translate-x-0 !translate-y-0 !rounded-none !m-0 overflow-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {title}

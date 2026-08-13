@@ -10,6 +10,7 @@ import { CommunicationHealth } from "@/components/dashboard/CommunicationHealth"
 import { MarketingQuickActions } from "@/components/dashboard/MarketingQuickActions";
 import { TeamSnapshotCard } from "@/components/dashboard/TeamSnapshotCard";
 import { OrderFormDialog } from "@/components/transactions/OrderFormDialog";
+import { LeadFormDialog } from "@/components/transactions/LeadFormDialog";
 import { useDashboardMetrics, formatINR } from "@/hooks/useDashboardMetrics";
 
 export default function Dashboard() {
@@ -18,6 +19,7 @@ export default function Dashboard() {
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("create");
+  const [leadFormOpen, setLeadFormOpen] = useState(false);
 
   const { data: pendingOrders } = useQuery({
     queryKey: ["pending-online-orders"],
@@ -49,9 +51,14 @@ export default function Dashboard() {
           <h1 className="text-xl md:text-2xl font-semibold">Dashboard</h1>
           <p className="text-xs sm:text-sm text-muted-foreground">Business and marketing pulse at a glance.</p>
         </div>
-        <Button onClick={() => { setSelectedOrder(null); setDialogMode("create"); setCreateOpen(true); }}>
-          <Plus className="mr-2 h-4 w-4" /> New Sale
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => { setSelectedOrder(null); setDialogMode("create"); setCreateOpen(true); }}>
+            <Plus className="mr-2 h-4 w-4" /> New Sale
+          </Button>
+          <Button variant="outline" onClick={() => setLeadFormOpen(true)}>
+            <UserPlus className="mr-2 h-4 w-4" /> New Lead
+          </Button>
+        </div>
       </div>
 
       {/* Online Orders Banner */}
@@ -138,6 +145,7 @@ export default function Dashboard() {
       </div>
 
       <OrderFormDialog open={createOpen} onOpenChange={setCreateOpen} order={selectedOrder} mode={dialogMode} />
+      <LeadFormDialog open={leadFormOpen} onOpenChange={setLeadFormOpen} mode="create" />
     </div>
   );
 }
