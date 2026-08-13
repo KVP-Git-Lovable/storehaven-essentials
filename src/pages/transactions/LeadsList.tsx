@@ -141,6 +141,20 @@ export default function LeadsList() {
 
   const totalPages = Math.ceil((data?.count || 0) / PAGE_SIZE);
 
+  const { data: enquiries, isLoading: enquiriesLoading } = useQuery({
+    queryKey: ["transactions-online-enquiries"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("leads")
+        .select("*")
+        .or("source.ilike.%website%,source.ilike.%online%,source.ilike.%appointment%")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return (data || []) as any[];
+    },
+  });
+
   const openLinkedCustomer = async (customerId: string) => {
     const { data: c } = await supabase.from("customers").select("*").eq("id", customerId).maybeSingle();
     if (!c) {
@@ -284,18 +298,60 @@ export default function LeadsList() {
         </TabsContent>
 
         <TabsContent value="enquiries" className="space-y-6">
-          <Card className="p-8">
-            <div className="flex flex-col items-center justify-center gap-4 min-h-96">
-              <div className="text-center space-y-2">
-                <h3 className="text-lg font-semibold">Online Enquiries</h3>
-                <p className="text-sm text-muted-foreground">
-                  Online enquiries from your website will appear here.
-                </p>
-              </div>
-              <Button variant="outline" disabled>
-                No enquiries yet
-              </Button>
-            </div>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-muted-foreground">Appointment requests and enquiries submitted from your website.</p>
+            <Badge variant="secondary">{enquiries?.length ?? 0} total</Badge>
+          </div>
+          <Card className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Interest</TableHead>
+                  <TableHead>Preferred Date</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Submitted</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {enquiriesLoading ? (
+                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                ) : (enquiries || []).length === 0 ? (
+                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No online enquiries yet.</TableCell></TableRow>
+                ) : (
+                  enquiries!.map((l) => (
+                    <TableRow
+                      key={l.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => { setSelected(l); setMode("view"); setFormOpen(true); }}
+                    >
+                      <TableCell className="font-medium">{l.name || "—"}</TableCell>
+                      <TableCell>{l.phone || "—"}</TableCell>
+                      <TableCell className="text-xs">{l.email || "—"}</TableCell>
+                      <TableCell className="text-xs">{l.interest || "—"}</TableCell>
+                      <TableCell>{l.preferred_date ? format(new Date(l.preferred_date), "dd MMM yyyy") : "—"}</TableCell>
+                      <TableCell><Badge variant="outline">{l.source || "—"}</Badge></TableCell>
+                      <TableCell>{l.created_at ? format(new Date(l.created_at), "dd MMM yyyy, HH:mm") : "—"}</TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          {!l.is_converted && (
+                            <Button variant="default" size="sm" onClick={() => setConvertLead(l)}>
+                              <ArrowRightLeft className="h-3.5 w-3.5 mr-1" /> Convert
+                            </Button>
+                          )}
+                          <Button variant="outline" size="icon" onClick={() => { setSelected(l); setMode("view"); setFormOpen(true); }}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
           </Card>
         </TabsContent>
       </Tabs>
