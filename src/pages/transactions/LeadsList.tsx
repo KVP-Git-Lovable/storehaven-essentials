@@ -70,14 +70,15 @@ export default function LeadsList() {
     );
   };
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["transactions-leads", search, page, activeViewId, activeFilters, activeTab],
     queryFn: async () => {
       if (activeTab === "enquiries") {
-        // Fetch from online_enquiries table
+        // Website appointments are stored in leads and shown only in this tab.
         let q: any = supabase
-          .from("online_enquiries")
+          .from("leads")
           .select("*", { count: "exact" })
+          .eq("source", "website_appointment")
           .order("created_at", { ascending: false });
         if (search.trim()) {
           const s = search.trim();
@@ -103,7 +104,7 @@ export default function LeadsList() {
       let q: any = supabase
         .from("leads")
         .select("*", { count: "exact" })
-        .neq("source", "website_appointment")
+        .or("source.is.null,source.neq.website_appointment")
         .order("created_at", { ascending: false });
       if (search.trim()) {
         const s = search.trim();
@@ -234,6 +235,8 @@ export default function LeadsList() {
               <TableBody>
                 {isLoading ? (
                   <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                ) : isError ? (
+                  <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-destructive">Unable to load leads: {error instanceof Error ? error.message : "Please try again."}</TableCell></TableRow>
                 ) : (data?.rows || []).length === 0 ? (
                   <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">No leads found.</TableCell></TableRow>
                 ) : (
@@ -334,6 +337,8 @@ export default function LeadsList() {
               <TableBody>
                 {isLoading ? (
                   <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                ) : isError ? (
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-destructive">Unable to load enquiries: {error instanceof Error ? error.message : "Please try again."}</TableCell></TableRow>
                 ) : (data?.rows || []).length === 0 ? (
                   <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No enquiries found.</TableCell></TableRow>
                 ) : (
