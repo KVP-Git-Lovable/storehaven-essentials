@@ -4741,9 +4741,12 @@ export type Database = {
           email: string | null
           gender: string | null
           id: string
+          interest: string | null
           is_converted: boolean
           name: string | null
           phone: string
+          preferred_date: string | null
+          source: string | null
           state: string | null
           updated_at: string
         }
@@ -4758,9 +4761,12 @@ export type Database = {
           email?: string | null
           gender?: string | null
           id?: string
+          interest?: string | null
           is_converted?: boolean
           name?: string | null
           phone: string
+          preferred_date?: string | null
+          source?: string | null
           state?: string | null
           updated_at?: string
         }
@@ -4775,9 +4781,12 @@ export type Database = {
           email?: string | null
           gender?: string | null
           id?: string
+          interest?: string | null
           is_converted?: boolean
           name?: string | null
           phone?: string
+          preferred_date?: string | null
+          source?: string | null
           state?: string | null
           updated_at?: string
         }
