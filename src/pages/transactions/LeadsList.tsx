@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, ChevronLeft, ChevronRight, Plus, Eye, Pencil, Trash2, ArrowRightLeft, CheckCircle2, Upload } from "lucide-react";
 import {
   AlertDialog,
@@ -151,8 +152,8 @@ export default function LeadsList() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Leads</h1>
-          <p className="text-muted-foreground">Prospect contacts that can be converted into customers.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Leads & Enquiries</h1>
+          <p className="text-muted-foreground">Manage leads and online enquiries.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => setImportOpen(true)}>
@@ -164,112 +165,137 @@ export default function LeadsList() {
         </div>
       </div>
 
-      <EntityListViewsBar
-        entity="leads"
-        activeViewId={activeViewId}
-        onApply={(id, filters, selectedFields, columnOrder) => {
-          setActiveViewId(id);
-          setActiveFilters(filters);
-          setActiveSelectedFields(selectedFields || []);
-          setActiveColumnOrder(columnOrder || []);
-          setPage(0);
-        }}
-      />
+      <Tabs defaultValue="leads" className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="leads">Leads</TabsTrigger>
+          <TabsTrigger value="enquiries">Online Enquiries</TabsTrigger>
+        </TabsList>
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search name, phone, email, city..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-            className="pl-9"
+        <TabsContent value="leads" className="space-y-6">
+          <EntityListViewsBar
+            entity="leads"
+            activeViewId={activeViewId}
+            onApply={(id, filters, selectedFields, columnOrder) => {
+              setActiveViewId(id);
+              setActiveFilters(filters);
+              setActiveSelectedFields(selectedFields || []);
+              setActiveColumnOrder(columnOrder || []);
+              setPage(0);
+            }}
           />
-        </div>
-        <Badge variant="secondary">{data?.count ?? 0} total</Badge>
-      </div>
 
-      <Card className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {displayColumns.map((col) => (
-                <TableHead key={col}>{col === "is_converted" ? "Status" : fieldLabel(col)}</TableHead>
-              ))}
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
-            ) : (data?.rows || []).length === 0 ? (
-              <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">No leads found.</TableCell></TableRow>
-            ) : (
-              data!.rows.map((l) => (
-                <TableRow
-                  key={l.id}
-                  className={cn(
-                    "cursor-pointer hover:bg-muted/50",
-                    l.is_converted && "opacity-60 bg-muted/30"
-                  )}
-                  onClick={() => { setSelected(l); setMode("view"); setFormOpen(true); }}
-                >
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search name, phone, email, city..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+                className="pl-9"
+              />
+            </div>
+            <Badge variant="secondary">{data?.count ?? 0} total</Badge>
+          </div>
+
+          <Card className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
                   {displayColumns.map((col) => (
-                    <TableCell key={col} className={col === "address" ? "max-w-[200px] truncate" : undefined}>
-                      {renderCell(col, l)}
-                    </TableCell>
+                    <TableHead key={col}>{col === "is_converted" ? "Status" : fieldLabel(col)}</TableHead>
                   ))}
-                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-1">
-                      {l.is_converted ? (
-                        l.converted_customer_id && (
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                ) : (data?.rows || []).length === 0 ? (
+                  <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">No leads found.</TableCell></TableRow>
+                ) : (
+                  data!.rows.map((l) => (
+                    <TableRow
+                      key={l.id}
+                      className={cn(
+                        "cursor-pointer hover:bg-muted/50",
+                        l.is_converted && "opacity-60 bg-muted/30"
+                      )}
+                      onClick={() => { setSelected(l); setMode("view"); setFormOpen(true); }}
+                    >
+                      {displayColumns.map((col) => (
+                        <TableCell key={col} className={col === "address" ? "max-w-[200px] truncate" : undefined}>
+                          {renderCell(col, l)}
+                        </TableCell>
+                      ))}
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          {l.is_converted ? (
+                            l.converted_customer_id && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openLinkedCustomer(l.converted_customer_id!)}
+                              >
+                                View Customer
+                              </Button>
+                            )
+                          ) : (
+                            <Button variant="default" size="sm" onClick={() => setConvertLead(l)}>
+                              <ArrowRightLeft className="h-3.5 w-3.5 mr-1" /> Convert
+                            </Button>
+                          )}
+                          <Button variant="outline" size="icon" onClick={() => { setSelected(l); setMode("view"); setFormOpen(true); }}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="outline"
-                            size="sm"
-                            onClick={() => openLinkedCustomer(l.converted_customer_id!)}
+                            size="icon"
+                            disabled={l.is_converted}
+                            onClick={() => { setSelected(l); setMode("edit"); setFormOpen(true); }}
                           >
-                            View Customer
+                            <Pencil className="h-4 w-4" />
                           </Button>
-                        )
-                      ) : (
-                        <Button variant="default" size="sm" onClick={() => setConvertLead(l)}>
-                          <ArrowRightLeft className="h-3.5 w-3.5 mr-1" /> Convert
-                        </Button>
-                      )}
-                      <Button variant="outline" size="icon" onClick={() => { setSelected(l); setMode("view"); setFormOpen(true); }}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        disabled={l.is_converted}
-                        onClick={() => { setSelected(l); setMode("edit"); setFormOpen(true); }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="icon" onClick={() => setDeleteTarget(l)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+                          <Button variant="outline" size="icon" onClick={() => setDeleteTarget(l)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </Card>
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Page {page + 1} of {Math.max(totalPages, 1)}</p>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
-            <ChevronLeft className="h-4 w-4" /> Previous
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page + 1 >= totalPages}>
-            Next <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">Page {page + 1} of {Math.max(totalPages, 1)}</p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
+                <ChevronLeft className="h-4 w-4" /> Previous
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page + 1 >= totalPages}>
+                Next <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="enquiries" className="space-y-6">
+          <Card className="p-8">
+            <div className="flex flex-col items-center justify-center gap-4 min-h-96">
+              <div className="text-center space-y-2">
+                <h3 className="text-lg font-semibold">Online Enquiries</h3>
+                <p className="text-sm text-muted-foreground">
+                  Online enquiries from your website will appear here.
+                </p>
+              </div>
+              <Button variant="outline" disabled>
+                No enquiries yet
+              </Button>
+            </div>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <LeadFormDialog open={formOpen} onOpenChange={setFormOpen} lead={selected} mode={mode} />
       <LeadConvertDialog open={!!convertLead} onOpenChange={(o) => !o && setConvertLead(null)} lead={convertLead} />
