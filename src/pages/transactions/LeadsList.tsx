@@ -54,7 +54,7 @@ export default function LeadsList() {
 
   const leadsEntity = ENTITY_SCHEMAS.leads;
   const fieldLabel = (key: string) => leadsEntity.fields.find((f) => f.key === key)?.label || key;
-  const DEFAULT_COLUMNS = ["name", "email", "phone", "city", "state", "country", "date_of_birth", "gender", "is_converted"];
+  const DEFAULT_COLUMNS = ["name", "email", "phone", "city", "interest", "preferred_date", "source", "date_of_birth", "gender", "is_converted"];
   const viewColumns = (activeColumnOrder.length ? activeColumnOrder : activeSelectedFields).filter((k) => k !== "id");
   const displayColumns = usingListView && viewColumns.length ? viewColumns : DEFAULT_COLUMNS;
 
@@ -70,15 +70,14 @@ export default function LeadsList() {
     );
   };
 
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["transactions-leads", search, page, activeViewId, activeFilters, activeTab],
     queryFn: async () => {
       if (activeTab === "enquiries") {
-        // Website appointments are stored in leads and shown only in this tab.
+        // Fetch from online_enquiries table
         let q: any = supabase
-          .from("leads")
+          .from("online_enquiries")
           .select("*", { count: "exact" })
-          .eq("source", "website_appointment")
           .order("created_at", { ascending: false });
         if (search.trim()) {
           const s = search.trim();
@@ -104,7 +103,7 @@ export default function LeadsList() {
       let q: any = supabase
         .from("leads")
         .select("*", { count: "exact" })
-        .or("source.is.null,source.neq.website_appointment")
+        .neq("source", "website_appointment")
         .order("created_at", { ascending: false });
       if (search.trim()) {
         const s = search.trim();
@@ -160,6 +159,20 @@ export default function LeadsList() {
   });
 
   const totalPages = Math.ceil((data?.count || 0) / PAGE_SIZE);
+
+  const { data: enquiries, isLoading: enquiriesLoading } = useQuery({
+    queryKey: ["transactions-online-enquiries"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("leads")
+        .select("*")
+        .or("source.ilike.%website%,source.ilike.%online%,source.ilike.%appointment%")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return (data || []) as any[];
+    },
+  });
 
   const openLinkedCustomer = async (customerId: string) => {
     const { data: c } = await supabase.from("customers").select("*").eq("id", customerId).maybeSingle();
@@ -235,8 +248,6 @@ export default function LeadsList() {
               <TableBody>
                 {isLoading ? (
                   <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
-                ) : isError ? (
-                  <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-destructive">Unable to load leads: {error instanceof Error ? error.message : "Please try again."}</TableCell></TableRow>
                 ) : (data?.rows || []).length === 0 ? (
                   <TableRow><TableCell colSpan={displayColumns.length + 1} className="text-center py-8 text-muted-foreground">No leads found.</TableCell></TableRow>
                 ) : (
@@ -326,8 +337,8 @@ export default function LeadsList() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
+                  <TableHead>Email</TableHead>
                   <TableHead>Interest</TableHead>
                   <TableHead>Preferred Date</TableHead>
                   <TableHead>Submitted</TableHead>
@@ -337,23 +348,28 @@ export default function LeadsList() {
               <TableBody>
                 {isLoading ? (
                   <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
-                ) : isError ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-destructive">Unable to load enquiries: {error instanceof Error ? error.message : "Please try again."}</TableCell></TableRow>
                 ) : (data?.rows || []).length === 0 ? (
                   <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No enquiries found.</TableCell></TableRow>
                 ) : (
                   data!.rows.map((e: any) => (
                     <TableRow key={e.id} className="cursor-pointer hover:bg-muted/50">
                       <TableCell className="font-medium">{e.name || "—"}</TableCell>
-                      <TableCell className="text-xs">{e.email || "—"}</TableCell>
                       <TableCell className="text-xs">{e.phone || "—"}</TableCell>
+                      <TableCell className="text-xs">{e.email || "—"}</TableCell>
                       <TableCell className="text-xs max-w-[200px] truncate">{e.interest || "—"}</TableCell>
                       <TableCell>{e.preferred_date ? format(new Date(e.preferred_date), "dd MMM yyyy") : "—"}</TableCell>
                       <TableCell className="text-xs">{e.created_at ? format(new Date(e.created_at), "dd MMM yyyy, HH:mm") : "—"}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="outline" size="sm" onClick={() => { setSelected(e); setMode("view"); setFormOpen(true); }}>
-                          <Eye className="h-4 w-4 mr-1" /> View
-                        </Button>
+                      <TableCell className="text-right" onClick={(ev) => ev.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          {!e.is_converted && (
+                            <Button variant="default" size="sm" onClick={() => setConvertLead(e)}>
+                              <ArrowRightLeft className="h-3.5 w-3.5 mr-1" /> Convert
+                            </Button>
+                          )}
+                          <Button variant="outline" size="icon" onClick={() => { setSelected(e); setMode("view"); setFormOpen(true); }}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))

@@ -11,7 +11,6 @@ import {
   normalizeOptionValue,
   COLOR_SWATCH,
   imageUrlForColor,
-  extractProductCode,
 } from "@/lib/catalogOptions";
 
 type Variant = {
@@ -25,6 +24,12 @@ type Variant = {
 
 const fmt = (n?: number | null) =>
   n == null ? "—" : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+
+const extractProductCode = (imageUrl?: string): string | null => {
+  if (!imageUrl) return null;
+  const match = imageUrl.match(/\/files\/([^_]+)_/);
+  return match ? match[1] : null;
+};
 
 export default function CatalogItemDetail() {
   const { handle } = useParams<{ handle: string }>();
@@ -152,8 +157,8 @@ export default function CatalogItemDetail() {
           )}
           <h1 className="text-2xl font-semibold tracking-tight">{product.title}</h1>
 
-          {extractProductCode(product.image_url) && (
-            <p className="text-sm text-muted-foreground">Product Code: {extractProductCode(product.image_url)}</p>
+          {extractProductCode(displayImage || product.image_url) && (
+            <p className="text-sm text-muted-foreground">Product Code: {extractProductCode(displayImage || product.image_url)}</p>
           )}
 
           {matchedVariant?.variant_id && (

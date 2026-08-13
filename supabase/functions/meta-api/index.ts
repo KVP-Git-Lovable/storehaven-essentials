@@ -80,35 +80,24 @@ Deno.serve(async (req) => {
 
         const body: Record<string, unknown> = {
           name: c.name,
+          objective: OBJECTIVE_MAP[c.objective] || "OUTCOME_TRAFFIC",
           status: c.status === "active" ? "ACTIVE" : "PAUSED",
+          buying_type: c.buying_type === "reach_and_frequency" ? "RESERVED" : "AUCTION",
+          special_ad_categories: specials.length ? specials : ["NONE"],
         };
-        // Objective, buying type and special categories are creation-only in Meta.
-        if (!c.external_id) {
-          body.objective = OBJECTIVE_MAP[c.objective] || "OUTCOME_TRAFFIC";
-          body.buying_type = c.buying_type === "reach_and_frequency" ? "RESERVED" : "AUCTION";
-          body.special_ad_categories = specials.length ? specials : ["NONE"];
-        }
         if (c.budget_type === "daily") body.daily_budget = Math.round(Number(c.budget_amount) * 100);
         else body.lifetime_budget = Math.round(Number(c.budget_amount) * 100);
         if (c.start_date) body.start_time = c.start_date;
         if (c.end_date) body.stop_time = c.end_date;
 
-        const published = c.external_id
-          ? await graph(`/${c.external_id}`, { token: userToken, method: "POST", body })
-          : await graph(`/${adAccount}/campaigns`, { token: userToken, method: "POST", body });
-        const externalId = c.external_id || published.id;
+        const created = await graph(`/${adAccount}/campaigns`, { token: userToken, method: "POST", body });
         await db.from("social_campaigns").update({
-          external_id: externalId,
-          published_at: c.published_at || new Date().toISOString(),
+          external_id: created.id,
+          published_at: new Date().toISOString(),
           status: c.status === "active" ? "active" : "paused",
           last_synced_at: new Date().toISOString(),
         }).eq("id", c.id);
-        return json({
-          success: true,
-          campaign_id: externalId,
-          republished: Boolean(c.external_id),
-          published_at: new Date().toISOString(),
-        });
+        return json({ success: true, campaign_id: created.id, published_at: new Date().toISOString() });
       }
 
       case "pause_campaign":
@@ -158,62 +147,7 @@ Deno.serve(async (req) => {
         const { data: camp } = await db.from("social_campaigns").select("*").eq("id", adset.campaign_id).maybeSingle();
         if (!camp?.external_id) throw new Error("Campaign must be published first");
 
-        const adAccount = camp.ad_account_id || conn.default_ad_account_id;
-        if (!adAccount) throw new Error("Select a default Ad Account first");
-
-        const normalizeCountryCode = (location: string): string => {
-          const code = location.toUpperCase().slice(0, 2);
-          const validCodes = ["IN", "US", "GB", "DE", "FR", "AU", "CA", "JP", "IN"];
-          return validCodes.includes(code) ? code : "IN";
-        };
-
         const targeting: Record<string, unknown> = {};
-        const OPT_GOAL_ALIASES: Record<string, string> = {
-          LEADS: "LEAD_GENERATION",
-          CONVERSIONS: "OFFSITE_CONVERSIONS",
-          VIDEO_VIEWS: "THRUPLAY",
-          CLICKS: "LINK_CLICKS",
-          ENGAGEMENT: "POST_ENGAGEMENT",
-        };
-        const VALID_OPT_GOALS = [
-          "NONE","APP_INSTALLS","AD_RECALL_LIFT","ENGAGED_USERS","EVENT_RESPONSES","IMPRESSIONS",
-          "LEAD_GENERATION","QUALITY_LEAD","LINK_CLICKS","OFFSITE_CONVERSIONS","PAGE_LIKES",
-          "POST_ENGAGEMENT","QUALITY_CALL","REACH","LANDING_PAGE_VIEWS","VISIT_INSTAGRAM_PROFILE",
-          "ENGAGED_PAGE_VIEWS","VALUE","THRUPLAY","DERIVED_EVENTS","CONVERSATIONS","IN_APP_VALUE",
-          "SUBSCRIBERS","REMINDERS_SET","PROFILE_VISIT","PROFILE_AND_PAGE_ENGAGEMENT",
-          "AUTOMATIC_OBJECTIVE",
-        ];
-        const rawGoal = String(adset.optimization_goal || "").toUpperCase();
-        const mappedGoal = OPT_GOAL_ALIASES[rawGoal] || rawGoal;
-        const optimizationGoal = VALID_OPT_GOALS.includes(mappedGoal) ? mappedGoal : "LINK_CLICKS";
-
-        const BILLING_ALIASES: Record<string, string> = {
-          VIDEO_VIEWS: "THRUPLAY",
-          CLICKS: "LINK_CLICKS",
-          PURCHASE: "IMPRESSIONS",
-          LEADS: "IMPRESSIONS",
-          LEAD_GENERATION: "IMPRESSIONS",
-          OFFSITE_CONVERSIONS: "IMPRESSIONS",
-          REACH: "IMPRESSIONS",
-        };
-        const VALID_BILLING = ["APP_INSTALLS","CLICKS","IMPRESSIONS","LINK_CLICKS","NONE","OFFER_CLAIMS","PAGE_LIKES","POST_ENGAGEMENT","THRUPLAY","PURCHASE","LISTING_INTERACTION"];
-        const rawBilling = String(adset.billing_event || "").toUpperCase();
-        const mappedBilling = BILLING_ALIASES[rawBilling] || rawBilling;
-        const billingEvent = VALID_BILLING.includes(mappedBilling) ? mappedBilling : "IMPRESSIONS";
-
-        const VALID_BID_STRATEGIES = [
-          "LOWEST_COST_WITHOUT_CAP",
-          "LOWEST_COST_WITH_BID_CAP",
-          "COST_CAP",
-          "LOWEST_COST_WITH_MIN_ROAS",
-        ];
-        let bidStrategy = VALID_BID_STRATEGIES.includes(adset.bid_strategy)
-          ? adset.bid_strategy
-          : "LOWEST_COST_WITHOUT_CAP";
-        // Cap/ROAS strategies require a bid amount we do not capture — fall back safely.
-        if (bidStrategy !== "LOWEST_COST_WITHOUT_CAP" && !adset.bid_amount) {
-          bidStrategy = "LOWEST_COST_WITHOUT_CAP";
-        }
         if (adset.targeting?.age_min || adset.targeting?.age_max) {
           const ageMin = parseInt(adset.targeting.age_min || "18");
           const ageMax = adset.targeting.age_max === "65+" ? 65 : parseInt(adset.targeting.age_max || "65");
@@ -223,91 +157,41 @@ Deno.serve(async (req) => {
         if (adset.targeting?.genders && adset.targeting.genders.length > 0) {
           targeting.genders = adset.targeting.genders.map((g: string) => g === "All" ? 0 : g === "Men" ? 1 : 2);
         }
-        const rawLocations = String(adset.targeting?.locations || "").trim();
-        targeting.geo_locations = {
-          countries: [rawLocations ? normalizeCountryCode(rawLocations) : "IN"],
-        };
-
-        const campaignHasBudget = Number(camp.budget_amount) > 0;
+        if (adset.targeting?.locations) {
+          targeting.geo_locations = { cities: [{ key: adset.targeting.locations }] };
+        }
 
         const body: Record<string, unknown> = {
-          campaign_id: camp.external_id,
           name: adset.name,
-          optimization_goal: optimizationGoal,
-          billing_event: billingEvent,
-          status: "PAUSED",
-          targeting: Object.keys(targeting).length > 0 ? targeting : { geo_locations: { countries: ["IN"] } },
+          optimization_goal: adset.optimization_goal || "LINK_CLICKS",
+          billing_event: adset.billing_event || "LINK_CLICKS",
+          bid_strategy: adset.bid_strategy || "LOWEST_COST",
+          status: "ACTIVE",
+          targeting,
         };
-        // Under Campaign Budget Optimization the bid strategy lives on the campaign.
-        // Cap/ROAS strategies also need a bid_amount we do not capture.
-        if (campaignHasBudget) {
-          // CBO: the bid strategy lives on the campaign. Ensure it is not a
-          // cap/ROAS strategy, since we do not capture a bid amount.
-          try {
-            const campInfo = await graph(`/${camp.external_id}`, {
-              token: userToken,
-              params: { fields: "bid_strategy" },
-            });
-            if (campInfo?.bid_strategy && campInfo.bid_strategy !== "LOWEST_COST_WITHOUT_CAP") {
-              await graph(`/${camp.external_id}`, {
-                token: userToken,
-                method: "POST",
-                body: { bid_strategy: "LOWEST_COST_WITHOUT_CAP" },
-              });
-            }
-          } catch (e) {
-            console.error("campaign bid_strategy check failed:", (e as Error).message);
-          }
+
+        if (adset.budget_type === "daily") {
+          body.daily_budget = Math.round(Number(adset.budget_amount) * 100);
         } else {
-          body.bid_strategy = "LOWEST_COST_WITHOUT_CAP";
+          body.lifetime_budget = Math.round(Number(adset.budget_amount) * 100);
         }
 
-        // Campaign Budget Optimization: if the campaign carries the budget,
-        // Meta rejects a budget on the ad set ("Invalid parameter").
-        if (!campaignHasBudget) {
-          if (adset.budget_type === "daily") {
-            body.daily_budget = Math.round(Number(adset.budget_amount) * 100);
-          } else {
-            body.lifetime_budget = Math.round(Number(adset.budget_amount) * 100);
-          }
+        if (adset.start_date) body.start_time = new Date(adset.start_date).toISOString();
+        if (adset.end_date) body.end_time = new Date(adset.end_date).toISOString();
+
+        if (adset.placements && adset.placements.length > 0) {
+          body.promoted_object = { pixel_id: "0" };
+          body.instagram_actor_id = conn.default_instagram_id || "";
         }
 
-        // Ad set schedule must sit inside the campaign schedule.
-        const campStart = camp.start_date ? new Date(camp.start_date).getTime() : null;
-        const campEnd = camp.end_date ? new Date(camp.end_date).getTime() : null;
-        let startMs = adset.start_at ? new Date(adset.start_at).getTime() : campStart;
-        let endMs = adset.end_at ? new Date(adset.end_at).getTime() : campEnd;
-        if (campStart && (!startMs || startMs < campStart)) startMs = campStart;
-        if (campEnd && (!endMs || endMs > campEnd)) endMs = campEnd;
-        if (startMs && endMs && endMs <= startMs) endMs = campEnd && campEnd > startMs ? campEnd : null;
-        // A lifetime-budget campaign requires the ad set to be end-dated.
-        if (!endMs && campEnd) endMs = campEnd;
-        if (startMs) body.start_time = new Date(startMs).toISOString();
-        if (endMs) body.end_time = new Date(endMs).toISOString();
-
-        if (adset.placements && adset.placements.length > 0 && conn.default_instagram_id) {
-          body.instagram_actor_id = conn.default_instagram_id;
-        }
-
-        // Lead generation ad sets must declare the Page they collect leads for.
-        if (optimizationGoal === "LEAD_GENERATION") {
-          const leadPage = adset.page_id || conn.default_page_id;
-          if (!leadPage) throw new Error("Select a default Facebook Page before publishing a lead generation ad set");
-          body.promoted_object = { page_id: leadPage };
-        }
-
-        // campaign_id is required when creating, but cannot be changed on an existing ad set.
-        if (adset.external_id) delete body.campaign_id;
-        const published = adset.external_id
-          ? await graph(`/${adset.external_id}`, { token: userToken, method: "POST", body })
-          : await graph(`/${adAccount}/adsets`, { token: userToken, method: "POST", body });
-        const externalId = adset.external_id || published.id;
+        const created = await graph(`/${camp.external_id}/adsets`, { token: userToken, method: "POST", body });
         await db.from("social_ad_sets").update({
-          external_id: externalId,
-          status: "paused",
-          updated_at: new Date().toISOString(),
+          external_id: created.id,
+          published_at: new Date().toISOString(),
+          status: "active",
+          last_synced_at: new Date().toISOString(),
         }).eq("id", adset.id);
-        return json({ success: true, adset_id: externalId, republished: Boolean(adset.external_id) });
+        return json({ success: true, adset_id: created.id, published_at: new Date().toISOString() });
       }
 
       case "pause_adset":
@@ -374,86 +258,6 @@ Deno.serve(async (req) => {
             console.error("insights failed for", r.external_id, (e as Error).message);
           }
         }
-        return json({ success: true });
-      }
-
-      /* -------------------------------- ads ---------------------------------- */
-      case "publish_ad": {
-        const { data: ad } = await db.from("social_ads").select("*").eq("id", payload.ad_id).maybeSingle();
-        if (!ad) throw new Error("Ad not found");
-        const { data: adset } = await db.from("social_ad_sets").select("*").eq("id", ad.ad_set_id).maybeSingle();
-        if (!adset?.external_id) throw new Error("Ad Set must be published first");
-        const { data: camp } = await db.from("social_campaigns").select("*").eq("id", adset.campaign_id).maybeSingle();
-        const adAccount = camp?.ad_account_id || conn.default_ad_account_id;
-        if (!adAccount) throw new Error("Select a default Ad Account first");
-        const pageId = conn.default_page_id;
-        if (!pageId) throw new Error("Select a default Facebook Page before publishing an ad");
-
-        const media = ad.media && typeof ad.media === "object" ? ad.media : {};
-        const mediaUrl = String(media.url || media.image_url || "").trim();
-        const destinationUrl = String(ad.destination_url || "").trim();
-        if (!destinationUrl) throw new Error("Destination URL is required");
-
-        const linkData: Record<string, unknown> = {
-          link: destinationUrl,
-          message: ad.primary_text || "",
-          name: ad.headline || ad.name,
-          description: ad.description || "",
-          call_to_action: {
-            type: ad.call_to_action || "LEARN_MORE",
-            value: { link: destinationUrl },
-          },
-        };
-        if (mediaUrl) linkData.picture = mediaUrl;
-
-        // Meta creatives are immutable. Republish creates a replacement creative,
-        // then points the existing ad at it instead of creating a duplicate ad.
-        const creative = await graph(`/${adAccount}/adcreatives`, {
-          token: userToken,
-          method: "POST",
-          body: {
-            name: `${ad.name} creative`,
-            object_story_spec: { page_id: pageId, link_data: linkData },
-          },
-        });
-        const adBody: Record<string, unknown> = {
-          name: ad.name,
-          creative: { creative_id: creative.id },
-          status: ad.status === "active" ? "ACTIVE" : "PAUSED",
-        };
-        if (!ad.external_id) adBody.adset_id = adset.external_id;
-
-        const published = ad.external_id
-          ? await graph(`/${ad.external_id}`, { token: userToken, method: "POST", body: adBody })
-          : await graph(`/${adAccount}/ads`, { token: userToken, method: "POST", body: adBody });
-        const externalId = ad.external_id || published.id;
-        await db.from("social_ads").update({
-          external_id: externalId,
-          creative_external_id: creative.id,
-          status: ad.status === "active" ? "active" : "paused",
-          updated_at: new Date().toISOString(),
-        }).eq("id", ad.id);
-        return json({ success: true, ad_id: externalId, republished: Boolean(ad.external_id) });
-      }
-
-      case "pause_ad":
-      case "resume_ad": {
-        const { data: ad } = await db.from("social_ads").select("*").eq("id", payload.ad_id).maybeSingle();
-        if (!ad) throw new Error("Ad not found");
-        const next = action === "pause_ad" ? "PAUSED" : "ACTIVE";
-        if (ad.external_id) await graph(`/${ad.external_id}`, { token: userToken, method: "POST", body: { status: next } });
-        await db.from("social_ads").update({ status: next.toLowerCase() }).eq("id", ad.id);
-        return json({ success: true, status: next.toLowerCase() });
-      }
-
-      case "delete_ad": {
-        const { data: ad } = await db.from("social_ads").select("*").eq("id", payload.ad_id).maybeSingle();
-        if (ad?.external_id) {
-          try { await graph(`/${ad.external_id}`, { token: userToken, method: "DELETE" }); } catch (e) {
-            console.error("Meta delete failed, removing locally:", (e as Error).message);
-          }
-        }
-        await db.from("social_ads").delete().eq("id", payload.ad_id);
         return json({ success: true });
       }
 
@@ -566,52 +370,6 @@ Deno.serve(async (req) => {
 
       case "resync_accounts": {
         return json({ success: true, note: "Reconnect via Facebook to refresh pages and ad accounts" });
-      }
-
-      /* --------------------------- engagement test -------------------------- */
-      // Proves pages_manage_engagement works end-to-end: comments on the Page's
-      // latest post as the Page, then deletes the comment (unless keep_comment).
-      case "test_engagement": {
-        const pageId = payload.page_id || conn.default_page_id;
-        if (!pageId) throw new Error("No Facebook Page selected");
-        const token = await pageToken(pageId);
-
-        let permissionStatus = "unknown";
-        try {
-          const perms = await graph(`/me/permissions`, { token: userToken });
-          permissionStatus = (perms?.data || []).find(
-            (p: any) => p.permission === "pages_manage_engagement",
-          )?.status ?? "not_requested";
-        } catch (e) {
-          permissionStatus = `check_failed: ${(e as Error).message}`;
-        }
-
-        const posts = await graph(`/${pageId}/posts`, {
-          token,
-          params: { limit: "1", fields: "id,message,created_time" },
-        });
-        const post = posts?.data?.[0];
-        if (!post) throw new Error("The Page has no posts to comment on — publish a post first");
-
-        const comment = await graph(`/${post.id}/comments`, {
-          token,
-          method: "POST",
-          body: { message: payload.message || "API test — pages_manage_engagement ✔ (auto-deleted)" },
-        });
-
-        let deleted = false;
-        if (!payload.keep_comment && comment?.id) {
-          const del = await graph(`/${comment.id}`, { token, method: "DELETE" });
-          deleted = Boolean(del?.success ?? true);
-        }
-
-        return json({
-          success: true,
-          permission_status: permissionStatus,
-          post: { id: post.id, created_time: post.created_time },
-          comment_id: comment?.id ?? null,
-          deleted,
-        });
       }
 
       default:

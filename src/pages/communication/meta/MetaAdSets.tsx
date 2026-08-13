@@ -11,15 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
@@ -31,25 +22,24 @@ const OPTIMIZATION_GOALS = [
   ["REACH", "Reach"],
   ["LINK_CLICKS", "Link Clicks"],
   ["POST_ENGAGEMENT", "Post Engagement"],
-  ["THRUPLAY", "Video Views (ThruPlay)"],
-  ["OFFSITE_CONVERSIONS", "Conversions"],
-  ["LEAD_GENERATION", "Leads"],
+  ["VIDEO_VIEWS", "Video Views"],
+  ["CONVERSIONS", "Conversions"],
+  ["LEADS", "Leads"],
   ["APP_INSTALLS", "App Installs"],
-  ["LANDING_PAGE_VIEWS", "Landing Page Views"],
 ];
 
 const BILLING_EVENTS = [
   ["IMPRESSIONS", "Impressions"],
   ["LINK_CLICKS", "Link Clicks"],
   ["POST_ENGAGEMENT", "Post Engagement"],
-  ["THRUPLAY", "ThruPlay"],
+  ["VIDEO_VIEWS", "Video Views"],
+  ["PURCHASE", "Purchase"],
 ];
 
 const BID_STRATEGIES = [
-  ["LOWEST_COST_WITHOUT_CAP", "Lowest Cost"],
-  ["LOWEST_COST_WITH_BID_CAP", "Lowest Cost with Bid Cap"],
+  ["LOWEST_COST", "Lowest Cost"],
   ["COST_CAP", "Cost Cap"],
-  ["LOWEST_COST_WITH_MIN_ROAS", "Lowest Cost with Min ROAS"],
+  ["BID_CAP", "Bid Cap"],
 ];
 
 const PLACEMENTS = [
@@ -74,7 +64,7 @@ const emptyForm = {
   name: "",
   optimization_goal: "LINK_CLICKS",
   billing_event: "LINK_CLICKS",
-  bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+  bid_strategy: "LOWEST_COST",
   budget_type: "daily",
   budget_amount: "",
   start_date: "",
@@ -97,7 +87,6 @@ export default function MetaAdSets() {
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -125,11 +114,11 @@ export default function MetaAdSets() {
       name: r.name,
       optimization_goal: r.optimization_goal || "LINK_CLICKS",
       billing_event: r.billing_event || "LINK_CLICKS",
-      bid_strategy: r.bid_strategy || "LOWEST_COST_WITHOUT_CAP",
+      bid_strategy: r.bid_strategy || "LOWEST_COST",
       budget_type: r.budget_type || "daily",
       budget_amount: String(r.budget_amount ?? ""),
-      start_date: r.start_at ? r.start_at.slice(0, 10) : "",
-      end_date: r.end_at ? r.end_at.slice(0, 10) : "",
+      start_date: r.start_date ? r.start_date.slice(0, 10) : "",
+      end_date: r.end_date ? r.end_date.slice(0, 10) : "",
       age_min: targeting.age_min || "18",
       age_max: targeting.age_max || "65+",
       genders: targeting.genders || [],
@@ -170,8 +159,8 @@ export default function MetaAdSets() {
       bid_strategy: form.bid_strategy,
       budget_type: form.budget_type,
       budget_amount: Number(form.budget_amount || 0),
-      start_at: form.start_date ? new Date(form.start_date).toISOString() : null,
-      end_at: form.end_date ? new Date(form.end_date).toISOString() : null,
+      start_date: form.start_date ? new Date(form.start_date).toISOString() : null,
+      end_date: form.end_date ? new Date(form.end_date).toISOString() : null,
       targeting,
       placements: form.placements,
       status: "draft",
@@ -262,12 +251,11 @@ export default function MetaAdSets() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => openEdit(r)}>Edit</DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => callApi("publish_adset", r.id, r.external_id ? "Ad Set republished" : "Ad Set published")}
-                              className="gap-2"
-                            >
-                              <Rocket className="h-4 w-4" /> {r.external_id ? "Republish Changes" : "Publish"}
-                            </DropdownMenuItem>
+                            {!r.external_id && (
+                              <DropdownMenuItem onClick={() => callApi("publish_adset", r.id, "Ad Set published")} className="gap-2">
+                                <Rocket className="h-4 w-4" /> Publish
+                              </DropdownMenuItem>
+                            )}
                             {r.external_id && r.status === "active" && (
                               <DropdownMenuItem onClick={() => callApi("pause_adset", r.id, "Ad Set paused")} className="gap-2">
                                 <Pause className="h-4 w-4" /> Pause
@@ -279,7 +267,7 @@ export default function MetaAdSets() {
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem
-                              onClick={() => setDeleteTarget(r)}
+                              onClick={() => callApi("delete_adset", r.id, "Ad Set deleted")}
                               className="gap-2 text-destructive"
                             >
                               <Trash2 className="h-4 w-4" /> Delete
@@ -463,29 +451,6 @@ export default function MetaAdSets() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure you want to delete this?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove the ad set "{deleteTarget?.name}" from your account and Meta Ads Manager.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogAction
-            onClick={() => {
-              if (deleteTarget) {
-                callApi("delete_adset", deleteTarget.id, "Ad Set deleted");
-                setDeleteTarget(null);
-              }
-            }}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            Yes, Delete
-          </AlertDialogAction>
-          <AlertDialogCancel>No, Keep It</AlertDialogCancel>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

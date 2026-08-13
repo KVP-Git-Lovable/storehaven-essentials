@@ -1,40 +1,40 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { Users, UserPlus, ShoppingCart, IndianRupee, Megaphone, Loader2, Plus, AlertCircle, ChevronRight } from "lucide-react";
+import { Users, UserPlus, ShoppingCart, IndianRupee, Megaphone, Loader2, AlertCircle, Plus, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { KpiCard } from "@/components/dashboard/KpiCard";
-import { RevenueOrdersTrend } from "@/components/dashboard/RevenueOrdersTrend";
+import { WhatsappMessageTrend } from "@/components/dashboard/WhatsappMessageTrend";
 import { CommunicationHealth } from "@/components/dashboard/CommunicationHealth";
 import { MarketingQuickActions } from "@/components/dashboard/MarketingQuickActions";
 import { TeamSnapshotCard } from "@/components/dashboard/TeamSnapshotCard";
 import { OrderFormDialog } from "@/components/transactions/OrderFormDialog";
 import { LeadFormDialog } from "@/components/transactions/LeadFormDialog";
 import { useDashboardMetrics, formatINR } from "@/hooks/useDashboardMetrics";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { data, isLoading } = useDashboardMetrics();
+  const [onlineOrderCount, setOnlineOrderCount] = useState(0);
+  const [leadFormOpen, setLeadFormOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("create");
-  const [leadFormOpen, setLeadFormOpen] = useState(false);
 
-  const { data: pendingOrders } = useQuery({
-    queryKey: ["pending-online-orders"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("online_orders")
-        .select("id", { count: "exact" })
-        .eq("status", "pending");
-
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
-  const pendingCount = pendingOrders?.length || 0;
+  useEffect(() => {
+    async function fetchOnlineOrdersCount() {
+      try {
+        const { count } = await supabase
+          .from("online_orders")
+          .select("*", { count: "exact", head: true });
+        setOnlineOrderCount(count || 0);
+      } catch (error) {
+        console.error("Failed to fetch online orders count:", error);
+      }
+    }
+    fetchOnlineOrdersCount();
+  }, []);
 
   if (isLoading || !data) {
     return (
@@ -62,22 +62,17 @@ export default function Dashboard() {
       </div>
 
       {/* Online Orders Banner */}
-      {pendingCount > 0 && (
-        <div
-          onClick={() => navigate("/transactions/online-orders")}
-          className="cursor-pointer bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 rounded-lg p-4 flex items-center justify-between hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />
-            <div>
-              <p className="font-medium text-orange-900 dark:text-orange-100">
-                You have new Online Order requests - {pendingCount}
-              </p>
-              <p className="text-sm text-orange-800 dark:text-orange-200">Click here to view details</p>
-            </div>
-          </div>
-          <ChevronRight className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />
-        </div>
+      {onlineOrderCount > 0 && (
+        <Alert className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
+          <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <AlertDescription className="text-sm text-blue-800 dark:text-blue-200">
+            You have new Online Order requests - <span className="font-semibold">{onlineOrderCount}</span>.{" "}
+            <Link to="/transactions/online-orders" className="font-semibold underline hover:no-underline">
+              Click here
+            </Link>{" "}
+            to view details
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Section 1: KPI Row */}
@@ -127,7 +122,7 @@ export default function Dashboard() {
       {/* Section 2 + 3: Trend + Communication Health */}
       <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <RevenueOrdersTrend data={data.trend} />
+          <WhatsappMessageTrend />
         </div>
         <div>
           <CommunicationHealth comm={data.comm} />
