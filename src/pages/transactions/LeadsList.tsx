@@ -48,6 +48,7 @@ export default function LeadsList() {
   const [activeFilters, setActiveFilters] = useState<FilterCondition[]>([]);
   const [activeSelectedFields, setActiveSelectedFields] = useState<string[]>([]);
   const [activeColumnOrder, setActiveColumnOrder] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<"leads" | "enquiries">("leads");
 
   const usingListView = activeViewId !== null;
 
@@ -70,14 +71,31 @@ export default function LeadsList() {
   };
 
   const { data, isLoading } = useQuery({
-    queryKey: ["transactions-leads", search, page, activeViewId, activeFilters],
+    queryKey: ["transactions-leads", search, page, activeViewId, activeFilters, activeTab],
     queryFn: async () => {
+      if (activeTab === "enquiries") {
+        // Fetch from online_enquiries table
+        let q: any = supabase
+          .from("online_enquiries")
+          .select("*", { count: "exact" })
+          .order("created_at", { ascending: false });
+        if (search.trim()) {
+          const s = search.trim();
+          q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%,email.ilike.%${s}%,interest.ilike.%${s}%`);
+        }
+        q = q.range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+        const { data, error, count } = await q;
+        if (error) throw error;
+        return { rows: (data || []) as LeadRow[], count: count || 0 };
+      }
+
+      // Fetch leads tab - exclude website appointments
       if (usingListView) {
         const result = await executeListView(
           { entity_type: "leads", filters: activeFilters },
           { limit: 100000 }
         );
-        const rows = applyClientSearch(result.rows);
+        const rows = applyClientSearch(result.rows).filter((r: any) => r.source !== "website_appointment");
         const count = rows.length;
         const paged = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
         return { rows: paged as LeadRow[], count };
@@ -85,6 +103,7 @@ export default function LeadsList() {
       let q: any = supabase
         .from("leads")
         .select("*", { count: "exact" })
+        .neq("source", "website_appointment")
         .order("created_at", { ascending: false });
       if (search.trim()) {
         const s = search.trim();
@@ -158,17 +177,19 @@ export default function LeadsList() {
           <h1 className="text-2xl font-bold tracking-tight">Leads & Enquiries</h1>
           <p className="text-muted-foreground">Manage leads and online enquiries.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" /> Import Leads
-          </Button>
-          <Button onClick={() => { setSelected(null); setMode("create"); setFormOpen(true); }}>
-            <Plus className="mr-2 h-4 w-4" /> New Lead
-          </Button>
-        </div>
+        {activeTab === "leads" && (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Upload className="mr-2 h-4 w-4" /> Import Leads
+            </Button>
+            <Button onClick={() => { setSelected(null); setMode("create"); setFormOpen(true); }}>
+              <Plus className="mr-2 h-4 w-4" /> New Lead
+            </Button>
+          </div>
+        )}
       </div>
 
-      <Tabs defaultValue="leads" className="w-full">
+      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as "leads" | "enquiries"); setPage(0); }} className="w-full">
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="leads">Leads</TabsTrigger>
           <TabsTrigger value="enquiries">Online Enquiries</TabsTrigger>
@@ -284,19 +305,69 @@ export default function LeadsList() {
         </TabsContent>
 
         <TabsContent value="enquiries" className="space-y-6">
-          <Card className="p-8">
-            <div className="flex flex-col items-center justify-center gap-4 min-h-96">
-              <div className="text-center space-y-2">
-                <h3 className="text-lg font-semibold">Online Enquiries</h3>
-                <p className="text-sm text-muted-foreground">
-                  Online enquiries from your website will appear here.
-                </p>
-              </div>
-              <Button variant="outline" disabled>
-                No enquiries yet
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search name, phone, email, interest..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+                className="pl-9"
+              />
+            </div>
+            <Badge variant="secondary">{data?.count ?? 0} total</Badge>
+          </div>
+
+          <Card className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Interest</TableHead>
+                  <TableHead>Preferred Date</TableHead>
+                  <TableHead>Submitted</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                ) : (data?.rows || []).length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No enquiries found.</TableCell></TableRow>
+                ) : (
+                  data!.rows.map((e: any) => (
+                    <TableRow key={e.id} className="cursor-pointer hover:bg-muted/50">
+                      <TableCell className="font-medium">{e.name || "—"}</TableCell>
+                      <TableCell className="text-xs">{e.email || "—"}</TableCell>
+                      <TableCell className="text-xs">{e.phone || "—"}</TableCell>
+                      <TableCell className="text-xs max-w-[200px] truncate">{e.interest || "—"}</TableCell>
+                      <TableCell>{e.preferred_date ? format(new Date(e.preferred_date), "dd MMM yyyy") : "—"}</TableCell>
+                      <TableCell className="text-xs">{e.created_at ? format(new Date(e.created_at), "dd MMM yyyy, HH:mm") : "—"}</TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="outline" size="sm" onClick={() => { setSelected(e); setMode("view"); setFormOpen(true); }}>
+                          <Eye className="h-4 w-4 mr-1" /> View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </Card>
+
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">Page {page + 1} of {Math.max(Math.ceil((data?.count || 0) / PAGE_SIZE), 1)}</p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
+                <ChevronLeft className="h-4 w-4" /> Previous
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page + 1 >= Math.ceil((data?.count || 0) / PAGE_SIZE)}>
+                Next <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
-          </Card>
+          </div>
         </TabsContent>
       </Tabs>
 
