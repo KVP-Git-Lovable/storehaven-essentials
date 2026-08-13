@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Users, UserPlus, ShoppingCart, IndianRupee, Megaphone, Loader2, AlertCircle, Plus, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { WhatsappMessageTrend } from "@/components/dashboard/WhatsappMessageTrend";
 import { CommunicationHealth } from "@/components/dashboard/CommunicationHealth";
