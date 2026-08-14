@@ -246,10 +246,7 @@ export default function Attendance() {
       }
     },
     onSuccess: () => {
-      // Optimistic refresh - invalidate immediately for instant sync
-      queryClient.invalidateQueries({ queryKey: ["attendance-today"] });
-      // Also refetch to ensure fresh data
-      queryClient.refetchQueries({ queryKey: ["attendance-today", selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ["attendance-today", selectedDate] });
       toast.success(checkType === "in" ? "Checked in successfully" : "Checked out successfully");
       setIsMarkOpen(false);
       setCapturedImage(null);
