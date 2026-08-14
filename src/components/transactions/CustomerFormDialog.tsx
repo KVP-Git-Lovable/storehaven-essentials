@@ -353,6 +353,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
             </Button>
           )}
         </DialogFooter>
+        </div>
       </DialogContent>
       <OrderFormDialog
         open={orderDialogOpen}
