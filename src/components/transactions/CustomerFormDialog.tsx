@@ -161,12 +161,13 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={`w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto ${isView ? "sm:max-w-3xl" : "sm:max-w-lg"}`}>
-        <DialogHeader>
+      <DialogContent className="!inset-0 !left-0 !right-0 !w-screen !max-h-none !max-w-none !translate-x-0 !translate-y-0 !rounded-none !m-0 overflow-auto">
+        <DialogHeader className="sticky top-0 bg-background z-10 border-b">
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-4 py-2">
-          <div className="col-span-2">
+        <div className="px-6 py-4 space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="col-span-2 lg:col-span-2">
             <Label>Customer Code *</Label>
             <Input
               value={form.customer_code}
@@ -178,7 +179,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
               Alphanumeric only (letters, digits, "_" or "-"). Must be unique.
             </p>
           </div>
-          <div className="col-span-2">
+          <div className="col-span-2 lg:col-span-2">
             <Label>Name</Label>
             <Input value={form.name} disabled={isView} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </div>
@@ -217,11 +218,11 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
             <Label>Anniversary</Label>
             <Input type="date" disabled={isView} value={form.anniversary_date} onChange={(e) => setForm({ ...form, anniversary_date: e.target.value })} />
           </div>
-          <div className="col-span-2">
+          <div className="col-span-2 lg:col-span-1">
             <Label>Gender</Label>
             <GenderSelect value={form.gender} onChange={(v) => setForm({ ...form, gender: v || "" })} disabled={isView} />
           </div>
-          <div>
+          <div className="col-span-2 lg:col-span-1">
             <Label>City</Label>
             <Input
               value={form.city}
@@ -230,7 +231,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
               placeholder="e.g. Mumbai"
             />
           </div>
-          <div>
+          <div className="col-span-2 lg:col-span-1">
             <Label>State</Label>
             <Select
               value={form.state || undefined}
@@ -245,7 +246,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
               </SelectContent>
             </Select>
           </div>
-          <div className="col-span-2">
+          <div className="col-span-2 lg:col-span-1">
             <Label>Country</Label>
             <Select value={form.country} onValueChange={(v) => setForm({ ...form, country: v })} disabled={isView}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -259,7 +260,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
         </div>
 
         {isView && customer && (
-          <div className="py-4 border-t space-y-4">
+          <div className="px-6 space-y-4 border-t py-4">
             <Button variant="outline" onClick={() => setDocumentUploadOpen(true)} className="w-full">
               Upload PAN/Aadhaar
             </Button>
@@ -295,9 +296,9 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
         )}
 
         {isView && customer && (
-          <div className="mt-2">
-            <h3 className="text-sm font-semibold mb-2">Orders ({orders?.length ?? 0})</h3>
-            <div className="border rounded-md max-h-[300px] overflow-y-auto">
+          <div className="px-6 py-4 border-t space-y-3">
+            <h3 className="text-sm font-semibold">Orders ({orders?.length ?? 0})</h3>
+            <div className="border rounded-md max-h-[400px] overflow-y-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -344,7 +345,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer = null, mode =
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="sticky bottom-0 bg-background border-t px-6 py-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>{isView ? "Close" : "Cancel"}</Button>
           {!isView && (
             <Button onClick={() => createMut.mutate()} disabled={!form.phone || createMut.isPending}>
