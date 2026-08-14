@@ -221,12 +221,14 @@ export default function Attendance() {
       }
 
       // Check for existing record using user_id
-      const { data: existing } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from("attendance_records")
         .select("id, check_in_time")
         .eq("user_id", user.id)
         .eq("attendance_date", format(new Date(), "yyyy-MM-dd"))
-        .single();
+        .maybeSingle();
+
+      if (existingError) throw existingError;
 
       if (checkType === "in") {
         if (existing) throw new Error("Already checked in today");
@@ -235,7 +237,7 @@ export default function Attendance() {
         const checkInHour = now.getHours();
         const status = checkInHour <= 9 ? "present" : "late";
 
-        await supabase.from("attendance_records").insert({
+        const { error: insertError } = await supabase.from("attendance_records").insert({
           user_id: user.id,
           attendance_date: format(now, "yyyy-MM-dd"),
           check_in_time: now.toISOString(),
@@ -247,6 +249,8 @@ export default function Attendance() {
           face_verification_status: verifyResult.status,
           face_match_score: verifyResult.score,
         });
+
+        if (insertError) throw insertError;
       } else {
         if (!existing) throw new Error("No check-in record found for today");
 
@@ -254,7 +258,7 @@ export default function Attendance() {
         const checkOut = new Date();
         const totalHours = (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60);
 
-        await supabase
+        const { error: updateError } = await supabase
           .from("attendance_records")
           .update({
             check_out_time: checkOut.toISOString(),
@@ -267,10 +271,13 @@ export default function Attendance() {
             face_match_score: verifyResult.score,
           })
           .eq("id", existing.id);
+
+        if (updateError) throw updateError;
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["attendance-today", selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ["attendance-today"] });
+      setSelectedDate(format(new Date(), "yyyy-MM-dd"));
       toast.success(checkType === "in" ? "Checked in successfully" : "Checked out successfully");
       setIsMarkOpen(false);
       setCapturedImage(null);
@@ -544,10 +551,13 @@ export default function Attendance() {
                     </TableCell>
                     <TableCell>
                       {record.check_in_photo_url ? (
-                        <img 
-                          src={record.check_in_photo_url} 
-                          alt="Check-in" 
-                          className="h-10 w-10 rounded object-cover"
+                        <GeoStampedPhoto
+                          photoUrl={record.check_in_photo_url}
+                          address={record.check_in_address}
+                          latitude={record.check_in_latitude}
+                          longitude={record.check_in_longitude}
+                          timestamp={record.check_in_time}
+                          className="h-32 w-40"
                         />
                       ) : (
                         "-"
@@ -555,8 +565,16 @@ export default function Attendance() {
                     </TableCell>
                     <TableCell>
                       {record.check_in_address ? (
-                        <div className="flex items-center gap-1 text-xs text-green-600">
-                          <MapPin className="h-3 w-3" /> Verified
+                        <div className="max-w-[220px] space-y-1 text-xs">
+                          <div className="flex items-start gap-1 text-green-600">
+                            <MapPin className="h-3 w-3 mt-0.5 shrink-0" />
+                            <span className="line-clamp-2">{record.check_in_address}</span>
+                          </div>
+                          {record.check_in_latitude != null && record.check_in_longitude != null && (
+                            <div className="text-muted-foreground">
+                              {Number(record.check_in_latitude).toFixed(6)}, {Number(record.check_in_longitude).toFixed(6)}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         "-"
