@@ -379,10 +379,13 @@ export default function Attendance() {
                     {capturedImage && (
                       <div>
                         <Label className="text-xs text-muted-foreground">Captured Photo</Label>
-                        <img
-                          src={capturedImage}
-                          alt="Captured"
-                          className="w-full h-32 object-cover rounded-lg border"
+                        <GeoStampedPhoto
+                          photoUrl={capturedImage}
+                          address={location?.address}
+                          latitude={location?.lat}
+                          longitude={location?.lng}
+                          timestamp={new Date().toISOString()}
+                          className="w-full h-40"
                         />
                       </div>
                     )}
