@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { FaceCaptureDialog } from "@/components/staff/FaceCaptureDialog";
 import { FaceVerificationBadge } from "@/components/attendance/FaceVerificationBadge";
+import { GeoStampedPhoto } from "@/components/attendance/GeoStampedPhoto";
 import { useAuth } from "@/hooks/useAuth";
 
 interface AttendanceRecord {
@@ -26,6 +27,12 @@ interface AttendanceRecord {
   check_out_time: string | null;
   check_in_photo_url: string | null;
   check_in_address: string | null;
+  check_in_latitude: number | null;
+  check_in_longitude: number | null;
+  check_out_photo_url: string | null;
+  check_out_address: string | null;
+  check_out_latitude: number | null;
+  check_out_longitude: number | null;
   status: string;
   total_hours: number | null;
   face_verification_status: string | null;
@@ -64,11 +71,26 @@ export default function Attendance() {
     }
   }, [isMarkOpen]);
 
+  const reverseGeocode = async (lat: number, lng: number): Promise<string> => {
+    const fallback = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
+        { headers: { Accept: "application/json" } }
+      );
+      if (!res.ok) return fallback;
+      const json = await res.json();
+      return json?.display_name ? String(json.display_name) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
   const getLocation = () => {
     setGettingLocation(true);
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (position) => {
+        async (position) => {
           const { latitude, longitude } = position.coords;
           setLocation({
             lat: latitude,
@@ -76,6 +98,8 @@ export default function Attendance() {
             address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
           });
           setGettingLocation(false);
+          const address = await reverseGeocode(latitude, longitude);
+          setLocation({ lat: latitude, lng: longitude, address });
         },
         (error) => {
           console.error("Location error:", error);
