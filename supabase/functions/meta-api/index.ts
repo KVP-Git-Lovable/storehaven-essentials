@@ -271,22 +271,43 @@ Deno.serve(async (req) => {
         let fbPostId: string | null = null;
         let igPostId: string | null = null;
 
+        // Facebook native scheduling: 10 minutes .. 75 days ahead, published=false
+        const scheduledMs = p.scheduled_at ? new Date(p.scheduled_at).getTime() : 0;
+        const nowMs = Date.now();
+        const isScheduled = scheduledMs > nowMs + 60_000;
+        if (isScheduled) {
+          if (scheduledMs < nowMs + 10 * 60_000) {
+            throw new Error("Facebook requires the scheduled time to be at least 10 minutes in the future");
+          }
+          if (scheduledMs > nowMs + 75 * 24 * 60 * 60_000) {
+            throw new Error("Facebook cannot schedule a post more than 75 days in advance");
+          }
+          if (p.destination === "instagram" || p.destination === "both") {
+            throw new Error("Instagram does not support scheduled publishing via the API — publish now, or set the destination to Facebook only");
+          }
+        }
+        const scheduleFields = isScheduled
+          ? { published: false, scheduled_publish_time: Math.floor(scheduledMs / 1000) }
+          : {};
+
         try {
           if (p.destination === "facebook" || p.destination === "both") {
             if (!pageId) throw new Error("No Facebook Page selected");
             const token = await pageToken(pageId);
             if (p.post_type === "image" && p.media_url) {
               const r = await graph(`/${pageId}/photos`, {
-                token, method: "POST", body: { url: p.media_url, caption: p.message ?? "" },
+                token, method: "POST", body: { url: p.media_url, caption: p.message ?? "", ...scheduleFields },
               });
               fbPostId = r.post_id || r.id;
             } else if (p.post_type === "video" && p.media_url) {
               const r = await graph(`/${pageId}/videos`, {
-                token, method: "POST", body: { file_url: p.media_url, description: p.message ?? "" },
+                token, method: "POST", body: { file_url: p.media_url, description: p.message ?? "", ...scheduleFields },
               });
               fbPostId = r.id;
             } else {
-              const r = await graph(`/${pageId}/feed`, { token, method: "POST", body: { message: p.message ?? "" } });
+              const r = await graph(`/${pageId}/feed`, {
+                token, method: "POST", body: { message: p.message ?? "", ...scheduleFields },
+              });
               fbPostId = r.id;
             }
           }
@@ -315,14 +336,20 @@ Deno.serve(async (req) => {
         }
 
         await db.from("social_posts").update({
-          status: "published",
+          status: isScheduled ? "scheduled" : "published",
           facebook_post_id: fbPostId,
           instagram_post_id: igPostId,
-          published_at: new Date().toISOString(),
+          published_at: isScheduled ? null : new Date().toISOString(),
           error_message: null,
         }).eq("id", p.id);
 
-        return json({ success: true, facebook_post_id: fbPostId, instagram_post_id: igPostId });
+        return json({
+          success: true,
+          scheduled: isScheduled,
+          scheduled_at: isScheduled ? new Date(scheduledMs).toISOString() : null,
+          facebook_post_id: fbPostId,
+          instagram_post_id: igPostId,
+        });
       }
 
       /* ------------------------------ insights ------------------------------ */
