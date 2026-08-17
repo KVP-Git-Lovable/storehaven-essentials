@@ -294,7 +294,23 @@ Deno.serve(async (req) => {
           if (p.destination === "facebook" || p.destination === "both") {
             if (!pageId) throw new Error("No Facebook Page selected");
             const token = await pageToken(pageId);
-            if (p.post_type === "image" && p.media_url) {
+            if (p.post_type === "image" && p.media_url && isScheduled) {
+              // Facebook rejects scheduled_publish_time on /photos. Upload the photo
+              // unpublished, then create a scheduled feed post that attaches it.
+              const photo = await graph(`/${pageId}/photos`, {
+                token, method: "POST", body: { url: p.media_url, published: false },
+              });
+              const r = await graph(`/${pageId}/feed`, {
+                token,
+                method: "POST",
+                body: {
+                  message: p.message ?? "",
+                  attached_media: [{ media_fbid: photo.id }],
+                  ...scheduleFields,
+                },
+              });
+              fbPostId = r.id;
+            } else if (p.post_type === "image" && p.media_url) {
               const r = await graph(`/${pageId}/photos`, {
                 token, method: "POST", body: { url: p.media_url, caption: p.message ?? "", ...scheduleFields },
               });
@@ -329,10 +345,14 @@ Deno.serve(async (req) => {
             igPostId = published.id;
           }
         } catch (e) {
+          const raw = (e as Error).message;
+          const msg = /\(#200\)|#283|pages_manage_posts|pages_read_engagement/.test(raw)
+            ? `${raw} — the Page access token is missing publishing permissions. Reconnect Meta and make sure the Page is selected and "Manage posts" / "Read engagement" access is granted.`
+            : raw;
           await db.from("social_posts").update({
-            status: "failed", error_message: (e as Error).message,
+            status: "failed", error_message: msg,
           }).eq("id", p.id);
-          throw e;
+          throw new Error(msg);
         }
 
         await db.from("social_posts").update({
