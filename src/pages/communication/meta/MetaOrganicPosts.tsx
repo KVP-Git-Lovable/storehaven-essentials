@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -99,7 +100,20 @@ export default function MetaOrganicPosts() {
     });
     setPublishing(false);
     if (fnErr || data?.error) {
-      toast({ title: "Publish failed", description: data?.error || fnErr?.message, variant: "destructive" });
+      let description = data?.error || fnErr?.message;
+      if (fnErr instanceof FunctionsHttpError) {
+        try {
+          const body = await fnErr.context.json();
+          description = body?.error || description;
+        } catch { /* keep default message */ }
+      }
+      toast({ title: "Publish failed", description, variant: "destructive" });
+    } else if (data?.scheduled) {
+      toast({
+        title: "Post scheduled on Facebook",
+        description: `Will go live at ${new Date(data.scheduled_at).toLocaleString()}`,
+      });
+      setForm((f) => ({ ...f, message: "", media_url: "", scheduled_at: "" }));
     } else {
       toast({ title: "Post published", description: data?.facebook_post_id ? `Post ID: ${data.facebook_post_id}` : undefined });
       setForm((f) => ({ ...f, message: "", media_url: "" }));
